@@ -1,0 +1,48 @@
+:host {
+  display: block;
+}
+
+.rv-message {
+  padding: var(--rv-space-sm) var(--rv-space-lg);
+  border-bottom: 1px solid var(--rv-color-border);
+}
+
+.rv-message--user {
+  background: var(--rv-color-surface);
+}
+
+.rv-message--assistant {
+  background: var(--rv-color-bg);
+}
+
+.rv-message--system,
+.rv-message--tool {
+  background: var(--rv-color-surface-raised);
+  opacity: 0.85;
+}
+
+.rv-message__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--rv-space-md);
+  margin-bottom: var(--rv-space-xs);
+}
+
+.rv-message__author {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+  color: var(--rv-color-text-secondary);
+  text-transform: uppercase;
+}
+
+.rv-message__status {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-stream);
+}
+
+.rv-message__blocks {
+  display: flex;
+  flex-direction: column;
+}

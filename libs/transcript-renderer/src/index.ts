@@ -1,12 +1,21 @@
 /**
  * @rusty-view/transcript-renderer
  *
- * Virtualized transcript rendering: dynamic message-height handling, scroll
- * anchoring, tail-follow, jump-to-message, long-message block rendering, and
- * streaming-delta patching. Roleplay-agnostic. Must survive 10k+ messages with
- * no full-transcript re-render on token deltas. Depends on
- * @rusty-view/protocol and @rusty-view/chat-domain.
+ * Virtualized transcript rendering: 10k+ messages, streaming-safe delta
+ * rendering, scroll anchoring, tail-follow, jump-to-message, collapsible
+ * blocks, and roleplay-agnostic extension hooks.
  *
- * Implemented in Den task #3184. This file is the public API entrypoint only.
+ * The virtualizer (Angular CDK) is hidden behind the public component API.
+ * Implemented in Den task #3184.
  */
+
+export { TranscriptViewportComponent } from './lib/transcript-viewport';
+export { MessageItemComponent } from './lib/message-item';
+export { MessageBlockComponent } from './lib/message-block';
+export { CHAT_MESSAGE_DECORATORS } from './lib/transcript-decorators';
+export type {
+  ChatMessageDecorator,
+  ChatMessageDecoration,
+} from './lib/transcript-decorators';
+
 export const TRANSCRIPT_RENDERER_VERSION = '0.0.0' as const;

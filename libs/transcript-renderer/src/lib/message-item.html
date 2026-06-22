@@ -1,0 +1,26 @@
+<div
+  class="rv-message"
+  [class]="roleClass()"
+  [class.rv-message--decorated]="decoration().className !== undefined"
+>
+  <header class="rv-message__header">
+    <span class="rv-message__author">{{ authorLabel() }}</span>
+    @if (statusIndicator()) {
+    <span class="rv-message__status">{{ statusIndicator() }}</span>
+    }
+  </header>
+
+  @if (decoration().prefix) {
+  <div class="rv-message__prefix">{{ decoration().prefix }}</div>
+  }
+
+  <div class="rv-message__blocks">
+    @for (block of message().blocks; track block.id) {
+    <rv-message-block [block]="block" />
+    }
+  </div>
+
+  @if (decoration().suffix) {
+  <div class="rv-message__suffix">{{ decoration().suffix }}</div>
+  }
+</div>

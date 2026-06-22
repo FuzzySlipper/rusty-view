@@ -1,0 +1,12 @@
+<cdk-virtual-scroll-viewport
+  autosize
+  [itemSize]="50"
+  class="rv-transcript"
+  (scroll)="onScroll()"
+>
+  @for (message of messages(); track message.id) {
+  <div class="rv-transcript__item">
+    <rv-message-item [message]="message" />
+  </div>
+  }
+</cdk-virtual-scroll-viewport>

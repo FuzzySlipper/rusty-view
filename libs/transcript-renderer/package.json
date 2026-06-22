@@ -1,6 +1,10 @@
 {
   "name": "@rusty-view/transcript-renderer",
   "version": "0.0.1",
-  "peerDependencies": {},
+  "peerDependencies": {
+    "@angular/cdk": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@rusty-view/chat-domain": "workspace:*"
+  },
   "sideEffects": false
 }

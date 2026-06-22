@@ -1,0 +1,14 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.rv-transcript {
+  height: 100%;
+  overflow-y: auto;
+  contain: strict;
+}
+
+.rv-transcript__item {
+  contain: content;
+}
