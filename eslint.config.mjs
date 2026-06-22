@@ -24,7 +24,14 @@ export default [
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   {
-    ignores: ['**/dist', '**/out-tsc', '**/.nx'],
+    ignores: [
+      '**/dist',
+      '**/out-tsc',
+      '**/.nx',
+      // Machine-generated protocol types (openapi-typescript). Not hand-edited;
+      // see libs/protocol/src/generated/openapi.ts and the `protocol:generate` task.
+      '**/src/generated/**',
+    ],
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],

@@ -22,6 +22,20 @@
       "options": {
         "command": "tsc --noEmit -p {projectRoot}/tsconfig.lib.json"
       }
+    },
+    "generate": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "pnpm exec openapi-typescript \"${RUSTY_VIEW_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json}\" -o {projectRoot}/src/generated/openapi.ts"
+      }
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node {projectRoot}/scripts/check-generated.mjs"
+      }
     }
   }
 }
