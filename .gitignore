@@ -1,5 +1,5 @@
 # Dependencies
-/node_modules/
+node_modules/
 
 # Nx cache & reports
 /.nx/cache

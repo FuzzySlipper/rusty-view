@@ -13,4 +13,3 @@
  * Implemented in Den task #3182. This file is the public API entrypoint only.
  */
 export const TESTING_FIXTURES_VERSION = '0.0.0' as const;
-export * from './lib/x.fixture';
