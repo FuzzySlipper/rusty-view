@@ -1,11 +1,38 @@
 /**
  * @rusty-view/chat-domain
  *
- * Pure TypeScript chat domain logic: conversation projection from the protocol
- * event log, event reduction, message/block modeling, branch/session modeling,
- * cursor/summary-checkpoint concepts. No Angular, no network calls, no I/O.
- * Depends only on @rusty-view/protocol.
+ * Pure TypeScript domain logic for rusty-view: conversation projection from the
+ * protocol event log, event reduction, message/block modeling, branch/session
+ * modeling, and the storage adapter interface.
  *
- * Implemented in Den task #3182. This file is the public API entrypoint only.
+ * No Angular, no network calls, no I/O, no browser APIs. Depends only on
+ * @rusty-view/protocol. The Angular chat-store (#3183) wraps this in Signals.
+ *
+ * Implemented in Den task #3182.
  */
+
+export { projectConversation } from './lib/conversation-projection';
+export { emptyProjection } from './lib/domain-types';
+
+export type {
+  MessageRole,
+  MessageAuthor,
+  MessageBlockKind,
+  RenderPolicy,
+  MessageBlock,
+  MessageStatus,
+  ChatMessage,
+  ToolCallStatus,
+  ToolCallProjection,
+  CommandStatus,
+  CommandProjection,
+  ActiveAssistantTurn,
+  ConversationBranch,
+  SummaryCheckpoint,
+  StreamErrorState,
+  ConversationProjection,
+} from './lib/domain-types';
+
+export type { ChatStorageAdapter } from './lib/chat-storage-adapter';
+
 export const CHAT_DOMAIN_VERSION = '0.0.0' as const;

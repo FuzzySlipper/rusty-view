@@ -1,7 +1,291 @@
-import { CHAT_DOMAIN_VERSION } from '../index';
+import {
+  CHAT_DOMAIN_VERSION,
+  emptyProjection,
+  projectConversation,
+  type ChatMessage,
+  type ConversationProjection,
+} from '../index';
+import type { ChatEvent } from '@rusty-view/protocol';
 
-describe('@rusty-view/chat-domain public API', () => {
+import { describe, expect, it } from 'vitest';
+
+describe('@rusty-view/chat-domain package version', () => {
   it('exports a version marker', () => {
     expect(CHAT_DOMAIN_VERSION).toBe('0.0.0');
+  });
+});
+
+function makeEvent(
+  kind: ChatEvent['kind'],
+  payload: ChatEvent['payload'],
+  overrides: Partial<ChatEvent> = {},
+): ChatEvent {
+  return {
+    event_id:
+      overrides.event_id ?? `evt_${Math.random().toString(36).slice(2, 8)}`,
+    session_id: overrides.session_id ?? 'sess_1',
+    sequence_id: overrides.sequence_id ?? 0,
+    created_at: overrides.created_at ?? '2026-06-22T10:00:00Z',
+    kind,
+    payload,
+  };
+}
+
+describe('projectConversation', () => {
+  it('returns an empty projection for no events', () => {
+    const projection = projectConversation([]);
+    expect(projection.messages).toHaveLength(0);
+    expect(projection.unknownEvents).toHaveLength(0);
+  });
+
+  it('applies events on top of a previous projection (incremental)', () => {
+    const base = projectConversation([
+      makeEvent('message_created', {
+        message_id: 'm1',
+        role: 'user',
+        body: 'first',
+      }),
+    ]);
+    const updated = projectConversation(
+      [
+        makeEvent('message_created', {
+          message_id: 'm2',
+          role: 'assistant',
+          body: 'second',
+        }),
+      ],
+      base,
+    );
+    expect(updated.messages).toHaveLength(2);
+  });
+
+  it('tracks latestCursor from event_id', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'message_created',
+        { message_id: 'm1', role: 'user', body: 'hi' },
+        { event_id: 'cur_5' },
+      ),
+    ]);
+    expect(projection.latestCursor).toBe('cur_5');
+  });
+
+  it('session_snapshot sets sessionMetadata', () => {
+    const session = {
+      session_id: 'sess_1',
+      agent_id: 'agent_1',
+      profile_id: 'prof_1',
+      kind: 'full' as const,
+      status: 'active' as const,
+      latest_cursor: 'cur_0',
+      updated_at: '2026-06-22T10:00:00Z',
+    };
+    const projection = projectConversation([
+      makeEvent('session_snapshot', { session }),
+    ]);
+    expect(projection.sessionMetadata?.session_id).toBe('sess_1');
+  });
+
+  it('message_created creates a completed message with a text block', () => {
+    const projection = projectConversation([
+      makeEvent('message_created', {
+        message_id: 'm1',
+        role: 'user',
+        body: 'Hello world',
+      }),
+    ]);
+    expect(projection.messages).toHaveLength(1);
+    const msg = projection.messages[0];
+    expect(msg?.id).toBe('m1');
+    expect(msg?.author.role).toBe('user');
+    expect(msg?.status).toBe('completed');
+    expect(msg?.blocks[0]?.kind).toBe('text');
+    expect(msg?.blocks[0]?.content).toBe('Hello world');
+  });
+
+  it('deduplicates message_created by message_id', () => {
+    const events: ChatEvent[] = [
+      makeEvent(
+        'message_created',
+        { message_id: 'm1', role: 'user', body: 'hi' },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'message_created',
+        { message_id: 'm1', role: 'user', body: 'hi' },
+        { event_id: 'e2' },
+      ),
+    ];
+    const projection = projectConversation(events);
+    expect(projection.messages).toHaveLength(1);
+  });
+
+  it('assistant streaming: turn_started → deltas → completed → turn_finished', () => {
+    const events: ChatEvent[] = [
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'assistant_text_delta',
+        { message_id: 'a1', delta: 'Hello ' },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_text_delta',
+        { message_id: 'a1', delta: 'world!' },
+        { event_id: 'e3' },
+      ),
+      makeEvent(
+        'assistant_message_completed',
+        { message_id: 'a1', body: 'Hello world!' },
+        { event_id: 'e4' },
+      ),
+      makeEvent('assistant_turn_finished', {}, { event_id: 'e5' }),
+    ];
+
+    const projection = projectConversation(events);
+
+    // Message finalized.
+    expect(projection.messages).toHaveLength(1);
+    const msg = projection.messages[0];
+    expect(msg?.id).toBe('a1');
+    expect(msg?.status).toBe('completed');
+    expect(msg?.blocks[0]?.content).toBe('Hello world!');
+
+    // Active turn cleared.
+    expect(projection.activeTurn).toBeUndefined();
+  });
+
+  it('assistant_text_delta creates a streaming message if turn not started', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'assistant_text_delta',
+        { message_id: 'a1', delta: 'partial' },
+        { event_id: 'e1' },
+      ),
+    ]);
+    expect(projection.messages).toHaveLength(1);
+    expect(projection.messages[0]?.status).toBe('streaming');
+    expect(projection.messages[0]?.blocks[0]?.content).toBe('partial');
+  });
+
+  it('activeTurn tracks streaming text across deltas', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'assistant_text_delta',
+        { message_id: 'a1', delta: 'foo' },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_text_delta',
+        { message_id: 'a1', delta: 'bar' },
+        { event_id: 'e3' },
+      ),
+    ]);
+    expect(projection.activeTurn?.streamingText).toBe('foobar');
+    expect(projection.activeTurn?.messageId).toBe('a1');
+  });
+
+  it('tool_call lifecycle: started → completed', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'tool_call_started',
+        {
+          tool_call_id: 'tc1',
+          tool_name: 'search_lore',
+          summary: 'Searched for amber',
+          status: 'started',
+        },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'tool_call_completed',
+        {
+          tool_call_id: 'tc1',
+          tool_name: 'search_lore',
+          summary: 'Found 3 entries',
+          status: 'completed',
+        },
+        { event_id: 'e2' },
+      ),
+    ]);
+    expect(projection.toolCalls).toHaveLength(1);
+    expect(projection.toolCalls[0]?.status).toBe('completed');
+    expect(projection.toolCalls[0]?.toolName).toBe('search_lore');
+  });
+
+  it('tool_call_failed sets status to failed', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'tool_call_failed',
+        {
+          tool_call_id: 'tc1',
+          tool_name: 'search_lore',
+          summary: 'Lore service down',
+          status: 'failed',
+          reason_code: 'timeout',
+        },
+        { event_id: 'e1' },
+      ),
+    ]);
+    expect(projection.toolCalls[0]?.status).toBe('failed');
+    expect(projection.toolCalls[0]?.reasonCode).toBe('timeout');
+  });
+
+  it('command lifecycle: started → completed', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'command_started',
+        {
+          command_name: '/new',
+          summary: 'Creating new session',
+          status: 'started',
+        },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'command_completed',
+        {
+          command_name: '/new',
+          summary: 'Archived and created',
+          status: 'completed',
+          old_session_id: 's1',
+          new_session_id: 's2',
+        },
+        { event_id: 'e2' },
+      ),
+    ]);
+    expect(projection.commands).toHaveLength(2);
+    expect(projection.commands[1]?.status).toBe('completed');
+    expect(projection.commands[1]?.newSessionId).toBe('s2');
+  });
+
+  it('stream_error surfaces error state', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'stream_error',
+        {
+          message: 'Connection lost',
+          retryable: true,
+          reason_code: 'network',
+        },
+        { event_id: 'e1' },
+      ),
+    ]);
+    expect(projection.streamError?.message).toBe('Connection lost');
+    expect(projection.streamError?.retryable).toBe(true);
+  });
+
+  it('unknown events are preserved in unknownEvents', () => {
+    const unknownEvent = makeEvent(
+      'unknown',
+      {
+        summary: 'Weird thing happened',
+        raw: { detail: 42 },
+      },
+      { event_id: 'e1' },
+    );
+    const projection = projectConversation([unknownEvent]);
+    expect(projection.unknownEvents).toHaveLength(1);
+    expect(projection.unknownEvents[0]?.event_id).toBe('e1');
   });
 });
