@@ -1,7 +1,456 @@
-import { CHAT_STORE_VERSION } from '../index';
+import type {
+  ChatCommandRegistry,
+  ChatEvent,
+  ChatSessionOpenResult,
+  ChatSessionPage,
+  ChatSessionSummary,
+  ExecuteChatCommandResult,
+  SendChatMessageResult,
+} from '@rusty-view/protocol';
+import { TestBed } from '@angular/core/testing';
+import { describe, expect, it, vi } from 'vitest';
 
-describe('@rusty-view/chat-store public API', () => {
+import type { ChatStorageAdapter } from '@rusty-view/chat-domain';
+import { ChatTransport } from '@rusty-view/transport';
+import type { ChatEventStream } from '@rusty-view/transport';
+import type { ChatConnectionState } from '@rusty-view/transport';
+
+import { CHAT_STORE_VERSION } from '../index';
+import { ChatStore, CHAT_STORAGE_ADAPTER } from './chat-store';
+
+// ---- in-memory storage for tests ----
+
+class InMemoryChatStorage implements ChatStorageAdapter {
+  readonly sessionsMap = new Map<string, ChatSessionSummary>();
+  readonly eventsMap = new Map<string, ChatEvent[]>();
+
+  async putSession(session: ChatSessionSummary): Promise<void> {
+    this.sessionsMap.set(session.session_id, session);
+  }
+  async putEvents(
+    sessionId: string,
+    events: readonly ChatEvent[],
+  ): Promise<void> {
+    const existing = this.eventsMap.get(sessionId) ?? [];
+    this.eventsMap.set(sessionId, [...existing, ...events]);
+  }
+  async getEvents(sessionId: string): Promise<ChatEvent[]> {
+    return this.eventsMap.get(sessionId) ?? [];
+  }
+  async getSessions(): Promise<ChatSessionSummary[]> {
+    return [...this.sessionsMap.values()];
+  }
+  async clearSession(sessionId: string): Promise<void> {
+    this.sessionsMap.delete(sessionId);
+    this.eventsMap.delete(sessionId);
+  }
+}
+
+// ---- mock transport ----
+
+function createMockTransport(opts: {
+  sessions?: ChatSessionPage;
+  openResult?: ChatSessionOpenResult;
+  streamEvents?: ChatEvent[];
+  sendResult?: SendChatMessageResult;
+  commandResult?: ExecuteChatCommandResult;
+}): ChatTransport {
+  const mock = {
+    getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
+    listSessions: vi.fn(async () => opts.sessions ?? emptySessionPage()),
+    openSession: vi.fn(async () => opts.openResult ?? emptyOpenResult()),
+    replayEvents: vi.fn(async () => []),
+    sendMessage: vi.fn(async () => opts.sendResult ?? acceptedResult()),
+    listCommands: vi.fn(
+      async () => ({ commands: [] }) satisfies ChatCommandRegistry,
+    ),
+    sendCommand: vi.fn(
+      async () => opts.commandResult ?? completedCommandResult(),
+    ),
+    streamEvents: vi.fn(() => createMockStream(opts.streamEvents ?? [])),
+  };
+  return mock as unknown as ChatTransport;
+}
+
+function createMockStream(events: ChatEvent[]): ChatEventStream {
+  const yieldedEvents = [...events];
+  let closed = false;
+  let stateListener: ((s: ChatConnectionState) => void) | null = null;
+
+  const stream = {
+    events: async function* () {
+      // Yield buffered events, then keep the generator alive until close().
+      for (const event of yieldedEvents) {
+        if (closed) return;
+        yield event;
+      }
+      while (!closed) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    },
+    onStateChange: (cb: (s: ChatConnectionState) => void) => {
+      stateListener = cb;
+      cb({ status: 'connected' });
+      return () => {
+        stateListener = null;
+      };
+    },
+    getState: () => ({ status: 'connected' }) as ChatConnectionState,
+    getLastCursor: () =>
+      yieldedEvents.length > 0
+        ? (yieldedEvents.at(-1) as ChatEvent).event_id
+        : undefined,
+    close: () => {
+      closed = true;
+      if (stateListener !== null) {
+        stateListener({ status: 'closed' });
+      }
+    },
+  };
+  return stream as unknown as ChatEventStream;
+}
+
+function emptySessionPage(): ChatSessionPage {
+  return { items: [], total: 0, limit: 100, offset: 0 };
+}
+
+function emptyOpenResult(): ChatSessionOpenResult {
+  return {
+    session: {
+      session_id: 'sess_test',
+      agent_id: 'agent_1',
+      profile_id: 'prof_1',
+      kind: 'full',
+      status: 'active',
+      latest_cursor: 'cur_0',
+      updated_at: '2026-06-22T10:00:00Z',
+    },
+    events: [],
+    latest_cursor: 'cur_0',
+    has_more_before: false,
+  };
+}
+
+function acceptedResult(): SendChatMessageResult {
+  return { status: 'accepted', message_id: 'msg_1', latest_cursor: 'cur_1' };
+}
+
+function completedCommandResult(): ExecuteChatCommandResult {
+  return {
+    status: 'completed',
+    command_name: '/status',
+    summary: 'OK',
+    latest_cursor: 'cur_1',
+  };
+}
+
+function setupStore(
+  transport: ChatTransport,
+  storage: ChatStorageAdapter,
+): ChatStore {
+  TestBed.configureTestingModule({
+    providers: [
+      ChatStore,
+      { provide: ChatTransport, useValue: transport },
+      { provide: CHAT_STORAGE_ADAPTER, useValue: storage },
+    ],
+  });
+  return TestBed.inject(ChatStore);
+}
+
+describe('@rusty-view/chat-store package version', () => {
   it('exports a version marker', () => {
     expect(CHAT_STORE_VERSION).toBe('0.0.0');
+  });
+});
+
+describe('ChatStore', () => {
+  it('starts with empty state', () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+    expect(store.sessions()).toEqual([]);
+    expect(store.activeSessionId()).toBeNull();
+    expect(store.projection().messages).toHaveLength(0);
+    expect(store.connectionState().status).toBe('idle');
+  });
+
+  it('refreshSessions populates the sessions signal', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          {
+            session_id: 's1',
+            agent_id: 'a1',
+            profile_id: 'p1',
+            kind: 'full',
+            status: 'active',
+            latest_cursor: 'c1',
+            updated_at: '2026-06-22T10:00:00Z',
+          },
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.refreshSessions();
+    expect(store.sessions()).toHaveLength(1);
+    expect(store.sessions()[0]?.session_id).toBe('s1');
+  });
+
+  it('selectSession opens a session and populates projection from events', async () => {
+    const events: ChatEvent[] = [
+      {
+        event_id: 'e1',
+        session_id: 'sess_test',
+        sequence_id: 1,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'message_created',
+        payload: { message_id: 'm1', role: 'user', body: 'hello' },
+      },
+    ];
+    const transport = createMockTransport({
+      openResult: { ...emptyOpenResult(), events },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    expect(store.activeSessionId()).toBe('sess_test');
+    expect(store.projection().messages).toHaveLength(1);
+    expect(store.projection().messages[0]?.blocks[0]?.content).toBe('hello');
+  });
+
+  it('ingestEvents deduplicates by event_id', () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    const event: ChatEvent = {
+      event_id: 'evt_dedup',
+      session_id: 'sess_1',
+      sequence_id: 1,
+      created_at: '2026-06-22T10:00:00Z',
+      kind: 'message_created',
+      payload: { message_id: 'm1', role: 'user', body: 'hi' },
+    };
+    store.ingestEvents([event]);
+    store.ingestEvents([event]); // same event_id
+    expect(store.rawEvents()).toHaveLength(1);
+  });
+
+  it('ingestEvents reduces incrementally without rebuilding projection', () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    const streamingEvents: ChatEvent[] = [
+      {
+        event_id: 's1',
+        session_id: 'sess_1',
+        sequence_id: 1,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'assistant_turn_started',
+        payload: {} as ChatEvent['payload'],
+      },
+      {
+        event_id: 's2',
+        session_id: 'sess_1',
+        sequence_id: 2,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'assistant_text_delta',
+        payload: { message_id: 'a1', delta: 'foo ', coalesced: false },
+      },
+      {
+        event_id: 's3',
+        session_id: 'sess_1',
+        sequence_id: 3,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'assistant_text_delta',
+        payload: { message_id: 'a1', delta: 'bar', coalesced: false },
+      },
+      {
+        event_id: 's4',
+        session_id: 'sess_1',
+        sequence_id: 4,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'assistant_message_completed',
+        payload: { message_id: 'a1', body: 'foo bar' },
+      },
+      {
+        event_id: 's5',
+        session_id: 'sess_1',
+        sequence_id: 5,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'assistant_turn_finished',
+        payload: {} as ChatEvent['payload'],
+      },
+    ];
+    store.ingestEvents(streamingEvents);
+
+    expect(store.projection().messages).toHaveLength(1);
+    expect(store.projection().messages[0]?.status).toBe('completed');
+  });
+
+  it('sendMessage calls transport.sendMessage with the text', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('test message');
+
+    expect(transport.sendMessage).toHaveBeenCalledWith(
+      'sess_test',
+      expect.objectContaining({ body: 'test message' }),
+    );
+  });
+
+  it('sendMessage clears pending send on success', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('test message');
+
+    expect(store.pendingSends()).toHaveLength(0);
+  });
+
+  it('runCommand switches session when result has new_session_id', async () => {
+    const transport = createMockTransport({
+      commandResult: {
+        status: 'completed',
+        command_name: '/new',
+        summary: 'Created new session',
+        latest_cursor: 'cur_0',
+        new_session_id: 'sess_new',
+      },
+      sessions: {
+        items: [
+          {
+            session_id: 'sess_new',
+            agent_id: 'a1',
+            profile_id: 'p1',
+            kind: 'full',
+            status: 'active',
+            latest_cursor: 'cur_0',
+            updated_at: '2026-06-22T10:00:00Z',
+          },
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.runCommand('/new');
+
+    expect(store.activeSessionId()).toBe('sess_new');
+  });
+
+  it('SSE stream events are ingested into the projection', async () => {
+    const streamEvent: ChatEvent = {
+      event_id: 'stream_e1',
+      session_id: 'sess_test',
+      sequence_id: 100,
+      created_at: '2026-06-22T10:00:00Z',
+      kind: 'message_created',
+      payload: { message_id: 'sm1', role: 'user', body: 'from stream' },
+    };
+    const transport = createMockTransport({
+      streamEvents: [streamEvent],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+
+    // Wait for the background stream consumer to process events.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const rawEventIds = store.rawEvents().map((e) => e.event_id);
+    expect(rawEventIds).toContain('stream_e1');
+  });
+
+  it('reconnect closes and reopens the stream', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.reconnect();
+
+    // streamEvents called twice: initial + reconnect
+    expect(transport.streamEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('connectionState updates from the stream', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((r) => setTimeout(r, 30));
+
+    // The mock stream emits 'connected' on state change.
+    expect(store.connectionState().status).toBe('connected');
+  });
+
+  it('handles all known event kinds without crashing', () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    const events: ChatEvent[] = [
+      {
+        event_id: 'k1',
+        session_id: 's',
+        sequence_id: 1,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'message_created',
+        payload: { message_id: 'm1', role: 'user', body: 'hi' },
+      },
+      {
+        event_id: 'k2',
+        session_id: 's',
+        sequence_id: 2,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'tool_call_started',
+        payload: {
+          tool_call_id: 'tc1',
+          tool_name: 'search',
+          summary: 'Searched',
+          status: 'started',
+        },
+      },
+      {
+        event_id: 'k3',
+        session_id: 's',
+        sequence_id: 3,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'command_started',
+        payload: {
+          command_name: '/status',
+          summary: 'Checking',
+          status: 'started',
+        },
+      },
+      {
+        event_id: 'k4',
+        session_id: 's',
+        sequence_id: 4,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'stream_error',
+        payload: { message: 'Lost connection', retryable: true },
+      },
+      {
+        event_id: 'k5',
+        session_id: 's',
+        sequence_id: 5,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'unknown',
+        payload: { summary: 'Mystery', raw: { x: 1 } },
+      },
+    ];
+    store.ingestEvents(events);
+
+    expect(store.projection().messages.length).toBeGreaterThan(0);
+    expect(store.projection().unknownEvents.length).toBeGreaterThan(0);
   });
 });

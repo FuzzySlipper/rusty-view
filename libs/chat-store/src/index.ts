@@ -2,11 +2,18 @@
  * @rusty-view/chat-store
  *
  * Angular Signals store for chat session state: current session, message
- * projection, stream status, and connection status. Transport-agnostic by
- * design — the shell/container layer feeds transport events into the store; the
- * store makes no network calls and holds no roleplay state. Depends on
- * @rusty-view/protocol and @rusty-view/chat-domain.
+ * projection (via chat-domain reducer), stream status, connection state, raw
+ * event log, command registry, and pending sends. No roleplay-specific state.
  *
- * Implemented in Den task #3183. This file is the public API entrypoint only.
+ * All network communication goes through @rusty-view/transport. All durable
+ * storage goes through a ChatStorageAdapter (provided via CHAT_STORAGE_ADAPTER
+ * injection token — typically IndexedDbChatStorage).
+ *
+ * Implemented in Den task #3183.
  */
+
+export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
+export { IndexedDbChatStorage } from './lib/indexed-db-chat-storage';
+export type { PendingSend } from './lib/pending-operations';
+
 export const CHAT_STORE_VERSION = '0.0.0' as const;

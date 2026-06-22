@@ -80,7 +80,11 @@ export default [
             },
             {
               sourceTag: 'scope:chat-store',
-              onlyDependOnLibsWithTags: ['scope:protocol', 'scope:chat-domain'],
+              onlyDependOnLibsWithTags: [
+                'scope:protocol',
+                'scope:chat-domain',
+                'scope:transport',
+              ],
             },
             {
               sourceTag: 'scope:transcript-renderer',

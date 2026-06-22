@@ -1,6 +1,11 @@
 {
   "name": "@rusty-view/chat-store",
   "version": "0.0.1",
-  "peerDependencies": {},
+  "peerDependencies": {
+    "@angular/core": "^21.2.0",
+    "@rusty-view/chat-domain": "workspace:*",
+    "@rusty-view/protocol": "workspace:*",
+    "@rusty-view/transport": "workspace:*"
+  },
   "sideEffects": false
 }
