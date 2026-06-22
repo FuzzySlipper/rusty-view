@@ -1,0 +1,14 @@
+{
+  "name": "rv",
+  "version": "0.0.0",
+  "private": true,
+  "description": "rusty-view workspace generator collection: rv:component, rv:fixture, rv:library.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "generators": "./generators.json",
+  "peerDependencies": {
+    "@nx/angular": "*",
+    "@nx/devkit": "*",
+    "@nx/js": "*"
+  }
+}

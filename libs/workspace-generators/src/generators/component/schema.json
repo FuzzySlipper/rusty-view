@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "rv:component options",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Component name, e.g. 'message-bubble'.",
+      "$default": "$name"
+    },
+    "project": {
+      "type": "string",
+      "description": "Target @rusty-view library project, e.g. 'chat-components'."
+    },
+    "selectorPrefix": {
+      "type": "string",
+      "description": "Element selector prefix.",
+      "default": "rv"
+    }
+  },
+  "required": ["name", "project"]
+}

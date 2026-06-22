@@ -1,0 +1,13 @@
+{
+  "name": "workspace-generators",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/workspace-generators/src",
+  "tags": ["type:lib", "scope:workspace-generators"],
+  "implicitDependencies": [],
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

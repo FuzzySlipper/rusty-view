@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "name": "rv",
+  "version": "0.0.0",
+  "generators": {
+    "component": {
+      "factory": "./src/generators/component/generator",
+      "schema": "./src/generators/component/schema.json",
+      "description": "Scaffold a presentational component (OnPush, standalone, rv- kebab selector, typed signal I/O) inside an existing @rusty-view library.",
+      "aliases": ["c"]
+    },
+    "fixture": {
+      "factory": "./src/generators/fixture/generator",
+      "schema": "./src/generators/fixture/schema.json",
+      "description": "Scaffold a typed test fixture in @rusty-view/testing-fixtures.",
+      "aliases": ["f"]
+    },
+    "library": {
+      "factory": "./src/generators/library/generator",
+      "schema": "./src/generators/library/schema.json",
+      "description": "Scaffold a boundary-tagged library (delegates to Nx library generators with rusty-view conventions).",
+      "aliases": ["lib"]
+    }
+  }
+}

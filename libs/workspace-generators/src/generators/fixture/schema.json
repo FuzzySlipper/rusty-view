@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "rv:fixture options",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Fixture name, e.g. 'huge-session'.",
+      "$default": "$name"
+    }
+  },
+  "required": ["name"]
+}

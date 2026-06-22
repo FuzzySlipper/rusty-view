@@ -1,0 +1,17 @@
+# Lockfiles
+pnpm-lock.yaml
+package-lock.json
+
+# Generated / build output
+dist/
+out-tsc/
+.nx/
+coverage/
+
+# Authored design + policy docs (prose; do not reformat)
+docs/
+AGENTS.md
+agents-project.md
+
+# Generated protocol types (once #3180 lands)
+libs/protocol/src/generated/

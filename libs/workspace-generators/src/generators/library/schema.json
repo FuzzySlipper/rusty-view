@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "rv:library options",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Library name.",
+      "$default": "$name"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["angular", "js"],
+      "description": "Library kind.",
+      "default": "js"
+    },
+    "scope": {
+      "type": "string",
+      "description": "Boundary scope (must be one of the approved rusty-view scopes)."
+    },
+    "directory": {
+      "type": "string",
+      "description": "Output directory (defaults to libs/<name>)."
+    },
+    "importPath": {
+      "type": "string",
+      "description": "Package import path (defaults to @rusty-view/<name>)."
+    },
+    "prefix": {
+      "type": "string",
+      "description": "Angular element selector prefix.",
+      "default": "rv"
+    }
+  },
+  "required": ["name", "type", "scope"]
+}

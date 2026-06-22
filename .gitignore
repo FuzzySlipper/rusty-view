@@ -1,0 +1,38 @@
+# Dependencies
+/node_modules/
+
+# Nx cache & reports
+/.nx/cache
+/.nx/workspace-data
+
+# Build outputs
+/dist
+*.tsbuildinfo
+
+# Angular
+/.angular/cache
+
+# Test / coverage / e2e artifacts
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+.angular
+
+__screenshots__/
+
+vitest.config.*.timestamp*

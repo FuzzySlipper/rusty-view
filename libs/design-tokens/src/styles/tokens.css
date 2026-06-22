@@ -1,0 +1,91 @@
+/*
+ * rusty-view design tokens.
+ *
+ * Single source of truth for visual values. Components consume these via
+ * `var(--rv-*)` in their component-scoped styles. Keep this file free of any
+ * component or layout rules — values only.
+ *
+ * Defaults are dark-first (debug tools favour dark) with a light theme under
+ * `prefers-color-scheme: light`. No roleplay concepts, no app-specific theming.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- color ---- */
+  --rv-color-bg: #0b0d10;
+  --rv-color-surface: #12161b;
+  --rv-color-surface-raised: #1a1f26;
+  --rv-color-border: #262d36;
+  --rv-color-border-strong: #38424e;
+  --rv-color-text-primary: #e6e9ee;
+  --rv-color-text-secondary: #aab2bf;
+  --rv-color-text-muted: #6b7480;
+  --rv-color-accent: #4f9cf4;
+  --rv-color-accent-hover: #6cb0ff;
+  --rv-color-accent-text: #0b0d10;
+  --rv-color-success: #3fb950;
+  --rv-color-warning: #d29922;
+  --rv-color-danger: #f85149;
+  --rv-color-stream: #8a96a6;
+
+  /* ---- spacing (4px base scale) ---- */
+  --rv-space-0: 0;
+  --rv-space-xs: 2px;
+  --rv-space-sm: 4px;
+  --rv-space-md: 8px;
+  --rv-space-lg: 16px;
+  --rv-space-xl: 24px;
+
+  /* ---- typography ---- */
+  --rv-font-mono:
+    'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  --rv-font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --rv-font-size-xs: 11px;
+  --rv-font-size-sm: 12px;
+  --rv-font-size-md: 13px;
+  --rv-font-size-lg: 15px;
+  --rv-line-height-tight: 1.25;
+  --rv-line-height-normal: 1.5;
+  --rv-font-weight-regular: 400;
+  --rv-font-weight-bold: 600;
+
+  /* ---- density (debug tools are dense) ---- */
+  --rv-density-control-sm: 24px;
+  --rv-density-control-md: 30px;
+  --rv-density-row: 28px;
+  --rv-radius: 4px;
+
+  /* ---- z-index ---- */
+  --rv-z-base: 1;
+  --rv-z-sticky: 100;
+  --rv-z-overlay: 1000;
+
+  /* ---- motion ---- */
+  --rv-motion-fast: 80ms;
+  --rv-motion-base: 160ms;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --rv-color-bg: #f6f7f9;
+    --rv-color-surface: #ffffff;
+    --rv-color-surface-raised: #ffffff;
+    --rv-color-border: #d7dbe0;
+    --rv-color-border-strong: #b6bdc6;
+    --rv-color-text-primary: #1b1f24;
+    --rv-color-text-secondary: #48515d;
+    --rv-color-text-muted: #7a828d;
+    --rv-color-accent: #1f6feb;
+    --rv-color-accent-hover: #1858c4;
+    --rv-color-accent-text: #ffffff;
+    --rv-color-success: #1a7f37;
+    --rv-color-warning: #9a6700;
+    --rv-color-danger: #cf222e;
+    --rv-color-stream: #57606a;
+  }
+}
