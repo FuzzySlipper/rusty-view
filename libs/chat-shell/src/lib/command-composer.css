@@ -1,0 +1,98 @@
+:host {
+  display: block;
+}
+
+.rv-command {
+  border-top: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface);
+}
+
+.rv-command__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-xs);
+  padding: var(--rv-space-xs) var(--rv-space-md);
+}
+
+.rv-command__prefix {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  color: var(--rv-color-accent);
+}
+
+.rv-command__input {
+  flex: 1;
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-command__input:focus {
+  outline: none;
+  border-color: var(--rv-color-accent);
+}
+
+.rv-command__run,
+.rv-command__toggle {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  cursor: pointer;
+}
+
+.rv-command__run:hover,
+.rv-command__toggle:hover {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-accent);
+}
+
+.rv-command__registry {
+  max-height: 200px;
+  overflow-y: auto;
+  border-top: 1px solid var(--rv-color-border);
+  padding: var(--rv-space-xs) var(--rv-space-md);
+}
+
+.rv-command-entry {
+  display: flex;
+  gap: var(--rv-space-md);
+  width: 100%;
+  padding: var(--rv-space-xs);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rv-command-entry:hover {
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-command-entry__name {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-accent);
+  white-space: nowrap;
+}
+
+.rv-command-entry__desc {
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rv-command__registry-empty {
+  padding: var(--rv-space-sm);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+}

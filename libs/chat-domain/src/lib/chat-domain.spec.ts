@@ -1,10 +1,4 @@
-import {
-  CHAT_DOMAIN_VERSION,
-  emptyProjection,
-  projectConversation,
-  type ChatMessage,
-  type ConversationProjection,
-} from '../index';
+import { CHAT_DOMAIN_VERSION, projectConversation } from '../index';
 import type { ChatEvent } from '@rusty-view/protocol';
 
 import { describe, expect, it } from 'vitest';

@@ -1,0 +1,90 @@
+:host {
+  display: block;
+  height: 100vh;
+}
+
+.rv-debug {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--rv-color-bg);
+}
+
+.rv-debug__header {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-md);
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border-bottom: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface);
+}
+
+.rv-debug__title {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  font-weight: var(--rv-font-weight-bold);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-debug__cursor {
+  margin-left: auto;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+}
+
+.rv-debug__toggle {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  cursor: pointer;
+}
+
+.rv-debug__toggle:hover {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-accent);
+}
+
+.rv-debug__body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rv-debug__sidebar {
+  width: 240px;
+  border-right: 1px solid var(--rv-color-border);
+  overflow: hidden;
+}
+
+.rv-debug__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rv-debug__transcript {
+  flex: 1;
+  overflow: hidden;
+}
+
+.rv-debug__no-session {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-debug__inspector {
+  width: 360px;
+  border-left: 1px solid var(--rv-color-border);
+  overflow: hidden;
+}

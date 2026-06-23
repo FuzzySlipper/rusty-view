@@ -1,0 +1,19 @@
+<div class="rv-input">
+  <textarea
+    class="rv-input__field"
+    [placeholder]="placeholder()"
+    [disabled]="disabled()"
+    [value]="text()"
+    (input)="text.set($any($event.target).value)"
+    (keydown)="onKeydown($event)"
+    rows="2"
+  ></textarea>
+  <button
+    type="button"
+    class="rv-input__send"
+    [disabled]="disabled() || text().trim().length === 0"
+    (click)="submit()"
+  >
+    Send
+  </button>
+</div>

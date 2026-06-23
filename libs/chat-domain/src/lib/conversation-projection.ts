@@ -1,8 +1,4 @@
-import type {
-  ChatEvent,
-  ChatEventPayload,
-  ChatEventKind,
-} from '@rusty-view/protocol';
+import type { ChatEvent } from '@rusty-view/protocol';
 
 import {
   emptyProjection,
@@ -70,7 +66,7 @@ function applyEvent(
     case 'assistant_message_completed':
       return applyAssistantMessageCompleted(withCursor, event);
     case 'assistant_turn_finished':
-      return applyAssistantTurnFinished(withCursor, event);
+      return applyAssistantTurnFinished(withCursor);
     case 'tool_call_started':
       return applyToolCall(withCursor, event, 'started');
     case 'tool_call_completed':
@@ -214,7 +210,6 @@ function applyAssistantMessageCompleted(
 
 function applyAssistantTurnFinished(
   projection: ConversationProjection,
-  _event: ChatEvent,
 ): ConversationProjection {
   if (projection.activeTurn === undefined) {
     return projection;

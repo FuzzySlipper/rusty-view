@@ -1,0 +1,38 @@
+<div class="rv-command">
+  <div class="rv-command__bar">
+    <span class="rv-command__prefix">/</span>
+    <input
+      type="text"
+      class="rv-command__input"
+      placeholder="command (e.g. new, status, reload-mcp)…"
+      [value]="commandText()"
+      (input)="commandText.set($any($event.target).value)"
+      (keydown)="onKeydown($event)"
+    />
+    <button type="button" class="rv-command__run" (click)="submit()">
+      Run
+    </button>
+    <button type="button" class="rv-command__toggle" (click)="toggleRegistry()">
+      {{ showRegistry() ? 'Hide' : 'Commands' }}
+    </button>
+  </div>
+
+  @if (showRegistry()) {
+  <div class="rv-command__registry">
+    @for (cmd of availableCommands(); track cmd.name) {
+    <button
+      type="button"
+      class="rv-command-entry"
+      (click)="fillCommand(cmd.name)"
+    >
+      <span class="rv-command-entry__name">/{{ cmd.name }}</span>
+      <span class="rv-command-entry__desc">{{ cmd.description }}</span>
+    </button>
+    } @empty {
+    <div class="rv-command__registry-empty">
+      No commands loaded. Run refresh.
+    </div>
+    }
+  </div>
+  }
+</div>

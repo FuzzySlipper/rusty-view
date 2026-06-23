@@ -1,0 +1,26 @@
+<div class="rv-event-inspector">
+  <div class="rv-event-inspector__list">
+    @for (event of events(); track event.event_id) {
+    <div
+      class="rv-event"
+      [class.rv-event--selected]="selectedEventId() === event.event_id"
+    >
+      <span class="rv-event__seq">{{ event.sequence_id }}</span>
+      <span
+        class="rv-event__kind"
+        [class]="kindColor[event.kind] ?? 'rv-event-kind--unknown'"
+      >
+        {{ event.kind }}
+      </span>
+      <span class="rv-event__id">{{ event.event_id }}</span>
+    </div>
+    } @empty {
+    <div class="rv-event-inspector__empty">No events yet.</div>
+    }
+  </div>
+  @if (selectedEvent(events()); as selected) {
+  <div class="rv-event-inspector__detail">
+    <rv-json-inspector [data]="selected" />
+  </div>
+  }
+</div>

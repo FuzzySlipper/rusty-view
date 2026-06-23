@@ -1,6 +1,8 @@
 {
   "name": "@rusty-view/chat-components",
   "version": "0.0.1",
-  "peerDependencies": {},
+  "peerDependencies": {
+    "@angular/core": "^21.2.0"
+  },
   "sideEffects": false
 }

@@ -1,0 +1,33 @@
+<div class="rv-sessions">
+  <div class="rv-sessions__header">Sessions</div>
+  @if (store.sessions().length === 0) {
+  <div class="rv-sessions__empty">No sessions. Click refresh.</div>
+  } @else {
+  <ul class="rv-sessions__list">
+    @for (session of store.sessions(); track session.session_id) {
+    <li>
+      <button
+        type="button"
+        class="rv-session"
+        [class.rv-session--active]="store.activeSessionId() === session.session_id"
+        (click)="onSelect(session.session_id)"
+      >
+        <span class="rv-session__title"
+          >{{ session.title ?? session.session_id }}</span
+        >
+        <span class="rv-session__meta"
+          >{{ session.status }} · {{ session.message_count ?? 0 }} msgs</span
+        >
+      </button>
+    </li>
+    }
+  </ul>
+  }
+  <button
+    type="button"
+    class="rv-sessions__refresh"
+    (click)="store.refreshSessions()"
+  >
+    Refresh
+  </button>
+</div>

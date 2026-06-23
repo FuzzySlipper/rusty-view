@@ -1,6 +1,12 @@
 {
   "name": "@rusty-view/chat-shell",
   "version": "0.0.1",
-  "peerDependencies": {},
+  "peerDependencies": {
+    "@angular/core": "^21.2.0",
+    "@rusty-view/chat-components": "workspace:*",
+    "@rusty-view/chat-store": "workspace:*",
+    "@rusty-view/protocol": "workspace:*",
+    "@rusty-view/transcript-renderer": "workspace:*"
+  },
   "sideEffects": false
 }

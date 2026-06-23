@@ -1,0 +1,50 @@
+<div class="rv-debug">
+  <!-- Header: title + stream status + cursor + inspector toggle -->
+  <header class="rv-debug__header">
+    <span class="rv-debug__title">rusty-view · debug-chat</span>
+    <rv-stream-status
+      [status]="connectionStatus()"
+      (reconnect)="onReconnect()"
+    />
+    <span class="rv-debug__cursor">cursor: {{ cursorLabel() }}</span>
+    <button type="button" class="rv-debug__toggle" (click)="toggleInspector()">
+      {{ showInspector() ? 'Hide Inspector' : 'Show Inspector' }}
+    </button>
+  </header>
+
+  <!-- Body: sidebar + transcript + inspector -->
+  <div class="rv-debug__body">
+    <!-- Session sidebar -->
+    <aside class="rv-debug__sidebar">
+      <rv-session-list (selectSession)="onSelectSession($event)" />
+    </aside>
+
+    <!-- Central: transcript + input + command composer -->
+    <main class="rv-debug__main">
+      @if (store.activeSessionId()) {
+      <div class="rv-debug__transcript">
+        <rv-transcript-viewport [messages]="store.messages()" />
+      </div>
+      <rv-message-input
+        [disabled]="store.isStreaming()"
+        (send)="onSendMessage($event)"
+      />
+      <rv-command-composer />
+      } @else {
+      <div class="rv-debug__no-session">
+        Select a session from the sidebar to begin.
+      </div>
+      }
+    </main>
+
+    <!-- Inspector: raw events + JSON -->
+    @if (showInspector()) {
+    <aside class="rv-debug__inspector">
+      <rv-event-inspector
+        [events]="store.rawEvents()"
+        [selectedEventId]="selectedEventId()"
+      />
+    </aside>
+    }
+  </div>
+</div>

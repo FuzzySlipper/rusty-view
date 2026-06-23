@@ -1,0 +1,10 @@
+<button
+  type="button"
+  class="rv-status"
+  [class]="statusClass()"
+  (click)="reconnect.emit()"
+  [title]="'Click to reconnect'"
+>
+  <span class="rv-status__dot"></span>
+  <span class="rv-status__label">{{ label() }}</span>
+</button>

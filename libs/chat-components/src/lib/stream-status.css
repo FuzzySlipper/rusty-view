@@ -1,0 +1,38 @@
+:host {
+  display: inline-flex;
+}
+
+.rv-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rv-space-xs);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  cursor: pointer;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rv-color-text-muted);
+}
+
+.rv-status--connected .rv-status__dot {
+  background: var(--rv-color-success);
+}
+
+.rv-status--connecting .rv-status__dot,
+.rv-status--reconnecting .rv-status__dot {
+  background: var(--rv-color-warning);
+}
+
+.rv-status--closed .rv-status__dot,
+.rv-status--error .rv-status__dot {
+  background: var(--rv-color-danger);
+}
