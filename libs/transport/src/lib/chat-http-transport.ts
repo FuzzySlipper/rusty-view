@@ -81,7 +81,10 @@ export class ChatHttpTransport {
 
   constructor(config: ChatTransportConfig) {
     this.config = config;
-    this.fetchImpl = config.fetchImpl ?? globalThis.fetch;
+    // Bind fetch to globalThis: in the browser, storing `globalThis.fetch` as
+    // a bare reference and calling it later loses the `this` context (Window),
+    // causing 'Illegal invocation'. Binding ensures correct context everywhere.
+    this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   /** List chat-capable sessions with optional filtering/pagination. */

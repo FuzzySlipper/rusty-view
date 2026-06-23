@@ -54,7 +54,9 @@ export class ChatTransport {
   constructor(configInput: ChatTransportConfigInput) {
     this.config = resolveChatTransportConfig(configInput);
     this.http = new ChatHttpTransport(this.config);
-    this.fetchImpl = this.config.fetchImpl ?? globalThis.fetch;
+    // Bind fetch to globalThis (see ChatHttpTransport for the 'Illegal
+    // invocation' rationale).
+    this.fetchImpl = this.config.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   getConfig(): Readonly<ChatTransportConfig> {
