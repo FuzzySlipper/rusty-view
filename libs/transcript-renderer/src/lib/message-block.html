@@ -1,4 +1,4 @@
-@if (isCollapsible) {
+@if (isCollapsible()) {
 <div
   class="rv-block rv-block--collapsible"
   [class.rv-block--debug]="block().kind === 'debug'"
@@ -10,14 +10,18 @@
     [attr.aria-expanded]="expanded()"
   >
     <span class="rv-block__kind">{{ block().kind }}</span>
-    @if (isTruncated) {
+    @if (isTruncated()) {
     <span class="rv-block__expand">expand</span>
     }
   </button>
-  <pre class="rv-block__content">{{ displayContent }}</pre>
+  <pre class="rv-block__content">{{ displayContent() }}</pre>
 </div>
 } @else {
 <div class="rv-block rv-block--text">
-  <p class="rv-block__content">{{ displayContent }}</p>
+  @if (renderedHtml()) {
+  <div class="rv-block__markdown" [innerHTML]="renderedHtml()"></div>
+  } @else {
+  <p class="rv-block__content">{{ displayContent() }}</p>
+  }
 </div>
 }

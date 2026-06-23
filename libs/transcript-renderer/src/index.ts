@@ -17,5 +17,12 @@ export type {
   ChatMessageDecorator,
   ChatMessageDecoration,
 } from './lib/transcript-decorators';
+export { WorkerManager } from './lib/worker-manager';
+export type {
+  WorkerRequest,
+  WorkerResponse,
+  WorkerOperationKind,
+} from './lib/worker-message-protocol';
+export { processRequestInline } from './lib/worker-inline-ops';
 
 export const TRANSCRIPT_RENDERER_VERSION = '0.0.0' as const;

@@ -1,14 +1,30 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
+import { WorkerManager } from '@rusty-view/transcript-renderer';
 
 /**
  * Presentational raw JSON inspector for debugging.
  *
- * Pretty-prints any value as formatted JSON. Used in the debug app's inspector
- * panels to inspect raw events, messages, and tool calls.
+ * Pretty-prints and syntax-highlights any value as formatted JSON. Uses the
+ * {@link WorkerManager} to offload large JSON processing off the main thread,
+ * preventing frame drops when inspecting large tool-call results or debug
+ * payloads. For small JSON (< 1000 chars), it pretty-prints inline for speed.
  */
 @Component({
   selector: 'rv-json-inspector',
-  template: ` <pre class="rv-json">{{ formatted() }}</pre> `,
+  template: `
+    @if (highlightedHtml()) {
+      <pre class="rv-json" [innerHTML]="highlightedHtml()"></pre>
+    } @else {
+      <pre class="rv-json">{{ formattedInline() }}</pre>
+    }
+  `,
   styles: [
     `
       :host {
@@ -26,22 +42,74 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
         white-space: pre-wrap;
         word-break: break-all;
       }
+      :host ::ng-deep .rv-json-key {
+        color: var(--rv-color-accent);
+      }
+      :host ::ng-deep .rv-json-string {
+        color: var(--rv-color-success);
+      }
+      :host ::ng-deep .rv-json-bool {
+        color: var(--rv-color-warning);
+      }
+      :host ::ng-deep .rv-json-null {
+        color: var(--rv-color-text-muted);
+      }
+      :host ::ng-deep .rv-json-number {
+        color: var(--rv-color-danger);
+      }
     `,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class JsonInspectorComponent {
-  readonly data = input<unknown>(undefined);
+  private readonly workerManager = inject(WorkerManager);
 
-  protected formatted(): string {
-    const value = this.data();
-    if (value === undefined || value === null) {
-      return '—';
-    }
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
+  readonly data = input<unknown>(undefined);
+  readonly workerThreshold = input<number>(1_000);
+
+  protected readonly highlightedHtml = signal<string>('');
+  protected readonly formattedInline = signal<string>('—');
+
+  constructor() {
+    effect(() => {
+      const value = this.data();
+      if (value === undefined || value === null) {
+        this.formattedInline.set('—');
+        this.highlightedHtml.set('');
+        return;
+      }
+
+      let jsonStr: string;
+      try {
+        jsonStr = JSON.stringify(value, null, 2);
+      } catch {
+        jsonStr = String(value);
+      }
+
+      if (jsonStr.length > this.workerThreshold()) {
+        // Offload to worker for large JSON.
+        this.formattedInline.set('');
+        void this.highlightJson(jsonStr);
+      } else {
+        // Inline for small JSON (fast, no worker overhead).
+        this.highlightedHtml.set('');
+        this.formattedInline.set(jsonStr);
+      }
+    });
+  }
+
+  private async highlightJson(jsonStr: string): Promise<void> {
+    const html = await this.workerManager.highlightJson(jsonStr);
+    // Only update if the data hasn't changed during async processing.
+    const currentValue = this.data();
+    if (currentValue !== undefined && currentValue !== null) {
+      try {
+        if (JSON.stringify(currentValue, null, 2) === jsonStr) {
+          this.highlightedHtml.set(html);
+        }
+      } catch {
+        // value changed — ignore stale result
+      }
     }
   }
 }

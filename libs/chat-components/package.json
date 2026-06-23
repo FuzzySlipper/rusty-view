@@ -2,7 +2,8 @@
   "name": "@rusty-view/chat-components",
   "version": "0.0.1",
   "peerDependencies": {
-    "@angular/core": "^21.2.0"
+    "@angular/core": "^21.2.0",
+    "@rusty-view/transcript-renderer": "workspace:*"
   },
   "sideEffects": false
 }

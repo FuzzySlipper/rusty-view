@@ -92,7 +92,11 @@ export default [
             },
             {
               sourceTag: 'scope:chat-components',
-              onlyDependOnLibsWithTags: ['scope:protocol', 'scope:chat-domain'],
+              onlyDependOnLibsWithTags: [
+                'scope:protocol',
+                'scope:chat-domain',
+                'scope:transcript-renderer',
+              ],
             },
             {
               // The shell is the composition layer: it wires transport into the
