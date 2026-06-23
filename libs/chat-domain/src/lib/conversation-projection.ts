@@ -161,12 +161,27 @@ function applyAssistantTextDelta(
   event: ChatEvent,
 ): ConversationProjection {
   const payload = event.payload;
-  if (!('message_id' in payload) || !('delta' in payload)) {
+
+  // The OpenAPI contract specifies `message_id` and `delta` fields, but the
+  // live backend currently emits `wake_id` (or sometimes `message_id`) and
+  // `text` for the delta content. Accept both shapes to handle contract drift.
+  const messageId =
+    'message_id' in payload && typeof payload.message_id === 'string'
+      ? payload.message_id
+      : 'wake_id' in payload && typeof payload.wake_id === 'string'
+        ? `asst:${payload.wake_id}`
+        : undefined;
+
+  const delta =
+    'delta' in payload && typeof payload.delta === 'string'
+      ? payload.delta
+      : 'text' in payload && typeof payload.text === 'string'
+        ? payload.text
+        : undefined;
+
+  if (messageId === undefined || delta === undefined) {
     return projection;
   }
-
-  const messageId = payload.message_id;
-  const delta = payload.delta;
 
   // Update or create the streaming message.
   const messages = upsertStreamingDelta(
@@ -191,12 +206,27 @@ function applyAssistantMessageCompleted(
   event: ChatEvent,
 ): ConversationProjection {
   const payload = event.payload;
-  if (!('message_id' in payload) || !('body' in payload)) {
+
+  // The OpenAPI contract specifies `message_id` and `body`, but the live backend
+  // emits `status` + `summary` (and sometimes `wake_id`) with no `message_id`.
+  // Accept both shapes.
+  const messageId =
+    'message_id' in payload && typeof payload.message_id === 'string'
+      ? payload.message_id
+      : 'wake_id' in payload && typeof payload.wake_id === 'string'
+        ? `asst:${payload.wake_id}`
+        : projection.activeTurn?.messageId;
+
+  const body =
+    'body' in payload && typeof payload.body === 'string'
+      ? payload.body
+      : 'summary' in payload && typeof payload.summary === 'string'
+        ? payload.summary
+        : undefined;
+
+  if (messageId === undefined || body === undefined) {
     return projection;
   }
-
-  const messageId = payload.message_id;
-  const body = payload.body;
 
   const messages = finalizeAssistantMessage(
     projection.messages,
