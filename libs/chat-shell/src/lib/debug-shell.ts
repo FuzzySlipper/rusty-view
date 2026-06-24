@@ -14,7 +14,6 @@ import type { StreamStatusKind } from '@rusty-view/chat-components';
 import { TranscriptViewportComponent } from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
 import { ProfilePanelComponent } from './profile-panel';
-import { CommandComposerComponent } from './command-composer';
 import { TopMenuComponent } from './top-menu';
 
 /**
@@ -35,7 +34,6 @@ import { TopMenuComponent } from './top-menu';
     MessageInputComponent,
     StreamStatusComponent,
     EventInspectorComponent,
-    CommandComposerComponent,
     TopMenuComponent,
   ],
   templateUrl: './debug-shell.html',

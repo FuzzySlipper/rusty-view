@@ -20,7 +20,7 @@
       <rv-profile-panel />
     </aside>
 
-    <!-- Central: transcript + input + command composer -->
+    <!-- Central: transcript + input -->
     <main class="rv-debug__main">
       <!-- Historical session banner -->
       @if (isViewingHistorical()) {
@@ -49,7 +49,6 @@
           (send)="onSendMessage($event)"
         />
       }
-      <rv-command-composer />
       } @else {
       <div class="rv-debug__no-session">
         Select a profile from the sidebar to begin.

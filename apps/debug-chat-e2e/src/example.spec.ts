@@ -61,25 +61,4 @@ test('selecting a session shows the transcript region', async ({ page }) => {
     timeout: 10_000,
   });
   await expect(page.locator('rv-message-input')).toBeVisible();
-  await expect(page.locator('rv-command-composer')).toBeVisible();
-});
-
-test('command registry is loaded and toggleable', async ({ page }) => {
-  test.skip(!backendReachable, 'backend not reachable at ' + BACKEND_URL);
-  await page.goto('/');
-
-  // The command composer is inside the session view, so select a profile first.
-  const profileButton = page.locator('.rv-profile').first();
-  await expect(profileButton).toBeVisible({ timeout: 10_000 });
-  await profileButton.click();
-
-  await expect(page.locator('rv-command-composer')).toBeVisible({
-    timeout: 10_000,
-  });
-
-  const toggleButton = page.locator('.rv-command__toggle');
-  await toggleButton.click();
-
-  const registryEntry = page.locator('.rv-command-entry').first();
-  await expect(registryEntry).toBeVisible({ timeout: 5_000 });
 });
