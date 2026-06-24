@@ -13,14 +13,14 @@ import {
 import type { StreamStatusKind } from '@rusty-view/chat-components';
 import { TranscriptViewportComponent } from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
-import { SessionListComponent } from './session-list';
+import { ProfilePanelComponent } from './profile-panel';
 import { CommandComposerComponent } from './command-composer';
 import { TopMenuComponent } from './top-menu';
 
 /**
  * Debug chat shell — the composition layer that wires everything together.
  *
- * Layout: header with stream status → session sidebar → central transcript +
+ * Layout: header with stream status → profile sidebar → central transcript +
  * message input → event inspector panel. Dense, workbench-style, roleplay-
  * agnostic.
  *
@@ -30,7 +30,7 @@ import { TopMenuComponent } from './top-menu';
 @Component({
   selector: 'rv-debug-shell',
   imports: [
-    SessionListComponent,
+    ProfilePanelComponent,
     TranscriptViewportComponent,
     MessageInputComponent,
     StreamStatusComponent,
@@ -58,6 +58,14 @@ export class DebugShellComponent {
     return cursor ?? '—';
   });
 
+  protected readonly isViewingHistorical = computed(
+    () => this.store.isViewingHistorical(),
+  );
+
+  protected readonly viewingSessionId = computed(
+    () => this.store.viewingHistoricalSessionId(),
+  );
+
   protected onSelectSession(sessionId: string): void {
     void this.store.selectSession(sessionId);
   }
@@ -76,5 +84,9 @@ export class DebugShellComponent {
 
   protected selectEvent(eventId: string): void {
     this.selectedEventId.set(eventId);
+  }
+
+  protected onReturnToActive(): void {
+    void this.store.returnToActiveSession();
   }
 }

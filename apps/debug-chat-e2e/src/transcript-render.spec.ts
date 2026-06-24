@@ -136,10 +136,10 @@ test('selecting a session renders message rows in the transcript', async ({
 
   await page.goto('/');
 
-  // Session loaded from the mocked list.
-  const session = page.locator('.rv-session').first();
-  await expect(session).toBeVisible({ timeout: 10_000 });
-  await session.click();
+  // Profile loaded from the mocked list.
+  const profile = page.locator('.rv-profile').first();
+  await expect(profile).toBeVisible({ timeout: 10_000 });
+  await profile.click();
 
   // The real assertion: message ROWS render, not just the viewport shell.
   const items = page.locator('.rv-transcript__item');

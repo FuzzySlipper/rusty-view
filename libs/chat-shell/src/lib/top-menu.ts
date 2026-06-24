@@ -9,17 +9,38 @@ import { TopMenuBarComponent, type TopMenuEntry } from '@rusty-view/chat-compone
 
 import { HelpPanelComponent } from './help-panel';
 import { OptionsPanelComponent } from './options-panel';
+import { SessionsPanelComponent } from './sessions-panel';
 import {
   CHAT_TOP_MENU_ITEMS,
   HELP_PANEL_ID,
   OPTIONS_PANEL_ID,
+  SESSIONS_PANEL_ID,
   type ChatTopMenuItem,
 } from './shell-extension-tokens';
 
 /** Built-in menu items the shell always ships with. */
 const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
-  { id: OPTIONS_PANEL_ID, label: 'Options', kind: 'panel', panelId: OPTIONS_PANEL_ID, order: 90 },
-  { id: HELP_PANEL_ID, label: 'Help', kind: 'panel', panelId: HELP_PANEL_ID, order: 100 },
+  {
+    id: SESSIONS_PANEL_ID,
+    label: 'Sessions',
+    kind: 'panel',
+    panelId: SESSIONS_PANEL_ID,
+    order: 10,
+  },
+  {
+    id: OPTIONS_PANEL_ID,
+    label: 'Options',
+    kind: 'panel',
+    panelId: OPTIONS_PANEL_ID,
+    order: 90,
+  },
+  {
+    id: HELP_PANEL_ID,
+    label: 'Help',
+    kind: 'panel',
+    panelId: HELP_PANEL_ID,
+    order: 100,
+  },
 ];
 
 /**
@@ -34,7 +55,12 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
  */
 @Component({
   selector: 'rv-top-menu',
-  imports: [TopMenuBarComponent, OptionsPanelComponent, HelpPanelComponent],
+  imports: [
+    TopMenuBarComponent,
+    OptionsPanelComponent,
+    HelpPanelComponent,
+    SessionsPanelComponent,
+  ],
   templateUrl: './top-menu.html',
   styleUrl: './top-menu.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,6 +95,9 @@ export class TopMenuComponent {
   );
   protected readonly helpOpen = computed(
     () => this.openPanelId() === HELP_PANEL_ID,
+  );
+  protected readonly sessionsOpen = computed(
+    () => this.openPanelId() === SESSIONS_PANEL_ID,
   );
 
   protected onSelect(id: string): void {

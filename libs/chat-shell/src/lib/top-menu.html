@@ -50,4 +50,26 @@
       </div>
     </div>
   }
+
+  @if (sessionsOpen()) {
+    <div
+      class="rv-top-menu__overlay"
+      role="button"
+      tabindex="0"
+      aria-label="Close sessions"
+      (click)="closePanel()"
+      (keydown.enter)="closePanel()"
+      (keydown.space)="closePanel()"
+    >
+      <div
+        class="rv-top-menu__panel"
+        role="dialog"
+        aria-label="Sessions"
+        (click)="$event.stopPropagation()"
+        (keydown)="$event.stopPropagation()"
+      >
+        <rv-sessions-panel (dismissed)="closePanel()" />
+      </div>
+    </div>
+  }
 </div>

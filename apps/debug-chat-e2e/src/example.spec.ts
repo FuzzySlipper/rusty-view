@@ -33,7 +33,7 @@ test('debug-chat renders the shell with sidebar and header', async ({
   await expect(header).toContainText('rusty-view');
   await expect(header).toContainText('debug-chat');
 
-  await expect(page.locator('rv-session-list')).toBeVisible();
+  await expect(page.locator('rv-profile-panel')).toBeVisible();
   await expect(page.locator('rv-stream-status')).toBeVisible();
 });
 
@@ -42,11 +42,11 @@ test('sessions from the backend appear in the sidebar', async ({ page }) => {
   await page.goto('/');
 
   // The app initializer calls refreshSessions() on startup. Wait for at
-  // least one session button to appear in the sidebar.
-  const sessionButton = page.locator('.rv-session').first();
-  await expect(sessionButton).toBeVisible({ timeout: 10_000 });
+  // least one profile button to appear in the sidebar.
+  const profileButton = page.locator('.rv-profile').first();
+  await expect(profileButton).toBeVisible({ timeout: 10_000 });
 
-  const count = await page.locator('.rv-session').count();
+  const count = await page.locator('.rv-profile').count();
   expect(count).toBeGreaterThan(0);
 });
 
@@ -54,12 +54,9 @@ test('selecting a session shows the transcript region', async ({ page }) => {
   test.skip(!backendReachable, 'backend not reachable at ' + BACKEND_URL);
   await page.goto('/');
 
-  const sessionButton = page.locator('.rv-session').first();
-  await expect(sessionButton).toBeVisible({ timeout: 10_000 });
-  await sessionButton.click();
-
-  // The transcript viewport should appear (the "no session" placeholder
-  // should be gone).
+  const profileButton = page.locator('.rv-profile').first();
+  await expect(profileButton).toBeVisible({ timeout: 10_000 });
+  await profileButton.click();
   await expect(page.locator('rv-transcript-viewport')).toBeVisible({
     timeout: 10_000,
   });
@@ -71,10 +68,10 @@ test('command registry is loaded and toggleable', async ({ page }) => {
   test.skip(!backendReachable, 'backend not reachable at ' + BACKEND_URL);
   await page.goto('/');
 
-  // The command composer is inside the session view, so select a session first.
-  const sessionButton = page.locator('.rv-session').first();
-  await expect(sessionButton).toBeVisible({ timeout: 10_000 });
-  await sessionButton.click();
+  // The command composer is inside the session view, so select a profile first.
+  const profileButton = page.locator('.rv-profile').first();
+  await expect(profileButton).toBeVisible({ timeout: 10_000 });
+  await profileButton.click();
 
   await expect(page.locator('rv-command-composer')).toBeVisible({
     timeout: 10_000,

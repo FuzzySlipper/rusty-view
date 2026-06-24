@@ -1,0 +1,129 @@
+import type { ChatSessionStatus, ChatSessionSummary } from '@rusty-view/protocol';
+
+/**
+ * Frontend view model for a "brain profile".
+ *
+ * The backend does not expose a profile-listing endpoint or a Profile wire type
+ * — profiles exist only as the `profile_id` string on a {@link ChatSessionSummary}.
+ * This type is a *projection* derived from the session list, not a hand-written
+ * duplicate of a backend DTO. Per docs/rusty-view.md, projection/view-model
+ * types belong in chat-domain (not in components and not in the type-only
+ * protocol package). Roleplay-agnostic: a profile is just a brain identity that
+ * owns one or more chat sessions.
+ */
+export interface BrainProfile {
+  /** Stable identity (the backend `profile_id`). */
+  readonly profileId: string;
+  /** Display label — the profile id (downstream may decorate). */
+  readonly label: string;
+  /** All sessions belonging to this profile, newest-updated first. */
+  readonly sessions: readonly ChatSessionSummary[];
+  /**
+   * The profile's current live session: prefer status `active`; otherwise the
+   * most recently updated non-archived session; otherwise the most recently
+   * updated session overall. `null` only if the profile has no sessions.
+   */
+  readonly activeSessionId: string | null;
+  /** Aggregate liveness derived from member session statuses. */
+  readonly status: BrainProfileStatus;
+  /** Most recent `updated_at` across the profile's sessions (ISO). */
+  readonly lastActivityAt: string;
+  readonly sessionCount: number;
+}
+
+/** Aggregate status of a profile, derived from its sessions. */
+export type BrainProfileStatus = 'active' | 'idle' | 'archived';
+
+/** Rank used to pick the live session: lower is more live. */
+function statusRank(status: ChatSessionStatus): number {
+  switch (status) {
+    case 'active':
+      return 0;
+    case 'idle':
+      return 1;
+    case 'blocked':
+      return 2;
+    case 'archived':
+      return 3;
+  }
+}
+
+/**
+ * Derive the {@link BrainProfile} view model for a single profile id from its
+ * sessions. Pure. Sessions are sorted newest-updated first as a side effect of
+ * the returned `sessions` array (input is not mutated).
+ */
+export function projectProfile(
+  profileId: string,
+  sessions: readonly ChatSessionSummary[],
+): BrainProfile {
+  const sorted = [...sessions].sort((a, b) =>
+    b.updated_at.localeCompare(a.updated_at),
+  );
+
+  // Pick the live session: lowest status rank, ties broken by recency (the
+  // sort above already put newest first, so the first match wins ties).
+  let live: ChatSessionSummary | null = null;
+  let liveRank = Number.POSITIVE_INFINITY;
+  for (const session of sorted) {
+    const rank = statusRank(session.status);
+    if (rank < liveRank) {
+      live = session;
+      liveRank = rank;
+    }
+  }
+
+  const hasActive = sorted.some((s) => s.status === 'active');
+  const hasIdle = sorted.some(
+    (s) => s.status === 'idle' || s.status === 'blocked',
+  );
+  const status: BrainProfileStatus = hasActive
+    ? 'active'
+    : hasIdle
+      ? 'idle'
+      : 'archived';
+
+  const lastActivityAt =
+    sorted.length === 0 ? '' : sorted[0]?.updated_at ?? '';
+
+  return {
+    profileId,
+    label: profileId,
+    sessions: sorted,
+    activeSessionId: live === null ? null : live.session_id,
+    status,
+    lastActivityAt,
+    sessionCount: sorted.length,
+  };
+}
+
+/**
+ * Group a flat session list into {@link BrainProfile}s, one per distinct
+ * `profile_id`, ordered by most recent activity then profile id. Pure — does
+ * not mutate the input.
+ */
+export function projectProfiles(
+  sessions: readonly ChatSessionSummary[],
+): readonly BrainProfile[] {
+  const byProfile = new Map<string, ChatSessionSummary[]>();
+  for (const session of sessions) {
+    const list = byProfile.get(session.profile_id);
+    if (list === undefined) {
+      byProfile.set(session.profile_id, [session]);
+    } else {
+      list.push(session);
+    }
+  }
+
+  const profiles: BrainProfile[] = [];
+  for (const [profileId, group] of byProfile) {
+    profiles.push(projectProfile(profileId, group));
+  }
+
+  profiles.sort(
+    (a, b) =>
+      b.lastActivityAt.localeCompare(a.lastActivityAt) ||
+      a.profileId.localeCompare(b.profileId),
+  );
+  return profiles;
+}

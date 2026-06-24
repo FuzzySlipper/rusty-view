@@ -1,11 +1,13 @@
 import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
-import type { ChatStorageAdapter } from '@rusty-view/chat-domain';
+import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 
 const DB_NAME = 'rusty-view-chat';
 const DB_VERSION = 2;
 const SESSIONS_STORE = 'sessions';
 const EVENTS_STORE = 'events';
 const SETTINGS_STORE = 'settings';
+const UI_STATE_STORE = 'ui_state';
+const UI_STATE_KEY = 'default';
 
 /**
  * Ensure the full shared schema exists. The `rusty-view-chat` database is also
@@ -26,6 +28,9 @@ function ensureSchema(db: IDBDatabase): void {
   }
   if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
     db.createObjectStore(SETTINGS_STORE);
+  }
+  if (!db.objectStoreNames.contains(UI_STATE_STORE)) {
+    db.createObjectStore(UI_STATE_STORE);
   }
 }
 
@@ -160,6 +165,43 @@ export class IndexedDbChatStorage implements ChatStorageAdapter {
       tx.onabort = () =>
         reject(tx.error ?? new Error('Clear session events aborted'));
     });
+  }
+
+  async getUiState(): Promise<ChatUiState | null> {
+    try {
+      const db = await this.getDb();
+      return await new Promise<ChatUiState | null>((resolve, reject) => {
+        const tx = db.transaction(UI_STATE_STORE, 'readonly');
+        const request = tx.objectStore(UI_STATE_STORE).get(UI_STATE_KEY);
+        request.onsuccess = () =>
+          resolve(
+            request.result === undefined
+              ? null
+              : (request.result as ChatUiState),
+          );
+        request.onerror = () =>
+          reject(request.error ?? new Error('UI state load failed'));
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async setUiState(state: ChatUiState): Promise<void> {
+    try {
+      const db = await this.getDb();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(UI_STATE_STORE, 'readwrite');
+        tx.objectStore(UI_STATE_STORE).put(state, UI_STATE_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () =>
+          reject(tx.error ?? new Error('UI state save failed'));
+        tx.onabort = () =>
+          reject(tx.error ?? new Error('UI state save aborted'));
+      });
+    } catch {
+      // Non-fatal: in-memory selection still works for this session.
+    }
   }
 
   /** Run a write transaction and resolve when it completes. */

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * Top menu / Options / Help smoke test (task #3252).
@@ -17,7 +17,7 @@ import { expect, test } from '@playwright/test';
  * assertion is polled rather than read once.
  */
 
-async function fontMdToken(page: import('@playwright/test').Page): Promise<string> {
+async function fontMdToken(page: Page): Promise<string> {
   return page.evaluate(() =>
     getComputedStyle(document.documentElement)
       .getPropertyValue('--rv-font-size-md')

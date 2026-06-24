@@ -10,6 +10,8 @@ import {
 import {
   emptyProjection,
   projectConversation,
+  projectProfiles,
+  type BrainProfile,
   type ChatStorageAdapter,
   type ConversationProjection,
 } from '@rusty-view/chat-domain';
@@ -70,6 +72,14 @@ export class ChatStore implements OnDestroy {
   private readonly _activeSessionStatus = signal<ChatSessionStatus | null>(
     null,
   );
+  /** Brain profile the user has selected in the sidebar. Persisted. */
+  private readonly _selectedProfileId = signal<string | null>(null);
+  /**
+   * Non-null when the user is viewing a historical (non-active) session from
+   * the Sessions menu. The selected profile stays intact; the transcript shows
+   * the historical session read-only-ish until the user returns to active.
+   */
+  private readonly _viewingHistoricalSessionId = signal<string | null>(null);
 
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
@@ -108,6 +118,42 @@ export class ChatStore implements OnDestroy {
   );
   readonly lastCursor = computed(() => this._projection().latestCursor ?? null);
 
+  // ---- profile / historical-session view state ----
+  /** Brain profiles derived from the session list, ordered by recent activity. */
+  readonly profiles = computed<readonly BrainProfile[]>(() =>
+    projectProfiles(this._sessions()),
+  );
+  readonly selectedProfileId = this._selectedProfileId.asReadonly();
+  /** The selected profile's current live session id (null if no profile/none). */
+  readonly activeSessionIdForSelectedProfile = computed<string | null>(() => {
+    const id = this._selectedProfileId();
+    if (id === null) return null;
+    const profile = this.profiles().find((p) => p.profileId === id);
+    return profile?.activeSessionId ?? null;
+  });
+  readonly viewingHistoricalSessionId =
+    this._viewingHistoricalSessionId.asReadonly();
+  /** True when the transcript is showing a historical session, not the live one. */
+  readonly isViewingHistorical = computed(
+    () => this._viewingHistoricalSessionId() !== null,
+  );
+  /** Sessions for the selected profile (historical list), newest first. */
+  readonly selectedProfileSessions = computed<readonly ChatSessionSummary[]>(
+    () => {
+      const id = this._selectedProfileId();
+      if (id === null) return [];
+      return (
+        this.profiles().find((p) => p.profileId === id)?.sessions ?? []
+      );
+    },
+  );
+  /** All sessions across profiles, newest first (for the Sessions menu). */
+  readonly allSessions = computed<readonly ChatSessionSummary[]>(() =>
+    [...this._sessions()].sort((a, b) =>
+      b.updated_at.localeCompare(a.updated_at),
+    ),
+  );
+
   // ---- session operations ----
 
   /** Fetch the session list from the backend and update state + cache. */
@@ -116,6 +162,72 @@ export class ChatStore implements OnDestroy {
     this._sessions.set(page.items);
     for (const session of page.items) {
       void this.storage.putSession(session).catch(() => undefined);
+    }
+
+    // First-load UI-state restore (idempotent: only acts before first selection).
+    if (this._selectedProfileId() === null) {
+      await this.restoreUiState();
+    }
+  }
+
+  /** Load persisted UI state (selected profile) and apply it if still valid. */
+  private async restoreUiState(): Promise<void> {
+    const state = await this.storage.getUiState().catch(() => null);
+    const persistedProfileId = state?.selectedProfileId;
+    if (persistedProfileId === undefined || persistedProfileId === '') {
+      return;
+    }
+    // Only restore if the profile still exists; otherwise leave unselected.
+    const stillExists = this._sessions().some(
+      (s) => s.profile_id === persistedProfileId,
+    );
+    if (stillExists) {
+      await this.selectProfile(persistedProfileId);
+    }
+  }
+
+  /** Persist the current selected-profile id (fire and forget). */
+  private persistSelectedProfile(): void {
+    const id = this._selectedProfileId();
+    void this.storage
+      .setUiState({
+        ...(id !== null ? { selectedProfileId: id } : {}),
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Select a brain profile and open its current active session. If the profile
+   * has no live session, the sidebar selection is still recorded but no session
+   * is opened.
+   */
+  async selectProfile(profileId: string): Promise<void> {
+    this._selectedProfileId.set(profileId);
+    this._viewingHistoricalSessionId.set(null);
+    this.persistSelectedProfile();
+
+    const activeSessionId = this.activeSessionIdForSelectedProfile();
+    if (activeSessionId !== null) {
+      await this.selectSession(activeSessionId);
+    }
+  }
+
+  /**
+   * Open a historical (non-active) session for viewing from the Sessions menu,
+   * without changing the selected profile. The transcript switches to that
+   * session read-only; use {@link returnToActiveSession} to go back.
+   */
+  async viewHistoricalSession(sessionId: string): Promise<void> {
+    this._viewingHistoricalSessionId.set(sessionId);
+    await this.selectSession(sessionId);
+  }
+
+  /** Return the transcript to the selected profile's current active session. */
+  async returnToActiveSession(): Promise<void> {
+    this._viewingHistoricalSessionId.set(null);
+    const activeSessionId = this.activeSessionIdForSelectedProfile();
+    if (activeSessionId !== null) {
+      await this.selectSession(activeSessionId);
     }
   }
 

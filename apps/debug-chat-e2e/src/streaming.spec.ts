@@ -43,23 +43,23 @@ test('send message → assistant response appears in transcript', async ({
 
   await page.goto('/');
 
-  // Wait for sessions to load.
-  const sessionButtons = page.locator('.rv-session');
-  await expect(sessionButtons.first()).toBeVisible({ timeout: 10_000 });
+  // Wait for profiles to load.
+  const profileButtons = page.locator('.rv-profile');
+  await expect(profileButtons.first()).toBeVisible({ timeout: 10_000 });
 
-  // Prefer an idle/active session (archived sessions may not respond to wakes).
-  // Try to find a non-archived session; fall back to the first.
-  const count = await sessionButtons.count();
+  // Prefer an active/idle profile (archived profiles may not respond to wakes).
+  // Try to find a non-archived profile; fall back to the first.
+  const count = await profileButtons.count();
   let targetIndex = 0;
   for (let i = 0; i < count; i++) {
-    const text = await sessionButtons.nth(i).textContent();
+    const text = await profileButtons.nth(i).textContent();
     if (text !== null && !text.includes('archived')) {
       targetIndex = i;
       break;
     }
   }
 
-  await sessionButtons.nth(targetIndex).click();
+  await profileButtons.nth(targetIndex).click();
   await expect(page.locator('rv-transcript-viewport')).toBeVisible({
     timeout: 10_000,
   });
