@@ -18,6 +18,7 @@
     "graph": "nx graph",
     "protocol:generate": "nx run protocol:generate",
     "protocol:check": "nx run protocol:check",
+    "publish:libs": "node tools/publish-libs.mjs",
     "ci": "prettier --check . && nx run-many -t lint typecheck test --all && nx run protocol:check && nx run-many -t build --all"
   },
   "devDependencies": {
