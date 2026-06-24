@@ -91,6 +91,39 @@ describe('MessageBlockComponent', () => {
     // Should now show full content.
     expect(host.textContent).toContain(longContent);
   });
+  it('renders markdown text blocks into a token-bound markdown container', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'Hello **bold** world' }),
+    );
+    // Markdown parsing is async (worker/inline fallback). Let it resolve.
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const md = host.querySelector('.rv-block__markdown');
+    expect(md).not.toBeNull();
+    // Inline formatting is applied.
+    expect(md?.innerHTML).toContain('<strong>bold</strong>');
+
+    // The markdown container must bind to the appearance tokens (the fix for
+    // appearance controls not reaching chat text). Assert via the component's
+    // scoped stylesheet that the rule references the tokens.
+    const sheet = Array.from(host.ownerDocument.styleSheets)
+      .map((s) => {
+        try {
+          return Array.from(s.cssRules)
+            .map((r) => r.cssText)
+            .join('\n');
+        } catch {
+          return '';
+        }
+      })
+      .join('\n');
+    expect(sheet).toContain('rv-block__markdown');
+    expect(sheet).toContain('var(--rv-color-text-primary)');
+    expect(sheet).toContain('var(--rv-font-size-md)');
+  });
 });
 
 describe('MessageItemComponent', () => {
