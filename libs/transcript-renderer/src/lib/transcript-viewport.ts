@@ -17,8 +17,12 @@ import { MessageItemComponent } from './message-item';
 /**
  * Virtualized transcript viewport.
  *
- * Renders 10k+ messages efficiently using Angular CDK virtual scroll with
- * auto-size (variable-height items). Only visible messages exist in the DOM.
+ * Renders 10k+ messages efficiently using Angular CDK virtual scroll with a
+ * fixed estimated item size (`itemSize=50`). Only visible messages exist in the
+ * DOM. Rows are driven by `*cdkVirtualFor` — a plain `@for` would not register
+ * items with the scroll strategy, so nothing would render. Messages vary in
+ * height, so the scroll thumb is approximate; precise variable-height autosize
+ * would require `@angular/cdk-experimental` and is a future option.
  *
  * Scroll behavior:
  * - Tail-follow: when the user is at the bottom, new content auto-scrolls.
@@ -104,6 +108,12 @@ export class TranscriptViewportComponent {
         });
       }
     });
+  }
+
+  /** trackBy for *cdkVirtualFor: stable identity keeps streaming deltas from
+   * re-creating views (only the changed message re-renders). */
+  protected trackByMessageId(_index: number, message: ChatMessage): string {
+    return message.id;
   }
 
   /** Called on viewport scroll to track whether the user is at the bottom. */
