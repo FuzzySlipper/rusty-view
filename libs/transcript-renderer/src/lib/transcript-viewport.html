@@ -4,7 +4,7 @@
   (scroll)="onScroll()"
 >
   <div
-    *cdkVirtualFor="let message of messages(); trackBy: trackByMessageId"
+    *cdkVirtualFor="let message of renderMessages(); trackBy: trackByMessageId"
     class="rv-transcript__item"
   >
     <rv-message-item [message]="message" />

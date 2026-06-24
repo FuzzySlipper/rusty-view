@@ -2,8 +2,11 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   effect,
+  inject,
   input,
+  signal,
   viewChild,
 } from '@angular/core';
 import {
@@ -68,11 +71,55 @@ export class TranscriptViewportComponent {
   /** Previous messages reference — used to detect prepends for anchor preservation. */
   private previousMessages: readonly ChatMessage[] = [];
 
+  private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
+   * input: CDK registers the rendered data length with its scroll strategy when
+   * `*cdkVirtualForOf` first receives data. If that happens while the viewport is
+   * still measured at 0 (messages preloaded before layout settles, or rendered
+   * behind an `@if`), the strategy records a length of 0 and renders nothing
+   * until the next data change. So we hold the data here and emit it only once
+   * the viewport has a real size, then keep it in sync with the input.
+   */
+  protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
+
+  /** True once the viewport has been sized and has received the initial data. */
+  private viewportReady = false;
+
   constructor() {
-    // Tail-follow + scroll anchor preservation: when messages change, decide
-    // whether to scroll to bottom (tail-follow) or preserve anchor (prepend).
+    // Keep the rendered data in sync with the input once the viewport is ready.
     effect(() => {
       const msgs = this.messages();
+      if (this.viewportReady) {
+        this.renderMessages.set(msgs);
+      }
+    });
+
+    // Emit the initial data once the viewport has a non-zero size. A
+    // ResizeObserver covers the case where the height lands after first render
+    // (behind an `@if`, or a CSS-grid cell resolving from 0 → its real height).
+    afterNextRender(() => {
+      const host = this.viewport().elementRef.nativeElement;
+      const emitWhenSized = () => {
+        if (this.viewportReady || host.clientHeight === 0) return;
+        this.viewportReady = true;
+        this.renderMessages.set(this.messages());
+      };
+      emitWhenSized();
+      if (!this.viewportReady && typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => emitWhenSized());
+        observer.observe(host);
+        this.destroyRef.onDestroy(() => observer.disconnect());
+      }
+    });
+
+    // Tail-follow + scroll anchor preservation: when the rendered messages
+    // change, decide whether to scroll to bottom (tail-follow) or preserve the
+    // anchor (prepend). Tracks `renderMessages` so it fires when the data is
+    // first emitted to the viewport, not just when the input changes.
+    effect(() => {
+      const msgs = this.renderMessages();
       const prev = this.previousMessages;
       this.previousMessages = msgs;
 
@@ -100,7 +147,7 @@ export class TranscriptViewportComponent {
     effect(() => {
       const targetId = this.targetMessageId();
       if (targetId === undefined) return;
-      const msgs = this.messages();
+      const msgs = this.renderMessages();
       const index = msgs.findIndex((m) => m.id === targetId);
       if (index >= 0) {
         afterNextRender(() => {
@@ -127,7 +174,7 @@ export class TranscriptViewportComponent {
   /** Scroll to the bottom of the transcript (latest message). */
   scrollToBottom(): void {
     const vp = this.viewport();
-    const count = this.messages().length;
+    const count = this.renderMessages().length;
     if (count > 0) {
       vp.scrollToIndex(count - 1);
     }
