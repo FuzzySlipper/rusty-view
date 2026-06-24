@@ -1,4 +1,5 @@
 import {
+  computed,
   type EnvironmentProviders,
   inject,
   makeEnvironmentProviders,
@@ -11,10 +12,12 @@ import {
   IndexedDbChatStorage,
 } from '@rusty-view/chat-store';
 import {
+  ChatTheme,
   CHAT_SETTINGS_STORAGE,
   IndexedDbChatSettingsStorage,
   provideChatTheme,
 } from '@rusty-view/chat-theme';
+import { TRANSCRIPT_MARKDOWN_ENABLED } from '@rusty-view/transcript-renderer';
 
 /**
  * Configuration for the debug-chat app's transport connection to rusty-crew.
@@ -108,6 +111,12 @@ export function provideDebugChat(
     { provide: CHAT_SETTINGS_STORAGE, useClass: IndexedDbChatSettingsStorage },
     IndexedDbChatSettingsStorage,
     provideChatTheme(),
+    {
+      provide: TRANSCRIPT_MARKDOWN_ENABLED,
+      useFactory: (theme: ChatTheme) =>
+        computed(() => theme.settings().markdownRendering),
+      deps: [ChatTheme],
+    },
     ChatStore,
     provideAppInitializer(() => {
       const store = inject(ChatStore);

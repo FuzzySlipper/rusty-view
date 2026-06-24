@@ -59,6 +59,10 @@ export class AppearanceTabComponent {
     void this.theme.update({ density: value });
   }
 
+  protected setMarkdownRendering(value: boolean): void {
+    void this.theme.update({ markdownRendering: value });
+  }
+
   protected onScale(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;

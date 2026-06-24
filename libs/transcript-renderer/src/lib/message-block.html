@@ -40,10 +40,25 @@
 </div>
 } @else {
 <div class="rv-block rv-block--text">
-  @if (renderedHtml()) {
+  @if (shouldRenderMarkdown() && renderedHtml()) {
   <div class="rv-block__markdown" [innerHTML]="renderedHtml()"></div>
   } @else {
-  <p class="rv-block__content">{{ displayContent() }}</p>
+  <p class="rv-block__content">{{ block().content }}</p>
+  }
+  @if (markdownEnabled()) {
+  <div class="rv-block__raw-toggle">
+    <button
+      type="button"
+      class="rv-block__raw-button"
+      (click)="toggleRaw()"
+      [attr.aria-pressed]="showRaw()"
+      tabindex="0"
+      (keydown.enter)="toggleRaw()"
+      (keydown.space)="$event.preventDefault(); toggleRaw()"
+    >
+      {{ showRaw() ? 'Markdown' : 'Raw' }}
+    </button>
+  </div>
   }
 </div>
 }

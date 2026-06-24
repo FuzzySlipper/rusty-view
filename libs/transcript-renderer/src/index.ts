@@ -24,5 +24,6 @@ export type {
   WorkerOperationKind,
 } from './lib/worker-message-protocol';
 export { processRequestInline } from './lib/worker-inline-ops';
+export { TRANSCRIPT_MARKDOWN_ENABLED } from './lib/markdown-render-token';
 
 export const TRANSCRIPT_RENDERER_VERSION = '0.0.0' as const;

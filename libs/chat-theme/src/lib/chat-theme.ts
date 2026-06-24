@@ -156,6 +156,7 @@ export class ChatTheme {
       fontScale: clampFontScale(settings.fontScale ?? 1),
       density,
       colors: { ...settings.colors },
+      markdownRendering: settings.markdownRendering ?? true,
     };
   }
 

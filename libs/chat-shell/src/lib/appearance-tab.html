@@ -61,6 +61,29 @@
     </div>
   </fieldset>
 
+  <!-- Markdown rendering -->
+  <fieldset class="rv-appearance__group">
+    <legend>Markdown rendering</legend>
+    <div class="rv-appearance__segmented">
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().markdownRendering === true"
+        (click)="setMarkdownRendering(true)"
+      >
+        On
+      </button>
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().markdownRendering === false"
+        (click)="setMarkdownRendering(false)"
+      >
+        Off
+      </button>
+    </div>
+  </fieldset>
+
   <!-- Colours -->
   <fieldset class="rv-appearance__group">
     <legend>Colours</legend>

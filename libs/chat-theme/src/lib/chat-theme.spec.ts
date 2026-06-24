@@ -95,4 +95,29 @@ describe('ChatTheme', () => {
     expect(theme.settings().colors.bg).toBe('#aaaaaa');
     expect(theme.settings().colors.accent).toBe('#bbbbbb');
   });
+
+  it('default markdownRendering is true', () => {
+    const theme = TestBed.inject(ChatTheme);
+    expect(theme.settings().markdownRendering).toBe(true);
+  });
+
+  it('toggles markdownRendering and persists', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({ markdownRendering: false });
+    expect(theme.settings().markdownRendering).toBe(false);
+
+    const stored = await storage.load();
+    expect(stored?.markdownRendering).toBe(false);
+
+    // Toggle back on.
+    await theme.update({ markdownRendering: true });
+    expect(theme.settings().markdownRendering).toBe(true);
+  });
+
+  it('reset restores markdownRendering to default true', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({ markdownRendering: false });
+    await theme.reset();
+    expect(theme.settings().markdownRendering).toBe(true);
+  });
 });

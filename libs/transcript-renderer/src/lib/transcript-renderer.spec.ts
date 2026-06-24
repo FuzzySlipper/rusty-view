@@ -1,10 +1,12 @@
 import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { describe, expect, it } from 'vitest';
 
 import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
+import { TRANSCRIPT_MARKDOWN_ENABLED } from './markdown-render-token';
 
 function makeBlock(overrides: Partial<MessageBlock>): MessageBlock {
   return {
@@ -175,5 +177,122 @@ describe('MessageItemComponent', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('text part');
     expect(host.textContent).toContain('tool data');
+  });
+});
+
+describe('MessageBlockComponent markdown toggle', () => {
+  async function createBlock(
+    block: MessageBlock,
+    markdownEnabled = true,
+  ) {
+    TestBed.configureTestingModule({
+      imports: [MessageBlockComponent],
+      providers: [
+        {
+          provide: TRANSCRIPT_MARKDOWN_ENABLED,
+          useValue: signal(markdownEnabled),
+        },
+      ],
+    });
+    TestBed.flushEffects?.();
+    const fixture = TestBed.createComponent(MessageBlockComponent);
+    fixture.componentRef.setInput('block', block);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders markdown when global toggle is on', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '**bold**' }),
+      true,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
+    expect(host.innerHTML).toContain('<strong>bold</strong>');
+  });
+
+  it('renders raw text when global toggle is off', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '**bold**' }),
+      false,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    // No markdown container — raw text shown.
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+    expect(host.textContent).toContain('**bold**');
+    // Raw toggle button should NOT appear when global markdown is off.
+    expect(host.querySelector('.rv-block__raw-button')).toBeNull();
+  });
+
+  it('toggles individual block to raw via per-block button', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '**bold**' }),
+      true,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    // Initially renders markdown.
+    expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
+
+    // Click the raw toggle.
+    const rawButton = host.querySelector('.rv-block__raw-button') as HTMLButtonElement;
+    expect(rawButton).not.toBeNull();
+    rawButton.click();
+    fixture.detectChanges();
+
+    // Now shows raw text.
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+    expect(host.textContent).toContain('**bold**');
+    expect(rawButton.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('toggles back from raw to markdown', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '**bold**' }),
+      true,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const rawButton = host.querySelector('.rv-block__raw-button') as HTMLButtonElement;
+
+    // Toggle to raw.
+    rawButton.click();
+    fixture.detectChanges();
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+
+    // Toggle back to markdown.
+    rawButton.click();
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
+  });
+
+  it('raw text is always available and copyable', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'Some text content' }),
+      false,
+    );
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const contentEl = host.querySelector('.rv-block__content');
+    expect(contentEl).not.toBeNull();
+    expect(contentEl?.textContent).toContain('Some text content');
   });
 });

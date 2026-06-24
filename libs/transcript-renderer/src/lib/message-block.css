@@ -131,6 +131,35 @@
   border-top: 1px solid var(--rv-color-border);
 }
 
+/* Strikethrough. */
+.rv-block__markdown del {
+  text-decoration: line-through;
+  color: var(--rv-color-text-secondary);
+}
+
+/* Tables: compact, bordered, scrollable on narrow widths. */
+.rv-block__markdown .rv-md-table {
+  width: max-content;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 var(--rv-space-sm);
+  font-size: var(--rv-font-size-sm);
+  overflow-x: auto;
+  display: block;
+}
+
+.rv-block__markdown .rv-md-table th,
+.rv-block__markdown .rv-md-table td {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  text-align: left;
+}
+
+.rv-block__markdown .rv-md-table th {
+  background: var(--rv-color-surface-raised);
+  font-weight: var(--rv-font-weight-bold);
+}
+
 .rv-block--collapsible {
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
@@ -237,4 +266,39 @@
 }
 .rv-block__tool-header[disabled] .rv-block__disclosure {
   visibility: hidden;
+}
+
+/* ---- per-block raw toggle ---- */
+
+.rv-block__raw-toggle {
+  margin-top: var(--rv-space-xs);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-block--text:hover .rv-block__raw-toggle,
+.rv-block__raw-button:focus-visible {
+  opacity: 1;
+}
+
+.rv-block__raw-button {
+  padding: 2px var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rv-block__raw-button:hover {
+  color: var(--rv-color-text-primary);
+  border-color: var(--rv-color-accent);
+}
+
+.rv-block__raw-button[aria-pressed='true'] {
+  color: var(--rv-color-accent);
+  border-color: var(--rv-color-accent);
 }

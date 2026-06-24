@@ -61,6 +61,12 @@ export interface AppearanceSettings {
   readonly fontScale: number;
   readonly density: AppearanceDensity;
   readonly colors: AppearanceColors;
+  /**
+   * Whether chat message text is rendered as formatted Markdown (true) or
+   * shown as raw plain text (false). Users can also toggle individual
+   * responses to raw via a per-block control in the transcript.
+   */
+  readonly markdownRendering: boolean;
 }
 
 /** Inclusive bounds for {@link AppearanceSettings.fontScale}. */
@@ -103,6 +109,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   fontScale: 1,
   density: 'normal',
   colors: {},
+  markdownRendering: true,
 };
 
 /** Clamp a font scale into the allowed range and round to a sane precision. */
