@@ -1,0 +1,14 @@
+<div class="rv-tab-strip" role="tablist">
+  @for (tab of tabs(); track tab.id) {
+    <button
+      type="button"
+      role="tab"
+      class="rv-tab-strip__tab"
+      [class.rv-tab-strip__tab--active]="tab.id === activeId()"
+      [attr.aria-selected]="tab.id === activeId()"
+      (click)="onSelect(tab.id)"
+    >
+      {{ tab.label }}
+    </button>
+  }
+</div>

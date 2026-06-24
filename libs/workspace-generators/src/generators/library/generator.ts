@@ -21,6 +21,7 @@ const ALLOWED_SCOPES: ReadonlySet<string> = new Set<string>([
   'transport',
   'chat-domain',
   'chat-store',
+  'chat-theme',
   'transcript-renderer',
   'chat-components',
   'chat-shell',

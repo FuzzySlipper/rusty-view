@@ -15,6 +15,7 @@ import { TranscriptViewportComponent } from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
 import { SessionListComponent } from './session-list';
 import { CommandComposerComponent } from './command-composer';
+import { TopMenuComponent } from './top-menu';
 
 /**
  * Debug chat shell — the composition layer that wires everything together.
@@ -35,6 +36,7 @@ import { CommandComposerComponent } from './command-composer';
     StreamStatusComponent,
     EventInspectorComponent,
     CommandComposerComponent,
+    TopMenuComponent,
   ],
   templateUrl: './debug-shell.html',
   styleUrl: './debug-shell.css',

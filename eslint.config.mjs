@@ -87,6 +87,12 @@ export default [
               ],
             },
             {
+              // Theme/appearance state + settings storage. Depends only on
+              // design-token names (pure constants). Consumed by the shell.
+              sourceTag: 'scope:chat-theme',
+              onlyDependOnLibsWithTags: ['scope:design-tokens'],
+            },
+            {
               sourceTag: 'scope:transcript-renderer',
               onlyDependOnLibsWithTags: ['scope:protocol', 'scope:chat-domain'],
             },
@@ -108,6 +114,7 @@ export default [
                 'scope:transport',
                 'scope:chat-domain',
                 'scope:chat-store',
+                'scope:chat-theme',
                 'scope:transcript-renderer',
                 'scope:chat-components',
               ],

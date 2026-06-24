@@ -1,0 +1,25 @@
+<div class="rv-options">
+  <header class="rv-options__header">
+    <span class="rv-options__title">Options</span>
+    <button
+      type="button"
+      class="rv-options__close"
+      (click)="closePanel()"
+      aria-label="Close options"
+    >
+      ✕
+    </button>
+  </header>
+
+  <rv-tab-strip
+    [tabs]="tabEntries()"
+    [activeId]="activeId()"
+    (selected)="onSelectTab($event)"
+  />
+
+  <div class="rv-options__body">
+    @if (activeComponent(); as comp) {
+      <ng-container [ngComponentOutlet]="comp" />
+    }
+  </div>
+</div>
