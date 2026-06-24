@@ -45,6 +45,7 @@
       @if (!isViewingHistorical()) {
         <rv-message-input
           [disabled]="inputDisabled()"
+          [commands]="store.commands()"
           (send)="onSendMessage($event)"
         />
       }

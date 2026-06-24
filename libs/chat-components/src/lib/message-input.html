@@ -4,9 +4,13 @@
     [placeholder]="placeholder()"
     [disabled]="disabled()"
     [value]="text()"
-    (input)="text.set($any($event.target).value)"
+    (input)="onInput($event)"
     (keydown)="onKeydown($event)"
     rows="2"
+    [attr.aria-expanded]="hintOpen() && filteredCommands().length > 0"
+    [attr.aria-activedescendant]="hintOpen() && filteredCommands().length > 0 ? 'hint-' + hintIndex() : null"
+    aria-autocomplete="list"
+    role="combobox"
   ></textarea>
   <button
     type="button"
@@ -16,4 +20,26 @@
   >
     Send
   </button>
+  @if (hintOpen() && filteredCommands().length > 0) {
+    <div class="rv-input__hints" role="listbox">
+      @for (cmd of filteredCommands(); track cmd.name; let i = $index) {
+        <div
+          class="rv-input__hint"
+          [class.rv-input__hint--active]="i === hintIndex()"
+          [id]="'hint-' + i"
+          role="option"
+          [attr.aria-selected]="i === hintIndex()"
+          (click)="acceptHint(cmd.name)"
+        >
+          <span class="rv-input__hint-name">{{ cmd.name }}</span>
+          @if (cmd.description) {
+            <span class="rv-input__hint-desc">{{ cmd.description }}</span>
+          }
+          @if (cmd.args_schema && hasArgs(cmd.args_schema)) {
+            <span class="rv-input__hint-args">{{ formatArgs(cmd.args_schema) }}</span>
+          }
+        </div>
+      }
+    </div>
+  }
 </div>

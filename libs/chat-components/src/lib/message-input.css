@@ -44,3 +44,60 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.rv-input {
+  position: relative;
+}
+
+.rv-input__hints {
+  position: absolute;
+  bottom: 100%;
+  left: var(--rv-space-lg);
+  right: calc(var(--rv-space-lg) + 60px); /* account for send button */
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.rv-input__hint {
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-bottom: 1px solid var(--rv-color-border);
+  cursor: pointer;
+}
+
+.rv-input__hint:last-child {
+  border-bottom: none;
+}
+
+.rv-input__hint--active {
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-input__hint-name {
+  display: block;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  font-weight: var(--rv-font-weight-bold);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-input__hint-desc {
+  display: block;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-secondary);
+  margin-top: 2px;
+}
+
+.rv-input__hint-args {
+  display: block;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-tertiary);
+  margin-top: 2px;
+}
