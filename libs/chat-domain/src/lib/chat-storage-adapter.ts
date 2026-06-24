@@ -4,11 +4,14 @@ import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
  * Small, roleplay-agnostic UI-state blob persisted alongside the chat cache.
  *
  * Currently holds the selected brain-profile id so the sidebar selection
- * survives refresh/reconnect. Optional fields keep the shape forward-compatible;
- * unknown keys are ignored by storage impls.
+ * survives refresh/reconnect, and the command history (submitted slash
+ * commands) for Up/Down navigation in the composer. Optional fields keep the
+ * shape forward-compatible; unknown keys are ignored by storage impls.
  */
 export interface ChatUiState {
   readonly selectedProfileId?: string;
+  /** Submitted slash commands, newest-first, bounded. */
+  readonly commandHistory?: readonly string[];
 }
 
 /**

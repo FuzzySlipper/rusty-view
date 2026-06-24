@@ -390,4 +390,225 @@ describe('MessageInputComponent', () => {
       expect(hints[1].getAttribute('aria-selected')).toBe('false');
     });
   });
+
+  describe('Command history navigation', () => {
+    const history = ['/new', '/status', '/help'];
+
+    it('should not navigate when history is empty', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', []);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('');
+      expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('should enter history mode on ArrowUp and show newest command', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('/new');
+      expect(component['historyIndex']()).toBe(0);
+    });
+
+    it('should navigate to older command on subsequent ArrowUp', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('/status');
+      expect(component['historyIndex']()).toBe(1);
+    });
+
+    it('should clamp at oldest command on ArrowUp', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      // Navigate all the way to oldest.
+      for (let i = 0; i < history.length; i++) {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      }
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('/help');
+      // One more Up should stay at oldest.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+      expect(component['text']()).toBe('/help');
+    });
+
+    it('should navigate forward on ArrowDown', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      // Go up to oldest.
+      for (let i = 0; i < history.length; i++) {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      }
+      // Come back down one.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('/status');
+      expect(component['historyIndex']()).toBe(1);
+    });
+
+    it('should exit history mode and restore draft on ArrowDown past newest', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      // Type a draft.
+      textarea.value = '/draft';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      // Enter history.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+      expect(component['text']()).toBe('/new');
+
+      // Exit past newest.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      fixture.detectChanges();
+      expect(component['text']()).toBe('/draft');
+      expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('should preserve unsent draft when navigating history', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = '/draft text';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      // Enter history.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+      expect(component['text']()).toBe('/new');
+
+      // Exit history by navigating past newest.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      fixture.detectChanges();
+      expect(component['text']()).toBe('/draft text');
+    });
+
+    it('should exit history mode on typing', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+      expect(component['historyIndex']()).toBe(0);
+
+      // Simulate typing.
+      textarea.value = '/ty';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('should not navigate history when typing a normal message', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = 'hello world';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      // Text should not change (history nav didn't fire for normal text).
+      expect(component['text']()).toBe('hello world');
+      expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('should navigate history from empty text on ArrowUp', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('/new');
+    });
+
+    it('should prioritize hint navigation over history when hints are open', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commands', mockCommands);
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      // '/re' matches 'reload-mcp' and 'reset' — two hints.
+      textarea.value = '/re';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      // Hints are open — ArrowUp should navigate hints, not history.
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['hintIndex']()).toBeGreaterThan(0);
+      expect(component['historyIndex']()).toBeNull();
+      // Text should still be /re (hint nav doesn't change text).
+      expect(component['text']()).toBe('/re');
+    });
+
+    it('should reset history mode on submit', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commandHistory', history);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+      expect(component['historyIndex']()).not.toBeNull();
+
+      component['submit']();
+      fixture.detectChanges();
+      expect(component['historyIndex']()).toBeNull();
+    });
+  });
 });

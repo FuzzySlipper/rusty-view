@@ -75,6 +75,8 @@ export class ChatStore implements OnDestroy {
   );
   /** Brain profile the user has selected in the sidebar. Persisted. */
   private readonly _selectedProfileId = signal<string | null>(null);
+  /** Submitted slash commands for Up/Down history navigation. Persisted. */
+  private readonly _commandHistory = signal<readonly string[]>([]);
   /**
    * Non-null when the user is viewing a historical (non-active) session from
    * the Sessions menu. The selected profile stays intact; the transcript shows
@@ -132,6 +134,8 @@ export class ChatStore implements OnDestroy {
     projectProfiles(this._sessions()),
   );
   readonly selectedProfileId = this._selectedProfileId.asReadonly();
+  /** Submitted slash commands, newest-first (for Up/Down navigation). */
+  readonly commandHistory = this._commandHistory.asReadonly();
   /** The selected profile's current live session id (null if no profile/none). */
   readonly activeSessionIdForSelectedProfile = computed<string | null>(() => {
     const id = this._selectedProfileId();
@@ -182,26 +186,53 @@ export class ChatStore implements OnDestroy {
   private async restoreUiState(): Promise<void> {
     const state = await this.storage.getUiState().catch(() => null);
     const persistedProfileId = state?.selectedProfileId;
-    if (persistedProfileId === undefined || persistedProfileId === '') {
-      return;
+    if (persistedProfileId !== undefined && persistedProfileId !== '') {
+      // Only restore if the profile still exists; otherwise leave unselected.
+      const stillExists = this._sessions().some(
+        (s) => s.profile_id === persistedProfileId,
+      );
+      if (stillExists) {
+        await this.selectProfile(persistedProfileId);
+      }
     }
-    // Only restore if the profile still exists; otherwise leave unselected.
-    const stillExists = this._sessions().some(
-      (s) => s.profile_id === persistedProfileId,
-    );
-    if (stillExists) {
-      await this.selectProfile(persistedProfileId);
+
+    // Restore command history.
+    const persistedHistory = state?.commandHistory;
+    if (persistedHistory !== undefined && persistedHistory.length > 0) {
+      this._commandHistory.set(persistedHistory);
     }
   }
 
-  /** Persist the current selected-profile id (fire and forget). */
-  private persistSelectedProfile(): void {
+  /** Persist the current selected-profile id and command history (fire and forget). */
+  private persistUiState(): void {
     const id = this._selectedProfileId();
+    const history = this._commandHistory();
     void this.storage
       .setUiState({
         ...(id !== null ? { selectedProfileId: id } : {}),
+        ...(history.length > 0 ? { commandHistory: history } : {}),
       })
       .catch(() => undefined);
+  }
+
+  /** Maximum number of slash commands retained in history. */
+  static readonly MAX_COMMAND_HISTORY = 100;
+
+  /**
+   * Record a successfully submitted slash command in history for Up/Down
+   * navigation. Consecutive duplicates are skipped. Bounded to
+   * {@link MAX_COMMAND_HISTORY} entries (newest-first).
+   */
+  private recordCommand(command: string): void {
+    const trimmed = command.trim();
+    if (trimmed.length === 0) return;
+    this._commandHistory.update((prev) => {
+      // Skip consecutive duplicate.
+      if (prev.length > 0 && prev[0] === trimmed) return prev;
+      const next = [trimmed, ...prev];
+      return next.slice(0, ChatStore.MAX_COMMAND_HISTORY);
+    });
+    this.persistUiState();
   }
 
   /**
@@ -212,7 +243,7 @@ export class ChatStore implements OnDestroy {
   async selectProfile(profileId: string): Promise<void> {
     this._selectedProfileId.set(profileId);
     this._viewingHistoricalSessionId.set(null);
-    this.persistSelectedProfile();
+    this.persistUiState();
 
     const activeSessionId = this.activeSessionIdForSelectedProfile();
     if (activeSessionId !== null) {
@@ -367,6 +398,9 @@ export class ChatStore implements OnDestroy {
       this._pendingCommands.update((cmds) =>
         cmds.filter((c) => c.id !== pendingId),
       );
+
+      // Record in command history for Up/Down navigation.
+      this.recordCommand(command);
 
       // /new returns a new_session_id — switch to it.
       if (result.new_session_id !== undefined) {

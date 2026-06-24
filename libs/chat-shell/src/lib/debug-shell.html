@@ -46,6 +46,7 @@
         <rv-message-input
           [disabled]="inputDisabled()"
           [commands]="store.commands()"
+          [commandHistory]="store.commandHistory()"
           (send)="onSendMessage($event)"
         />
       }

@@ -802,3 +802,111 @@ describe('ChatStore.submit (slash-command routing)', () => {
     expect(store.isSubmitting()).toBe(true);
   });
 });
+
+describe('ChatStore command history', () => {
+  function commandResult(name: string): ExecuteChatCommandResult {
+    return {
+      status: 'completed',
+      command_name: name,
+      summary: '',
+      latest_cursor: 'c1',
+    };
+  }
+
+  async function setupStoreWithSession(storage?: ChatStorageAdapter) {
+    const commandMock = vi.fn(async (sessionId: string, _req: { command: string }) =>
+      commandResult(_req.command.replace(/^\//, '').split(/\s/)[0] ?? 'x'),
+    );
+    const transport = createMockTransport({});
+    (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
+      commandMock;
+    const s = storage ?? new InMemoryChatStorage();
+    const store = setupStore(transport, s);
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+    return { store, storage: s, commandMock };
+  }
+
+  it('starts with empty command history', () => {
+    const store = setupStore(createMockTransport({}), new InMemoryChatStorage());
+    expect(store.commandHistory()).toEqual([]);
+  });
+
+  it('records submitted slash commands newest-first', async () => {
+    const { store } = await setupStoreWithSession();
+    await store.submit('/status');
+    await store.submit('/help');
+    expect(store.commandHistory()).toEqual(['/help', '/status']);
+  });
+
+  it('does not record normal messages in command history', async () => {
+    const sendMock = vi.fn(async () => ({
+      status: 'accepted' as const,
+      message_id: 'm1',
+      latest_cursor: 'c1',
+    }));
+    const transport = createMockTransport({});
+    (transport as unknown as { sendMessage: typeof sendMock }).sendMessage =
+      sendMock;
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+
+    await store.submit('hello world');
+    expect(store.commandHistory()).toEqual([]);
+  });
+
+  it('skips consecutive duplicate commands', async () => {
+    const { store } = await setupStoreWithSession();
+    await store.submit('/status');
+    await store.submit('/status');
+    await store.submit('/status');
+    expect(store.commandHistory()).toEqual(['/status']);
+  });
+
+  it('allows non-consecutive duplicate commands', async () => {
+    const { store } = await setupStoreWithSession();
+    await store.submit('/status');
+    await store.submit('/help');
+    await store.submit('/status');
+    expect(store.commandHistory()).toEqual(['/status', '/help', '/status']);
+  });
+
+  it('does not record failed commands', async () => {
+    const commandMock = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const transport = createMockTransport({});
+    (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
+      commandMock;
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+
+    await store.submit('/fail');
+    expect(store.commandHistory()).toEqual([]);
+  });
+
+  it('bounds history to MAX_COMMAND_HISTORY', async () => {
+    const { store } = await setupStoreWithSession();
+    const max = ChatStore.MAX_COMMAND_HISTORY;
+    for (let i = 0; i < max + 10; i++) {
+      await store.submit(`/cmd${i}`);
+    }
+    expect(store.commandHistory()).toHaveLength(max);
+    // Newest should be the last submitted command.
+    expect(store.commandHistory()[0]).toBe(`/cmd${max + 9}`);
+  });
+
+  it('persists command history across store recreation', async () => {
+    const storage = new InMemoryChatStorage();
+    const { store: store1 } = await setupStoreWithSession(storage);
+    await store1.submit('/status');
+    await store1.submit('/help');
+
+    // Simulate a fresh store with the same storage.
+    TestBed.resetTestingModule();
+    const { store: store2 } = await setupStoreWithSession(storage);
+    expect(store2.commandHistory()).toEqual(['/help', '/status']);
+  });
+});

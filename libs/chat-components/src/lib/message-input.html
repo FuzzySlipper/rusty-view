@@ -9,6 +9,7 @@
     rows="2"
     [attr.aria-expanded]="hintOpen() && filteredCommands().length > 0"
     [attr.aria-activedescendant]="hintOpen() && filteredCommands().length > 0 ? 'hint-' + hintIndex() : null"
+    [attr.aria-controls]="hintOpen() && filteredCommands().length > 0 ? 'rv-input-hints' : null"
     aria-autocomplete="list"
     role="combobox"
   ></textarea>
@@ -21,7 +22,7 @@
     Send
   </button>
   @if (hintOpen() && filteredCommands().length > 0) {
-    <div class="rv-input__hints" role="listbox">
+    <div class="rv-input__hints" role="listbox" id="rv-input-hints">
       @for (cmd of filteredCommands(); track cmd.name; let i = $index) {
         <div
           class="rv-input__hint"
@@ -29,7 +30,10 @@
           [id]="'hint-' + i"
           role="option"
           [attr.aria-selected]="i === hintIndex()"
+          tabindex="-1"
           (click)="acceptHint(cmd.name)"
+          (keydown.enter)="acceptHint(cmd.name)"
+          (keydown.space)="acceptHint(cmd.name)"
         >
           <span class="rv-input__hint-name">{{ cmd.name }}</span>
           @if (cmd.description) {
