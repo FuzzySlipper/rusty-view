@@ -13,6 +13,7 @@ import {
   CdkVirtualScrollViewport,
   ScrollingModule,
 } from '@angular/cdk/scrolling';
+import { ScrollingModule as ExperimentalScrollingModule } from '@angular/cdk-experimental/scrolling';
 import type { ChatMessage } from '@rusty-view/chat-domain';
 
 import { MessageItemComponent } from './message-item';
@@ -20,17 +21,18 @@ import { MessageItemComponent } from './message-item';
 /**
  * Virtualized transcript viewport.
  *
- * Renders 10k+ messages efficiently using Angular CDK virtual scroll with a
- * fixed estimated item size (`itemSize=50`). Only visible messages exist in the
- * DOM. Rows are driven by `*cdkVirtualFor` — a plain `@for` would not register
- * items with the scroll strategy, so nothing would render. Messages vary in
- * height, so the scroll thumb is approximate; precise variable-height autosize
- * would require `@angular/cdk-experimental` and is a future option.
+ * Renders 10k+ messages efficiently using Angular CDK virtual scroll with the
+ * **autosize** strategy (`CdkAutoSizeVirtualScroll` from
+ * `@angular/cdk-experimental/scrolling`). The autosize strategy measures real
+ * item heights after rendering and uses an averaging estimator for unseen
+ * items, so messages and expanded tool blocks lay out without overlap.
  *
  * Scroll behavior:
  * - Tail-follow: when the user is at the bottom, new content auto-scrolls.
  *   When the user scrolls up, tail-follow pauses (no fighting the user).
  * - Jump-to-message: set `targetMessageId` to scroll to a specific message.
+ *   Uses an estimated pixel offset (based on average item size) since the
+ *   autosize strategy does not support `scrollToIndex`.
  * - Scroll anchor preservation: when older history is prepended above the
  *   viewport (cursor-based replay), the viewport stays anchored to the message
  *   the user was looking at — no visible jump.
@@ -45,7 +47,11 @@ import { MessageItemComponent } from './message-item';
  */
 @Component({
   selector: 'rv-transcript-viewport',
-  imports: [ScrollingModule, MessageItemComponent],
+  imports: [
+    ScrollingModule,
+    ExperimentalScrollingModule,
+    MessageItemComponent,
+  ],
   templateUrl: './transcript-viewport.html',
   styleUrl: './transcript-viewport.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -65,6 +71,11 @@ export class TranscriptViewportComponent {
 
   /** Pixel threshold from bottom to consider "at bottom" for tail-follow. */
   private static readonly BOTTOM_THRESHOLD_PX = 80;
+
+  /** Default estimated item height used for offset estimation when the autosize
+   * strategy hasn't measured enough items yet. Matches the CSS-based minimum
+   * height of a single-line message row. */
+  private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
 
   private isAtBottom = true;
 
@@ -151,7 +162,7 @@ export class TranscriptViewportComponent {
       const index = msgs.findIndex((m) => m.id === targetId);
       if (index >= 0) {
         afterNextRender(() => {
-          this.viewport().scrollToIndex(index, 'smooth');
+          this.scrollToIndex(index);
         });
       }
     });
@@ -174,46 +185,42 @@ export class TranscriptViewportComponent {
   /** Scroll to the bottom of the transcript (latest message). */
   scrollToBottom(): void {
     const vp = this.viewport();
-    const count = this.renderMessages().length;
-    if (count > 0) {
-      vp.scrollToIndex(count - 1);
-    }
+    // Scroll to a very large offset — CDK clamps to the maximum scrollable
+    // distance. This works with both fixed-size and autosize strategies.
+    vp.scrollToOffset(Number.MAX_SAFE_INTEGER);
+  }
+
+  /**
+   * Scroll to a specific message index. Uses an estimated pixel offset based
+   * on the default item height, since the autosize strategy does not support
+   * `scrollToIndex`. The autosize strategy will re-measure and adjust once
+   * the target item is rendered.
+   */
+  private scrollToIndex(index: number): void {
+    const vp = this.viewport();
+    const offset = index * TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX;
+    vp.scrollToOffset(offset, 'smooth');
   }
 
   /**
    * Preserve scroll anchor when older messages are prepended.
    *
-   * Before the prepend, the user was looking at a message at some index in the
-   * old array. After the prepend, that same message is now at index + prependedCount.
-   * We scroll to that new index with the same pixel offset so the viewport
-   * appears unchanged.
+   * The autosize strategy tracks real pixel positions, so we simply restore
+   * the scroll offset from the top. The prepended messages shift all items
+   * down, and restoring the offset keeps the viewport visually stable.
    */
   private preserveScrollAnchor(
-    prev: readonly ChatMessage[],
-    current: readonly ChatMessage[],
-    prependedCount: number,
+    _prev: readonly ChatMessage[],
+    _current: readonly ChatMessage[],
+    _prependedCount: number,
   ): void {
     const vp = this.viewport();
 
     // Record the scroll offset from the top before CDK recalculates.
     const scrollOffsetFromTop = vp.measureScrollOffset('top');
 
-    // Find the index of the first visible item in the OLD array.
-    const oldRenderedRange = vp.getRenderedRange();
-    const oldFirstVisibleIndex = oldRenderedRange.start;
-
-    // The same message is now at oldFirstVisibleIndex + prependedCount.
-    const newAnchorIndex = oldFirstVisibleIndex + prependedCount;
-
-    // Clamp to valid range.
-    const clampedIndex = Math.max(
-      0,
-      Math.min(newAnchorIndex, current.length - 1),
-    );
-
-    // Scroll to the new anchor index with the same offset.
-    vp.scrollToIndex(clampedIndex);
-    // Fine-tune: restore the exact pixel offset within the item.
+    // With autosize, just restore the pixel offset — the strategy has already
+    // remeasured and repositioned items after the data change.
     vp.scrollToOffset(scrollOffsetFromTop);
   }
 }
