@@ -13,6 +13,7 @@
 
 export { projectConversation } from './lib/conversation-projection';
 export { emptyProjection } from './lib/domain-types';
+export { projectProfile, projectProfiles } from './lib/brain-profile';
 
 export type {
   MessageRole,
@@ -35,6 +36,10 @@ export type {
   ConversationProjection,
 } from './lib/domain-types';
 
-export type { ChatStorageAdapter } from './lib/chat-storage-adapter';
+export type {
+  ChatStorageAdapter,
+  ChatUiState,
+} from './lib/chat-storage-adapter';
+export type { BrainProfile, BrainProfileStatus } from './lib/brain-profile';
 
 export const CHAT_DOMAIN_VERSION = '0.0.0' as const;

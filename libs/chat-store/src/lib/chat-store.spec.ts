@@ -10,7 +10,7 @@ import type {
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ChatStorageAdapter } from '@rusty-view/chat-domain';
+import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 import { ChatTransport } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
 import type { ChatConnectionState } from '@rusty-view/transport';
@@ -23,6 +23,7 @@ import { ChatStore, CHAT_STORAGE_ADAPTER } from './chat-store';
 class InMemoryChatStorage implements ChatStorageAdapter {
   readonly sessionsMap = new Map<string, ChatSessionSummary>();
   readonly eventsMap = new Map<string, ChatEvent[]>();
+  private uiState: ChatUiState | null = null;
 
   async putSession(session: ChatSessionSummary): Promise<void> {
     this.sessionsMap.set(session.session_id, session);
@@ -43,6 +44,12 @@ class InMemoryChatStorage implements ChatStorageAdapter {
   async clearSession(sessionId: string): Promise<void> {
     this.sessionsMap.delete(sessionId);
     this.eventsMap.delete(sessionId);
+  }
+  async getUiState(): Promise<ChatUiState | null> {
+    return this.uiState;
+  }
+  async setUiState(state: ChatUiState): Promise<void> {
+    this.uiState = state;
   }
 }
 
@@ -530,5 +537,153 @@ describe('ChatStore', () => {
 
     expect(store.projection().messages.length).toBeGreaterThan(0);
     expect(store.projection().unknownEvents.length).toBeGreaterThan(0);
+  });
+});
+
+// ---- profile / historical session tests ----
+
+function makeSession(overrides: Partial<ChatSessionSummary>): ChatSessionSummary {
+  return {
+    session_id: 's1',
+    agent_id: 'a1',
+    profile_id: 'p1',
+    kind: 'full',
+    status: 'idle',
+    latest_cursor: '',
+    updated_at: '2026-06-22T10:00:00Z',
+    ...overrides,
+  } as ChatSessionSummary;
+}
+
+describe('ChatStore profiles', () => {
+  it('derives profiles from the session list', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({ session_id: 's1', profile_id: 'p1', status: 'idle', updated_at: '2026-06-01T00:00:00Z' }),
+          makeSession({ session_id: 's2', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+          makeSession({ session_id: 's3', profile_id: 'p2', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+        ],
+        total: 3,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+
+    expect(store.profiles()).toHaveLength(2);
+    // Most-recently active profile first.
+    expect(store.profiles()[0]?.profileId).toBe('p2');
+    expect(store.profiles()[0]?.status).toBe('active');
+    expect(store.profiles()[0]?.activeSessionId).toBe('s3');
+  });
+
+  it('selectProfile opens the profile active session', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+          makeSession({ session_id: 'old', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+        ],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+
+    await store.selectProfile('p1');
+    expect(store.selectedProfileId()).toBe('p1');
+    expect(store.activeSessionId()).toBe('live');
+    expect(store.isViewingHistorical()).toBe(false);
+  });
+
+  it('viewHistoricalSession opens the chosen session without changing profile', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+          makeSession({ session_id: 'archived-1', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+        ],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectProfile('p1');
+
+    await store.viewHistoricalSession('archived-1');
+    expect(store.selectedProfileId()).toBe('p1');
+    expect(store.activeSessionId()).toBe('archived-1');
+    expect(store.viewingHistoricalSessionId()).toBe('archived-1');
+    expect(store.isViewingHistorical()).toBe(true);
+  });
+
+  it('returnToActiveSession restores the profile live session', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+          makeSession({ session_id: 'archived-1', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+        ],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectProfile('p1');
+    await store.viewHistoricalSession('archived-1');
+
+    await store.returnToActiveSession();
+    expect(store.viewingHistoricalSessionId()).toBeNull();
+    expect(store.activeSessionId()).toBe('live');
+    expect(store.isViewingHistorical()).toBe(false);
+  });
+
+  it('persists and restores selectedProfileId across refreshes', async () => {
+    const storage = new InMemoryChatStorage();
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store1 = setupStore(transport, storage);
+    await store1.refreshSessions();
+    await store1.selectProfile('p1');
+
+    // Simulate a fresh store with the same storage.
+    TestBed.resetTestingModule();
+    const store2 = setupStore(transport, storage);
+    await store2.refreshSessions();
+    expect(store2.selectedProfileId()).toBe('p1');
+  });
+
+  it('does not restore a profile id that no longer exists', async () => {
+    const storage = new InMemoryChatStorage();
+    await storage.setUiState({ selectedProfileId: 'gone' });
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, storage);
+    await store.refreshSessions();
+    expect(store.selectedProfileId()).toBeNull();
   });
 });

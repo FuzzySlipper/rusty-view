@@ -1,6 +1,17 @@
 import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 
 /**
+ * Small, roleplay-agnostic UI-state blob persisted alongside the chat cache.
+ *
+ * Currently holds the selected brain-profile id so the sidebar selection
+ * survives refresh/reconnect. Optional fields keep the shape forward-compatible;
+ * unknown keys are ignored by storage impls.
+ */
+export interface ChatUiState {
+  readonly selectedProfileId?: string;
+}
+
+/**
  * Storage adapter contract for durable chat cache.
  *
  * Defined here (in chat-domain) so the interface is shared between the
@@ -17,4 +28,8 @@ export interface ChatStorageAdapter {
   getEvents(sessionId: string, afterCursor?: string): Promise<ChatEvent[]>;
   getSessions(): Promise<ChatSessionSummary[]>;
   clearSession(sessionId: string): Promise<void>;
+  /** Load persisted UI state (selected profile, etc.), or null if none. */
+  getUiState(): Promise<ChatUiState | null>;
+  /** Persist UI state (merged by the caller; impls replace the blob). */
+  setUiState(state: ChatUiState): Promise<void>;
 }

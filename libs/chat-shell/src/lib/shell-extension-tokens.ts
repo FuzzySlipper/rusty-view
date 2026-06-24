@@ -65,3 +65,4 @@ export const CHAT_OPTIONS_TABS = new InjectionToken<readonly ChatOptionsTab[]>(
 /** Built-in panel ids reserved by the shell. */
 export const OPTIONS_PANEL_ID = 'options' as const;
 export const HELP_PANEL_ID = 'help' as const;
+export const SESSIONS_PANEL_ID = 'sessions' as const;

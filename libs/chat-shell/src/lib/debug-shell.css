@@ -88,3 +88,39 @@
   border-left: 1px solid var(--rv-color-border);
   overflow: hidden;
 }
+
+/* Historical session banner — shown above the transcript when viewing an
+ * older session via the Sessions menu. */
+.rv-debug__historical-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rv-space-md);
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  background: var(--rv-color-warning);
+  color: var(--rv-color-bg);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug__historical-banner__label {
+  font-weight: var(--rv-font-weight-bold);
+  text-transform: uppercase;
+}
+
+.rv-debug__historical-banner__return {
+  appearance: none;
+  border: 1px solid var(--rv-color-bg);
+  border-radius: var(--rv-radius);
+  background: transparent;
+  color: var(--rv-color-bg);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  cursor: pointer;
+}
+
+.rv-debug__historical-banner__return:hover {
+  background: var(--rv-color-bg);
+  color: var(--rv-color-warning);
+}

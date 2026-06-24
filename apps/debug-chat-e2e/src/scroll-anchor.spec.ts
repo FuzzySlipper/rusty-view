@@ -36,14 +36,14 @@ test('scroll position is preserved when older messages are prepended', async ({
   // we can't select a real session. Skip if the backend isn't available — the
   // test needs the full shell with transcript viewport rendered.
   const hasSessions = await page
-    .locator('.rv-session')
+    .locator('.rv-profile')
     .count()
     .then((c) => c > 0);
 
   test.skip(!hasSessions, 'no sessions available — needs a backend');
 
   // Select the first session to open the transcript.
-  await page.locator('.rv-session').first().click();
+  await page.locator('.rv-profile').first().click();
   await expect(page.locator('rv-transcript-viewport')).toBeVisible({
     timeout: 10_000,
   });

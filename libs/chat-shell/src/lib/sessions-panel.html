@@ -1,0 +1,73 @@
+<div class="rv-sessions-panel">
+  <header class="rv-sessions-panel__header">
+    <span class="rv-sessions-panel__title">Sessions</span>
+    <button
+      type="button"
+      class="rv-sessions-panel__close"
+      (click)="closePanel()"
+      aria-label="Close sessions"
+    >
+      ✕
+    </button>
+  </header>
+
+  <div class="rv-sessions-panel__filters">
+    <button
+      type="button"
+      class="rv-sessions-panel__chip"
+      [class.rv-sessions-panel__chip--active]="filterProfileId() === null"
+      (click)="setFilter(null)"
+    >
+      All
+    </button>
+    @for (pid of profileIds(); track pid) {
+      <button
+        type="button"
+        class="rv-sessions-panel__chip"
+        [class.rv-sessions-panel__chip--active]="filterProfileId() === pid"
+        (click)="setFilter(pid)"
+      >
+        {{ pid }}
+      </button>
+    }
+  </div>
+
+  <div class="rv-sessions-panel__body">
+    @if (!hasSessions()) {
+      <div class="rv-sessions-panel__empty">No sessions.</div>
+    } @else {
+      <ul class="rv-sessions-panel__list">
+        @for (session of sessions(); track session.session_id) {
+          <li>
+            <button
+              type="button"
+              class="rv-sessions-panel__row"
+              [class.rv-sessions-panel__row--active]="
+                store.activeSessionId() === session.session_id
+              "
+              (click)="onSelectSession(session.session_id)"
+            >
+              <span class="rv-sessions-panel__title">
+                {{ session.title ?? session.session_id }}
+              </span>
+              <span class="rv-sessions-panel__meta">
+                {{ session.profile_id }} ·
+                <span
+                  class="rv-sessions-panel__status"
+                  [class.rv-sessions-panel__status--active]="
+                    session.status === 'active'
+                  "
+                  [class.rv-sessions-panel__status--idle]="
+                    session.status === 'idle'
+                  "
+                >{{ session.status }}</span>
+                · {{ session.message_count ?? 0 }} msgs
+                · {{ session.updated_at | date: 'short' }}
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</div>
