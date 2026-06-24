@@ -1,4 +1,10 @@
 import type { WorkerRequest, WorkerResponse } from './worker-message-protocol';
+import {
+  DEFAULT_ALLOWED_HTML_ATTRS,
+  DEFAULT_ALLOWED_HTML_TAGS,
+  DEFAULT_HTML_SANITIZER_POLICY,
+  type HtmlSanitizerPolicy,
+} from './render-mode-token';
 
 /**
  * Inline (main-thread) implementations of all worker operations.
@@ -283,6 +289,112 @@ function highlightCode(content: string, language: string): string {
 }
 
 /**
+ * Sanitize raw HTML content for safe rendering.
+ *
+ * Pre-pass stripper that removes disallowed tags, event handler attributes,
+ * style attributes, and dangerous URLs. The result is intended to be bound
+ * via Angular's `[innerHTML]` which provides a second sanitization layer.
+ *
+ * This is a regex-based approach — not a full HTML parser — but it is safe
+ * because:
+ * 1. Disallowed tags are stripped entirely (including their content for
+ *    script/iframe/style/etc.).
+ * 2. All `on*` attributes are removed.
+ * 3. `style` attributes are removed.
+ * 4. URLs in href/src are protocol-validated.
+ * 5. Angular's `[innerHTML]` sanitizer is the final defense.
+ */
+function sanitizeHtml(content: string, policy: HtmlSanitizerPolicy): string {
+  const allowedTags = new Set(policy.allowedTags);
+  const allowedAttrs = new Set(policy.allowedAttrs);
+
+  // Tags whose content must be stripped entirely (not just the tag itself).
+  const stripContentTags = new Set([
+    'script', 'style', 'iframe', 'object', 'embed', 'noscript',
+    'template', 'form', 'input', 'button', 'select', 'option',
+    'textarea', 'link', 'meta', 'base', 'title', 'head',
+  ]);
+
+  let result = content;
+
+  // 1. Strip dangerous tags and their content entirely.
+  for (const tag of stripContentTags) {
+    const openRegex = new RegExp(`<${tag}[^>]*>[^]*?</${tag}>`, 'gi');
+    result = result.replaceAll(openRegex, '');
+    // Also remove self-closing/standalone occurrences.
+    const selfRegex = new RegExp(`<${tag}[^>]*/?>`, 'gi');
+    result = result.replaceAll(selfRegex, '');
+  }
+
+  // 2. Remove HTML comments (may contain conditional IE comments).
+  result = result.replaceAll(/<!--[^]*?-->/g, '');
+
+  // 3. Process remaining tags: strip disallowed tags and attributes.
+  const tagRegex = /<(\/?)(\w+)((?:[^>]*?))>/g;
+  result = result.replaceAll(
+    tagRegex,
+    (_match, closing: string, tagName: string, attrs: string) => {
+      const tag = tagName.toLowerCase();
+
+      // If tag is not in the allowed list, strip the tag but keep content.
+      if (!allowedTags.has(tag)) {
+        return '';
+      }
+
+      // Process attributes for opening tags.
+      if (closing === '/') {
+        return `</${tag}>`;
+      }
+
+      // Sanitize attributes.
+      const sanitizedAttrs = sanitizeAttributes(attrs, allowedAttrs, policy);
+      return `<${tag}${sanitizedAttrs}>`;
+    },
+  );
+
+  return result;
+}
+
+/** Sanitize a tag's attribute string: strip disallowed attrs and validate URLs. */
+function sanitizeAttributes(
+  attrs: string,
+  allowedAttrs: Set<string>,
+  policy: HtmlSanitizerPolicy,
+): string {
+  const kept: string[] = [];
+
+  // Match attribute name="value" or name='value' or name=value or name
+  const attrRegex = /([a-zA-Z-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+  let match: RegExpExecArray | null;
+  while ((match = attrRegex.exec(attrs)) !== null) {
+    const attrName = match[1]?.toLowerCase();
+    if (attrName === undefined) continue;
+
+    // Strip all event handler attributes (on*).
+    if (attrName.startsWith('on')) continue;
+
+    // Strip style attributes.
+    if (attrName === 'style') continue;
+
+    // Check if attribute is allowed.
+    if (!allowedAttrs.has(attrName)) continue;
+
+    const value = match[2] ?? match[3] ?? match[4] ?? '';
+
+    // Validate URLs in href and src.
+    if (attrName === 'href' || attrName === 'src') {
+      const safeUrl = policy.validateUrl(value);
+      if (safeUrl === null) continue;
+      kept.push(`${attrName}="${safeUrl}"`);
+    } else {
+      kept.push(`${attrName}="${value}"`);
+    }
+  }
+
+  return kept.length > 0 ? ' ' + kept.join(' ') : '';
+}
+
+/**
  * Process a worker request inline (main thread). Returns the response.
  */
 export function processRequestInline(request: WorkerRequest): WorkerResponse {
@@ -293,6 +405,12 @@ export function processRequestInline(request: WorkerRequest): WorkerResponse {
           kind: 'parse-markdown',
           id: request.id,
           html: parseMarkdown(request.content),
+        };
+      case 'sanitize-html':
+        return {
+          kind: 'sanitize-html',
+          id: request.id,
+          html: sanitizeHtml(request.content, DEFAULT_HTML_SANITIZER_POLICY),
         };
       case 'highlight-json':
         return {

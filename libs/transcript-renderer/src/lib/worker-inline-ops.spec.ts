@@ -331,4 +331,127 @@ describe('processRequestInline (inline worker fallback)', () => {
       }
     });
   });
+
+  describe('sanitize-html', () => {
+    function sanitize(content: string): string {
+      const response = processRequestInline({
+        kind: 'sanitize-html',
+        id: 0,
+        content,
+      });
+      if (response.kind === 'sanitize-html') return response.html;
+      throw new Error(`Unexpected response: ${response.kind}`);
+    }
+
+    it('allows basic formatting tags', () => {
+      const html = sanitize('<p>Hello <b>bold</b> <i>italic</i> <em>em</em></p>');
+      expect(html).toContain('<p>');
+      expect(html).toContain('<b>bold</b>');
+      expect(html).toContain('<i>italic</i>');
+      expect(html).toContain('<em>em</em>');
+    });
+
+    it('allows headings', () => {
+      const html = sanitize('<h1>Title</h1><h2>Subtitle</h2>');
+      expect(html).toContain('<h1>Title</h1>');
+      expect(html).toContain('<h2>Subtitle</h2>');
+    });
+
+    it('allows links with safe URLs', () => {
+      const html = sanitize('<a href="https://example.com">link</a>');
+      expect(html).toContain('<a');
+      expect(html).toContain('href="https://example.com"');
+      expect(html).toContain('>link</a>');
+    });
+
+    it('allows relative links', () => {
+      const html = sanitize('<a href="/page">page</a>');
+      expect(html).toContain('href="/page"');
+    });
+
+    it('strips script tags entirely', () => {
+      const html = sanitize('<p>safe</p><script>alert("xss")</script>');
+      expect(html).not.toContain('<script>');
+      expect(html).not.toContain('alert');
+      expect(html).toContain('<p>safe</p>');
+    });
+
+    it('strips iframe tags entirely', () => {
+      const html = sanitize('<iframe src="https://evil.com"></iframe><p>ok</p>');
+      expect(html).not.toContain('<iframe');
+      expect(html).toContain('<p>ok</p>');
+    });
+
+    it('strips style tags entirely', () => {
+      const html = sanitize('<style>body{display:none}</style><p>visible</p>');
+      expect(html).not.toContain('<style>');
+      expect(html).not.toContain('display:none');
+      expect(html).toContain('<p>visible</p>');
+    });
+
+    it('strips event handler attributes', () => {
+      const html = sanitize('<div onclick="alert(1)">click me</div>');
+      expect(html).not.toContain('onclick');
+      expect(html).toContain('<div>click me</div>');
+    });
+
+    it('strips onerror from img tags', () => {
+      const html = sanitize('<img src="x" onerror="alert(1)">');
+      expect(html).not.toContain('onerror');
+    });
+
+    it('strips style attributes', () => {
+      const html = sanitize('<p style="color:red">text</p>');
+      expect(html).not.toContain('style=');
+      expect(html).toContain('<p>text</p>');
+    });
+
+    it('strips dangerous URL protocols in href', () => {
+      const html = sanitize('<a href="javascript:alert(1)">click</a>');
+      expect(html).not.toContain('javascript:');
+      expect(html).toContain('<a>click</a>');
+    });
+
+    it('strips data: protocol in src', () => {
+      const html = sanitize('<img src="data:text/html,<script>alert(1)</script>">');
+      expect(html).not.toContain('data:text/html');
+    });
+
+    it('strips form elements entirely', () => {
+      const html = sanitize('<form action="/steal"><input type="text"></form>');
+      expect(html).not.toContain('<form');
+      expect(html).not.toContain('<input');
+    });
+
+    it('strips HTML comments', () => {
+      const html = sanitize('<!-- comment --><p>text</p>');
+      expect(html).not.toContain('comment');
+      expect(html).toContain('<p>text</p>');
+    });
+
+    it('allows tables', () => {
+      const html = sanitize('<table><thead><tr><th>Col</th></tr></thead><tbody><tr><td>val</td></tr></tbody></table>');
+      expect(html).toContain('<table>');
+      expect(html).toContain('<th>Col</th>');
+      expect(html).toContain('<td>val</td>');
+    });
+
+    it('allows lists', () => {
+      const html = sanitize('<ul><li>one</li><li>two</li></ul>');
+      expect(html).toContain('<ul>');
+      expect(html).toContain('<li>one</li>');
+    });
+
+    it('handles malformed HTML without crashing', () => {
+      const html = sanitize('<p>unclosed <b>bold<p>next<div>broken');
+      expect(html.length).toBeGreaterThan(0);
+      // Should not throw.
+    });
+
+    it('strips unknown tags but keeps their content', () => {
+      const html = sanitize('<custom-tag>content</custom-tag>');
+      expect(html).not.toContain('<custom-tag>');
+      expect(html).toContain('content');
+    });
+  });
 });

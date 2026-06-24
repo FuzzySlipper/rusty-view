@@ -61,25 +61,33 @@
     </div>
   </fieldset>
 
-  <!-- Markdown rendering -->
+  <!-- Text render mode -->
   <fieldset class="rv-appearance__group">
-    <legend>Markdown rendering</legend>
+    <legend>Text render mode</legend>
     <div class="rv-appearance__segmented">
       <button
         type="button"
         class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().markdownRendering === true"
-        (click)="setMarkdownRendering(true)"
+        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'markdown'"
+        (click)="setTextRenderMode('markdown')"
       >
-        On
+        Markdown
       </button>
       <button
         type="button"
         class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().markdownRendering === false"
-        (click)="setMarkdownRendering(false)"
+        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'sanitized-html'"
+        (click)="setTextRenderMode('sanitized-html')"
       >
-        Off
+        HTML
+      </button>
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'raw'"
+        (click)="setTextRenderMode('raw')"
+      >
+        Raw
       </button>
     </div>
   </fieldset>

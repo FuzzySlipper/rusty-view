@@ -40,12 +40,12 @@
 </div>
 } @else {
 <div class="rv-block rv-block--text">
-  @if (shouldRenderMarkdown() && renderedHtml()) {
+  @if (shouldRenderFormatted() && renderedHtml()) {
   <div class="rv-block__markdown" [innerHTML]="renderedHtml()"></div>
   } @else {
   <p class="rv-block__content">{{ block().content }}</p>
   }
-  @if (markdownEnabled()) {
+  @if (renderMode() !== 'raw') {
   <div class="rv-block__raw-toggle">
     <button
       type="button"
@@ -56,7 +56,7 @@
       (keydown.enter)="toggleRaw()"
       (keydown.space)="$event.preventDefault(); toggleRaw()"
     >
-      {{ showRaw() ? 'Markdown' : 'Raw' }}
+      {{ showRaw() ? 'Formatted' : 'Raw' }}
     </button>
   </div>
   }

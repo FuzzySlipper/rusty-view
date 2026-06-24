@@ -13,6 +13,11 @@ export type WorkerRequest =
       readonly content: string;
     }
   | {
+      readonly kind: 'sanitize-html';
+      readonly id: number;
+      readonly content: string;
+    }
+  | {
       readonly kind: 'highlight-json';
       readonly id: number;
       readonly content: string;
@@ -31,6 +36,11 @@ export type WorkerResponse =
       readonly html: string;
     }
   | {
+      readonly kind: 'sanitize-html';
+      readonly id: number;
+      readonly html: string;
+    }
+  | {
       readonly kind: 'highlight-json';
       readonly id: number;
       readonly html: string;
@@ -45,5 +55,6 @@ export type WorkerResponse =
 /** The subset of WorkerRequest kinds that produce results (not errors). */
 export type WorkerOperationKind =
   | 'parse-markdown'
+  | 'sanitize-html'
   | 'highlight-json'
   | 'highlight-code';

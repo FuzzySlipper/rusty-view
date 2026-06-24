@@ -24,6 +24,16 @@ export type {
   WorkerOperationKind,
 } from './lib/worker-message-protocol';
 export { processRequestInline } from './lib/worker-inline-ops';
-export { TRANSCRIPT_MARKDOWN_ENABLED } from './lib/markdown-render-token';
+export {
+  TRANSCRIPT_TEXT_RENDER_MODE,
+  TRANSCRIPT_HTML_POLICY,
+  DEFAULT_HTML_SANITIZER_POLICY,
+  DEFAULT_ALLOWED_HTML_TAGS,
+  DEFAULT_ALLOWED_HTML_ATTRS,
+} from './lib/render-mode-token';
+export type {
+  TextRenderMode,
+  HtmlSanitizerPolicy,
+} from './lib/render-mode-token';
 
 export const TRANSCRIPT_RENDERER_VERSION = '0.0.0' as const;

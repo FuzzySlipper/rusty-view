@@ -7,6 +7,7 @@ import {
   type AppearanceColors,
   type AppearanceDensity,
   type AppearanceFontFamily,
+  type TextRenderMode,
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
   FONT_SCALE_STEP,
@@ -59,8 +60,8 @@ export class AppearanceTabComponent {
     void this.theme.update({ density: value });
   }
 
-  protected setMarkdownRendering(value: boolean): void {
-    void this.theme.update({ markdownRendering: value });
+  protected setTextRenderMode(value: TextRenderMode): void {
+    void this.theme.update({ textRenderMode: value });
   }
 
   protected onScale(event: Event): void {

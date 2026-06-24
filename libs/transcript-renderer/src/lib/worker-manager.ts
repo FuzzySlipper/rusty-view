@@ -34,6 +34,11 @@ export class WorkerManager {
     return this.dispatch('parse-markdown', content);
   }
 
+  /** Sanitize raw HTML for safe rendering (off-thread if possible). */
+  sanitizeHtml(content: string): Promise<string> {
+    return this.dispatch('sanitize-html', content);
+  }
+
   /** Pretty-print and syntax-highlight JSON (off-thread if possible). */
   highlightJson(content: string): Promise<string> {
     return this.dispatch('highlight-json', content);
@@ -139,6 +144,9 @@ export class WorkerManager {
     }
     if (kind === 'parse-markdown') {
       return { kind: 'parse-markdown', id, content };
+    }
+    if (kind === 'sanitize-html') {
+      return { kind: 'sanitize-html', id, content };
     }
     return { kind: 'highlight-json', id, content };
   }

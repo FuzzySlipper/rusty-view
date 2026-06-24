@@ -10,31 +10,35 @@ import {
 import type { MessageBlock } from '@rusty-view/chat-domain';
 
 import { WorkerManager } from './worker-manager';
-import { TRANSCRIPT_MARKDOWN_ENABLED } from './markdown-render-token';
+import {
+  TRANSCRIPT_TEXT_RENDER_MODE,
+  type TextRenderMode,
+} from './render-mode-token';
 
 /**
  * Renders a single {@link MessageBlock} by kind.
  *
- * - text → markdown-rendered (via worker for large content) when the global
- *   Markdown preference is on and the user hasn't toggled this block to raw.
+ * - text → rendered according to the global {@link TextRenderMode}:
+ *   `markdown` (worker-parsed), `sanitized-html` (pre-sanitized then Angular
+ *   `[innerHTML]`), or `raw` (plain text). A per-block raw toggle overrides
+ *   to raw so users can always recover.
  * - tool_call / tool_result / debug / command → collapsible panel
  *
  * Large blocks render the first N lines with an expand toggle. Text blocks use
- * the {@link WorkerManager} to parse markdown off the main thread when the
+ * the {@link WorkerManager} to parse/sanitize off the main thread when the
  * content exceeds the inline threshold, preventing frame drops during scroll
  * with very long messages.
  *
- * **Markdown rendering**: the global on/off comes from
- * {@link TRANSCRIPT_MARKDOWN_ENABLED} (a signal injected from the host). A
- * per-block "raw" toggle ( {@link showRaw} ) lets the user flip an individual
- * response to plain text when rendering is wrong, slow, or confusing. Raw text
- * is always available and copyable.
+ * **Render modes** (task #3260):
+ * - `raw` — plain text, no formatting. Always available as fallback.
+ * - `markdown` — content parsed as Markdown → safe HTML.
+ * - `sanitized-html` — content treated as inline HTML, pre-sanitized (strips
+ *   scripts, event handlers, iframes, dangerous URLs) then bound via
+ *   `[innerHTML]` for Angular's final sanitization layer.
  *
- * **Streaming behavior**: markdown is rendered for all text blocks including
- * those in an active streaming turn. The worker processes asynchronously so
- * streaming deltas don't block the UI, and a guard prevents stale renders. If
- * live markdown parsing creates churn in practice, hosts can set the global
- * preference to `false` or users can toggle individual blocks to raw.
+ * Per-block raw toggle: the `showRaw` signal overrides the global mode to
+ * `raw`. The toggle button appears on text blocks when the global mode is not
+ * already `raw`.
  */
 @Component({
   selector: 'rv-message-block',
@@ -44,23 +48,28 @@ import { TRANSCRIPT_MARKDOWN_ENABLED } from './markdown-render-token';
 })
 export class MessageBlockComponent {
   private readonly workerManager = inject(WorkerManager);
-  protected readonly markdownEnabled = inject(TRANSCRIPT_MARKDOWN_ENABLED);
+  protected readonly renderMode = inject(TRANSCRIPT_TEXT_RENDER_MODE);
 
   readonly block = input.required<MessageBlock>();
   readonly collapsedThreshold = input<number>(500);
-  /** Content length above which markdown parsing goes to the worker. */
+  /** Content length above which markdown/HTML processing goes to the worker. */
   readonly workerThreshold = input<number>(2_000);
 
   protected readonly expanded = signal(false);
-  /** Per-block override: when true, show raw text instead of rendered Markdown. */
+  /** Per-block override: when true, show raw text regardless of global mode. */
   protected readonly showRaw = signal(false);
 
-  /** Rendered HTML for text blocks (markdown-parsed). */
+  /** Rendered HTML for text blocks (markdown-parsed or sanitized). */
   protected readonly renderedHtml = signal<string>('');
 
-  /** Whether this text block should render as formatted Markdown. */
-  protected readonly shouldRenderMarkdown = computed(
-    () => this.markdownEnabled() && !this.showRaw(),
+  /** Effective render mode: global mode unless per-block raw is toggled. */
+  protected readonly effectiveRenderMode = computed<TextRenderMode>(
+    () => (this.showRaw() ? 'raw' : this.renderMode()),
+  );
+
+  /** Whether this text block should render formatted content. */
+  protected readonly shouldRenderFormatted = computed(
+    () => this.effectiveRenderMode() !== 'raw',
   );
 
   /** Tool/command metadata, when this block represents inline tool activity. */
@@ -95,21 +104,21 @@ export class MessageBlockComponent {
   );
 
   constructor() {
-    // When the text block content changes OR the render-mode changes,
-    // render (or clear) markdown accordingly.
+    // When the text block content changes OR the render mode changes,
+    // render (or clear) formatted content accordingly.
     effect(() => {
       const block = this.block();
       if (block.kind !== 'text') {
         this.renderedHtml.set('');
         return;
       }
-      if (!this.shouldRenderMarkdown()) {
+      const mode = this.effectiveRenderMode();
+      if (mode === 'raw') {
         this.renderedHtml.set('');
         return;
       }
       const content = block.content;
-      // Fire and forget — the signal updates when the worker responds.
-      void this.renderMarkdown(content);
+      void this.renderFormatted(content, mode);
     });
   }
 
@@ -121,11 +130,20 @@ export class MessageBlockComponent {
     this.showRaw.update((v) => !v);
   }
 
-  private async renderMarkdown(content: string): Promise<void> {
-    const html = await this.workerManager.parseMarkdown(content);
+  private async renderFormatted(
+    content: string,
+    mode: TextRenderMode,
+  ): Promise<void> {
+    const html =
+      mode === 'sanitized-html'
+        ? await this.workerManager.sanitizeHtml(content)
+        : await this.workerManager.parseMarkdown(content);
     // Only update if the block hasn't changed during async processing
     // AND the render mode is still active.
-    if (this.block().content === content && this.shouldRenderMarkdown()) {
+    if (
+      this.block().content === content &&
+      this.effectiveRenderMode() === mode
+    ) {
       this.renderedHtml.set(html);
     }
   }

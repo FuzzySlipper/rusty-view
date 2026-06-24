@@ -48,6 +48,11 @@ export interface AppearanceColors {
 }
 
 /**
+ * How text blocks in the transcript are rendered. See {@link AppearanceSettings.textRenderMode}.
+ */
+export type TextRenderMode = 'raw' | 'markdown' | 'sanitized-html';
+
+/**
  * Complete appearance preferences. Stored verbatim via the settings storage
  * adapter; never includes secrets or auth material.
  */
@@ -62,11 +67,11 @@ export interface AppearanceSettings {
   readonly density: AppearanceDensity;
   readonly colors: AppearanceColors;
   /**
-   * Whether chat message text is rendered as formatted Markdown (true) or
-   * shown as raw plain text (false). Users can also toggle individual
-   * responses to raw via a per-block control in the transcript.
+   * How chat message text is rendered: `raw` (plain text), `markdown`
+   * (formatted Markdown), or `sanitized-html` (inline HTML with sanitization).
+   * Users can also toggle individual blocks to raw via a per-block control.
    */
-  readonly markdownRendering: boolean;
+  readonly textRenderMode: TextRenderMode;
 }
 
 /** Inclusive bounds for {@link AppearanceSettings.fontScale}. */
@@ -109,7 +114,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   fontScale: 1,
   density: 'normal',
   colors: {},
-  markdownRendering: true,
+  textRenderMode: 'markdown',
 };
 
 /** Clamp a font scale into the allowed range and round to a sane precision. */

@@ -12,6 +12,7 @@ import {
   type AppearanceDensity,
   type AppearanceFontFamily,
   type AppearanceSettings,
+  type TextRenderMode,
   BASE_DENSITY,
   BASE_FONT_SIZES,
   clampFontScale,
@@ -156,7 +157,7 @@ export class ChatTheme {
       fontScale: clampFontScale(settings.fontScale ?? 1),
       density,
       colors: { ...settings.colors },
-      markdownRendering: settings.markdownRendering ?? true,
+      textRenderMode: normalizeTextRenderMode(settings.textRenderMode),
     };
   }
 
@@ -245,4 +246,14 @@ export class ChatTheme {
       root.style.setProperty(token, value);
     }
   }
+}
+
+/** Coerce an arbitrary text render mode into a valid value. */
+function normalizeTextRenderMode(
+  mode: TextRenderMode | undefined,
+): TextRenderMode {
+  if (mode === 'raw' || mode === 'markdown' || mode === 'sanitized-html') {
+    return mode;
+  }
+  return 'markdown';
 }

@@ -21,6 +21,7 @@ export {
   type AppearanceColors,
   type AppearanceFontFamily,
   type AppearanceDensity,
+  type TextRenderMode,
   DEFAULT_APPEARANCE,
   BASE_FONT_SIZES,
   BASE_DENSITY,

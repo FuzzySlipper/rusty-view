@@ -96,28 +96,28 @@ describe('ChatTheme', () => {
     expect(theme.settings().colors.accent).toBe('#bbbbbb');
   });
 
-  it('default markdownRendering is true', () => {
+  it('default textRenderMode is markdown', () => {
     const theme = TestBed.inject(ChatTheme);
-    expect(theme.settings().markdownRendering).toBe(true);
+    expect(theme.settings().textRenderMode).toBe('markdown');
   });
 
-  it('toggles markdownRendering and persists', async () => {
+  it('toggles textRenderMode and persists', async () => {
     const theme = TestBed.inject(ChatTheme);
-    await theme.update({ markdownRendering: false });
-    expect(theme.settings().markdownRendering).toBe(false);
+    await theme.update({ textRenderMode: 'raw' });
+    expect(theme.settings().textRenderMode).toBe('raw');
 
     const stored = await storage.load();
-    expect(stored?.markdownRendering).toBe(false);
+    expect(stored?.textRenderMode).toBe('raw');
 
-    // Toggle back on.
-    await theme.update({ markdownRendering: true });
-    expect(theme.settings().markdownRendering).toBe(true);
+    // Toggle to sanitized-html.
+    await theme.update({ textRenderMode: 'sanitized-html' });
+    expect(theme.settings().textRenderMode).toBe('sanitized-html');
   });
 
-  it('reset restores markdownRendering to default true', async () => {
+  it('reset restores textRenderMode to default markdown', async () => {
     const theme = TestBed.inject(ChatTheme);
-    await theme.update({ markdownRendering: false });
+    await theme.update({ textRenderMode: 'raw' });
     await theme.reset();
-    expect(theme.settings().markdownRendering).toBe(true);
+    expect(theme.settings().textRenderMode).toBe('markdown');
   });
 });

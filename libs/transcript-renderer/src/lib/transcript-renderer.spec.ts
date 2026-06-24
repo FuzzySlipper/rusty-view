@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
-import { TRANSCRIPT_MARKDOWN_ENABLED } from './markdown-render-token';
+import { TRANSCRIPT_TEXT_RENDER_MODE, type TextRenderMode } from './render-mode-token';
 
 function makeBlock(overrides: Partial<MessageBlock>): MessageBlock {
   return {
@@ -183,14 +183,14 @@ describe('MessageItemComponent', () => {
 describe('MessageBlockComponent markdown toggle', () => {
   async function createBlock(
     block: MessageBlock,
-    markdownEnabled = true,
+    textRenderMode: TextRenderMode = 'markdown',
   ) {
     TestBed.configureTestingModule({
       imports: [MessageBlockComponent],
       providers: [
         {
-          provide: TRANSCRIPT_MARKDOWN_ENABLED,
-          useValue: signal(markdownEnabled),
+          provide: TRANSCRIPT_TEXT_RENDER_MODE,
+          useValue: signal(textRenderMode),
         },
       ],
     });
@@ -201,10 +201,10 @@ describe('MessageBlockComponent markdown toggle', () => {
     return fixture;
   }
 
-  it('renders markdown when global toggle is on', async () => {
+  it('renders markdown when mode is markdown', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: '**bold**' }),
-      true,
+      'markdown',
     );
     await Promise.resolve();
     await Promise.resolve();
@@ -215,10 +215,10 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(host.innerHTML).toContain('<strong>bold</strong>');
   });
 
-  it('renders raw text when global toggle is off', async () => {
+  it('renders raw text when mode is raw', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: '**bold**' }),
-      false,
+      'raw',
     );
     await Promise.resolve();
     await Promise.resolve();
@@ -228,14 +228,14 @@ describe('MessageBlockComponent markdown toggle', () => {
     // No markdown container — raw text shown.
     expect(host.querySelector('.rv-block__markdown')).toBeNull();
     expect(host.textContent).toContain('**bold**');
-    // Raw toggle button should NOT appear when global markdown is off.
+    // Raw toggle button should NOT appear when global mode is raw.
     expect(host.querySelector('.rv-block__raw-button')).toBeNull();
   });
 
   it('toggles individual block to raw via per-block button', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: '**bold**' }),
-      true,
+      'markdown',
     );
     await Promise.resolve();
     await Promise.resolve();
@@ -257,10 +257,10 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(rawButton.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('toggles back from raw to markdown', async () => {
+  it('toggles back from raw to formatted', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: '**bold**' }),
-      true,
+      'markdown',
     );
     await Promise.resolve();
     await Promise.resolve();
@@ -283,10 +283,38 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
   });
 
+  it('sanitized-html mode renders HTML after pre-sanitization', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '<p>Hello <b>world</b></p>' }),
+      'sanitized-html',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
+    expect(host.innerHTML).toContain('<b>world</b>');
+  });
+
+  it('sanitized-html mode strips dangerous content', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '<p>safe</p><script>alert(1)</script>' }),
+      'sanitized-html',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.innerHTML).not.toContain('<script>');
+    expect(host.textContent).toContain('safe');
+  });
+
   it('raw text is always available and copyable', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: 'Some text content' }),
-      false,
+      'raw',
     );
     fixture.detectChanges();
 

@@ -17,7 +17,7 @@ import {
   IndexedDbChatSettingsStorage,
   provideChatTheme,
 } from '@rusty-view/chat-theme';
-import { TRANSCRIPT_MARKDOWN_ENABLED } from '@rusty-view/transcript-renderer';
+import { TRANSCRIPT_TEXT_RENDER_MODE } from '@rusty-view/transcript-renderer';
 
 /**
  * Configuration for the debug-chat app's transport connection to rusty-crew.
@@ -112,9 +112,9 @@ export function provideDebugChat(
     IndexedDbChatSettingsStorage,
     provideChatTheme(),
     {
-      provide: TRANSCRIPT_MARKDOWN_ENABLED,
+      provide: TRANSCRIPT_TEXT_RENDER_MODE,
       useFactory: (theme: ChatTheme) =>
-        computed(() => theme.settings().markdownRendering),
+        computed(() => theme.settings().textRenderMode),
       deps: [ChatTheme],
     },
     ChatStore,
