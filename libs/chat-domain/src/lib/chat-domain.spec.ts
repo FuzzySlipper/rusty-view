@@ -406,3 +406,80 @@ describe('inline tool/command blocks', () => {
     expect(toolBlock?.content).toBe('timeout');
   });
 });
+
+describe('command lifecycle events', () => {
+  it('projects command_started into a running command block', () => {
+    const projection = projectConversation([
+      makeEvent('command_started', {
+        command_name: '/status',
+        summary: 'Checking status',
+        status: 'started',
+      }),
+    ]);
+    expect(projection.commands).toHaveLength(1);
+    expect(projection.commands[0]?.commandName).toBe('/status');
+    expect(projection.commands[0]?.status).toBe('started');
+
+    const cmdBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'command',
+    );
+    expect(cmdBlock?.tool?.name).toBe('/status');
+    expect(cmdBlock?.tool?.status).toBe('running');
+  });
+
+  it('upgrades command block from started to completed in place', () => {
+    const projection = projectConversation([
+      makeEvent('command_started', {
+        command_name: '/new',
+        summary: 'Starting',
+        status: 'started',
+      }),
+      makeEvent('command_completed', {
+        command_name: '/new',
+        summary: 'Created session abc',
+        status: 'completed',
+        new_session_id: 'new-sess',
+      }),
+    ]);
+    // The commands log is append-only.
+    expect(projection.commands).toHaveLength(2);
+    expect(projection.commands[1]?.status).toBe('completed');
+    // The inline block is upserted in place.
+    const cmdBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'command',
+    );
+    expect(cmdBlock?.tool?.status).toBe('completed');
+  });
+
+  it('marks a command block as failed with reason code', () => {
+    const projection = projectConversation([
+      makeEvent('command_started', {
+        command_name: '/reload',
+        summary: 'Reloading',
+        status: 'started',
+      }),
+      makeEvent('command_failed', {
+        command_name: '/reload',
+        summary: 'Not allowed',
+        status: 'failed',
+        reason_code: 'forbidden',
+      }),
+    ]);
+    const cmdBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'command',
+    );
+    expect(cmdBlock?.tool?.status).toBe('failed');
+    expect(cmdBlock?.tool?.reasonCode).toBe('forbidden');
+  });
+
+  it('ignores malformed command payloads without crashing', () => {
+    const projection = projectConversation([
+      makeEvent('command_started', {
+        summary: 'oops',
+        status: 'started',
+      } as never),
+    ]);
+    expect(projection.commands).toHaveLength(0);
+    expect(projection.messages).toHaveLength(0);
+  });
+});

@@ -58,6 +58,11 @@ export class DebugShellComponent {
     return cursor ?? '—';
   });
 
+  /** Disable the message input when streaming OR a submission is in flight. */
+  protected readonly inputDisabled = computed(
+    () => this.store.isGenerating() || this.store.isSubmitting(),
+  );
+
   protected readonly isViewingHistorical = computed(
     () => this.store.isViewingHistorical(),
   );
@@ -71,7 +76,7 @@ export class DebugShellComponent {
   }
 
   protected onSendMessage(text: string): void {
-    void this.store.sendMessage(text);
+    void this.store.submit(text);
   }
 
   protected onReconnect(): void {

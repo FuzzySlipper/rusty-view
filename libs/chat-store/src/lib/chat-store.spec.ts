@@ -687,3 +687,118 @@ describe('ChatStore profiles', () => {
     expect(store.selectedProfileId()).toBeNull();
   });
 });
+
+describe('ChatStore.submit (slash-command routing)', () => {
+  it('routes plain text to sendMessage', async () => {
+    const sendMock = vi.fn(async () => ({
+      status: 'accepted' as const,
+      message_id: 'm1',
+      latest_cursor: 'c1',
+    }));
+    const commandMock = vi.fn(
+      async () =>
+        ({
+          status: 'completed' as const,
+          command_name: 'x',
+          summary: '',
+          latest_cursor: 'c1',
+        }) satisfies ExecuteChatCommandResult,
+    );
+    const transport = createMockTransport({});
+    (transport as unknown as { sendMessage: typeof sendMock }).sendMessage =
+      sendMock;
+    (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
+      commandMock;
+
+    const store = setupStore(transport, new InMemoryChatStorage());
+    // Simulate an active session by injecting one via refreshSessions + selectSession.
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+
+    await store.submit('hello world');
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(commandMock).not.toHaveBeenCalled();
+  });
+
+  it('routes text starting with / to runCommand', async () => {
+    const sendMock = vi.fn(async () => ({
+      status: 'accepted' as const,
+      message_id: 'm1',
+      latest_cursor: 'c1',
+    }));
+    const commandMock = vi.fn(
+      async () =>
+        ({
+          status: 'completed' as const,
+          command_name: 'status',
+          summary: 'OK',
+          latest_cursor: 'c1',
+        }) satisfies ExecuteChatCommandResult,
+    );
+    const transport = createMockTransport({});
+    (transport as unknown as { sendMessage: typeof sendMock }).sendMessage =
+      sendMock;
+    (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
+      commandMock;
+
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+
+    await store.submit('/status');
+    expect(commandMock).toHaveBeenCalledTimes(1);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('records pendingCommands and clears on success', async () => {
+    let resolve!: (v: ExecuteChatCommandResult) => void;
+    const commandMock = vi.fn(
+      () =>
+        new Promise<ExecuteChatCommandResult>((r) => {
+          resolve = r;
+        }),
+    );
+    const transport = createMockTransport({});
+    (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
+      commandMock;
+
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+
+    const promise = store.submit('/slow');
+    expect(store.pendingCommands()).toHaveLength(1);
+    expect(store.isSubmitting()).toBe(true);
+
+    resolve({
+      status: 'completed',
+      command_name: 'slow',
+      summary: 'done',
+      latest_cursor: 'c1',
+    });
+    await promise;
+
+    expect(store.pendingCommands()).toHaveLength(0);
+    expect(store.isSubmitting()).toBe(false);
+  });
+
+  it('records error on pendingCommand when transport throws', async () => {
+    const commandMock = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const transport = createMockTransport({});
+    (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
+      commandMock;
+
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('sess_test');
+
+    await store.submit('/fail');
+
+    expect(store.pendingCommands()).toHaveLength(1);
+    expect(store.pendingCommands()[0]?.status).toBe('error');
+    expect(store.pendingCommands()[0]?.error).toContain('boom');
+    expect(store.isSubmitting()).toBe(true);
+  });
+});

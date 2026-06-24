@@ -68,6 +68,7 @@ export class ChatStore implements OnDestroy {
   });
   private readonly _commandRegistry = signal<ChatCommandDescriptor[]>([]);
   private readonly _pendingSends = signal<PendingSend[]>([]);
+  private readonly _pendingCommands = signal<PendingSend[]>([]);
   /** Status of the open session, from openSession (authoritative current state). */
   private readonly _activeSessionStatus = signal<ChatSessionStatus | null>(
     null,
@@ -93,6 +94,13 @@ export class ChatStore implements OnDestroy {
   readonly connectionState = this._connectionState.asReadonly();
   readonly commands = this._commandRegistry.asReadonly();
   readonly pendingSends = this._pendingSends.asReadonly();
+  readonly pendingCommands = this._pendingCommands.asReadonly();
+  /** True when a message or command is currently in flight. */
+  readonly isSubmitting = computed(
+    () =>
+      this._pendingSends().length > 0 ||
+      this._pendingCommands().length > 0,
+  );
 
   // ---- computed signals ----
   readonly messages = computed(
@@ -322,8 +330,22 @@ export class ChatStore implements OnDestroy {
   }
 
   /**
+   * Unified submit: routes to {@link runCommand} if text starts with `/`,
+   * otherwise to {@link sendMessage}. Used by the main chat composer so
+   * users can type either messages or slash commands in one input.
+   */
+  async submit(text: string): Promise<void> {
+    if (text.startsWith('/')) {
+      await this.runCommand(text);
+    } else {
+      await this.sendMessage(text);
+    }
+  }
+
+  /**
    * Execute a slash/debug command. If the command returns a new session
-   * (e.g. /new), automatically switch to it.
+   * (e.g. /new), automatically switch to it. Tracks pending state so the
+   * composer can disable during execution and surface failures.
    */
   async runCommand(command: string): Promise<void> {
     const sessionId = this._activeSessionId();
@@ -331,12 +353,34 @@ export class ChatStore implements OnDestroy {
       throw new Error('No active session — call selectSession first.');
     }
 
-    const result = await this.transport.sendCommand(sessionId, { command });
+    const pendingId = `cmd_${Date.now()}`;
+    const pending: PendingSend = {
+      id: pendingId,
+      text: command,
+      status: 'sending',
+      error: undefined,
+    };
+    this._pendingCommands.update((cmds) => [...cmds, pending]);
 
-    // /new returns a new_session_id — switch to it.
-    if (result.new_session_id !== undefined) {
-      await this.refreshSessions();
-      await this.selectSession(result.new_session_id);
+    try {
+      const result = await this.transport.sendCommand(sessionId, { command });
+      this._pendingCommands.update((cmds) =>
+        cmds.filter((c) => c.id !== pendingId),
+      );
+
+      // /new returns a new_session_id — switch to it.
+      if (result.new_session_id !== undefined) {
+        await this.refreshSessions();
+        await this.selectSession(result.new_session_id);
+      }
+    } catch (error) {
+      this._pendingCommands.update((cmds) =>
+        cmds.map((c) =>
+          c.id === pendingId
+            ? { ...c, status: 'error', error: String(error) }
+            : c,
+        ),
+      );
     }
   }
 
