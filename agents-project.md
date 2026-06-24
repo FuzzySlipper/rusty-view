@@ -51,6 +51,7 @@ the broader roleplay system design documents.
     /transport              # HTTP/SSE client for rusty-crew (no components)
     /chat-domain            # pure TypeScript domain logic (no Angular)
     /chat-store             # Angular Signals store (no roleplay state)
+    /chat-theme             # appearance settings + live token application
     /transcript-renderer    # virtualized transcript rendering (roleplay-agnostic)
     /chat-components        # dumb presentational components (no service injection)
     /chat-shell             # debug app layout (session list, transcript, inspectors)
@@ -82,6 +83,7 @@ must not own or fork core transcript mechanics.
 | transport | HTTP/SSE/WS interaction with rusty-crew | Component imports, roleplay concepts |
 | chat-domain | Conversation projection, event reduction, branch modeling | Angular components, network calls |
 | chat-store | Current session state, message projection, stream status | Roleplay-specific state, direct network calls |
+| chat-theme | Appearance settings + live `--rv-*` token application, settings persistence | Roleplay concepts, session/transcript state, direct `localStorage` |
 | transcript-renderer | Virtualized rendering, scroll behavior, streaming deltas | Roleplay concepts, hardcoded message decoration |
 | chat-components | Dumb presentational components (inputs/outputs only) | Service injection, store access, domain logic |
 | chat-shell | Debug app layout, session list, inspector panels | Roleplay UI |

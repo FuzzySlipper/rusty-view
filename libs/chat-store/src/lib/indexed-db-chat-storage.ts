@@ -2,9 +2,32 @@ import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 import type { ChatStorageAdapter } from '@rusty-view/chat-domain';
 
 const DB_NAME = 'rusty-view-chat';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const SESSIONS_STORE = 'sessions';
 const EVENTS_STORE = 'events';
+const SETTINGS_STORE = 'settings';
+
+/**
+ * Ensure the full shared schema exists. The `rusty-view-chat` database is also
+ * opened by `@rusty-view/chat-theme` (for the `settings` store). Whichever
+ * connection triggers an upgrade must create every known store, so the other
+ * connection never sees a missing store. Idempotent: only creates what's
+ * absent.
+ */
+function ensureSchema(db: IDBDatabase): void {
+  if (!db.objectStoreNames.contains(SESSIONS_STORE)) {
+    db.createObjectStore(SESSIONS_STORE, { keyPath: 'session_id' });
+  }
+  if (!db.objectStoreNames.contains(EVENTS_STORE)) {
+    const eventStore = db.createObjectStore(EVENTS_STORE, {
+      keyPath: ['session_id', 'sequence_id'],
+    });
+    eventStore.createIndex('by_session', 'session_id', { unique: false });
+  }
+  if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
+    db.createObjectStore(SETTINGS_STORE);
+  }
+}
 
 /**
  * IndexedDB-backed implementation of {@link ChatStorageAdapter}.
@@ -32,18 +55,7 @@ export class IndexedDbChatStorage implements ChatStorageAdapter {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(SESSIONS_STORE)) {
-          db.createObjectStore(SESSIONS_STORE, { keyPath: 'session_id' });
-        }
-        if (!db.objectStoreNames.contains(EVENTS_STORE)) {
-          const eventStore = db.createObjectStore(EVENTS_STORE, {
-            keyPath: ['session_id', 'sequence_id'],
-          });
-          eventStore.createIndex('by_session', 'session_id', {
-            unique: false,
-          });
-        }
+        ensureSchema(request.result);
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () =>

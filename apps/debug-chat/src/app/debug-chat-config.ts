@@ -10,6 +10,11 @@ import {
   CHAT_STORAGE_ADAPTER,
   IndexedDbChatStorage,
 } from '@rusty-view/chat-store';
+import {
+  CHAT_SETTINGS_STORAGE,
+  IndexedDbChatSettingsStorage,
+  provideChatTheme,
+} from '@rusty-view/chat-theme';
 
 /**
  * Configuration for the debug-chat app's transport connection to rusty-crew.
@@ -100,6 +105,9 @@ export function provideDebugChat(
   return makeEnvironmentProviders([
     { provide: ChatTransport, useValue: transport },
     { provide: CHAT_STORAGE_ADAPTER, useClass: IndexedDbChatStorage },
+    { provide: CHAT_SETTINGS_STORAGE, useClass: IndexedDbChatSettingsStorage },
+    IndexedDbChatSettingsStorage,
+    provideChatTheme(),
     ChatStore,
     provideAppInitializer(() => {
       const store = inject(ChatStore);

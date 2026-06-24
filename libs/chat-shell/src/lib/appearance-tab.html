@@ -1,0 +1,95 @@
+<div class="rv-appearance">
+  <!-- Font family -->
+  <fieldset class="rv-appearance__group">
+    <legend>Chat font family</legend>
+    <div class="rv-appearance__segmented">
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().fontFamily === 'system'"
+        (click)="setFontFamily('system')"
+      >
+        System sans
+      </button>
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().fontFamily === 'mono'"
+        (click)="setFontFamily('mono')"
+      >
+        Mono
+      </button>
+    </div>
+  </fieldset>
+
+  <!-- Font scale -->
+  <fieldset class="rv-appearance__group">
+    <legend>
+      Font scale · {{ theme.settings().fontScale.toFixed(2) }}×
+    </legend>
+    <input
+      type="range"
+      class="rv-appearance__range"
+      [min]="fontScaleMin"
+      [max]="fontScaleMax"
+      [step]="fontScaleStep"
+      [value]="theme.settings().fontScale"
+      (input)="onScale($event)"
+    />
+  </fieldset>
+
+  <!-- Density -->
+  <fieldset class="rv-appearance__group">
+    <legend>Density</legend>
+    <div class="rv-appearance__segmented">
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().density === 'normal'"
+        (click)="setDensity('normal')"
+      >
+        Normal
+      </button>
+      <button
+        type="button"
+        class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().density === 'compact'"
+        (click)="setDensity('compact')"
+      >
+        Compact
+      </button>
+    </div>
+  </fieldset>
+
+  <!-- Colours -->
+  <fieldset class="rv-appearance__group">
+    <legend>Colours</legend>
+    <ul class="rv-appearance__colors">
+      @for (field of colorFields; track field.key) {
+        <li class="rv-appearance__color">
+          <span class="rv-appearance__color-label">{{ field.label }}</span>
+          <input
+            type="color"
+            class="rv-appearance__color-input"
+            [value]="colorValue(field.key)"
+            (input)="onColor(field.key, $event)"
+          />
+          <button
+            type="button"
+            class="rv-appearance__color-default"
+            [class.rv-appearance__color-default--off]="!isColorOverridden(field.key)"
+            (click)="clearColor(field.key)"
+          >
+            default
+          </button>
+        </li>
+      }
+    </ul>
+  </fieldset>
+
+  <div class="rv-appearance__actions">
+    <button type="button" class="rv-appearance__reset" (click)="resetAll()">
+      Reset to defaults
+    </button>
+  </div>
+</div>

@@ -1,0 +1,41 @@
+:host {
+  display: block;
+}
+
+.rv-tab-strip {
+  display: flex;
+  gap: var(--rv-space-xs);
+  border-bottom: 1px solid var(--rv-color-border);
+  padding: 0 var(--rv-space-sm);
+}
+
+.rv-tab-strip__tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--rv-radius) var(--rv-radius) 0 0;
+  background: transparent;
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  cursor: pointer;
+  transition:
+    color var(--rv-motion-fast) ease,
+    background var(--rv-motion-fast) ease;
+}
+
+.rv-tab-strip__tab:hover {
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-tab-strip__tab--active {
+  color: var(--rv-color-text-primary);
+  background: var(--rv-color-surface-raised);
+  border-color: var(--rv-color-border);
+}
+
+.rv-tab-strip__tab:focus-visible {
+  outline: 2px solid var(--rv-color-accent);
+  outline-offset: -2px;
+}

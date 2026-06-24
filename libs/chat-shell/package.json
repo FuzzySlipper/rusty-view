@@ -2,9 +2,11 @@
   "name": "@rusty-view/chat-shell",
   "version": "0.0.1",
   "peerDependencies": {
+    "@angular/common": "^21.2.0",
     "@angular/core": "^21.2.0",
     "@rusty-view/chat-components": "workspace:*",
     "@rusty-view/chat-store": "workspace:*",
+    "@rusty-view/chat-theme": "workspace:*",
     "@rusty-view/protocol": "workspace:*",
     "@rusty-view/transcript-renderer": "workspace:*"
   },

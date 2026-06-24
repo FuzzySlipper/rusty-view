@@ -15,5 +15,9 @@ export { MessageInputComponent } from './lib/message-input';
 export { StreamStatusComponent } from './lib/stream-status';
 export type { StreamStatusKind } from './lib/stream-status';
 export { JsonInspectorComponent } from './lib/json-inspector';
+export { TopMenuBarComponent } from './lib/top-menu-bar';
+export type { TopMenuEntry } from './lib/top-menu-bar';
+export { TabStripComponent } from './lib/tab-strip';
+export type { TabEntry } from './lib/tab-strip';
 
 export const CHAT_COMPONENTS_VERSION = '0.0.0' as const;
