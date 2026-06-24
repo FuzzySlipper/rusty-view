@@ -41,6 +41,14 @@ export class MessageBlockComponent {
   /** Rendered HTML for text blocks (markdown-parsed). */
   protected readonly renderedHtml = signal<string>('');
 
+  /** Tool/command metadata, when this block represents inline tool activity. */
+  protected readonly tool = computed(() => this.block().tool);
+
+  /** Whether the tool block has expandable detail (result / reason). */
+  protected readonly hasDetail = computed(
+    () => this.block().content.length > 0,
+  );
+
   protected readonly isCollapsible = computed(
     () => this.block().kind !== 'text',
   );

@@ -28,10 +28,28 @@ export type MessageBlockKind =
 
 export type RenderPolicy = 'full' | 'collapsed' | 'partial';
 
+/** Lifecycle status of a tool-call or command block. */
+export type ToolBlockStatus = 'started' | 'running' | 'completed' | 'failed';
+
+/**
+ * Metadata for an inline tool-call / command block. Present on blocks of kind
+ * `tool_call` or `command`; absent on text blocks. The renderer uses it to draw
+ * a header (name + status) while the block `content` holds the (collapsible)
+ * detail/result.
+ */
+export interface ToolBlockMeta {
+  readonly name: string;
+  readonly status: ToolBlockStatus;
+  readonly summary: string;
+  readonly reasonCode: string | undefined;
+}
+
 /**
  * A renderable block within a message. Messages contain multiple blocks so the
  * transcript renderer can virtualize, collapse, and partial-render long content.
- * The renderer fills in `estimatedHeight` after measuring; it is absent until then.
+ * Tool-call and command activity is interleaved as blocks (in event order) so it
+ * renders inline in the transcript. The renderer fills in `estimatedHeight` after
+ * measuring; it is absent until then.
  */
 export interface MessageBlock {
   readonly id: string;
@@ -40,6 +58,8 @@ export interface MessageBlock {
   readonly content: string;
   readonly estimatedHeight: number | undefined;
   readonly renderPolicy: RenderPolicy;
+  /** Present for `tool_call` / `command` blocks; absent for text blocks. */
+  readonly tool?: ToolBlockMeta;
 }
 
 // ---- messages ----

@@ -283,3 +283,126 @@ describe('projectConversation', () => {
     expect(projection.unknownEvents[0]?.event_id).toBe('e1');
   });
 });
+
+describe('inline tool/command blocks', () => {
+  it('renders a tool_call as an inline collapsible block on the assistant message', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', {
+        message_id: 'a1',
+        delta: 'Let me look that up. ',
+      }),
+      makeEvent('tool_call_started', {
+        tool_call_id: 'tc1',
+        tool_name: 'search_lore',
+        summary: 'Searching lore for "amber lantern"',
+      }),
+    ]);
+
+    const blocks = projection.messages[0]?.blocks ?? [];
+    const toolBlock = blocks.find((b) => b.kind === 'tool_call');
+    expect(toolBlock?.id).toBe('tool-tc1');
+    expect(toolBlock?.renderPolicy).toBe('collapsed');
+    expect(toolBlock?.tool?.name).toBe('search_lore');
+    expect(toolBlock?.tool?.status).toBe('running');
+    // Still mirrored in the separate collection for the debug inspector.
+    expect(projection.toolCalls).toHaveLength(1);
+  });
+
+  it('updates the same block in place across started → completed', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { message_id: 'a1', delta: 'x' }),
+      makeEvent('tool_call_started', {
+        tool_call_id: 'tc1',
+        tool_name: 'search_lore',
+        summary: 'searching',
+      }),
+      makeEvent('tool_call_completed', {
+        tool_call_id: 'tc1',
+        tool_name: 'search_lore',
+        summary: 'searching',
+        result_ref: { hits: 3 },
+      }),
+    ]);
+    const toolBlocks =
+      projection.messages[0]?.blocks.filter((b) => b.kind === 'tool_call') ??
+      [];
+    expect(toolBlocks).toHaveLength(1);
+    expect(toolBlocks[0]?.tool?.status).toBe('completed');
+    expect(toolBlocks[0]?.content).toContain('hits');
+  });
+
+  it('interleaves text and tool blocks in chronological order', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { message_id: 'a1', delta: 'before ' }),
+      makeEvent('tool_call_started', {
+        tool_call_id: 'tc1',
+        tool_name: 'search_lore',
+        summary: 's',
+      }),
+      makeEvent('assistant_text_delta', { message_id: 'a1', delta: 'after' }),
+    ]);
+    const kinds = projection.messages[0]?.blocks.map((b) => b.kind) ?? [];
+    expect(kinds).toEqual(['text', 'tool_call', 'text']);
+    const texts = projection.messages[0]?.blocks
+      .filter((b) => b.kind === 'text')
+      .map((b) => b.content);
+    expect(texts).toEqual(['before ', 'after']);
+  });
+
+  it('accepts the live backend tool shape (wake_id, no summary, is_error)', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { wake_id: 'w1', text: 'working ' }),
+      makeEvent('tool_call_started', {
+        wake_id: 'w1',
+        tool_name: 'git_status',
+      }),
+      makeEvent('tool_call_completed', {
+        wake_id: 'w1',
+        tool_name: 'git_status',
+        is_error: false,
+      }),
+    ]);
+    const toolBlocks =
+      projection.messages[0]?.blocks.filter((b) => b.kind === 'tool_call') ??
+      [];
+    expect(toolBlocks).toHaveLength(1);
+    expect(toolBlocks[0]?.id).toBe('tool-w1');
+    expect(toolBlocks[0]?.tool?.name).toBe('git_status');
+    expect(toolBlocks[0]?.tool?.status).toBe('completed');
+    // No summary on the wire — falls back to the tool name.
+    expect(toolBlocks[0]?.tool?.summary).toBe('git_status');
+  });
+
+  it('treats a completed event with is_error as a failure', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { wake_id: 'w1', text: 'x' }),
+      makeEvent('tool_call_completed', {
+        wake_id: 'w1',
+        tool_name: 'git_status',
+        is_error: true,
+      }),
+    ]);
+    const toolBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'tool_call',
+    );
+    expect(toolBlock?.tool?.status).toBe('failed');
+  });
+
+  it('marks a failed tool block with status failed and reason', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { message_id: 'a1', delta: 'x' }),
+      makeEvent('tool_call_failed', {
+        tool_call_id: 'tc1',
+        tool_name: 'search_lore',
+        summary: 's',
+        reason_code: 'timeout',
+      }),
+    ]);
+    const toolBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'tool_call',
+    );
+    expect(toolBlock?.tool?.status).toBe('failed');
+    expect(toolBlock?.tool?.reasonCode).toBe('timeout');
+    expect(toolBlock?.content).toBe('timeout');
+  });
+});

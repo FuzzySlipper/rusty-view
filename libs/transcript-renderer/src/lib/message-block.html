@@ -1,4 +1,26 @@
-@if (isCollapsible()) {
+@if (tool(); as tool) {
+<div class="rv-block rv-block--tool" [attr.data-status]="tool.status">
+  <button
+    type="button"
+    class="rv-block__header rv-block__tool-header"
+    (click)="toggleExpand()"
+    [attr.aria-expanded]="expanded()"
+    [disabled]="!hasDetail()"
+  >
+    <span class="rv-block__disclosure" aria-hidden="true"
+      >{{ expanded() ? '▾' : '▸' }}</span
+    >
+    <span class="rv-block__tool-name">{{ tool.name }}</span>
+    <span class="rv-block__tool-status" [attr.data-status]="tool.status"
+      >{{ tool.status }}</span
+    >
+    <span class="rv-block__tool-summary">{{ tool.summary }}</span>
+  </button>
+  @if (expanded() && hasDetail()) {
+  <pre class="rv-block__content">{{ block().content }}</pre>
+  }
+</div>
+} @else if (isCollapsible()) {
 <div
   class="rv-block rv-block--collapsible"
   [class.rv-block--debug]="block().kind === 'debug'"

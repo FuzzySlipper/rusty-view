@@ -10,6 +10,7 @@ import {
   type MessageBlock,
   type MessageRole,
   type StreamErrorState,
+  type ToolBlockMeta,
   type ToolCallProjection,
 } from './domain-types';
 
@@ -255,21 +256,49 @@ function applyToolCall(
   status: ToolCallProjection['status'],
 ): ConversationProjection {
   const payload = event.payload;
-  if (
-    !('tool_call_id' in payload) ||
-    !('tool_name' in payload) ||
-    !('summary' in payload)
-  ) {
+
+  // The OpenAPI contract specifies `tool_call_id`, `tool_name`, `summary` (and
+  // `result_ref`/`reason_code`). The live backend instead keys tool calls by
+  // `wake_id`, omits `summary`, and signals failure via `is_error` on the
+  // completed event (no separate tool_call_failed/result_ref). Accept both.
+  const toolCallId =
+    'tool_call_id' in payload && typeof payload.tool_call_id === 'string'
+      ? payload.tool_call_id
+      : 'wake_id' in payload && typeof payload.wake_id === 'string'
+        ? payload.wake_id
+        : undefined;
+  const toolName =
+    'tool_name' in payload && typeof payload.tool_name === 'string'
+      ? payload.tool_name
+      : undefined;
+  if (toolCallId === undefined || toolName === undefined) {
     return projection;
   }
 
+  const summary =
+    'summary' in payload && typeof payload.summary === 'string'
+      ? payload.summary
+      : toolName;
+
+  // A completed event carrying is_error is really a failure.
+  const isError = 'is_error' in payload && payload.is_error === true;
+  const effectiveStatus: ToolCallProjection['status'] =
+    status === 'completed' && isError ? 'failed' : status;
+
+  const reasonCode =
+    'reason_code' in payload && typeof payload.reason_code === 'string'
+      ? payload.reason_code
+      : effectiveStatus === 'failed'
+        ? 'error'
+        : undefined;
+
   const entry: ToolCallProjection = {
-    toolCallId: payload.tool_call_id,
-    toolName: payload.tool_name,
-    summary: payload.summary,
-    status,
+    toolCallId,
+    toolName,
+    summary,
+    status: effectiveStatus,
     resultRef: 'result_ref' in payload ? payload.result_ref : undefined,
-    reasonCode: 'reason_code' in payload ? payload.reason_code : undefined,
+    reasonCode,
     eventId: event.event_id,
     createdAt: event.created_at,
   };
@@ -283,7 +312,25 @@ function applyToolCall(
       ? projection.toolCalls.map((tc, i) => (i === existing ? entry : tc))
       : [...projection.toolCalls, entry];
 
-  return { ...projection, toolCalls };
+  // Also surface the tool activity inline in the transcript as a collapsible
+  // block on the active assistant message, upserted by id so the started →
+  // completed/failed transition updates one block in place.
+  const meta: ToolBlockMeta = {
+    name: toolName,
+    status: effectiveStatus === 'started' ? 'running' : effectiveStatus,
+    summary,
+    reasonCode,
+  };
+  const messages = upsertActivityBlock(
+    { ...projection, toolCalls },
+    event,
+    `tool-${toolCallId}`,
+    'tool_call',
+    toolResultDetail(payload, effectiveStatus),
+    meta,
+  );
+
+  return { ...projection, toolCalls, messages };
 }
 
 // ---- commands ----
@@ -315,7 +362,26 @@ function applyCommand(
     createdAt: event.created_at,
   };
 
-  return { ...projection, commands: [...projection.commands, entry] };
+  // The collection is an append-only event log; the inline block (below) is
+  // upserted by command name so its started → completed/failed updates in place.
+  const commands = [...projection.commands, entry];
+
+  const meta: ToolBlockMeta = {
+    name: entry.commandName,
+    status: status === 'started' ? 'running' : status,
+    summary: entry.summary,
+    reasonCode: entry.reasonCode,
+  };
+  const messages = upsertActivityBlock(
+    { ...projection, commands },
+    event,
+    `cmd-${entry.commandName}`,
+    'command',
+    entry.reasonCode ?? '',
+    meta,
+  );
+
+  return { ...projection, commands, messages };
 }
 
 // ---- stream error ----
@@ -409,15 +475,26 @@ function findOrCreateTextBlock(
   message: ChatMessage,
   delta: string,
 ): MessageBlock {
-  const existing = message.blocks.find((b) => b.kind === 'text');
-  if (existing) {
-    return { ...existing, content: existing.content + delta };
+  // Append to the current text segment — the LAST block, if it is text. When the
+  // last block is a tool/command block (activity occurred mid-turn), start a new
+  // text segment so text and tool blocks interleave in chronological order.
+  const last = message.blocks[message.blocks.length - 1];
+  if (last !== undefined && last.kind === 'text') {
+    return { ...last, content: last.content + delta };
   }
+  return makeTextBlock(message.id, message.blocks.length, delta);
+}
+
+function makeTextBlock(
+  messageId: string,
+  index: number,
+  content: string,
+): MessageBlock {
   return {
-    id: `${message.id}-block-text`,
-    messageId: message.id,
+    id: `${messageId}-text-${index}`,
+    messageId,
     kind: 'text',
-    content: delta,
+    content,
     estimatedHeight: undefined,
     renderPolicy: 'full',
   };
@@ -434,6 +511,107 @@ function replaceBlock(
   return [...blocks, replacement];
 }
 
+/** Serialize the detail/result content shown (collapsed) in a tool block. */
+function toolResultDetail(
+  payload: ChatEvent['payload'],
+  status: ToolCallProjection['status'],
+): string {
+  if (status === 'failed') {
+    return 'reason_code' in payload && typeof payload.reason_code === 'string'
+      ? payload.reason_code
+      : '';
+  }
+  if ('result_ref' in payload && payload.result_ref) {
+    try {
+      return JSON.stringify(payload.result_ref, null, 2);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+/**
+ * Resolve the assistant message that tool/command blocks attach to: the active
+ * turn's message, else the most recent streaming assistant message, else a new
+ * streaming assistant message created to host the activity.
+ */
+function resolveActiveAssistantMessage(
+  projection: ConversationProjection,
+  event: ChatEvent,
+): { messages: readonly ChatMessage[]; messageId: string } {
+  const turnId = projection.activeTurn?.messageId;
+  if (turnId !== undefined && messageExists(projection, turnId)) {
+    return { messages: projection.messages, messageId: turnId };
+  }
+  const streaming = findLastStreamingAssistant(projection.messages);
+  if (streaming !== undefined) {
+    return { messages: projection.messages, messageId: streaming };
+  }
+  const messageId = turnId ?? `asst:${event.event_id}`;
+  const message = buildMessage(
+    messageId,
+    event.session_id,
+    'assistant',
+    event.created_at,
+    'streaming',
+    [],
+  );
+  return { messages: [...projection.messages, message], messageId };
+}
+
+function findLastStreamingAssistant(
+  messages: readonly ChatMessage[],
+): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (
+      message !== undefined &&
+      message.author.role === 'assistant' &&
+      message.status === 'streaming'
+    ) {
+      return message.id;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Upsert a tool_call/command block (by stable id) onto the active assistant
+ * message, so started → completed/failed updates one block in place and the
+ * renderer keeps its collapse state stable.
+ */
+function upsertActivityBlock(
+  projection: ConversationProjection,
+  event: ChatEvent,
+  blockId: string,
+  kind: 'tool_call' | 'command',
+  content: string,
+  tool: ToolBlockMeta,
+): readonly ChatMessage[] {
+  const { messages, messageId } = resolveActiveAssistantMessage(
+    projection,
+    event,
+  );
+  const index = messages.findIndex((msg) => msg.id === messageId);
+  if (index < 0) {
+    return messages;
+  }
+  return messages.map((msg, i) => {
+    if (i !== index) return msg;
+    const block: MessageBlock = {
+      id: blockId,
+      messageId,
+      kind,
+      content,
+      estimatedHeight: undefined,
+      renderPolicy: 'collapsed',
+      tool,
+    };
+    return { ...msg, blocks: replaceBlock(msg.blocks, block) };
+  });
+}
+
 function finalizeAssistantMessage(
   messages: readonly ChatMessage[],
   messageId: string,
@@ -444,11 +622,27 @@ function finalizeAssistantMessage(
   if (existingIndex >= 0) {
     return messages.map((msg, i) => {
       if (i !== existingIndex) return msg;
-      // Replace text content with authoritative final body.
-      const blocks = msg.blocks.map((b) =>
-        b.kind === 'text' ? { ...b, content: body } : b,
-      );
-      return { ...msg, status: 'completed' as const, blocks };
+      const textBlocks = msg.blocks.filter((b) => b.kind === 'text');
+      if (textBlocks.length === 1) {
+        // No tool interleaving — replace the single text block with the
+        // authoritative final body (deltas may have been lossy).
+        const blocks = msg.blocks.map((b) =>
+          b.kind === 'text' ? { ...b, content: body } : b,
+        );
+        return { ...msg, status: 'completed' as const, blocks };
+      }
+      if (textBlocks.length === 0) {
+        // Completed with no streamed text — attach the body as a text block.
+        const block = makeTextBlock(msg.id, msg.blocks.length, body);
+        return {
+          ...msg,
+          status: 'completed' as const,
+          blocks: [...msg.blocks, block],
+        };
+      }
+      // Multiple text segments interleaved with tool blocks — the streamed
+      // segments already carry the text in order; just mark completed.
+      return { ...msg, status: 'completed' as const };
     });
   }
 

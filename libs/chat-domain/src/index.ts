@@ -19,6 +19,8 @@ export type {
   MessageAuthor,
   MessageBlockKind,
   RenderPolicy,
+  ToolBlockStatus,
+  ToolBlockMeta,
   MessageBlock,
   MessageStatus,
   ChatMessage,

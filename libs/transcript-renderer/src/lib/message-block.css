@@ -59,3 +59,67 @@
   margin-left: auto;
   color: var(--rv-color-accent);
 }
+
+/* ---- inline tool / command blocks ---- */
+
+.rv-block--tool {
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  overflow: hidden;
+}
+
+.rv-block__tool-header {
+  border-bottom: none;
+}
+
+.rv-block--tool .rv-block__content {
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.rv-block__disclosure {
+  width: 1em;
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-block__tool-name {
+  font-weight: var(--rv-font-weight-bold);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-block__tool-status {
+  text-transform: uppercase;
+  font-weight: var(--rv-font-weight-bold);
+  letter-spacing: 0.03em;
+}
+
+.rv-block__tool-status[data-status='running'] {
+  color: var(--rv-color-accent);
+}
+.rv-block__tool-status[data-status='completed'] {
+  color: var(--rv-color-success, #2a8f3c);
+}
+.rv-block__tool-status[data-status='failed'] {
+  color: var(--rv-color-danger, #b00020);
+}
+
+.rv-block__tool-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-block__tool-header[disabled] {
+  cursor: default;
+}
+.rv-block__tool-header[disabled] .rv-block__disclosure {
+  visibility: hidden;
+}

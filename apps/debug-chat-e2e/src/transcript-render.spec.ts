@@ -31,7 +31,8 @@ const SESSION_SUMMARY = {
 };
 
 const USER_BODY = 'The door creaks open.';
-const ASSISTANT_BODY = 'A figure steps through the doorway, into the amber light.';
+const ASSISTANT_BODY =
+  'A figure steps through the doorway, into the amber light.';
 
 const MESSAGE_EVENTS = [
   {
@@ -47,6 +48,39 @@ const MESSAGE_EVENTS = [
     session_id: SESSION_ID,
     sequence_id: 2,
     created_at: '2026-06-22T10:00:02Z',
+    kind: 'assistant_text_delta',
+    payload: { message_id: 'msg_asst_1', delta: ASSISTANT_BODY },
+  },
+  {
+    event_id: `${SESSION_ID}:3`,
+    session_id: SESSION_ID,
+    sequence_id: 3,
+    created_at: '2026-06-22T10:00:03Z',
+    kind: 'tool_call_started',
+    payload: {
+      tool_call_id: 'tc1',
+      tool_name: 'search_lore',
+      summary: 'Searching lore for "amber lantern"',
+    },
+  },
+  {
+    event_id: `${SESSION_ID}:4`,
+    session_id: SESSION_ID,
+    sequence_id: 4,
+    created_at: '2026-06-22T10:00:04Z',
+    kind: 'tool_call_completed',
+    payload: {
+      tool_call_id: 'tc1',
+      tool_name: 'search_lore',
+      summary: 'Searching lore for "amber lantern"',
+      result_ref: { hits: 3 },
+    },
+  },
+  {
+    event_id: `${SESSION_ID}:5`,
+    session_id: SESSION_ID,
+    sequence_id: 5,
+    created_at: '2026-06-22T10:00:05Z',
     kind: 'assistant_message_completed',
     payload: { message_id: 'msg_asst_1', body: ASSISTANT_BODY },
   },
@@ -90,7 +124,11 @@ test('selecting a session renders message rows in the transcript', async ({
   // SSE stream: keep it benign — the rows come from openSession before the
   // stream connects, so an empty event-stream is enough.
   await page.route('**/v1/chat/sessions/*/stream*', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: ':\n\n' }),
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: ':\n\n',
+    }),
   );
   await page.route('**/v1/chat/sessions/*', (route) =>
     fulfillJson(route, { session: SESSION_SUMMARY, events: MESSAGE_EVENTS }),
@@ -113,4 +151,21 @@ test('selecting a session renders message rows in the transcript', async ({
   // message items and not placeholders.
   await expect(page.locator('.rv-message--user')).toHaveCount(1);
   await expect(page.locator('.rv-message--assistant')).toHaveCount(1);
+
+  // The tool call renders inline as a collapsible block with name + status,
+  // collapsed by default (no huge result JSON dumped).
+  const toolBlock = page.locator('.rv-block--tool');
+  await expect(toolBlock).toHaveCount(1);
+  await expect(toolBlock).toContainText('search_lore');
+  await expect(toolBlock.locator('.rv-block__tool-status')).toHaveText(
+    'completed',
+  );
+  await expect(toolBlock.locator('.rv-block__content')).toHaveCount(0);
+
+  // Expanding reveals the result detail; collapsing hides it again (stable
+  // disclosure affordance).
+  await toolBlock.locator('.rv-block__tool-header').click();
+  await expect(toolBlock.locator('.rv-block__content')).toContainText('hits');
+  await toolBlock.locator('.rv-block__tool-header').click();
+  await expect(toolBlock.locator('.rv-block__content')).toHaveCount(0);
 });
