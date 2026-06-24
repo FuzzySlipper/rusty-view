@@ -16,6 +16,121 @@
   color: var(--rv-color-text-primary);
 }
 
+/*
+ * Markdown-rendered text blocks. Mirrors the `.rv-block__content` baseline
+ * (same tokens) so the two render paths look identical and BOTH honor the
+ * live appearance settings (font family, font scale, text colour). Nested
+ * elements inherit token values rather than re-imposing browser defaults so
+ * the Options → Appearance controls actually reach the transcript text.
+ */
+.rv-block__markdown {
+  margin: 0;
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-md);
+  line-height: var(--rv-line-height-normal);
+  color: var(--rv-color-text-primary);
+  word-break: break-word;
+}
+
+.rv-block__markdown > :first-child {
+  margin-top: 0;
+}
+
+.rv-block__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.rv-block__markdown p {
+  margin: 0 0 var(--rv-space-sm);
+}
+
+.rv-block__markdown strong,
+.rv-block__markdown b {
+  font-weight: var(--rv-font-weight-bold);
+}
+
+/* Inline code: monospace, subtle surface chip. */
+.rv-block__markdown code {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  padding: 0 var(--rv-space-xs);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+}
+
+/* Fenced code blocks (parser emits `pre.rv-md-code`). Mono, scrollable. */
+.rv-block__markdown pre {
+  margin: 0 0 var(--rv-space-sm);
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  overflow-x: auto;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  line-height: var(--rv-line-height-normal);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-block__markdown pre code {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+/* Links: accent, readable underline. */
+.rv-block__markdown a {
+  color: var(--rv-color-accent);
+  text-decoration: underline;
+}
+
+.rv-block__markdown a:hover {
+  color: var(--rv-color-accent-hover);
+}
+
+/* Defensive styling for richer markdown the parser may gain later. */
+.rv-block__markdown h1,
+.rv-block__markdown h2,
+.rv-block__markdown h3,
+.rv-block__markdown h4,
+.rv-block__markdown h5,
+.rv-block__markdown h6 {
+  margin: var(--rv-space-md) 0 var(--rv-space-sm);
+  font-weight: var(--rv-font-weight-bold);
+  line-height: var(--rv-line-height-tight);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-block__markdown h1 {
+  font-size: var(--rv-font-size-lg);
+}
+
+.rv-block__markdown ul,
+.rv-block__markdown ol {
+  margin: 0 0 var(--rv-space-sm);
+  padding-left: var(--rv-space-xl);
+}
+
+.rv-block__markdown li {
+  margin: var(--rv-space-xs) 0;
+}
+
+.rv-block__markdown blockquote {
+  margin: 0 0 var(--rv-space-sm);
+  padding: 0 var(--rv-space-md);
+  border-left: 2px solid var(--rv-color-border-strong);
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-block__markdown hr {
+  margin: var(--rv-space-md) 0;
+  border: none;
+  border-top: 1px solid var(--rv-color-border);
+}
+
 .rv-block--collapsible {
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
