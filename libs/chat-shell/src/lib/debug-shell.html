@@ -26,7 +26,7 @@
         <rv-transcript-viewport [messages]="store.messages()" />
       </div>
       <rv-message-input
-        [disabled]="store.isStreaming()"
+        [disabled]="store.isGenerating()"
         (send)="onSendMessage($event)"
       />
       <rv-command-composer />

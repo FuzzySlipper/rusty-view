@@ -16,6 +16,7 @@ import {
 import type {
   ChatCommandDescriptor,
   ChatEvent,
+  ChatSessionStatus,
   ChatSessionSummary,
 } from '@rusty-view/protocol';
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
@@ -65,6 +66,10 @@ export class ChatStore implements OnDestroy {
   });
   private readonly _commandRegistry = signal<ChatCommandDescriptor[]>([]);
   private readonly _pendingSends = signal<PendingSend[]>([]);
+  /** Status of the open session, from openSession (authoritative current state). */
+  private readonly _activeSessionStatus = signal<ChatSessionStatus | null>(
+    null,
+  );
 
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
@@ -90,6 +95,16 @@ export class ChatStore implements OnDestroy {
   });
   readonly isStreaming = computed(
     () => this._projection().activeTurn !== undefined,
+  );
+  /**
+   * Whether the agent is genuinely generating a live response right now —
+   * `isStreaming` AND the session is server-side `active`. Used to gate the
+   * message input. An idle session can carry a stale/replayed `activeTurn` (a
+   * turn recorded without a terminal event, which the SSE stream re-replays);
+   * gating on session status prevents that from wedging the input as disabled.
+   */
+  readonly isGenerating = computed(
+    () => this.isStreaming() && this._activeSessionStatus() === 'active',
   );
   readonly lastCursor = computed(() => this._projection().latestCursor ?? null);
 
@@ -120,6 +135,7 @@ export class ChatStore implements OnDestroy {
     this._activeSessionId.set(sessionId);
     this._projection.set(emptyProjection());
     this._rawEvents.set([]);
+    this._activeSessionStatus.set(null);
 
     // 1. Load cached events from IndexedDB (survives refresh).
     const cachedEvents = await this.storage
@@ -131,13 +147,31 @@ export class ChatStore implements OnDestroy {
 
     // 2. Open fresh from backend.
     const result = await this.transport.openSession(sessionId);
+    this._activeSessionStatus.set(result.session.status);
     this.ingestEvents(result.events);
     void this.storage
       .putEvents(sessionId, result.events)
       .catch(() => undefined);
 
+    // Reconcile a stale active turn. Replayed events are historical; if a turn
+    // record is incomplete (deltas/tools with no terminal `assistant_turn_finished`),
+    // the projection leaves `activeTurn` set, which wedges the UI as "streaming"
+    // (disabled input) on an idle session. Only an `active` session can have a
+    // genuinely live turn — for any other status, drop the stale turn. A truly
+    // live turn is re-established by the SSE stream's deltas below.
+    if (result.session.status !== 'active') {
+      this.clearStaleActiveTurn();
+    }
+
     // 3. Start the live SSE stream.
     await this.startStream(sessionId);
+  }
+
+  /** Drop a stale `activeTurn` left by an incomplete (terminal-less) turn record. */
+  private clearStaleActiveTurn(): void {
+    this._projection.update((prev) =>
+      prev.activeTurn === undefined ? prev : { ...prev, activeTurn: undefined },
+    );
   }
 
   /** Send a user message to the active session. */

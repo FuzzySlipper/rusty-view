@@ -222,6 +222,84 @@ describe('ChatStore', () => {
     expect(store.projection().messages[0]?.blocks[0]?.content).toBe('hello');
   });
 
+  it('clears a stale active turn from an incomplete replay on a non-active session', async () => {
+    // Deltas with no terminal `assistant_turn_finished` — an incomplete turn
+    // record. On a non-active session this must not wedge the UI as streaming.
+    const deltaEvent: ChatEvent = {
+      event_id: 'd1',
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-06-22T10:00:00Z',
+      kind: 'assistant_text_delta',
+      payload: { message_id: 'a1', delta: 'half a thought', coalesced: false },
+    };
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        session: { ...emptyOpenResult().session, status: 'idle' },
+        events: [deltaEvent],
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    // The streamed text still renders…
+    expect(store.projection().messages).toHaveLength(1);
+    // …but the stale turn is cleared, so the input is not disabled.
+    expect(store.isStreaming()).toBe(false);
+    expect(store.isGenerating()).toBe(false);
+  });
+
+  it('does not block the input on an idle session even if the stream re-feeds a turn', async () => {
+    // Mirrors the live case: an idle session's open turn is re-replayed by the
+    // SSE stream (events the openSession page did not include), so the client's
+    // clear is overridden and `isStreaming` becomes true again. The input must
+    // still be enabled because the session itself is idle.
+    const streamDelta: ChatEvent = {
+      event_id: 'stream-1',
+      session_id: 'sess_test',
+      sequence_id: 9,
+      created_at: '2026-06-22T10:00:09Z',
+      kind: 'assistant_text_delta',
+      payload: { message_id: 'a1', delta: 're-replayed', coalesced: false },
+    };
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        session: { ...emptyOpenResult().session, status: 'idle' },
+        events: [],
+      },
+      streamEvents: [streamDelta],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((r) => setTimeout(r, 30)); // let the background stream deliver
+
+    expect(store.isStreaming()).toBe(true); // stream re-fed an active turn
+    expect(store.isGenerating()).toBe(false); // idle session → input NOT blocked
+  });
+
+  it('keeps the active turn for an actively-running session', async () => {
+    const deltaEvent: ChatEvent = {
+      event_id: 'd1',
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-06-22T10:00:00Z',
+      kind: 'assistant_text_delta',
+      payload: { message_id: 'a1', delta: 'still going', coalesced: false },
+    };
+    const transport = createMockTransport({
+      openResult: { ...emptyOpenResult(), events: [deltaEvent] }, // status 'active'
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    expect(store.isStreaming()).toBe(true);
+    // Active session + live turn → the input is correctly blocked.
+    expect(store.isGenerating()).toBe(true);
+  });
+
   it('ingestEvents deduplicates by event_id', () => {
     const transport = createMockTransport({});
     const store = setupStore(transport, new InMemoryChatStorage());
