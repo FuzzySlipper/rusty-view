@@ -5,8 +5,13 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { TopMenuBarComponent, type TopMenuEntry } from '@rusty-view/chat-components';
+import {
+  TopMenuBarComponent,
+  type TopMenuEntry,
+} from '@rusty-view/chat-components';
 
+import { AdminProfilesPanelComponent } from './admin-profiles-panel';
+import { AdminServicePanelComponent } from './admin-service-panel';
 import { HelpPanelComponent } from './help-panel';
 import { OptionsPanelComponent } from './options-panel';
 import { SessionsPanelComponent } from './sessions-panel';
@@ -14,6 +19,8 @@ import {
   CHAT_TOP_MENU_ITEMS,
   HELP_PANEL_ID,
   OPTIONS_PANEL_ID,
+  PROFILES_PANEL_ID,
+  SERVICE_PANEL_ID,
   SESSIONS_PANEL_ID,
   type ChatTopMenuItem,
 } from './shell-extension-tokens';
@@ -26,6 +33,20 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
     kind: 'panel',
     panelId: SESSIONS_PANEL_ID,
     order: 10,
+  },
+  {
+    id: PROFILES_PANEL_ID,
+    label: 'Profiles',
+    kind: 'panel',
+    panelId: PROFILES_PANEL_ID,
+    order: 20,
+  },
+  {
+    id: SERVICE_PANEL_ID,
+    label: 'Service',
+    kind: 'panel',
+    panelId: SERVICE_PANEL_ID,
+    order: 30,
   },
   {
     id: OPTIONS_PANEL_ID,
@@ -60,6 +81,8 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
     OptionsPanelComponent,
     HelpPanelComponent,
     SessionsPanelComponent,
+    AdminProfilesPanelComponent,
+    AdminServicePanelComponent,
   ],
   templateUrl: './top-menu.html',
   styleUrl: './top-menu.css',
@@ -79,8 +102,7 @@ export class TopMenuComponent {
       merged.set(item.id, item);
     }
     return [...merged.values()].sort(
-      (a, b) =>
-        (a.order ?? 100) - (b.order ?? 100) || a.id.localeCompare(b.id),
+      (a, b) => (a.order ?? 100) - (b.order ?? 100) || a.id.localeCompare(b.id),
     );
   });
 
@@ -99,6 +121,12 @@ export class TopMenuComponent {
   protected readonly sessionsOpen = computed(
     () => this.openPanelId() === SESSIONS_PANEL_ID,
   );
+  protected readonly profilesOpen = computed(
+    () => this.openPanelId() === PROFILES_PANEL_ID,
+  );
+  protected readonly serviceOpen = computed(
+    () => this.openPanelId() === SERVICE_PANEL_ID,
+  );
 
   protected onSelect(id: string): void {
     const item = this.items().find((i) => i.id === id);
@@ -111,7 +139,9 @@ export class TopMenuComponent {
 
     // Panel kind: toggle the panel.
     const panelId = item.panelId ?? item.id;
-    this.openPanelId.update((current) => (current === panelId ? null : panelId));
+    this.openPanelId.update((current) =>
+      current === panelId ? null : panelId,
+    );
   }
 
   protected closePanel(): void {

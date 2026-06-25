@@ -37,9 +37,9 @@ export interface ChatTopMenuItem {
  * flattens all provided arrays, dedupes by id (built-ins win for reserved ids),
  * and sorts by `order`. Defaults: `File`/`Options`/`Help` debug entries.
  */
-export const CHAT_TOP_MENU_ITEMS = new InjectionToken<readonly ChatTopMenuItem[]>(
-  'CHAT_TOP_MENU_ITEMS',
-);
+export const CHAT_TOP_MENU_ITEMS = new InjectionToken<
+  readonly ChatTopMenuItem[]
+>('CHAT_TOP_MENU_ITEMS');
 
 /**
  * A tab in the Options panel. `component` is a standalone component rendered
@@ -63,6 +63,8 @@ export const CHAT_OPTIONS_TABS = new InjectionToken<readonly ChatOptionsTab[]>(
 );
 
 /** Built-in panel ids reserved by the shell. */
+export const PROFILES_PANEL_ID = 'profiles' as const;
+export const SERVICE_PANEL_ID = 'service' as const;
 export const OPTIONS_PANEL_ID = 'options' as const;
 export const HELP_PANEL_ID = 'help' as const;
 export const SESSIONS_PANEL_ID = 'sessions' as const;

@@ -25,6 +25,25 @@ export type {
   OpenSessionQuery,
   ReplayEventsQuery,
 } from './lib/chat-http-transport';
+export { AdminHttpTransport } from './lib/admin-http-transport';
+export type { AdminListQuery } from './lib/admin-http-transport';
+export type {
+  AdminAgentDiagnostics,
+  AdminApiEnvelope,
+  AdminControlOutcome,
+  AdminControlResponse,
+  AdminDiagnosticsBundle,
+  AdminDiagnosticsOverview,
+  AdminPage,
+  CreateAdminProfileRequest,
+  CreatedServiceProfile,
+  McpSurfaceDiagnostics,
+  RuntimeBrainModuleDiagnostics,
+  RuntimeConfigApplyResult,
+  RuntimeConfigDiagnostic,
+  RuntimeConfigValidationReport,
+  RuntimeSessionDiagnostics,
+} from './lib/admin-api-types';
 
 export { ChatEventStream } from './lib/chat-event-stream';
 export type {

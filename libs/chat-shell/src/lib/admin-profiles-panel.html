@@ -1,0 +1,191 @@
+<div class="rv-admin-profiles">
+  <header class="rv-admin-profiles__header">
+    <span class="rv-admin-profiles__title">Profiles</span>
+    <button
+      type="button"
+      class="rv-admin-profiles__close"
+      (click)="closePanel()"
+      aria-label="Close profiles"
+    >
+      x
+    </button>
+  </header>
+
+  <div class="rv-admin-profiles__toolbar">
+    <button
+      type="button"
+      class="rv-admin-profiles__button"
+      (click)="refresh()"
+      [disabled]="admin.loading()"
+    >
+      Refresh
+    </button>
+    <span class="rv-admin-profiles__status">
+      {{ admin.loading() ? 'loading' : admin.profiles().length + ' profiles' }}
+    </span>
+  </div>
+
+  @if (admin.error() !== null) {
+  <div class="rv-admin-profiles__error" role="alert">{{ admin.error() }}</div>
+  }
+
+  <section class="rv-admin-profiles__section">
+    <h2>Create Profile</h2>
+    <div class="rv-admin-profiles__form-grid">
+      <label>
+        <span>Profile ID</span>
+        <input
+          type="text"
+          [value]="form().profileId"
+          (input)="updateText('profileId', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Display Name</span>
+        <input
+          type="text"
+          [value]="form().displayName"
+          (input)="updateText('displayName', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Agent ID</span>
+        <input
+          type="text"
+          [value]="form().agentId"
+          (input)="updateText('agentId', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Session ID</span>
+        <input
+          type="text"
+          [value]="form().sessionId"
+          (input)="updateText('sessionId', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Implementation ID</span>
+        <input
+          type="text"
+          [value]="form().implementationId"
+          (input)="updateText('implementationId', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Kind</span>
+        <select [value]="form().kind" (change)="updateKind($event)">
+          <option value="full">full</option>
+          <option value="worker">worker</option>
+          <option value="delegated">delegated</option>
+        </select>
+      </label>
+      <label>
+        <span>Provider</span>
+        <input
+          type="text"
+          [value]="form().provider"
+          (input)="updateText('provider', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Model</span>
+        <input
+          type="text"
+          [value]="form().modelName"
+          (input)="updateText('modelName', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Base URL</span>
+        <input
+          type="text"
+          [value]="form().baseUrl"
+          (input)="updateText('baseUrl', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>MCP Tool Profile</span>
+        <input
+          type="text"
+          [value]="form().mcpToolProfile"
+          (input)="updateText('mcpToolProfile', $event)"
+          autocomplete="off"
+        />
+      </label>
+    </div>
+    <button
+      type="button"
+      class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+      (click)="createProfile()"
+      [disabled]="createDisabled()"
+    >
+      Create Profile
+    </button>
+
+    @if (admin.createResult()?.outcome?.result; as created) {
+    <div class="rv-admin-profiles__result" role="status">
+      <span>profileId {{ created.profileId }}</span>
+      <span>agentId {{ created.agentId }}</span>
+      <span>sessionId {{ created.sessionId }}</span>
+      <span>implementationId {{ created.implementationId }}</span>
+    </div>
+    }
+  </section>
+
+  <section class="rv-admin-profiles__section">
+    <h2>Configured Profiles</h2>
+    @if (admin.profiles().length === 0) {
+    <div class="rv-admin-profiles__empty">No configured profiles.</div>
+    } @else {
+    <ul class="rv-admin-profiles__list">
+      @for (profile of admin.profiles(); track profile.profileId) {
+      <li class="rv-admin-profiles__profile">
+        <div class="rv-admin-profiles__profile-header">
+          <span>{{ profile.profileId }}</span>
+          <span>
+            {{ profile.activeSessions }} active / {{ profile.idleSessions }}
+            idle
+          </span>
+        </div>
+        <div class="rv-admin-profiles__meta">
+          <span>agents {{ profile.agentIds.join(', ') || '-' }}</span>
+          <span>sessions {{ profile.sessionIds.length }}</span>
+          <span>brains {{ profile.brainModules.length }}</span>
+          <span>mcp {{ profile.mcpSurfaces.length }}</span>
+        </div>
+        @if (profile.brainModules.length > 0) {
+        <div class="rv-admin-profiles__subgrid">
+          @for (brain of profile.brainModules; track brain.implementationId) {
+          <span>{{ brain.implementationId }}</span>
+          <span>{{ brain.moduleId }}</span>
+          <span>{{ brain.effectiveStrategy ?? brain.strategy ?? '-' }}</span>
+          <span>{{ brain.toolAdapterStatus }}</span>
+          }
+        </div>
+        }
+      </li>
+      }
+    </ul>
+    }
+  </section>
+
+  <section class="rv-admin-profiles__section">
+    <h2>Change Application</h2>
+    <div class="rv-admin-profiles__capabilities">
+      <span>Create profile</span><strong>available</strong>
+      <span>Config reload</span><strong>available</strong>
+      <span>MCP reload</span><strong>backend per-session control</strong>
+      <span>Profile file edits</span><strong>backend API needed</strong>
+      <span>Model/provider hot swap</span><strong>backend API needed</strong>
+    </div>
+  </section>
+</div>

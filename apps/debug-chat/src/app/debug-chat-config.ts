@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { ChatTransport } from '@rusty-view/transport';
 import {
+  AdminStore,
   ChatStore,
   CHAT_STORAGE_ADAPTER,
   IndexedDbChatStorage,
@@ -69,7 +70,9 @@ export function resolveDebugChatConfig(): DebugChatConfig {
     ?.trim();
 
   const baseUrl =
-    (queryBaseUrl !== undefined && queryBaseUrl !== '' ? queryBaseUrl : undefined) ??
+    (queryBaseUrl !== undefined && queryBaseUrl !== ''
+      ? queryBaseUrl
+      : undefined) ??
     windowConfig?.baseUrl ??
     deriveBaseUrlFromLocation();
 
@@ -118,6 +121,7 @@ export function provideDebugChat(
       deps: [ChatTheme],
     },
     ChatStore,
+    AdminStore,
     provideAppInitializer(() => {
       const store = inject(ChatStore);
       void store.refreshSessions();

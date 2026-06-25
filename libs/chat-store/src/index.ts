@@ -13,6 +13,8 @@
  */
 
 export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
+export { AdminStore } from './lib/admin-store';
+export type { AdminProfileSummary } from './lib/admin-store';
 export { IndexedDbChatStorage } from './lib/indexed-db-chat-storage';
 export type { PendingSend } from './lib/pending-operations';
 

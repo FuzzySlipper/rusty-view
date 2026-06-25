@@ -1,0 +1,133 @@
+<div class="rv-admin-service">
+  <header class="rv-admin-service__header">
+    <span class="rv-admin-service__title">Service Config</span>
+    <button
+      type="button"
+      class="rv-admin-service__close"
+      (click)="closePanel()"
+      aria-label="Close service config"
+    >
+      x
+    </button>
+  </header>
+
+  <div class="rv-admin-service__toolbar">
+    <button
+      type="button"
+      class="rv-admin-service__button"
+      disabled
+      title="Backend config mutation API required"
+    >
+      Save
+    </button>
+    <button
+      type="button"
+      class="rv-admin-service__button"
+      (click)="refresh()"
+      [disabled]="admin.loading()"
+    >
+      Refresh
+    </button>
+    <button
+      type="button"
+      class="rv-admin-service__button rv-admin-service__button--primary"
+      (click)="reload()"
+      [disabled]="admin.saving()"
+    >
+      Reload
+    </button>
+  </div>
+
+  @if (admin.error() !== null) {
+  <div class="rv-admin-service__error" role="alert">{{ admin.error() }}</div>
+  } @if (admin.overview(); as overview) {
+  <section class="rv-admin-service__section">
+    <h2>Runtime</h2>
+    <div class="rv-admin-service__summary">
+      <span>health</span><strong>{{ overview.health }}</strong>
+      <span>sessions</span><strong>{{ overview.summary.sessions }}</strong>
+      <span>active</span><strong>{{ overview.summary.activeSessions }}</strong>
+      <span>idle</span><strong>{{ overview.summary.idleSessions }}</strong>
+      <span>queued</span
+      ><strong>{{ overview.summary.pendingQueueItems }}</strong>
+      <span>tool errors</span><strong>{{ overview.summary.toolErrors }}</strong>
+    </div>
+    @if (overview.reasonCodes.length > 0) {
+    <div class="rv-admin-service__chips">
+      @for (reason of overview.reasonCodes; track reason) {
+      <span>{{ reason }}</span>
+      }
+    </div>
+    }
+  </section>
+  } @if (admin.configValidation(); as config) {
+  <section class="rv-admin-service__section">
+    <h2>Config Validation</h2>
+    <div class="rv-admin-service__path">{{ config.configPath }}</div>
+    <div class="rv-admin-service__summary">
+      <span>status</span><strong>{{ config.ok ? 'ok' : 'blocked' }}</strong>
+      <span>errors</span><strong>{{ config.summary.errors }}</strong>
+      <span>warnings</span><strong>{{ config.summary.warnings }}</strong>
+      <span>brains</span><strong>{{ config.summary.brains }}</strong>
+      <span>sessions</span><strong>{{ config.summary.sessions }}</strong>
+      <span>mcp bindings</span
+      ><strong>{{ config.summary.mcpBindings }}</strong>
+      <span>derived jobs</span
+      ><strong>{{ config.summary.derivedScheduledJobs }}</strong>
+      <span>derived mcp</span
+      ><strong>{{ config.summary.derivedMcpBindings }}</strong>
+    </div>
+    @if (config.diagnostics.length > 0) {
+    <ul class="rv-admin-service__diagnostics">
+      @for (diagnostic of config.diagnostics; track diagnostic.code +
+      diagnostic.path + diagnostic.message) {
+      <li>
+        <strong>{{ diagnostic.severity }}</strong>
+        <span>{{ diagnostic.code }}</span>
+        <span>{{ diagnostic.path ?? '-' }}</span>
+        <span>{{ diagnostic.message }}</span>
+      </li>
+      }
+    </ul>
+    }
+  </section>
+  } @else {
+  <section class="rv-admin-service__section">
+    <h2>Config Validation</h2>
+    <div class="rv-admin-service__path">No config validation payload.</div>
+  </section>
+  } @if (admin.reloadResult()?.outcome; as outcome) {
+  <section class="rv-admin-service__section" role="status">
+    <h2>Last Reload</h2>
+    <div class="rv-admin-service__result">
+      <span>{{ outcome.status }}</span>
+      <span>{{ outcome.summary }}</span>
+    </div>
+    @if (outcome.result; as result) {
+    <div class="rv-admin-service__summary">
+      <span>brains registered</span
+      ><strong>{{ result.brainsRegistered }}</strong> <span>brains present</span
+      ><strong>{{ result.brainsAlreadyPresent }}</strong>
+      <span>sessions created</span
+      ><strong>{{ result.sessionsCreated }}</strong>
+      <span>sessions present</span
+      ><strong>{{ result.sessionsAlreadyPresent }}</strong>
+      <span>sessions reactivated</span
+      ><strong>{{ result.sessionsReactivated }}</strong>
+      <span>sessions missing</span><strong>{{ result.sessionsMissing }}</strong>
+    </div>
+    }
+  </section>
+  }
+
+  <section class="rv-admin-service__section">
+    <h2>Apply Semantics</h2>
+    <div class="rv-admin-service__summary">
+      <span>service reload</span><strong>live</strong>
+      <span>session creation</span><strong>explicit</strong>
+      <span>channel joins</span><strong>explicit</strong>
+      <span>config save</span><strong>backend API needed</strong>
+      <span>brain hot swap</span><strong>backend API needed</strong>
+    </div>
+  </section>
+</div>

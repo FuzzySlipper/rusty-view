@@ -24,6 +24,21 @@ import type {
   FetchImpl,
 } from './chat-transport-config';
 import { resolveChatTransportConfig } from './chat-transport-config';
+import { AdminHttpTransport } from './admin-http-transport';
+import type {
+  AdminAgentDiagnostics,
+  AdminControlResponse,
+  AdminDiagnosticsBundle,
+  AdminDiagnosticsOverview,
+  AdminPage,
+  CreateAdminProfileRequest,
+  CreatedServiceProfile,
+  McpSurfaceDiagnostics,
+  RuntimeConfigApplyResult,
+  RuntimeConfigValidationReport,
+  RuntimeSessionDiagnostics,
+} from './admin-api-types';
+import type { AdminListQuery } from './admin-http-transport';
 
 /** Options for {@link ChatTransport.streamEvents}. */
 export interface StreamEventsOptions {
@@ -49,11 +64,13 @@ export interface StreamEventsOptions {
 export class ChatTransport {
   private readonly config: ChatTransportConfig;
   private readonly http: ChatHttpTransport;
+  private readonly adminHttp: AdminHttpTransport;
   private readonly fetchImpl: FetchImpl;
 
   constructor(configInput: ChatTransportConfigInput) {
     this.config = resolveChatTransportConfig(configInput);
     this.http = new ChatHttpTransport(this.config);
+    this.adminHttp = new AdminHttpTransport(this.config);
     // Bind fetch to globalThis (see ChatHttpTransport for the 'Illegal
     // invocation' rationale).
     this.fetchImpl = this.config.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -101,6 +118,50 @@ export class ChatTransport {
     idempotencyKey?: string,
   ): Promise<ExecuteChatCommandResult> {
     return this.http.sendCommand(sessionId, request, idempotencyKey);
+  }
+
+  // ---- admin diagnostics/control endpoints ----
+
+  adminDiagnostics(): Promise<AdminDiagnosticsBundle> {
+    return this.adminHttp.diagnostics();
+  }
+
+  adminOverview(): Promise<AdminDiagnosticsOverview> {
+    return this.adminHttp.overview();
+  }
+
+  adminSessions(
+    query?: AdminListQuery,
+  ): Promise<AdminPage<RuntimeSessionDiagnostics>> {
+    return this.adminHttp.sessions(query);
+  }
+
+  adminAgents(
+    query?: AdminListQuery,
+  ): Promise<AdminPage<AdminAgentDiagnostics>> {
+    return this.adminHttp.agents(query);
+  }
+
+  adminMcpSurfaces(
+    query?: AdminListQuery,
+  ): Promise<AdminPage<McpSurfaceDiagnostics>> {
+    return this.adminHttp.mcpSurfaces(query);
+  }
+
+  adminConfigValidation(): Promise<RuntimeConfigValidationReport | null> {
+    return this.adminHttp.configValidation();
+  }
+
+  createAdminProfile(
+    request: CreateAdminProfileRequest,
+  ): Promise<AdminControlResponse<CreatedServiceProfile>> {
+    return this.adminHttp.createProfile(request);
+  }
+
+  reloadAdminConfig(
+    reason?: string,
+  ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
+    return this.adminHttp.reloadConfig(reason);
   }
 
   // ---- SSE event stream ----

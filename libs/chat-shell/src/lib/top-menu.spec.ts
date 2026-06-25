@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
-import { ChatStore } from '@rusty-view/chat-store';
+import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import {
   CHAT_SETTINGS_STORAGE,
   ChatTheme,
@@ -19,7 +19,10 @@ function menuItemLabels(host: HTMLElement): string[] {
 }
 
 /** Find the first menu button with a given label. */
-function findMenuButton(host: HTMLElement, label: string): HTMLElement | undefined {
+function findMenuButton(
+  host: HTMLElement,
+  label: string,
+): HTMLElement | undefined {
   return Array.from(host.querySelectorAll('.rv-top-menu__item'))
     .map((b) => b as HTMLElement)
     .find((el) => (el.textContent?.trim() ?? '') === label);
@@ -43,6 +46,20 @@ describe('TopMenuComponent', () => {
           provide: ChatStore,
           useValue: { commands: () => [] } as unknown as ChatStore,
         },
+        {
+          provide: AdminStore,
+          useValue: {
+            refresh: async () => undefined,
+            loading: () => false,
+            saving: () => false,
+            error: () => null,
+            profiles: () => [],
+            overview: () => null,
+            configValidation: () => null,
+            createResult: () => null,
+            reloadResult: () => null,
+          } as unknown as AdminStore,
+        },
       ],
     }).compileComponents();
 
@@ -54,8 +71,30 @@ describe('TopMenuComponent', () => {
   it('renders the built-in Options and Help menu entries', async () => {
     const fixture = await createMenu();
     const labels = menuItemLabels(fixture.nativeElement as HTMLElement);
+    expect(labels).toContain('Profiles');
+    expect(labels).toContain('Service');
     expect(labels).toContain('Options');
     expect(labels).toContain('Help');
+  });
+
+  it('opens the Profiles panel when Profiles is clicked', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Profiles')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-admin-profiles-panel')).not.toBeNull();
+  });
+
+  it('opens the Service panel when Service is clicked', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Service')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-admin-service-panel')).not.toBeNull();
   });
 
   it('opens the Options panel when Options is clicked', async () => {
