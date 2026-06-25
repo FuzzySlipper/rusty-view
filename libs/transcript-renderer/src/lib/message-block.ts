@@ -7,13 +7,18 @@ import {
   input,
   signal,
 } from '@angular/core';
-import type { MessageBlock } from '@rusty-view/chat-domain';
+import { NgComponentOutlet } from '@angular/common';
+import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
 
 import { WorkerManager } from './worker-manager';
 import {
   TRANSCRIPT_TEXT_RENDER_MODE,
   type TextRenderMode,
 } from './render-mode-token';
+import {
+  CHAT_CONTENT_RENDERERS,
+  type ChatContentRenderContext,
+} from './content-renderers';
 
 type FormattedTextRenderMode = 'markdown' | 'sanitized-html';
 type ResolvedTextRenderMode = 'raw' | FormattedTextRenderMode;
@@ -55,15 +60,19 @@ const AUTO_HTML_TAGS = new Set([
  */
 @Component({
   selector: 'rv-message-block',
+  imports: [NgComponentOutlet],
   templateUrl: './message-block.html',
   styleUrl: './message-block.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MessageBlockComponent {
   private readonly workerManager = inject(WorkerManager);
+  private readonly contentRenderers =
+    inject(CHAT_CONTENT_RENDERERS, { optional: true }) ?? [];
   protected readonly renderMode = inject(TRANSCRIPT_TEXT_RENDER_MODE);
 
   readonly block = input.required<MessageBlock>();
+  readonly message = input<ChatMessage | undefined>(undefined);
   readonly collapsedThreshold = input<number>(500);
   /** Content length above which markdown/HTML processing goes to the worker. */
   readonly workerThreshold = input<number>(2_000);
@@ -93,6 +102,33 @@ export class MessageBlockComponent {
         this.renderedHtml() !== ''),
   );
 
+  protected readonly renderContext = computed<ChatContentRenderContext>(() => ({
+    message: this.message(),
+    block: this.block(),
+    sessionId: this.message()?.sessionId,
+  }));
+
+  protected readonly customRenderer = computed(() => {
+    const context = this.renderContext();
+    return this.contentRenderers
+      .filter((renderer) => renderer.type === context.block.kind)
+      .sort(
+        (a, b) =>
+          (a.order ?? 100) - (b.order ?? 100) ||
+          a.type.localeCompare(b.type),
+      )
+      .find((renderer) => renderer.canRender?.(context) ?? true);
+  });
+
+  protected readonly customRendererInputs = computed(() => {
+    const context = this.renderContext();
+    return {
+      block: context.block,
+      message: context.message,
+      context,
+    };
+  });
+
   /** Tool/command metadata, when this block represents inline tool activity. */
   protected readonly tool = computed(() => this.block().tool);
 
@@ -102,7 +138,7 @@ export class MessageBlockComponent {
   );
 
   protected readonly isCollapsible = computed(
-    () => this.block().kind !== 'text',
+    () => this.customRenderer() === undefined && this.block().kind !== 'text',
   );
 
   protected readonly displayContent = computed(() => {
@@ -129,7 +165,7 @@ export class MessageBlockComponent {
     // render (or clear) formatted content accordingly.
     effect(() => {
       const block = this.block();
-      if (block.kind !== 'text') {
+      if (this.customRenderer() !== undefined || block.kind !== 'text') {
         this.renderedHtml.set('');
         return;
       }

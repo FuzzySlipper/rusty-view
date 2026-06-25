@@ -35,5 +35,12 @@ export type {
   TextRenderMode,
   HtmlSanitizerPolicy,
 } from './lib/render-mode-token';
+export {
+  CHAT_CONTENT_RENDERERS,
+} from './lib/content-renderers';
+export type {
+  ChatContentRenderer,
+  ChatContentRenderContext,
+} from './lib/content-renderers';
 
 export const TRANSCRIPT_RENDERER_VERSION = '0.0.0' as const;

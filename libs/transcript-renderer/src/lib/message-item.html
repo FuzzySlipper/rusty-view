@@ -16,7 +16,7 @@
 
   <div class="rv-message__blocks">
     @for (block of message().blocks; track block.id) {
-    <rv-message-block [block]="block" />
+    <rv-message-block [block]="block" [message]="message()" />
     }
   </div>
 

@@ -1,4 +1,10 @@
-@if (tool(); as tool) {
+@if (customRenderer(); as renderer) {
+<div class="rv-block rv-block--custom" [attr.data-block-kind]="block().kind">
+  <ng-container
+    *ngComponentOutlet="renderer.component; inputs: customRendererInputs()"
+  />
+</div>
+} @else if (tool(); as tool) {
 <div class="rv-block rv-block--tool" [attr.data-status]="tool.status">
   <button
     type="button"

@@ -90,11 +90,12 @@ declared side-effect policy.
 
 ## Current Status
 
-Task #3338 defines and exports the contracts. Some contribution points already
-have rendered surfaces (`CHAT_TOP_MENU_ITEMS`, `CHAT_OPTIONS_TABS`), while
-others are API commitments for upcoming substrate tasks:
+Task #3338 defined and exported the contracts. Task #3339 wires the generic
+content renderer registry into the transcript renderer. Some contribution
+points already have rendered surfaces (`CHAT_TOP_MENU_ITEMS`,
+`CHAT_OPTIONS_TABS`, `CHAT_CONTENT_RENDERERS`), while others are API
+commitments for upcoming substrate tasks:
 
-- content renderer dispatch
 - richer slash command parsing/runtime
 - sidebar-panel rendering
 - message toolbar rendering

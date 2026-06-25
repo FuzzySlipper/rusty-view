@@ -46,8 +46,6 @@ export {
   provideChatPlugins,
 } from './lib/plugin-api';
 export type {
-  ChatContentRenderer,
-  ChatContentRenderContext,
   ChatMessageToolbarAction,
   ChatMessageToolbarContext,
   ChatPlugin,
@@ -70,5 +68,9 @@ export type {
   ChatSettingsPanel,
   ChatSidebarPanel,
 } from './lib/plugin-api';
+export type {
+  ChatContentRenderer,
+  ChatContentRenderContext,
+} from '@rusty-view/transcript-renderer';
 
 export const CHAT_SHELL_VERSION = '0.0.0' as const;

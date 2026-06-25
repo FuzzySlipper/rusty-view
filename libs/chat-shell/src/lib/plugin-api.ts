@@ -5,7 +5,11 @@ import {
   type Provider,
   type Type,
 } from '@angular/core';
-import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
+import type { ChatMessage } from '@rusty-view/chat-domain';
+import {
+  CHAT_CONTENT_RENDERERS,
+  type ChatContentRenderer,
+} from '@rusty-view/transcript-renderer';
 
 import {
   CHAT_OPTIONS_TABS,
@@ -13,6 +17,12 @@ import {
   type ChatOptionsTab,
   type ChatTopMenuItem,
 } from './shell-extension-tokens';
+
+export { CHAT_CONTENT_RENDERERS } from '@rusty-view/transcript-renderer';
+export type {
+  ChatContentRenderer,
+  ChatContentRenderContext,
+} from '@rusty-view/transcript-renderer';
 
 export type ChatPluginActionEffect =
   | 'none'
@@ -112,20 +122,6 @@ export interface ChatPluginAutoExecuteHook {
   readonly throttleMs?: number;
 }
 
-export interface ChatContentRenderContext {
-  readonly message: ChatMessage;
-  readonly block: MessageBlock;
-  readonly sessionId: string | undefined;
-}
-
-export interface ChatContentRenderer {
-  readonly type: string;
-  readonly label?: string;
-  readonly order?: number;
-  readonly component: Type<unknown>;
-  canRender?(context: ChatContentRenderContext): boolean;
-}
-
 export interface ChatMessageToolbarContext {
   readonly message: ChatMessage;
   readonly sessionId: string | undefined;
@@ -213,10 +209,6 @@ export interface ChatPlugin {
 export const CHAT_PLUGINS = new InjectionToken<readonly ChatPlugin[]>(
   'CHAT_PLUGINS',
 );
-
-export const CHAT_CONTENT_RENDERERS = new InjectionToken<
-  readonly ChatContentRenderer[]
->('CHAT_CONTENT_RENDERERS');
 
 export const CHAT_SLASH_COMMANDS = new InjectionToken<
   readonly ChatPluginSlashCommand[]

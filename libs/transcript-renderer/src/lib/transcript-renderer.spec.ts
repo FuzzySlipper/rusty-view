@@ -1,12 +1,16 @@
 import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { Component, input, signal } from '@angular/core';
 import { describe, expect, it } from 'vitest';
 
 import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
 import { TRANSCRIPT_TEXT_RENDER_MODE, type TextRenderMode } from './render-mode-token';
+import {
+  CHAT_CONTENT_RENDERERS,
+  type ChatContentRenderContext,
+} from './content-renderers';
 
 function makeBlock(overrides: Partial<MessageBlock>): MessageBlock {
   return {
@@ -32,6 +36,21 @@ function makeMessage(overrides: Partial<ChatMessage>): ChatMessage {
   } as ChatMessage;
 }
 
+@Component({
+  selector: 'rv-test-image-renderer',
+  template: `
+    <figure class="test-image-renderer">
+      <span>{{ block().kind }}</span>
+      <figcaption>{{ context().sessionId }}:{{ block().content }}</figcaption>
+    </figure>
+  `,
+})
+class TestImageRendererComponent {
+  readonly block = input.required<MessageBlock>();
+  readonly message = input<ChatMessage | undefined>(undefined);
+  readonly context = input.required<ChatContentRenderContext>();
+}
+
 describe('@rusty-view/transcript-renderer package version', () => {
   it('exports a version marker', () => {
     expect(TRANSCRIPT_RENDERER_VERSION).toBe('0.0.0');
@@ -39,9 +58,13 @@ describe('@rusty-view/transcript-renderer package version', () => {
 });
 
 describe('MessageBlockComponent', () => {
-  async function createBlock(block: MessageBlock) {
+  async function createBlock(
+    block: MessageBlock,
+    providers: Parameters<typeof TestBed.configureTestingModule>[0]['providers'] = [],
+  ) {
     await TestBed.configureTestingModule({
       imports: [MessageBlockComponent],
+      providers,
     }).compileComponents();
     const fixture = TestBed.createComponent(MessageBlockComponent);
     fixture.componentRef.setInput('block', block);
@@ -125,6 +148,42 @@ describe('MessageBlockComponent', () => {
     expect(sheet).toContain('rv-block__markdown');
     expect(sheet).toContain('var(--rv-color-text-primary)');
     expect(sheet).toContain('var(--rv-font-size-md)');
+  });
+
+  it('renders custom block types with a registered content renderer', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'image', content: '/files/image.png' }),
+      [
+        {
+          provide: CHAT_CONTENT_RENDERERS,
+          useValue: [
+            { type: 'image', component: TestImageRendererComponent },
+          ],
+        },
+      ],
+    );
+    fixture.componentRef.setInput(
+      'message',
+      makeMessage({ id: 'm1', sessionId: 's-custom' }),
+    );
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.test-image-renderer')).not.toBeNull();
+    expect(host.textContent).toContain('image');
+    expect(host.textContent).toContain('s-custom:/files/image.png');
+    expect(host.querySelector('.rv-block--collapsible')).toBeNull();
+  });
+
+  it('falls back to the generic collapsible renderer for unknown block types', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'future_block', content: 'opaque payload' }),
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block--collapsible')).not.toBeNull();
+    expect(host.textContent).toContain('future_block');
+    expect(host.textContent).toContain('opaque payload');
   });
 });
 

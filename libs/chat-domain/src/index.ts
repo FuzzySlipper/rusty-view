@@ -18,6 +18,7 @@ export { projectProfile, projectProfiles } from './lib/brain-profile';
 export type {
   MessageRole,
   MessageAuthor,
+  KnownMessageBlockKind,
   MessageBlockKind,
   RenderPolicy,
   ToolBlockStatus,

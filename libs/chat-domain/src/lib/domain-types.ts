@@ -19,12 +19,14 @@ export interface MessageAuthor {
 
 // ---- message blocks ----
 
-export type MessageBlockKind =
+export type KnownMessageBlockKind =
   | 'text'
   | 'tool_call'
   | 'tool_result'
   | 'debug'
   | 'command';
+
+export type MessageBlockKind = KnownMessageBlockKind | (string & {});
 
 export type RenderPolicy = 'full' | 'collapsed' | 'partial';
 
