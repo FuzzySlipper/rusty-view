@@ -22,6 +22,12 @@ interface ProfileFormState {
   readonly mcpToolProfile: string;
 }
 
+interface CapabilityRow {
+  readonly label: string;
+  readonly capabilityIds: readonly string[];
+  readonly availableLabel?: string;
+}
+
 const INITIAL_FORM: ProfileFormState = {
   profileId: '',
   displayName: '',
@@ -35,6 +41,41 @@ const INITIAL_FORM: ProfileFormState = {
   mcpToolProfile: '',
 };
 
+const CAPABILITY_ROWS: readonly CapabilityRow[] = [
+  {
+    label: 'Create profile',
+    capabilityIds: ['admin.control.profiles.create'],
+  },
+  {
+    label: 'Config reload',
+    capabilityIds: ['admin.control.config.reload'],
+  },
+  {
+    label: 'MCP reload',
+    capabilityIds: ['admin.control.mcp.reload'],
+  },
+  {
+    label: 'Profile file edits',
+    capabilityIds: [
+      'admin.control.profiles.read',
+      'admin.control.profiles.update.plan',
+      'admin.control.profiles.update.apply',
+    ],
+  },
+  {
+    label: 'Model/provider changes',
+    capabilityIds: [
+      'admin.control.profiles.update.plan',
+      'admin.control.profiles.update.apply',
+      'admin.control.sessions.rebuild_runtime.plan',
+      'admin.control.sessions.rebuild_runtime.apply',
+      'admin.control.profiles.rebuild_brain.plan',
+      'admin.control.profiles.rebuild_brain.apply',
+    ],
+    availableLabel: 'guarded rebuild available',
+  },
+];
+
 @Component({
   selector: 'rv-admin-profiles-panel',
   templateUrl: './admin-profiles-panel.html',
@@ -47,6 +88,7 @@ export class AdminProfilesPanelComponent {
 
   readonly dismissed = output<void>();
 
+  protected readonly capabilityRows = CAPABILITY_ROWS;
   protected readonly form = signal<ProfileFormState>(INITIAL_FORM);
   protected readonly createDisabled = computed(
     () =>
@@ -92,6 +134,18 @@ export class AdminProfilesPanelComponent {
         void this.chatStore.refreshSessions();
       }
     });
+  }
+
+  protected capabilityStatus(row: CapabilityRow): string {
+    const states = row.capabilityIds.map((id) =>
+      this.admin.controlCapabilityState(id),
+    );
+    if (states.every((state) => state === 'available')) {
+      return row.availableLabel ?? 'available';
+    }
+    if (states.some((state) => state === 'unknown')) return 'checking';
+    if (states.some((state) => state === 'available')) return 'partial';
+    return 'backend API needed';
   }
 }
 

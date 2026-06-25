@@ -181,11 +181,9 @@
   <section class="rv-admin-profiles__section">
     <h2>Change Application</h2>
     <div class="rv-admin-profiles__capabilities">
-      <span>Create profile</span><strong>available</strong>
-      <span>Config reload</span><strong>available</strong>
-      <span>MCP reload</span><strong>backend per-session control</strong>
-      <span>Profile file edits</span><strong>backend API needed</strong>
-      <span>Model/provider hot swap</span><strong>backend API needed</strong>
+      @for (row of capabilityRows; track row.label) {
+      <span>{{ row.label }}</span><strong>{{ capabilityStatus(row) }}</strong>
+      }
     </div>
   </section>
 </div>

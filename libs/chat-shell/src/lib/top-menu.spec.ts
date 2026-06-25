@@ -58,6 +58,7 @@ describe('TopMenuComponent', () => {
             configValidation: () => null,
             createResult: () => null,
             reloadResult: () => null,
+            controlCapabilityState: () => 'unknown',
           } as unknown as AdminStore,
         },
       ],
