@@ -42,6 +42,7 @@ Existing docs in this directory that informed this design:
 | `05-project-layout.md` | Proposed repos, services, dependency graph |
 | `07-rusty-view-plugin-api.md` | Generic Rusty View plugin hooks for downstream UI and agent/mechanic actions |
 | `08-message-alternates.md` | Generic message slot/variant primitive and backend storage/API gaps |
+| `09-conversation-tree-navigation.md` | Generic branch/snapshot navigation primitives and backend gaps |
 
 ## Naming
 

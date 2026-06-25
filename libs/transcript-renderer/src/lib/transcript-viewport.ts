@@ -2,10 +2,12 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   effect,
   inject,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -15,6 +17,15 @@ import {
 } from '@angular/cdk/scrolling';
 import { ScrollingModule as ExperimentalScrollingModule } from '@angular/cdk-experimental/scrolling';
 import type { ChatMessage } from '@rusty-view/chat-domain';
+import {
+  branchBreadcrumbs as buildBranchBreadcrumbs,
+  branchJumpTarget,
+  snapshotJumpTarget,
+  type ConversationBranch,
+  type ConversationBranchBreadcrumb,
+  type ConversationNavigationTarget,
+  type ConversationSnapshot,
+} from '@rusty-view/chat-domain';
 
 import { MessageItemComponent } from './message-item';
 
@@ -47,11 +58,7 @@ import { MessageItemComponent } from './message-item';
  */
 @Component({
   selector: 'rv-transcript-viewport',
-  imports: [
-    ScrollingModule,
-    ExperimentalScrollingModule,
-    MessageItemComponent,
-  ],
+  imports: [ScrollingModule, ExperimentalScrollingModule, MessageItemComponent],
   templateUrl: './transcript-viewport.html',
   styleUrl: './transcript-viewport.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,6 +75,18 @@ export class TranscriptViewportComponent {
 
   /** Set to a message ID to jump-scroll to that message. */
   readonly targetMessageId = input<string | undefined>(undefined);
+
+  /** Branches available for optional breadcrumb navigation. */
+  readonly branches = input<readonly ConversationBranch[]>([]);
+
+  /** Active branch id used to derive breadcrumb navigation. */
+  readonly activeBranchId = input<string | undefined>(undefined);
+
+  /** Snapshot targets available for optional jump navigation. */
+  readonly snapshots = input<readonly ConversationSnapshot[]>([]);
+
+  /** Emits when the user asks the transcript to jump to a tree target. */
+  readonly navigationRequested = output<ConversationNavigationTarget>();
 
   /** Pixel threshold from bottom to consider "at bottom" for tail-follow. */
   private static readonly BOTTOM_THRESHOLD_PX = 80;
@@ -94,6 +113,24 @@ export class TranscriptViewportComponent {
    * the viewport has a real size, then keep it in sync with the input.
    */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
+
+  protected readonly branchBreadcrumbs = computed<
+    readonly ConversationBranchBreadcrumb[]
+  >(() => buildBranchBreadcrumbs(this.branches(), this.activeBranchId()));
+
+  protected readonly snapshotTargets = computed(() =>
+    this.snapshots()
+      .map((snapshot) => snapshotJumpTarget(snapshot))
+      .filter((target): target is ConversationNavigationTarget => {
+        return target !== undefined;
+      }),
+  );
+
+  protected readonly hasNavigation = computed(() => {
+    return (
+      this.branchBreadcrumbs().length > 0 || this.snapshotTargets().length > 0
+    );
+  });
 
   /** True once the viewport has been sized and has received the initial data. */
   private viewportReady = false;
@@ -142,7 +179,7 @@ export class TranscriptViewportComponent {
         // Older history was prepended above the viewport. Preserve the anchor
         // so the user doesn't see a jump.
         afterNextRender(() => {
-          this.preserveScrollAnchor(prev, msgs, prependedCount);
+          this.preserveScrollAnchor();
         });
         return;
       }
@@ -158,13 +195,7 @@ export class TranscriptViewportComponent {
     effect(() => {
       const targetId = this.targetMessageId();
       if (targetId === undefined) return;
-      const msgs = this.renderMessages();
-      const index = msgs.findIndex((m) => m.id === targetId);
-      if (index >= 0) {
-        afterNextRender(() => {
-          this.scrollToIndex(index);
-        });
-      }
+      this.scrollToMessageId(targetId);
     });
   }
 
@@ -190,6 +221,36 @@ export class TranscriptViewportComponent {
     vp.scrollToOffset(Number.MAX_SAFE_INTEGER);
   }
 
+  scrollToMessageId(messageId: string): void {
+    const msgs = this.renderMessages();
+    const index = msgs.findIndex((m) => m.id === messageId);
+    if (index >= 0) {
+      afterNextRender(() => {
+        this.scrollToIndex(index);
+      });
+    }
+  }
+
+  protected jumpToBranch(crumb: ConversationBranchBreadcrumb): void {
+    const target = crumb.target ?? branchJumpTarget(crumb.branch);
+    if (target === undefined) return;
+
+    this.navigationRequested.emit(target);
+    this.scrollToMessageId(target.messageId);
+  }
+
+  protected jumpToSnapshot(target: ConversationNavigationTarget): void {
+    this.navigationRequested.emit(target);
+    this.scrollToMessageId(target.messageId);
+  }
+
+  protected navigationLabel(
+    target: ConversationNavigationTarget | undefined,
+    fallback: string,
+  ): string {
+    return target?.label ?? fallback;
+  }
+
   /**
    * Scroll to a specific message index. Uses an estimated pixel offset based
    * on the default item height, since the autosize strategy does not support
@@ -209,11 +270,7 @@ export class TranscriptViewportComponent {
    * the scroll offset from the top. The prepended messages shift all items
    * down, and restoring the offset keeps the viewport visually stable.
    */
-  private preserveScrollAnchor(
-    _prev: readonly ChatMessage[],
-    _current: readonly ChatMessage[],
-    _prependedCount: number,
-  ): void {
+  private preserveScrollAnchor(): void {
     const vp = this.viewport();
 
     // Record the scroll offset from the top before CDK recalculates.

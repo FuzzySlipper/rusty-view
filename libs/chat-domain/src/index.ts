@@ -15,6 +15,12 @@ export { projectConversation } from './lib/conversation-projection';
 export { emptyProjection } from './lib/domain-types';
 export { projectProfile, projectProfiles } from './lib/brain-profile';
 export {
+  branchBreadcrumbs,
+  branchJumpTarget,
+  messageJumpTarget,
+  snapshotJumpTarget,
+} from './lib/conversation-navigation';
+export {
   activeMessageForSlot,
   activeMessageVariant,
   findMessageVariant,
@@ -36,6 +42,7 @@ export type {
   MessageBlock,
   MessageStatus,
   ChatMessage,
+  MessageTreePosition,
   MessageVariantSource,
   MessageVariant,
   MessageAlternateSlot,
@@ -45,10 +52,16 @@ export type {
   CommandProjection,
   ActiveAssistantTurn,
   ConversationBranch,
+  ConversationSnapshot,
   SummaryCheckpoint,
   StreamErrorState,
   ConversationProjection,
 } from './lib/domain-types';
+export type {
+  ConversationBranchBreadcrumb,
+  ConversationNavigationTarget,
+  ConversationNavigationTargetKind,
+} from './lib/conversation-navigation';
 export type { MessageAlternateSlotOptions } from './lib/message-alternates';
 
 export type {

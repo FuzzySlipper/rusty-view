@@ -1,3 +1,36 @@
+@if (hasNavigation()) {
+<nav class="rv-transcript-nav" aria-label="Conversation navigation">
+  @if (branchBreadcrumbs().length > 0) {
+  <ol class="rv-transcript-nav__breadcrumbs">
+    @for (crumb of branchBreadcrumbs(); track crumb.branch.id) {
+    <li class="rv-transcript-nav__crumb">
+      <button
+        type="button"
+        class="rv-transcript-nav__button"
+        [class.rv-transcript-nav__button--current]="$last"
+        (click)="jumpToBranch(crumb)"
+      >
+        {{ navigationLabel(crumb.target, crumb.branch.id) }}
+      </button>
+    </li>
+    }
+  </ol>
+  } @if (snapshotTargets().length > 0) {
+  <div class="rv-transcript-nav__snapshots">
+    @for (target of snapshotTargets(); track target.id) {
+    <button
+      type="button"
+      class="rv-transcript-nav__button"
+      (click)="jumpToSnapshot(target)"
+    >
+      {{ navigationLabel(target, target.id) }}
+    </button>
+    }
+  </div>
+  }
+</nav>
+}
+
 <cdk-virtual-scroll-viewport
   autosize
   class="rv-transcript"

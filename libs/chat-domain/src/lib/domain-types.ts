@@ -78,7 +78,15 @@ export interface ChatMessage {
   readonly createdAt: string;
   readonly status: MessageStatus;
   readonly blocks: readonly MessageBlock[];
+  readonly tree?: MessageTreePosition;
   readonly metadata?: MessageMetadata;
+}
+
+export interface MessageTreePosition {
+  readonly branchId: string | undefined;
+  readonly parentMessageId: string | undefined;
+  readonly previousMessageId: string | undefined;
+  readonly snapshotIds: readonly string[];
 }
 
 // ---- message alternates ----
@@ -162,16 +170,31 @@ export interface ActiveAssistantTurn {
  */
 export interface ConversationBranch {
   readonly id: string;
+  readonly sessionId?: string;
+  readonly parentBranchId?: string;
   readonly parentMessageId: string | undefined;
+  readonly originMessageId?: string;
+  readonly headMessageId?: string;
   readonly label: string | undefined;
   readonly createdAt: string;
+  readonly metadata?: MessageMetadata;
 }
 
-export interface SummaryCheckpoint {
+export interface ConversationSnapshot {
   readonly id: string;
+  readonly sessionId?: string;
+  readonly branchId?: string;
+  readonly messageId: string | undefined;
+  readonly cursor?: string;
+  readonly label: string | undefined;
+  readonly summary: string | undefined;
+  readonly createdAt: string;
+  readonly metadata?: MessageMetadata;
+}
+
+export interface SummaryCheckpoint extends ConversationSnapshot {
   readonly cursor: string;
   readonly summary: string;
-  readonly createdAt: string;
 }
 
 // ---- the projection ----
@@ -194,6 +217,7 @@ export interface ConversationProjection {
   readonly toolCalls: readonly ToolCallProjection[];
   readonly commands: readonly CommandProjection[];
   readonly branches: readonly ConversationBranch[];
+  readonly snapshots: readonly ConversationSnapshot[];
   readonly checkpoints: readonly SummaryCheckpoint[];
   readonly latestCursor: string | undefined;
   readonly activeTurn: ActiveAssistantTurn | undefined;
@@ -209,6 +233,7 @@ export function emptyProjection(): ConversationProjection {
     toolCalls: [],
     commands: [],
     branches: [],
+    snapshots: [],
     checkpoints: [],
     latestCursor: undefined,
     activeTurn: undefined,

@@ -1,4 +1,8 @@
-import type { ChatMessage } from '@rusty-view/chat-domain';
+import type {
+  ChatMessage,
+  ConversationBranch,
+  ConversationSnapshot,
+} from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -107,6 +111,51 @@ describe('TranscriptViewportComponent scale', () => {
 
     expect(fixture.componentInstance).toBeTruthy();
     expect(fixture.componentInstance.messages()).toHaveLength(0);
+  });
+
+  it('accepts generic tree navigation inputs without throwing', async () => {
+    const messages = generateLargeMessageList(4);
+    const branches: ConversationBranch[] = [
+      {
+        id: 'main',
+        parentMessageId: undefined,
+        headMessageId: 'msg_1',
+        label: 'main',
+        createdAt: '2026-06-24T10:00:00Z',
+      },
+      {
+        id: 'alternate',
+        parentBranchId: 'main',
+        parentMessageId: 'msg_1',
+        headMessageId: 'msg_3',
+        label: 'alternate',
+        createdAt: '2026-06-24T10:05:00Z',
+      },
+    ];
+    const snapshots: ConversationSnapshot[] = [
+      {
+        id: 'snap_1',
+        branchId: 'alternate',
+        messageId: 'msg_2',
+        label: 'snap_1',
+        summary: undefined,
+        createdAt: '2026-06-24T10:06:00Z',
+      },
+    ];
+
+    await TestBed.configureTestingModule({
+      imports: [TranscriptViewportComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TranscriptViewportComponent);
+    fixture.componentRef.setInput('messages', messages);
+    fixture.componentRef.setInput('branches', branches);
+    fixture.componentRef.setInput('activeBranchId', 'alternate');
+    fixture.componentRef.setInput('snapshots', snapshots);
+
+    expect(fixture.componentInstance.branches()).toHaveLength(2);
+    expect(fixture.componentInstance.snapshots()).toHaveLength(1);
+    expect(fixture.componentInstance.activeBranchId()).toBe('alternate');
   });
 });
 
