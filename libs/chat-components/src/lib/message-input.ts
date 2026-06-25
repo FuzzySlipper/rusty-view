@@ -6,6 +6,22 @@ import {
   output,
   signal,
 } from '@angular/core';
+import {
+  attachmentKindForMimeType,
+  type ChatAttachment,
+  type ChatAttachmentScope,
+} from '@rusty-view/chat-domain';
+
+export type MessageInputAttachmentSource = 'picker' | 'paste' | 'drop';
+
+export interface MessageInputAttachmentSelection {
+  readonly file: File;
+  readonly attachment: ChatAttachment;
+  readonly scope: ChatAttachmentScope | undefined;
+  readonly source: MessageInputAttachmentSource;
+}
+
+const TEXT_PREVIEW_LIMIT = 2_000;
 
 /**
  * Presentational message input: text area with send button and command hints.
@@ -36,12 +52,22 @@ export class MessageInputComponent {
   >([]);
   /** Submitted slash commands for Up/Down navigation (newest-first). */
   readonly commandHistory = input<readonly string[]>([]);
+  readonly attachmentsEnabled = input<boolean>(false);
+  readonly attachmentScopes = input<readonly ChatAttachmentScope[]>([]);
   readonly send = output<string>();
   readonly hintSelected = output<string>();
+  readonly attachmentsSelected =
+    output<readonly MessageInputAttachmentSelection[]>();
+  readonly attachmentRemoved = output<MessageInputAttachmentSelection>();
 
   protected readonly text = signal('');
   protected readonly hintOpen = signal(false);
   protected readonly hintIndex = signal(0);
+  protected readonly dragActive = signal(false);
+  protected readonly selectedScopeId = signal<string | undefined>(undefined);
+  protected readonly attachments = signal<
+    readonly MessageInputAttachmentSelection[]
+  >([]);
   /** null = not navigating history; number = index into commandHistory(). */
   protected readonly historyIndex = signal<number | null>(null);
   /** Draft preserved when the user enters history navigation. */
@@ -55,6 +81,15 @@ export class MessageInputComponent {
       .filter((cmd) => cmd.name.toLowerCase().startsWith(query))
       .slice(0, 10);
   });
+
+  protected readonly activeScope = computed(() => {
+    const scopes = this.attachmentScopes();
+    return (
+      scopes.find((scope) => scope.id === this.selectedScopeId()) ?? scopes[0]
+    );
+  });
+
+  protected readonly accept = computed(() => this.activeScope()?.accept);
 
   protected onKeydown(event: KeyboardEvent): void {
     const hints = this.filteredCommands();
@@ -89,8 +124,7 @@ export class MessageInputComponent {
     // empty or a slash command — never clobber a half-typed normal message).
     if (!isOpen && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       const value = this.text();
-      const isCommandContext =
-        value.length === 0 || value.startsWith('/');
+      const isCommandContext = value.length === 0 || value.startsWith('/');
       if (isCommandContext) {
         event.preventDefault();
         // ArrowUp = older (index increases), ArrowDown = newer (index decreases).
@@ -112,6 +146,44 @@ export class MessageInputComponent {
     this.hintIndex.set(0);
     // Typing exits history navigation mode.
     this.historyIndex.set(null);
+  }
+
+  protected updateScope(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.selectedScopeId.set(target.value || undefined);
+  }
+
+  protected async onFileInput(event: Event): Promise<void> {
+    const target = event.target as HTMLInputElement;
+    await this.addFiles(target.files, 'picker');
+    target.value = '';
+  }
+
+  protected async onPaste(event: ClipboardEvent): Promise<void> {
+    if (!this.attachmentsEnabled()) return;
+    const files = event.clipboardData?.files;
+    if (files === undefined || files.length === 0) return;
+    await this.addFiles(files, 'paste');
+  }
+
+  protected onDragOver(event: DragEvent): void {
+    if (!this.attachmentsEnabled()) return;
+    event.preventDefault();
+    this.dragActive.set(true);
+  }
+
+  protected onDragLeave(event: DragEvent): void {
+    if (!this.attachmentsEnabled()) return;
+    if (event.currentTarget === event.target) {
+      this.dragActive.set(false);
+    }
+  }
+
+  protected async onDrop(event: DragEvent): Promise<void> {
+    if (!this.attachmentsEnabled()) return;
+    event.preventDefault();
+    this.dragActive.set(false);
+    await this.addFiles(event.dataTransfer?.files, 'drop');
   }
 
   protected acceptHint(name: string): void {
@@ -182,6 +254,13 @@ export class MessageInputComponent {
     this.savedDraft = '';
   }
 
+  protected removeAttachment(selection: MessageInputAttachmentSelection): void {
+    this.attachments.update((items) =>
+      items.filter((item) => item.attachment.id !== selection.attachment.id),
+    );
+    this.attachmentRemoved.emit(selection);
+  }
+
   protected hasArgs(schema: Record<string, unknown>): boolean {
     return Object.keys(schema).length > 0;
   }
@@ -191,4 +270,97 @@ export class MessageInputComponent {
     if (keys.length === 0) return '';
     return `[${keys.join(', ')}]`;
   }
+
+  private async addFiles(
+    files: FileList | readonly File[] | null | undefined,
+    source: MessageInputAttachmentSource,
+  ): Promise<void> {
+    if (files === undefined || files === null || files.length === 0) return;
+
+    const scope = this.activeScope();
+    const selections = await Promise.all(
+      Array.from(files).map((file) =>
+        this.selectionForFile(file, source, scope),
+      ),
+    );
+    const usableSelections =
+      scope?.multiple === false ? selections.slice(0, 1) : selections;
+    this.attachments.update((items) =>
+      scope?.multiple === false
+        ? usableSelections
+        : [...items, ...usableSelections],
+    );
+    this.attachmentsSelected.emit(usableSelections);
+  }
+
+  private async selectionForFile(
+    file: File,
+    source: MessageInputAttachmentSource,
+    scope: ChatAttachmentScope | undefined,
+  ): Promise<MessageInputAttachmentSelection> {
+    const mimeType = file.type || undefined;
+    return {
+      file,
+      scope,
+      source,
+      attachment: {
+        id: attachmentId(file),
+        kind: attachmentKindForMimeType(mimeType),
+        name: file.name || 'untitled',
+        mimeType,
+        sizeBytes: file.size,
+        url: undefined,
+        thumbnailUrl: undefined,
+        textPreview: await textPreviewForFile(file),
+        scopeId: scope?.id,
+      },
+    };
+  }
+}
+
+function attachmentId(file: File): string {
+  return [
+    'attachment',
+    file.name || 'untitled',
+    file.size,
+    file.lastModified,
+    Math.random().toString(36).slice(2, 8),
+  ].join('_');
+}
+
+async function textPreviewForFile(
+  file: File,
+): Promise<ChatAttachment['textPreview']> {
+  if (!isTextLikeFile(file)) return undefined;
+
+  const text = await readFileText(file);
+  if (text === undefined) return undefined;
+  return {
+    text: text.slice(0, TEXT_PREVIEW_LIMIT),
+    truncated: text.length > TEXT_PREVIEW_LIMIT,
+  };
+}
+
+function isTextLikeFile(file: File): boolean {
+  if (file.type.startsWith('text/')) return true;
+  return /\.(json|md|markdown|txt|csv|log|xml|yaml|yml)$/i.test(file.name);
+}
+
+function readFileText(file: File): Promise<string | undefined> {
+  const textMethod = (file as File & { text?: () => Promise<string> }).text;
+  if (typeof textMethod === 'function') {
+    return textMethod.call(file);
+  }
+  if (typeof FileReader === 'undefined') {
+    return Promise.resolve(undefined);
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(typeof reader.result === 'string' ? reader.result : undefined);
+    };
+    reader.onerror = () => resolve(undefined);
+    reader.readAsText(file);
+  });
 }

@@ -12,6 +12,7 @@
 export { TranscriptViewportComponent } from './lib/transcript-viewport';
 export { MessageItemComponent } from './lib/message-item';
 export { MessageBlockComponent } from './lib/message-block';
+export { AttachmentBlockComponent } from './lib/attachment-block';
 export { CHAT_MESSAGE_DECORATORS } from './lib/transcript-decorators';
 export type {
   ChatMessageDecorator,
@@ -35,9 +36,7 @@ export type {
   TextRenderMode,
   HtmlSanitizerPolicy,
 } from './lib/render-mode-token';
-export {
-  CHAT_CONTENT_RENDERERS,
-} from './lib/content-renderers';
+export { CHAT_CONTENT_RENDERERS } from './lib/content-renderers';
 export type {
   ChatContentRenderer,
   ChatContentRenderContext,

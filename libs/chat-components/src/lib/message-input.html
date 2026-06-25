@@ -1,10 +1,43 @@
-<div class="rv-input">
+<div
+  class="rv-input"
+  [class.rv-input--drag-active]="dragActive()"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+>
+  @if (attachmentsEnabled()) {
+  <div class="rv-input__attachments">
+    <label class="rv-input__attach">
+      <span>Attach</span>
+      <input
+        type="file"
+        [attr.accept]="accept() ?? null"
+        [multiple]="activeScope()?.multiple !== false"
+        (change)="onFileInput($event)"
+      />
+    </label>
+    @if (attachmentScopes().length > 0) {
+    <select
+      class="rv-input__scope"
+      [value]="activeScope()?.id ?? ''"
+      (change)="updateScope($event)"
+      aria-label="Attachment scope"
+    >
+      @for (scope of attachmentScopes(); track scope.id) {
+      <option [value]="scope.id">{{ scope.label }}</option>
+      }
+    </select>
+    }
+  </div>
+  }
+
   <textarea
     class="rv-input__field"
     [placeholder]="placeholder()"
     [disabled]="disabled()"
     [value]="text()"
     (input)="onInput($event)"
+    (paste)="onPaste($event)"
     (keydown)="onKeydown($event)"
     rows="2"
     [attr.aria-expanded]="hintOpen() && filteredCommands().length > 0"
@@ -21,29 +54,45 @@
   >
     Send
   </button>
-  @if (hintOpen() && filteredCommands().length > 0) {
-    <div class="rv-input__hints" role="listbox" id="rv-input-hints">
-      @for (cmd of filteredCommands(); track cmd.name; let i = $index) {
-        <div
-          class="rv-input__hint"
-          [class.rv-input__hint--active]="i === hintIndex()"
-          [id]="'hint-' + i"
-          role="option"
-          [attr.aria-selected]="i === hintIndex()"
-          tabindex="-1"
-          (click)="acceptHint(cmd.name)"
-          (keydown.enter)="acceptHint(cmd.name)"
-          (keydown.space)="acceptHint(cmd.name)"
-        >
-          <span class="rv-input__hint-name">{{ cmd.name }}</span>
-          @if (cmd.description) {
-            <span class="rv-input__hint-desc">{{ cmd.description }}</span>
-          }
-          @if (cmd.args_schema && hasArgs(cmd.args_schema)) {
-            <span class="rv-input__hint-args">{{ formatArgs(cmd.args_schema) }}</span>
-          }
-        </div>
+  @if (attachments().length > 0) {
+  <div class="rv-input__attachment-list" aria-label="Selected attachments">
+    @for (item of attachments(); track item.attachment.id) {
+    <button
+      type="button"
+      class="rv-input__attachment"
+      (click)="removeAttachment(item)"
+      [title]="item.attachment.name"
+    >
+      <span class="rv-input__attachment-kind">{{ item.attachment.kind }}</span>
+      <span class="rv-input__attachment-name">{{ item.attachment.name }}</span>
+      @if (item.attachment.textPreview) {
+      <span class="rv-input__attachment-preview">text</span>
+      }
+    </button>
+    }
+  </div>
+  } @if (hintOpen() && filteredCommands().length > 0) {
+  <div class="rv-input__hints" role="listbox" id="rv-input-hints">
+    @for (cmd of filteredCommands(); track cmd.name; let i = $index) {
+    <div
+      class="rv-input__hint"
+      [class.rv-input__hint--active]="i === hintIndex()"
+      [id]="'hint-' + i"
+      role="option"
+      [attr.aria-selected]="i === hintIndex()"
+      tabindex="-1"
+      (click)="acceptHint(cmd.name)"
+      (keydown.enter)="acceptHint(cmd.name)"
+      (keydown.space)="acceptHint(cmd.name)"
+    >
+      <span class="rv-input__hint-name">{{ cmd.name }}</span>
+      @if (cmd.description) {
+      <span class="rv-input__hint-desc">{{ cmd.description }}</span>
+      } @if (cmd.args_schema && hasArgs(cmd.args_schema)) {
+      <span class="rv-input__hint-args">{{ formatArgs(cmd.args_schema) }}</span>
       }
     </div>
+    }
+  </div>
   }
 </div>

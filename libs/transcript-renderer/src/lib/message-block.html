@@ -4,6 +4,8 @@
     *ngComponentOutlet="renderer.component; inputs: customRendererInputs()"
   />
 </div>
+} @else if (attachment(); as attachment) {
+<rv-attachment-block [attachment]="attachment" />
 } @else if (tool(); as tool) {
 <div class="rv-block rv-block--tool" [attr.data-status]="tool.status">
   <button
@@ -50,8 +52,7 @@
   <div class="rv-block__markdown" [innerHTML]="renderedHtml()"></div>
   } @else {
   <p class="rv-block__content">{{ block().content }}</p>
-  }
-  @if (showRawToggle()) {
+  } @if (showRawToggle()) {
   <div class="rv-block__raw-toggle">
     <button
       type="button"

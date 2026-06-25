@@ -1,0 +1,101 @@
+:host {
+  display: block;
+}
+
+.rv-attachment {
+  display: grid;
+  gap: var(--rv-space-sm);
+  max-width: 42rem;
+  margin: var(--rv-space-xs) 0;
+  padding: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+}
+
+.rv-attachment__preview {
+  display: flex;
+  align-items: center;
+  min-height: 2.5rem;
+}
+
+.rv-attachment__image,
+.rv-attachment__video {
+  display: block;
+  max-width: min(100%, 36rem);
+  max-height: 24rem;
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  object-fit: contain;
+}
+
+.rv-attachment__audio {
+  width: min(100%, 28rem);
+}
+
+.rv-attachment__file-link,
+.rv-attachment__placeholder {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  text-decoration: none;
+}
+
+.rv-attachment__file-link:hover {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-accent);
+}
+
+.rv-attachment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-attachment__name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--rv-color-text-primary);
+  font-size: var(--rv-font-size-sm);
+  font-weight: var(--rv-font-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-attachment__detail {
+  font-family: var(--rv-font-mono);
+  color: var(--rv-color-text-muted);
+}
+
+.rv-attachment__text-preview {
+  max-height: 12rem;
+  margin: 0;
+  padding: var(--rv-space-sm);
+  overflow: auto;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  line-height: var(--rv-line-height-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rv-attachment__truncated {
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}

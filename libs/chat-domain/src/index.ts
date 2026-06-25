@@ -20,6 +20,7 @@ export {
   messageJumpTarget,
   snapshotJumpTarget,
 } from './lib/conversation-navigation';
+export { attachmentKindForMimeType } from './lib/attachments';
 export {
   activeMessageForSlot,
   activeMessageVariant,
@@ -37,6 +38,10 @@ export type {
   MessageBlockKind,
   RenderPolicy,
   MessageMetadata,
+  AttachmentMediaKind,
+  AttachmentTextPreview,
+  ChatAttachment,
+  ChatAttachmentScope,
   ToolBlockStatus,
   ToolBlockMeta,
   MessageBlock,

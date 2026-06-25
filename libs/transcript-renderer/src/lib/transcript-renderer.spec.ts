@@ -1,4 +1,8 @@
-import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
+import type {
+  ChatAttachment,
+  ChatMessage,
+  MessageBlock,
+} from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
 import { Component, input, signal } from '@angular/core';
 import { describe, expect, it } from 'vitest';
@@ -6,7 +10,10 @@ import { describe, expect, it } from 'vitest';
 import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
-import { TRANSCRIPT_TEXT_RENDER_MODE, type TextRenderMode } from './render-mode-token';
+import {
+  TRANSCRIPT_TEXT_RENDER_MODE,
+  type TextRenderMode,
+} from './render-mode-token';
 import {
   CHAT_CONTENT_RENDERERS,
   type ChatContentRenderContext,
@@ -20,6 +27,23 @@ function makeBlock(overrides: Partial<MessageBlock>): MessageBlock {
     content: 'hello',
     estimatedHeight: undefined,
     renderPolicy: 'full',
+    ...overrides,
+  };
+}
+
+function makeAttachment(
+  overrides: Partial<ChatAttachment> = {},
+): ChatAttachment {
+  return {
+    id: 'a1',
+    kind: 'file',
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    sizeBytes: 2048,
+    url: '/files/notes.txt',
+    thumbnailUrl: undefined,
+    textPreview: undefined,
+    scopeId: undefined,
     ...overrides,
   };
 }
@@ -60,7 +84,9 @@ describe('@rusty-view/transcript-renderer package version', () => {
 describe('MessageBlockComponent', () => {
   async function createBlock(
     block: MessageBlock,
-    providers: Parameters<typeof TestBed.configureTestingModule>[0]['providers'] = [],
+    providers: Parameters<
+      typeof TestBed.configureTestingModule
+    >[0]['providers'] = [],
   ) {
     await TestBed.configureTestingModule({
       imports: [MessageBlockComponent],
@@ -156,9 +182,7 @@ describe('MessageBlockComponent', () => {
       [
         {
           provide: CHAT_CONTENT_RENDERERS,
-          useValue: [
-            { type: 'image', component: TestImageRendererComponent },
-          ],
+          useValue: [{ type: 'image', component: TestImageRendererComponent }],
         },
       ],
     );
@@ -184,6 +208,104 @@ describe('MessageBlockComponent', () => {
     expect(host.querySelector('.rv-block--collapsible')).not.toBeNull();
     expect(host.textContent).toContain('future_block');
     expect(host.textContent).toContain('opaque payload');
+  });
+
+  it('renders image attachments with thumbnail fallback', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          kind: 'image',
+          name: 'frame.png',
+          mimeType: 'image/png',
+          url: '/files/frame.png',
+          thumbnailUrl: '/thumbs/frame.png',
+        }),
+      }),
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    const image = host.querySelector(
+      '.rv-attachment__image',
+    ) as HTMLImageElement;
+    expect(image).not.toBeNull();
+    expect(image.getAttribute('src')).toBe('/thumbs/frame.png');
+    expect(image.getAttribute('alt')).toBe('frame.png');
+  });
+
+  it('renders audio attachments with native controls', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          kind: 'audio',
+          name: 'voice.mp3',
+          mimeType: 'audio/mpeg',
+          url: '/files/voice.mp3',
+        }),
+      }),
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('audio')?.getAttribute('src')).toBe(
+      '/files/voice.mp3',
+    );
+  });
+
+  it('renders video attachments with native controls and poster', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          kind: 'video',
+          name: 'clip.mp4',
+          mimeType: 'video/mp4',
+          url: '/files/clip.mp4',
+          thumbnailUrl: '/thumbs/clip.jpg',
+        }),
+      }),
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('video')?.getAttribute('src')).toBe(
+      '/files/clip.mp4',
+    );
+    expect(host.querySelector('video')?.getAttribute('poster')).toBe(
+      '/thumbs/clip.jpg',
+    );
+  });
+
+  it('renders file attachments and extracted text previews', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          kind: 'file',
+          name: 'notes.md',
+          mimeType: 'text/markdown',
+          url: '/files/notes.md',
+          textPreview: {
+            text: '# Notes\n\nA reusable source file.',
+            truncated: true,
+          },
+        }),
+      }),
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    const link = host.querySelector(
+      '.rv-attachment__file-link',
+    ) as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('href')).toBe('/files/notes.md');
+    expect(host.textContent).toContain('notes.md');
+    expect(host.textContent).toContain('2.0 KB');
+    expect(host.textContent).toContain('# Notes');
+    expect(host.textContent).toContain('preview truncated');
   });
 });
 
@@ -305,7 +427,9 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
 
     // Click the raw toggle.
-    const rawButton = host.querySelector('.rv-block__raw-button') as HTMLButtonElement;
+    const rawButton = host.querySelector(
+      '.rv-block__raw-button',
+    ) as HTMLButtonElement;
     expect(rawButton).not.toBeNull();
     rawButton.click();
     fixture.detectChanges();
@@ -326,7 +450,9 @@ describe('MessageBlockComponent markdown toggle', () => {
     fixture.detectChanges();
 
     const host: HTMLElement = fixture.nativeElement;
-    const rawButton = host.querySelector('.rv-block__raw-button') as HTMLButtonElement;
+    const rawButton = host.querySelector(
+      '.rv-block__raw-button',
+    ) as HTMLButtonElement;
 
     // Toggle to raw.
     rawButton.click();
@@ -358,7 +484,10 @@ describe('MessageBlockComponent markdown toggle', () => {
 
   it('sanitized-html mode strips dangerous content', async () => {
     const fixture = await createBlock(
-      makeBlock({ kind: 'text', content: '<p>safe</p><script>alert(1)</script>' }),
+      makeBlock({
+        kind: 'text',
+        content: '<p>safe</p><script>alert(1)</script>',
+      }),
       'sanitized-html',
     );
     await Promise.resolve();

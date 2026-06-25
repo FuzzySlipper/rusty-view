@@ -12,6 +12,10 @@
  */
 
 export { MessageInputComponent } from './lib/message-input';
+export type {
+  MessageInputAttachmentSelection,
+  MessageInputAttachmentSource,
+} from './lib/message-input';
 export { StreamStatusComponent } from './lib/stream-status';
 export type { StreamStatusKind } from './lib/stream-status';
 export { JsonInspectorComponent } from './lib/json-inspector';

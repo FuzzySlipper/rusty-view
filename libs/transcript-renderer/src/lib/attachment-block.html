@@ -1,0 +1,58 @@
+<figure class="rv-attachment" [attr.data-kind]="attachment().kind">
+  <div class="rv-attachment__preview">
+    @switch (attachment().kind) { @case ('image') { @if
+    (attachment().thumbnailUrl || attachment().url) {
+    <img
+      class="rv-attachment__image"
+      [src]="attachment().thumbnailUrl ?? attachment().url"
+      [alt]="attachment().name"
+    />
+    } @else {
+    <span class="rv-attachment__placeholder">image</span>
+    } } @case ('audio') { @if (attachment().url) {
+    <audio
+      class="rv-attachment__audio"
+      controls
+      [src]="attachment().url"
+    ></audio>
+    } @else {
+    <span class="rv-attachment__placeholder">audio</span>
+    } } @case ('video') { @if (attachment().url) {
+    <video
+      class="rv-attachment__video"
+      controls
+      [src]="attachment().url"
+      [poster]="attachment().thumbnailUrl ?? undefined"
+    ></video>
+    } @else {
+    <span class="rv-attachment__placeholder">video</span>
+    } } @default { @if (attachment().url) {
+    <a
+      class="rv-attachment__file-link"
+      [href]="attachment().url"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Open file
+    </a>
+    } @else {
+    <span class="rv-attachment__placeholder">file</span>
+    } } }
+  </div>
+
+  <figcaption class="rv-attachment__meta">
+    <span class="rv-attachment__name">{{ attachment().name }}</span>
+    <span class="rv-attachment__detail">{{ attachment().kind }}</span>
+    @if (attachment().mimeType) {
+    <span class="rv-attachment__detail">{{ attachment().mimeType }}</span>
+    } @if (fileSizeLabel()) {
+    <span class="rv-attachment__detail">{{ fileSizeLabel() }}</span>
+    }
+  </figcaption>
+
+  @if (attachment().textPreview; as preview) {
+  <pre class="rv-attachment__text-preview">{{ preview.text }}</pre>
+  @if (preview.truncated) {
+  <span class="rv-attachment__truncated">preview truncated</span>
+  } }
+</figure>

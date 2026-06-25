@@ -32,6 +32,38 @@ export type RenderPolicy = 'full' | 'collapsed' | 'partial';
 
 export type MessageMetadata = Readonly<Record<string, unknown>>;
 
+// ---- attachments ----
+
+export type AttachmentMediaKind = 'image' | 'audio' | 'video' | 'file';
+
+export interface AttachmentTextPreview {
+  readonly text: string;
+  readonly truncated: boolean;
+  readonly language?: string;
+}
+
+export interface ChatAttachment {
+  readonly id: string;
+  readonly kind: AttachmentMediaKind;
+  readonly name: string;
+  readonly mimeType: string | undefined;
+  readonly sizeBytes: number | undefined;
+  readonly url: string | undefined;
+  readonly thumbnailUrl: string | undefined;
+  readonly textPreview: AttachmentTextPreview | undefined;
+  readonly scopeId: string | undefined;
+  readonly metadata?: MessageMetadata;
+}
+
+export interface ChatAttachmentScope {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly accept?: string;
+  readonly multiple?: boolean;
+  readonly metadata?: MessageMetadata;
+}
+
 /** Lifecycle status of a tool-call or command block. */
 export type ToolBlockStatus = 'started' | 'running' | 'completed' | 'failed';
 
@@ -64,6 +96,7 @@ export interface MessageBlock {
   readonly renderPolicy: RenderPolicy;
   /** Present for `tool_call` / `command` blocks; absent for text blocks. */
   readonly tool?: ToolBlockMeta;
+  readonly attachment?: ChatAttachment;
   readonly metadata?: MessageMetadata;
 }
 

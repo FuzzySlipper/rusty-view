@@ -1,11 +1,16 @@
 import { TestBed } from '@angular/core/testing';
+import type { ChatAttachmentScope } from '@rusty-view/chat-domain';
 import { vi } from 'vitest';
 import { MessageInputComponent } from './message-input';
 
 describe('MessageInputComponent', () => {
   const mockCommands = [
     { name: 'new', description: 'Create a new session' },
-    { name: 'status', description: 'Show session status', args_schema: { detailed: 'boolean' } },
+    {
+      name: 'status',
+      description: 'Show session status',
+      args_schema: { detailed: 'boolean' },
+    },
     { name: 'help', description: 'Show help' },
     { name: 'reload-mcp', description: 'Reload MCP tools' },
     { name: 'reset', description: 'Reset session state' },
@@ -57,8 +62,12 @@ describe('MessageInputComponent', () => {
       fixture.detectChanges();
 
       expect(component['filteredCommands']()).toHaveLength(2); // reload-mcp, reset
-      expect(component['filteredCommands']().map(c => c.name)).toContain('reload-mcp');
-      expect(component['filteredCommands']().map(c => c.name)).toContain('reset');
+      expect(component['filteredCommands']().map((c) => c.name)).toContain(
+        'reload-mcp',
+      );
+      expect(component['filteredCommands']().map((c) => c.name)).toContain(
+        'reset',
+      );
     });
 
     it('should be case-insensitive', () => {
@@ -106,7 +115,9 @@ describe('MessageInputComponent', () => {
       textarea.dispatchEvent(new Event('input'));
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.querySelector('.rv-input__hints')).toBeTruthy();
+      expect(
+        fixture.nativeElement.querySelector('.rv-input__hints'),
+      ).toBeTruthy();
     });
 
     it('should close hint menu when text no longer starts with /', () => {
@@ -119,13 +130,17 @@ describe('MessageInputComponent', () => {
       textarea.dispatchEvent(new Event('input'));
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.querySelector('.rv-input__hints')).toBeTruthy();
+      expect(
+        fixture.nativeElement.querySelector('.rv-input__hints'),
+      ).toBeTruthy();
 
       textarea.value = 'hello';
       textarea.dispatchEvent(new Event('input'));
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.querySelector('.rv-input__hints')).toBeFalsy();
+      expect(
+        fixture.nativeElement.querySelector('.rv-input__hints'),
+      ).toBeFalsy();
     });
 
     it('should close hint menu when no commands match', () => {
@@ -138,7 +153,9 @@ describe('MessageInputComponent', () => {
       textarea.dispatchEvent(new Event('input'));
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.querySelector('.rv-input__hints')).toBeFalsy();
+      expect(
+        fixture.nativeElement.querySelector('.rv-input__hints'),
+      ).toBeFalsy();
     });
   });
 
@@ -156,11 +173,15 @@ describe('MessageInputComponent', () => {
 
       expect(component['hintIndex']()).toBe(0);
 
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
       expect(component['hintIndex']()).toBe(1);
 
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
       expect(component['hintIndex']()).toBe(2);
     });
@@ -196,7 +217,9 @@ describe('MessageInputComponent', () => {
 
       component['hintIndex'].set(mockCommands.length - 1);
 
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
       expect(component['hintIndex']()).toBe(0);
     });
@@ -446,7 +469,9 @@ describe('MessageInputComponent', () => {
       const textarea = fixture.nativeElement.querySelector('textarea');
       // Navigate all the way to oldest.
       for (let i = 0; i < history.length; i++) {
-        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+        textarea.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowUp' }),
+        );
       }
       fixture.detectChanges();
 
@@ -466,10 +491,14 @@ describe('MessageInputComponent', () => {
       const textarea = fixture.nativeElement.querySelector('textarea');
       // Go up to oldest.
       for (let i = 0; i < history.length; i++) {
-        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+        textarea.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowUp' }),
+        );
       }
       // Come back down one.
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
 
       expect(component['text']()).toBe('/status');
@@ -494,7 +523,9 @@ describe('MessageInputComponent', () => {
       expect(component['text']()).toBe('/new');
 
       // Exit past newest.
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
       expect(component['text']()).toBe('/draft');
       expect(component['historyIndex']()).toBeNull();
@@ -517,7 +548,9 @@ describe('MessageInputComponent', () => {
       expect(component['text']()).toBe('/new');
 
       // Exit history by navigating past newest.
-      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
       expect(component['text']()).toBe('/draft text');
     });
@@ -609,6 +642,118 @@ describe('MessageInputComponent', () => {
       component['submit']();
       fixture.detectChanges();
       expect(component['historyIndex']()).toBeNull();
+    });
+  });
+
+  describe('Attachments', () => {
+    const scopes: readonly ChatAttachmentScope[] = [
+      {
+        id: 'session-files',
+        label: 'Session files',
+        accept: 'text/*',
+        multiple: false,
+      },
+    ];
+
+    it('emits file picker attachments with scope metadata and text preview', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const selectedSpy = vi.fn();
+      component.attachmentsSelected.subscribe(selectedSpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.componentRef.setInput('attachmentScopes', scopes);
+      fixture.detectChanges();
+
+      const file = new File(['hello world'], 'note.txt', {
+        type: 'text/plain',
+      });
+      const target = { files: [file], value: 'note.txt' };
+      await component['onFileInput']({ target } as unknown as Event);
+      fixture.detectChanges();
+
+      expect(selectedSpy).toHaveBeenCalledTimes(1);
+      const selection = selectedSpy.mock.calls[0]?.[0]?.[0];
+      expect(selection).toBeDefined();
+      if (selection === undefined) return;
+      expect(selection.file).toBe(file);
+      expect(selection.source).toBe('picker');
+      expect(selection.scope).toEqual(scopes[0]);
+      expect(selection.attachment.kind).toBe('file');
+      expect(selection.attachment.scopeId).toBe('session-files');
+      expect(selection.attachment.textPreview?.text).toBe('hello world');
+      expect(component['attachments']()).toHaveLength(1);
+      expect(target.value).toBe('');
+    });
+
+    it('uses paste files as attachments when attachments are enabled', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const selectedSpy = vi.fn();
+      component.attachmentsSelected.subscribe(selectedSpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.detectChanges();
+
+      const file = new File(['pixels'], 'clip.png', { type: 'image/png' });
+      await component['onPaste']({
+        clipboardData: { files: [file] },
+      } as unknown as ClipboardEvent);
+
+      const selection = selectedSpy.mock.calls[0]?.[0]?.[0];
+      expect(selection).toBeDefined();
+      if (selection === undefined) return;
+      expect(selection.source).toBe('paste');
+      expect(selection.attachment.kind).toBe('image');
+      expect(selection.attachment.textPreview).toBeUndefined();
+    });
+
+    it('uses dropped files as attachments and clears drag state', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const selectedSpy = vi.fn();
+      const preventDefault = vi.fn();
+      component.attachmentsSelected.subscribe(selectedSpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.detectChanges();
+
+      component['dragActive'].set(true);
+      const file = new File(['audio'], 'voice.mp3', { type: 'audio/mpeg' });
+      await component['onDrop']({
+        preventDefault,
+        dataTransfer: { files: [file] },
+      } as unknown as DragEvent);
+
+      const selection = selectedSpy.mock.calls[0]?.[0]?.[0];
+      expect(selection).toBeDefined();
+      if (selection === undefined) return;
+      expect(preventDefault).toHaveBeenCalled();
+      expect(selection.source).toBe('drop');
+      expect(selection.attachment.kind).toBe('audio');
+      expect(component['dragActive']()).toBe(false);
+    });
+
+    it('removes selected attachment chips', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const removedSpy = vi.fn();
+      component.attachmentRemoved.subscribe(removedSpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.detectChanges();
+
+      const file = new File(['data'], 'data.json', {
+        type: 'application/json',
+      });
+      await component['onPaste']({
+        clipboardData: { files: [file] },
+      } as unknown as ClipboardEvent);
+      const selection = component['attachments']()[0];
+      expect(selection).toBeDefined();
+
+      if (selection !== undefined) {
+        component['removeAttachment'](selection);
+      }
+
+      expect(component['attachments']()).toHaveLength(0);
+      expect(removedSpy).toHaveBeenCalledWith(selection);
     });
   });
 });

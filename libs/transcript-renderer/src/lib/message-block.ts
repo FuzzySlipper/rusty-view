@@ -10,6 +10,7 @@ import {
 import { NgComponentOutlet } from '@angular/common';
 import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
 
+import { AttachmentBlockComponent } from './attachment-block';
 import { WorkerManager } from './worker-manager';
 import {
   TRANSCRIPT_TEXT_RENDER_MODE,
@@ -25,9 +26,38 @@ type ResolvedTextRenderMode = 'raw' | FormattedTextRenderMode;
 
 const HTML_VOID_TAGS = new Set(['br', 'hr', 'img']);
 const AUTO_HTML_TAGS = new Set([
-  'p', 'br', 'b', 'i', 'em', 'strong', 'code', 'pre', 'kbd', 's', 'del',
-  'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr',
-  'a', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption',
+  'p',
+  'br',
+  'b',
+  'i',
+  'em',
+  'strong',
+  'code',
+  'pre',
+  'kbd',
+  's',
+  'del',
+  'ul',
+  'ol',
+  'li',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'blockquote',
+  'hr',
+  'a',
+  'span',
+  'div',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+  'caption',
   'img',
 ]);
 
@@ -60,7 +90,7 @@ const AUTO_HTML_TAGS = new Set([
  */
 @Component({
   selector: 'rv-message-block',
-  imports: [NgComponentOutlet],
+  imports: [NgComponentOutlet, AttachmentBlockComponent],
   templateUrl: './message-block.html',
   styleUrl: './message-block.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -85,8 +115,8 @@ export class MessageBlockComponent {
   protected readonly renderedHtml = signal<string>('');
 
   /** Effective render mode: global mode unless per-block raw is toggled. */
-  protected readonly effectiveRenderMode = computed<TextRenderMode>(
-    () => (this.showRaw() ? 'raw' : this.renderMode()),
+  protected readonly effectiveRenderMode = computed<TextRenderMode>(() =>
+    this.showRaw() ? 'raw' : this.renderMode(),
   );
 
   /** Whether this text block should render formatted content. */
@@ -114,8 +144,7 @@ export class MessageBlockComponent {
       .filter((renderer) => renderer.type === context.block.kind)
       .sort(
         (a, b) =>
-          (a.order ?? 100) - (b.order ?? 100) ||
-          a.type.localeCompare(b.type),
+          (a.order ?? 100) - (b.order ?? 100) || a.type.localeCompare(b.type),
       )
       .find((renderer) => renderer.canRender?.(context) ?? true);
   });
@@ -132,13 +161,19 @@ export class MessageBlockComponent {
   /** Tool/command metadata, when this block represents inline tool activity. */
   protected readonly tool = computed(() => this.block().tool);
 
+  /** Attachment metadata, when this block represents an inline uploaded file. */
+  protected readonly attachment = computed(() => this.block().attachment);
+
   /** Whether the tool block has expandable detail (result / reason). */
   protected readonly hasDetail = computed(
     () => this.block().content.length > 0,
   );
 
   protected readonly isCollapsible = computed(
-    () => this.customRenderer() === undefined && this.block().kind !== 'text',
+    () =>
+      this.customRenderer() === undefined &&
+      this.attachment() === undefined &&
+      this.block().kind !== 'text',
   );
 
   protected readonly displayContent = computed(() => {
@@ -165,7 +200,11 @@ export class MessageBlockComponent {
     // render (or clear) formatted content accordingly.
     effect(() => {
       const block = this.block();
-      if (this.customRenderer() !== undefined || block.kind !== 'text') {
+      if (
+        this.customRenderer() !== undefined ||
+        block.attachment !== undefined ||
+        block.kind !== 'text'
+      ) {
         this.renderedHtml.set('');
         return;
       }
