@@ -30,6 +30,8 @@ export type MessageBlockKind = KnownMessageBlockKind | (string & {});
 
 export type RenderPolicy = 'full' | 'collapsed' | 'partial';
 
+export type MessageMetadata = Readonly<Record<string, unknown>>;
+
 /** Lifecycle status of a tool-call or command block. */
 export type ToolBlockStatus = 'started' | 'running' | 'completed' | 'failed';
 
@@ -62,6 +64,7 @@ export interface MessageBlock {
   readonly renderPolicy: RenderPolicy;
   /** Present for `tool_call` / `command` blocks; absent for text blocks. */
   readonly tool?: ToolBlockMeta;
+  readonly metadata?: MessageMetadata;
 }
 
 // ---- messages ----
@@ -75,6 +78,41 @@ export interface ChatMessage {
   readonly createdAt: string;
   readonly status: MessageStatus;
   readonly blocks: readonly MessageBlock[];
+  readonly metadata?: MessageMetadata;
+}
+
+// ---- message alternates ----
+
+export type MessageVariantSource = 'primary' | 'alternate';
+
+/**
+ * One complete renderable variant for a stable transcript slot.
+ *
+ * Variants intentionally carry a full ChatMessage rather than only replacement
+ * text. That preserves message metadata, block boundaries, block metadata, and
+ * mixed text/tool/debug content for every alternate.
+ */
+export interface MessageVariant {
+  readonly id: string;
+  readonly slotId: string;
+  readonly source: MessageVariantSource;
+  readonly ordinal: number;
+  readonly message: ChatMessage;
+  readonly metadata?: MessageMetadata;
+}
+
+/**
+ * Stable transcript position with one primary message and zero or more ordered
+ * alternates. A renderer can track `id` for virtualization/scroll anchoring
+ * while swapping the active variant locally.
+ */
+export interface MessageAlternateSlot {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly primary: MessageVariant;
+  readonly alternates: readonly MessageVariant[];
+  readonly activeVariantId: string | undefined;
+  readonly metadata?: MessageMetadata;
 }
 
 // ---- tool calls ----

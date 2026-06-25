@@ -14,6 +14,15 @@
 export { projectConversation } from './lib/conversation-projection';
 export { emptyProjection } from './lib/domain-types';
 export { projectProfile, projectProfiles } from './lib/brain-profile';
+export {
+  activeMessageForSlot,
+  activeMessageVariant,
+  findMessageVariant,
+  messageAlternateSlot,
+  orderedMessageVariants,
+  primaryMessageVariant,
+  withActiveMessageVariant,
+} from './lib/message-alternates';
 
 export type {
   MessageRole,
@@ -21,11 +30,15 @@ export type {
   KnownMessageBlockKind,
   MessageBlockKind,
   RenderPolicy,
+  MessageMetadata,
   ToolBlockStatus,
   ToolBlockMeta,
   MessageBlock,
   MessageStatus,
   ChatMessage,
+  MessageVariantSource,
+  MessageVariant,
+  MessageAlternateSlot,
   ToolCallStatus,
   ToolCallProjection,
   CommandStatus,
@@ -36,6 +49,7 @@ export type {
   StreamErrorState,
   ConversationProjection,
 } from './lib/domain-types';
+export type { MessageAlternateSlotOptions } from './lib/message-alternates';
 
 export type {
   ChatStorageAdapter,
