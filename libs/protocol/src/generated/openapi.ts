@@ -286,6 +286,7 @@ export interface components {
             allowed_session_kinds?: ("full" | "worker" | "delegated")[];
             /** @default false */
             requires_control_auth: boolean;
+            backing_control_command?: string;
         };
         ExecuteChatCommandRequest: {
             /** @description Raw slash command text such as /status or /new fresh start. */
@@ -423,7 +424,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description SSE stream of ChatEvent objects. Each SSE event uses ChatEvent.event_id as the SSE id. */
+            /** @description SSE stream of ChatEvent objects. Each SSE event uses ChatEvent.event_id as the SSE id. Assistant text deltas and tool lifecycle events are flushed during an in-flight wake as the service observes them; default tool payloads remain browser-safe and do not include raw arguments or results. */
             200: {
                 headers: {
                     [name: string]: unknown;
