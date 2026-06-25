@@ -44,6 +44,7 @@ Existing docs in this directory that informed this design:
 | `08-message-alternates.md` | Generic message slot/variant primitive and backend storage/API gaps |
 | `09-conversation-tree-navigation.md` | Generic branch/snapshot navigation primitives and backend gaps |
 | `10-attachments-and-data-bank.md` | Generic attachment, inline media, extracted text, and reusable file-scope primitives |
+| `11-transcript-search-navigation.md` | Generic current-conversation search, result highlighting, virtual-scroll jump navigation, and backend search gaps |
 
 ## Naming
 

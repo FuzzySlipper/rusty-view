@@ -1,13 +1,24 @@
 @if (customRenderer(); as renderer) {
-<div class="rv-block rv-block--custom" [attr.data-block-kind]="block().kind">
+<div
+  class="rv-block rv-block--custom"
+  [class.rv-block--search-match]="searchMatched()"
+  [attr.data-block-kind]="block().kind"
+>
   <ng-container
     *ngComponentOutlet="renderer.component; inputs: customRendererInputs()"
   />
 </div>
 } @else if (attachment(); as attachment) {
-<rv-attachment-block [attachment]="attachment" />
+<rv-attachment-block
+  [class.rv-block--search-match]="searchMatched()"
+  [attachment]="attachment"
+/>
 } @else if (tool(); as tool) {
-<div class="rv-block rv-block--tool" [attr.data-status]="tool.status">
+<div
+  class="rv-block rv-block--tool"
+  [class.rv-block--search-match]="searchMatched()"
+  [attr.data-status]="tool.status"
+>
   <button
     type="button"
     class="rv-block__header rv-block__tool-header"
@@ -31,6 +42,7 @@
 } @else if (isCollapsible()) {
 <div
   class="rv-block rv-block--collapsible"
+  [class.rv-block--search-match]="searchMatched()"
   [class.rv-block--debug]="block().kind === 'debug'"
 >
   <button
@@ -47,11 +59,21 @@
   <pre class="rv-block__content">{{ displayContent() }}</pre>
 </div>
 } @else {
-<div class="rv-block rv-block--text">
+<div
+  class="rv-block rv-block--text"
+  [class.rv-block--search-match]="searchMatched()"
+>
   @if (shouldRenderFormatted() && renderedHtml()) {
   <div class="rv-block__markdown" [innerHTML]="renderedHtml()"></div>
   } @else {
-  <p class="rv-block__content">{{ block().content }}</p>
+  <p class="rv-block__content">
+    @for (segment of highlightedSegments(); track $index) { @if
+    (segment.matched) {
+    <mark class="rv-block__search-mark">{{ segment.text }}</mark>
+    } @else {
+    <span>{{ segment.text }}</span>
+    } }
+  </p>
   } @if (showRawToggle()) {
   <div class="rv-block__raw-toggle">
     <button

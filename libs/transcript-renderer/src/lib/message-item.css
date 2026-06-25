@@ -7,6 +7,16 @@
   border-bottom: 1px solid var(--rv-color-border);
 }
 
+.rv-message--search-match {
+  box-shadow: inset 3px 0 0 var(--rv-color-accent);
+}
+
+.rv-message--search-active {
+  background: var(--rv-color-surface-raised);
+  outline: 1px solid var(--rv-color-accent);
+  outline-offset: -1px;
+}
+
 .rv-message--user {
   background: var(--rv-color-surface);
 }

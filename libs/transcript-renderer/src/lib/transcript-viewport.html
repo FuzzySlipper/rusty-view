@@ -29,6 +29,80 @@
   </div>
   }
 </nav>
+} @if (searchEnabled()) {
+<section class="rv-transcript-search" aria-label="Conversation search">
+  <label class="rv-transcript-search__query">
+    <span class="rv-transcript-search__label">Search</span>
+    <input
+      type="search"
+      class="rv-transcript-search__input"
+      [value]="searchQuery()"
+      (input)="updateSearchQuery($event)"
+      placeholder="Find in transcript"
+    />
+  </label>
+  <select
+    class="rv-transcript-search__select"
+    [value]="searchRole()"
+    (change)="updateSearchRole($event)"
+    aria-label="Role filter"
+  >
+    <option value="all">all roles</option>
+    <option value="user">user</option>
+    <option value="assistant">assistant</option>
+    <option value="system">system</option>
+    <option value="tool">tool</option>
+  </select>
+  <input
+    type="date"
+    class="rv-transcript-search__date"
+    [value]="searchDateFrom()"
+    (input)="updateSearchDateFrom($event)"
+    aria-label="Search from date"
+  />
+  <input
+    type="date"
+    class="rv-transcript-search__date"
+    [value]="searchDateTo()"
+    (input)="updateSearchDateTo($event)"
+    aria-label="Search to date"
+  />
+  <div class="rv-transcript-search__nav" aria-live="polite">
+    <span class="rv-transcript-search__status">{{ searchStatus() }}</span>
+    <button
+      type="button"
+      class="rv-transcript-search__button"
+      [disabled]="searchResults().length === 0"
+      (click)="previousSearchResult()"
+      aria-label="Previous search result"
+    >
+      Prev
+    </button>
+    <button
+      type="button"
+      class="rv-transcript-search__button"
+      [disabled]="searchResults().length === 0"
+      (click)="nextSearchResult()"
+      aria-label="Next search result"
+    >
+      Next
+    </button>
+    <button
+      type="button"
+      class="rv-transcript-search__button"
+      [disabled]="searchQuery().length === 0 && searchRole() === 'all' && searchDateFrom().length === 0 && searchDateTo().length === 0"
+      (click)="clearSearch()"
+      aria-label="Clear search"
+    >
+      Clear
+    </button>
+  </div>
+  @if (activeSearchSnippet()) {
+  <div class="rv-transcript-search__snippet" [title]="activeSearchSnippet()">
+    {{ activeSearchSnippet() }}
+  </div>
+  }
+</section>
 }
 
 <cdk-virtual-scroll-viewport
@@ -40,6 +114,12 @@
     *cdkVirtualFor="let message of renderMessages(); trackBy: trackByMessageId"
     class="rv-transcript__item"
   >
-    <rv-message-item [message]="message" />
+    <rv-message-item
+      [message]="message"
+      [searchQuery]="searchQuery()"
+      [matchedBlockIds]="matchedBlocksFor(message.id)"
+      [searchMatched]="matchedMessageIds().has(message.id)"
+      [searchActive]="activeSearchMessageId() === message.id"
+    />
   </div>
 </cdk-virtual-scroll-viewport>

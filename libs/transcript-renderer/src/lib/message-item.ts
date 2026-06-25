@@ -29,6 +29,10 @@ export class MessageItemComponent {
   private readonly decorators = inject(CHAT_MESSAGE_DECORATORS);
 
   readonly message = input.required<ChatMessage>();
+  readonly searchQuery = input<string>('');
+  readonly matchedBlockIds = input<ReadonlySet<string>>(new Set<string>());
+  readonly searchMatched = input<boolean>(false);
+  readonly searchActive = input<boolean>(false);
 
   protected readonly decoration = computed<ChatMessageDecoration>(() => {
     const message = this.message();

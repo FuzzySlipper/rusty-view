@@ -106,6 +106,8 @@ export class MessageBlockComponent {
   readonly collapsedThreshold = input<number>(500);
   /** Content length above which markdown/HTML processing goes to the worker. */
   readonly workerThreshold = input<number>(2_000);
+  readonly searchQuery = input<string>('');
+  readonly searchMatched = input<boolean>(false);
 
   protected readonly expanded = signal(false);
   /** Per-block override: when true, show raw text regardless of global mode. */
@@ -131,6 +133,23 @@ export class MessageBlockComponent {
         this.showRaw() ||
         this.renderedHtml() !== ''),
   );
+
+  protected readonly highlightedSegments = computed(() => {
+    const query = this.searchQuery().trim();
+    const content = this.block().content;
+    if (query.length === 0 || content.length === 0) {
+      return [{ text: content, matched: false }];
+    }
+
+    const index = content.toLowerCase().indexOf(query.toLowerCase());
+    if (index < 0) return [{ text: content, matched: false }];
+
+    return [
+      { text: content.slice(0, index), matched: false },
+      { text: content.slice(index, index + query.length), matched: true },
+      { text: content.slice(index + query.length), matched: false },
+    ].filter((segment) => segment.text.length > 0);
+  });
 
   protected readonly renderContext = computed<ChatContentRenderContext>(() => ({
     message: this.message(),

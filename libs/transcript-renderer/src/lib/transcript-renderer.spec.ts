@@ -107,6 +107,20 @@ describe('MessageBlockComponent', () => {
     expect(host.querySelector('.rv-block--text')).not.toBeNull();
   });
 
+  it('marks raw text search matches without using innerHTML', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'Find the brass key.' }),
+    );
+    fixture.componentRef.setInput('searchQuery', 'brass');
+    fixture.componentRef.setInput('searchMatched', true);
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const mark = host.querySelector('.rv-block__search-mark');
+    expect(host.querySelector('.rv-block--search-match')).not.toBeNull();
+    expect(mark?.textContent).toBe('brass');
+  });
+
   it('renders tool_call blocks as collapsible', async () => {
     const fixture = await createBlock(
       makeBlock({
@@ -330,6 +344,26 @@ describe('MessageItemComponent', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('Narrator');
     expect(host.textContent).toContain('The door creaks.');
+  });
+
+  it('adds search match and active classes to messages', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        blocks: [makeBlock({ id: 'b1', content: 'Search target' })],
+      }),
+    );
+    fixture.componentRef.setInput('searchQuery', 'target');
+    fixture.componentRef.setInput('matchedBlockIds', new Set(['b1']));
+    fixture.componentRef.setInput('searchMatched', true);
+    fixture.componentRef.setInput('searchActive', true);
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-message--search-match')).not.toBeNull();
+    expect(host.querySelector('.rv-message--search-active')).not.toBeNull();
+    expect(host.querySelector('.rv-block__search-mark')?.textContent).toBe(
+      'target',
+    );
   });
 
   it('uses role as author label when no display name', async () => {

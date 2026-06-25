@@ -6,6 +6,17 @@
   margin: var(--rv-space-xs) 0;
 }
 
+.rv-block--search-match {
+  border-left: 2px solid var(--rv-color-accent);
+  padding-left: var(--rv-space-sm);
+}
+
+.rv-block__search-mark {
+  border-radius: 2px;
+  background: var(--rv-color-warning);
+  color: var(--rv-color-bg);
+}
+
 .rv-block__content {
   margin: 0;
   white-space: pre-wrap;

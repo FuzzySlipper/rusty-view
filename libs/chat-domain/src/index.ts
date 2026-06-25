@@ -20,6 +20,7 @@ export {
   messageJumpTarget,
   snapshotJumpTarget,
 } from './lib/conversation-navigation';
+export { searchConversationMessages } from './lib/conversation-search';
 export { attachmentKindForMimeType } from './lib/attachments';
 export {
   activeMessageForSlot,
@@ -67,6 +68,10 @@ export type {
   ConversationNavigationTarget,
   ConversationNavigationTargetKind,
 } from './lib/conversation-navigation';
+export type {
+  ConversationSearchFilters,
+  ConversationSearchResult,
+} from './lib/conversation-search';
 export type { MessageAlternateSlotOptions } from './lib/message-alternates';
 
 export type {

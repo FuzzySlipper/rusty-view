@@ -16,18 +16,22 @@ import {
   ScrollingModule,
 } from '@angular/cdk/scrolling';
 import { ScrollingModule as ExperimentalScrollingModule } from '@angular/cdk-experimental/scrolling';
-import type { ChatMessage } from '@rusty-view/chat-domain';
+import type { ChatMessage, MessageRole } from '@rusty-view/chat-domain';
 import {
   branchBreadcrumbs as buildBranchBreadcrumbs,
   branchJumpTarget,
+  searchConversationMessages,
   snapshotJumpTarget,
   type ConversationBranch,
   type ConversationBranchBreadcrumb,
   type ConversationNavigationTarget,
+  type ConversationSearchFilters,
   type ConversationSnapshot,
 } from '@rusty-view/chat-domain';
 
 import { MessageItemComponent } from './message-item';
+
+const EMPTY_BLOCK_SET = new Set<string>();
 
 /**
  * Virtualized transcript viewport.
@@ -76,6 +80,9 @@ export class TranscriptViewportComponent {
   /** Set to a message ID to jump-scroll to that message. */
   readonly targetMessageId = input<string | undefined>(undefined);
 
+  /** Shows the generic current-conversation search toolbar. */
+  readonly searchEnabled = input<boolean>(true);
+
   /** Branches available for optional breadcrumb navigation. */
   readonly branches = input<readonly ConversationBranch[]>([]);
 
@@ -113,6 +120,11 @@ export class TranscriptViewportComponent {
    * the viewport has a real size, then keep it in sync with the input.
    */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
+  protected readonly searchQuery = signal('');
+  protected readonly searchRole = signal<MessageRole | 'all'>('all');
+  protected readonly searchDateFrom = signal('');
+  protected readonly searchDateTo = signal('');
+  protected readonly activeSearchIndex = signal(0);
 
   protected readonly branchBreadcrumbs = computed<
     readonly ConversationBranchBreadcrumb[]
@@ -130,6 +142,61 @@ export class TranscriptViewportComponent {
     return (
       this.branchBreadcrumbs().length > 0 || this.snapshotTargets().length > 0
     );
+  });
+
+  protected readonly searchFilters = computed<ConversationSearchFilters>(() => {
+    const role = this.searchRole();
+    return {
+      roles: role === 'all' ? [] : [role],
+      dateFrom: this.searchDateFrom(),
+      dateTo: this.searchDateTo(),
+    };
+  });
+
+  protected readonly searchResults = computed(() =>
+    searchConversationMessages(
+      this.renderMessages(),
+      this.searchQuery(),
+      this.searchFilters(),
+    ),
+  );
+
+  protected readonly activeSearchResult = computed(() => {
+    const results = this.searchResults();
+    if (results.length === 0) return undefined;
+    return results[Math.min(this.activeSearchIndex(), results.length - 1)];
+  });
+
+  protected readonly matchedMessageIds = computed(() => {
+    return new Set(this.searchResults().map((result) => result.messageId));
+  });
+
+  protected readonly activeSearchMessageId = computed(
+    () => this.activeSearchResult()?.messageId,
+  );
+
+  protected readonly matchedBlockIdsByMessage = computed(() => {
+    const matches = new Map<string, Set<string>>();
+    for (const result of this.searchResults()) {
+      const blocks = matches.get(result.messageId) ?? new Set<string>();
+      blocks.add(result.blockId);
+      matches.set(result.messageId, blocks);
+    }
+    return matches;
+  });
+
+  protected readonly searchStatus = computed(() => {
+    const query = this.searchQuery().trim();
+    if (query.length === 0) return 'Search';
+    const count = this.searchResults().length;
+    if (count === 0) return 'No results';
+    return `${this.activeSearchIndex() + 1} / ${count}`;
+  });
+
+  protected readonly activeSearchSnippet = computed(() => {
+    const result = this.activeSearchResult();
+    if (result === undefined) return '';
+    return result.snippet;
   });
 
   /** True once the viewport has been sized and has received the initial data. */
@@ -197,6 +264,25 @@ export class TranscriptViewportComponent {
       if (targetId === undefined) return;
       this.scrollToMessageId(targetId);
     });
+
+    effect(() => {
+      const results = this.searchResults();
+      if (results.length === 0) {
+        this.activeSearchIndex.set(0);
+        return;
+      }
+      if (this.activeSearchIndex() >= results.length) {
+        this.activeSearchIndex.set(results.length - 1);
+      }
+    });
+
+    effect(() => {
+      const result = this.activeSearchResult();
+      if (result === undefined || this.searchQuery().trim().length === 0) {
+        return;
+      }
+      this.scrollToMessageId(result.messageId);
+    });
   }
 
   /** trackBy for *cdkVirtualFor: stable identity keeps streaming deltas from
@@ -229,6 +315,54 @@ export class TranscriptViewportComponent {
         this.scrollToIndex(index);
       });
     }
+  }
+
+  protected updateSearchQuery(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.searchQuery.set(target.value);
+    this.activeSearchIndex.set(0);
+  }
+
+  protected updateSearchRole(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    this.searchRole.set((target.value as MessageRole | 'all') || 'all');
+    this.activeSearchIndex.set(0);
+  }
+
+  protected updateSearchDateFrom(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.searchDateFrom.set(target.value);
+    this.activeSearchIndex.set(0);
+  }
+
+  protected updateSearchDateTo(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.searchDateTo.set(target.value);
+    this.activeSearchIndex.set(0);
+  }
+
+  protected clearSearch(): void {
+    this.searchQuery.set('');
+    this.searchRole.set('all');
+    this.searchDateFrom.set('');
+    this.searchDateTo.set('');
+    this.activeSearchIndex.set(0);
+  }
+
+  protected previousSearchResult(): void {
+    const count = this.searchResults().length;
+    if (count === 0) return;
+    this.activeSearchIndex.update((index) => (index - 1 + count) % count);
+  }
+
+  protected nextSearchResult(): void {
+    const count = this.searchResults().length;
+    if (count === 0) return;
+    this.activeSearchIndex.update((index) => (index + 1) % count);
+  }
+
+  protected matchedBlocksFor(messageId: string): ReadonlySet<string> {
+    return this.matchedBlockIdsByMessage().get(messageId) ?? EMPTY_BLOCK_SET;
   }
 
   protected jumpToBranch(crumb: ConversationBranchBreadcrumb): void {

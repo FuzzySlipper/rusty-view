@@ -2,6 +2,8 @@
   class="rv-message"
   [class]="roleClass()"
   [class.rv-message--decorated]="decoration().className !== undefined"
+  [class.rv-message--search-match]="searchMatched()"
+  [class.rv-message--search-active]="searchActive()"
 >
   <header class="rv-message__header">
     <span class="rv-message__author">{{ authorLabel() }}</span>
@@ -16,7 +18,12 @@
 
   <div class="rv-message__blocks">
     @for (block of message().blocks; track block.id) {
-    <rv-message-block [block]="block" [message]="message()" />
+    <rv-message-block
+      [block]="block"
+      [message]="message()"
+      [searchQuery]="searchQuery()"
+      [searchMatched]="matchedBlockIds().has(block.id)"
+    />
     }
   </div>
 
