@@ -252,8 +252,13 @@ export class ChatTheme {
 function normalizeTextRenderMode(
   mode: TextRenderMode | undefined,
 ): TextRenderMode {
-  if (mode === 'raw' || mode === 'markdown' || mode === 'sanitized-html') {
+  if (
+    mode === 'auto' ||
+    mode === 'raw' ||
+    mode === 'markdown' ||
+    mode === 'sanitized-html'
+  ) {
     return mode;
   }
-  return 'markdown';
+  return 'auto';
 }

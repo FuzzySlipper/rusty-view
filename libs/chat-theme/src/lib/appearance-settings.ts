@@ -50,7 +50,7 @@ export interface AppearanceColors {
 /**
  * How text blocks in the transcript are rendered. See {@link AppearanceSettings.textRenderMode}.
  */
-export type TextRenderMode = 'raw' | 'markdown' | 'sanitized-html';
+export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
 
 /**
  * Complete appearance preferences. Stored verbatim via the settings storage
@@ -67,9 +67,10 @@ export interface AppearanceSettings {
   readonly density: AppearanceDensity;
   readonly colors: AppearanceColors;
   /**
-   * How chat message text is rendered: `raw` (plain text), `markdown`
-   * (formatted Markdown), or `sanitized-html` (inline HTML with sanitization).
-   * Users can also toggle individual blocks to raw via a per-block control.
+   * How chat message text is rendered: `auto` (detect Markdown/HTML per block),
+   * `raw` (plain text), `markdown` (formatted Markdown), or `sanitized-html`
+   * (inline HTML with sanitization). Users can also toggle individual blocks
+   * to raw via a per-block control.
    */
   readonly textRenderMode: TextRenderMode;
 }
@@ -114,7 +115,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   fontScale: 1,
   density: 'normal',
   colors: {},
-  textRenderMode: 'markdown',
+  textRenderMode: 'auto',
 };
 
 /** Clamp a font scale into the allowed range and round to a sane precision. */

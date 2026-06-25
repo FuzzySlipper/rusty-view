@@ -311,6 +311,64 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(host.textContent).toContain('safe');
   });
 
+  it('auto mode renders balanced sanitized HTML', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '<p>Hello <b>world</b></p>' }),
+      'auto',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
+    expect(host.innerHTML).toContain('<b>world</b>');
+  });
+
+  it('auto mode renders meaningful markdown', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '## Heading\n\n**bold**' }),
+      'auto',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
+    expect(host.innerHTML).toContain('<h2>Heading</h2>');
+    expect(host.innerHTML).toContain('<strong>bold</strong>');
+  });
+
+  it('auto mode leaves plain text raw', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'Just a normal chat message.' }),
+      'auto',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+    expect(host.querySelector('.rv-block__raw-button')).toBeNull();
+    expect(host.textContent).toContain('Just a normal chat message.');
+  });
+
+  it('auto mode leaves partial HTML raw until it is balanced', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '<div>partial' }),
+      'auto',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+    expect(host.textContent).toContain('<div>partial');
+  });
+
   it('raw text is always available and copyable', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: 'Some text content' }),

@@ -3,6 +3,8 @@ import { InjectionToken, signal, type Signal } from '@angular/core';
 /**
  * How text blocks in the transcript are rendered.
  *
+ * - `auto` — detect meaningful Markdown or sanitized HTML per text block;
+ *   plain chat text stays raw.
  * - `raw` — plain text, no formatting. Always available as a safe fallback.
  * - `markdown` — content parsed as Markdown → HTML (task #3259). Safe: all
  *   content is HTML-escaped before parsing; link URLs are protocol-validated.
@@ -15,13 +17,13 @@ import { InjectionToken, signal, type Signal } from '@angular/core';
  * {@link MessageBlockComponent} override to `raw` so users can always recover
  * to plain text when rendering is wrong, slow, or visually confusing.
  */
-export type TextRenderMode = 'raw' | 'markdown' | 'sanitized-html';
+export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
 
 /**
  * DI token for the global text render mode preference.
  *
  * Provides a readonly signal of {@link TextRenderMode}. The default is
- * `markdown`. The transcript-renderer is roleplay-agnostic and does not depend
+ * `auto`. The transcript-renderer is roleplay-agnostic and does not depend
  * on `@rusty-view/chat-theme`; the shell overrides this token with a computed
  * signal sourced from its appearance settings so live changes propagate
  * immediately.
@@ -38,7 +40,7 @@ export const TRANSCRIPT_TEXT_RENDER_MODE = new InjectionToken<Signal<TextRenderM
   'TRANSCRIPT_TEXT_RENDER_MODE',
   {
     providedIn: 'root',
-    factory: (): Signal<TextRenderMode> => signal('markdown'),
+    factory: (): Signal<TextRenderMode> => signal('auto'),
   },
 );
 

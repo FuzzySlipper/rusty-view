@@ -96,9 +96,9 @@ describe('ChatTheme', () => {
     expect(theme.settings().colors.accent).toBe('#bbbbbb');
   });
 
-  it('default textRenderMode is markdown', () => {
+  it('default textRenderMode is auto', () => {
     const theme = TestBed.inject(ChatTheme);
-    expect(theme.settings().textRenderMode).toBe('markdown');
+    expect(theme.settings().textRenderMode).toBe('auto');
   });
 
   it('toggles textRenderMode and persists', async () => {
@@ -112,12 +112,15 @@ describe('ChatTheme', () => {
     // Toggle to sanitized-html.
     await theme.update({ textRenderMode: 'sanitized-html' });
     expect(theme.settings().textRenderMode).toBe('sanitized-html');
+
+    await theme.update({ textRenderMode: 'auto' });
+    expect(theme.settings().textRenderMode).toBe('auto');
   });
 
-  it('reset restores textRenderMode to default markdown', async () => {
+  it('reset restores textRenderMode to default auto', async () => {
     const theme = TestBed.inject(ChatTheme);
     await theme.update({ textRenderMode: 'raw' });
     await theme.reset();
-    expect(theme.settings().textRenderMode).toBe('markdown');
+    expect(theme.settings().textRenderMode).toBe('auto');
   });
 });

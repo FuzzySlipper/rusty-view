@@ -15,13 +15,25 @@ import {
   type TextRenderMode,
 } from './render-mode-token';
 
+type FormattedTextRenderMode = 'markdown' | 'sanitized-html';
+type ResolvedTextRenderMode = 'raw' | FormattedTextRenderMode;
+
+const HTML_VOID_TAGS = new Set(['br', 'hr', 'img']);
+const AUTO_HTML_TAGS = new Set([
+  'p', 'br', 'b', 'i', 'em', 'strong', 'code', 'pre', 'kbd', 's', 'del',
+  'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr',
+  'a', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption',
+  'img',
+]);
+
 /**
  * Renders a single {@link MessageBlock} by kind.
  *
  * - text → rendered according to the global {@link TextRenderMode}:
- *   `markdown` (worker-parsed), `sanitized-html` (pre-sanitized then Angular
- *   `[innerHTML]`), or `raw` (plain text). A per-block raw toggle overrides
- *   to raw so users can always recover.
+ *   `auto` (detect Markdown/HTML per block), `markdown` (worker-parsed),
+ *   `sanitized-html` (pre-sanitized then Angular `[innerHTML]`), or `raw`
+ *   (plain text). A per-block raw toggle overrides to raw so users can always
+ *   recover.
  * - tool_call / tool_result / debug / command → collapsible panel
  *
  * Large blocks render the first N lines with an expand toggle. Text blocks use
@@ -30,6 +42,7 @@ import {
  * with very long messages.
  *
  * **Render modes** (task #3260):
+ * - `auto` — detect meaningful Markdown or sanitized HTML; otherwise raw.
  * - `raw` — plain text, no formatting. Always available as fallback.
  * - `markdown` — content parsed as Markdown → safe HTML.
  * - `sanitized-html` — content treated as inline HTML, pre-sanitized (strips
@@ -70,6 +83,14 @@ export class MessageBlockComponent {
   /** Whether this text block should render formatted content. */
   protected readonly shouldRenderFormatted = computed(
     () => this.effectiveRenderMode() !== 'raw',
+  );
+
+  protected readonly showRawToggle = computed(
+    () =>
+      this.renderMode() !== 'raw' &&
+      (this.renderMode() !== 'auto' ||
+        this.showRaw() ||
+        this.renderedHtml() !== ''),
   );
 
   /** Tool/command metadata, when this block represents inline tool activity. */
@@ -118,7 +139,12 @@ export class MessageBlockComponent {
         return;
       }
       const content = block.content;
-      void this.renderFormatted(content, mode);
+      const resolvedMode = this.resolveTextRenderMode(content, mode);
+      if (resolvedMode === 'raw') {
+        this.renderedHtml.set('');
+        return;
+      }
+      void this.renderFormatted(content, resolvedMode, mode);
     });
   }
 
@@ -132,7 +158,8 @@ export class MessageBlockComponent {
 
   private async renderFormatted(
     content: string,
-    mode: TextRenderMode,
+    mode: FormattedTextRenderMode,
+    expectedMode: TextRenderMode,
   ): Promise<void> {
     const html =
       mode === 'sanitized-html'
@@ -142,9 +169,67 @@ export class MessageBlockComponent {
     // AND the render mode is still active.
     if (
       this.block().content === content &&
-      this.effectiveRenderMode() === mode
+      this.effectiveRenderMode() === expectedMode &&
+      this.resolveTextRenderMode(content, expectedMode) === mode
     ) {
       this.renderedHtml.set(html);
     }
   }
+
+  private resolveTextRenderMode(
+    content: string,
+    mode: TextRenderMode,
+  ): ResolvedTextRenderMode {
+    if (mode !== 'auto') return mode;
+    if (hasBalancedAllowedHtml(content)) return 'sanitized-html';
+    if (hasMeaningfulMarkdown(content)) return 'markdown';
+    return 'raw';
+  }
+}
+
+function hasBalancedAllowedHtml(content: string): boolean {
+  const stack: string[] = [];
+  let sawAllowedTag = false;
+  let match: RegExpExecArray | null;
+  const tagRegex = /<\/?([a-zA-Z][\w:-]*)(?:\s[^<>]*)?>/g;
+
+  while ((match = tagRegex.exec(content)) !== null) {
+    const rawTag = match[1];
+    if (rawTag === undefined) continue;
+    const tag = rawTag.toLowerCase();
+    if (!AUTO_HTML_TAGS.has(tag)) continue;
+    sawAllowedTag = true;
+    if (HTML_VOID_TAGS.has(tag)) continue;
+
+    const matched = match[0];
+    if (matched.startsWith('</')) {
+      if (stack.pop() !== tag) return false;
+      continue;
+    }
+    if (matched.endsWith('/>')) continue;
+    stack.push(tag);
+  }
+
+  return sawAllowedTag && stack.length === 0;
+}
+
+function hasMeaningfulMarkdown(content: string): boolean {
+  return (
+    hasClosedCodeFence(content) ||
+    /^ {0,3}#{1,6}\s+\S/m.test(content) ||
+    /^ {0,3}>\s+\S/m.test(content) ||
+    /^ {0,3}[-*+]\s+\S/m.test(content) ||
+    /^ {0,3}\d+\.\s+\S/m.test(content) ||
+    /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/m.test(content) ||
+    /^\|.+\|\s*\n\|[\s:-]+\|/m.test(content) ||
+    /\*\*[^*\n][\s\S]*?\*\*/.test(content) ||
+    /~~[^~\n][\s\S]*?~~/.test(content) ||
+    /`[^`\n]+`/.test(content) ||
+    /\[[^\]\n]+\]\([^) \n]+(?:\s+"[^"\n]+")?\)/.test(content)
+  );
+}
+
+function hasClosedCodeFence(content: string): boolean {
+  const matches = content.match(/^ {0,3}(```|~~~)/gm);
+  return matches !== null && matches.length >= 2;
 }

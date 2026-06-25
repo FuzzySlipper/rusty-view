@@ -45,7 +45,7 @@
   } @else {
   <p class="rv-block__content">{{ block().content }}</p>
   }
-  @if (renderMode() !== 'raw') {
+  @if (showRawToggle()) {
   <div class="rv-block__raw-toggle">
     <button
       type="button"

@@ -68,6 +68,14 @@
       <button
         type="button"
         class="rv-appearance__seg"
+        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'auto'"
+        (click)="setTextRenderMode('auto')"
+      >
+        Auto
+      </button>
+      <button
+        type="button"
+        class="rv-appearance__seg"
         [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'markdown'"
         (click)="setTextRenderMode('markdown')"
       >
