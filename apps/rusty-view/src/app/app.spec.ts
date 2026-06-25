@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 
 import { ChatTransport } from '@rusty-view/transport';
 import {
+  AdminStore,
   ChatStore,
   CHAT_STORAGE_ADAPTER,
   IndexedDbChatStorage,
@@ -47,6 +48,47 @@ const mockTransport: ChatTransport = {
     summary: '',
     latest_cursor: '',
   }),
+  adminDiagnostics: async () => ({
+    overview: {
+      generatedAt: '2026-06-25T00:00:00Z',
+      health: 'ok',
+      degraded: false,
+      reasonCodes: [],
+      summary: {
+        sessions: 0,
+        activeSessions: 0,
+        idleSessions: 0,
+        archivedSessions: 0,
+        delegatedSessions: 0,
+        blockedDelegations: 0,
+        pendingQueueItems: 0,
+        expiredQueueItems: 0,
+        toolErrors: 0,
+        recentErrors: 0,
+      },
+      runtime: {
+        brainModules: [],
+        sessions: [],
+        delegatedSessions: [],
+        runtimePauses: [],
+      },
+    },
+    health: {},
+  }),
+  adminSessions: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
+  adminAgents: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
+  adminMcpSurfaces: async () => ({
+    items: [],
+    total: 0,
+    limit: 100,
+    offset: 0,
+  }),
+  adminConfigValidation: async () => null,
+  adminCapabilities: async () => ({
+    schema_version: 1,
+    slash_commands: [],
+    capabilities: [],
+  }),
   streamEvents: () =>
     ({
       events: async function* () {
@@ -68,6 +110,7 @@ describe('App', () => {
         { provide: ChatTransport, useValue: mockTransport },
         { provide: CHAT_STORAGE_ADAPTER, useValue: new IndexedDbChatStorage() },
         ChatStore,
+        AdminStore,
       ],
     }).compileComponents();
   });

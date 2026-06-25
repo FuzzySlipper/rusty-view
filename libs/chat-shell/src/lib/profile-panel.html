@@ -2,38 +2,40 @@
   <div class="rv-profiles__header">Brain profiles</div>
 
   @if (!hasProfiles()) {
-    <div class="rv-profiles__empty">
-      No profiles found. Click refresh or check the backend.
-    </div>
+  <div class="rv-profiles__empty">
+    No profiles found. Click refresh or check the backend.
+  </div>
   } @else {
-    <ul class="rv-profiles__list">
-      @for (profile of profiles(); track profile.profileId) {
-        <li>
-          <button
-            type="button"
-            class="rv-profile"
-            [class.rv-profile--selected]="selectedProfileId() === profile.profileId"
-            (click)="onSelectProfile(profile.profileId)"
+  <ul class="rv-profiles__list">
+    @for (profile of profiles(); track profile.profileId) {
+    <li>
+      <button
+        type="button"
+        class="rv-profile"
+        [class.rv-profile--selected]="selectedProfileId() === profile.profileId"
+        (click)="onSelectProfile(profile.profileId)"
+      >
+        <span class="rv-profile__name">{{ profile.label }}</span>
+        <span class="rv-profile__meta">
+          <span
+            class="rv-profile__status"
+            [class.rv-profile__status--active]="profile.status === 'active'"
+            [class.rv-profile__status--idle]="profile.status === 'idle'"
+            [class.rv-profile__status--archived]="profile.status === 'archived'"
+            >{{ profile.status }}</span
           >
-            <span class="rv-profile__name">{{ profile.label }}</span>
-            <span class="rv-profile__meta">
-              <span
-                class="rv-profile__status"
-                [class.rv-profile__status--active]="profile.status === 'active'"
-                [class.rv-profile__status--idle]="profile.status === 'idle'"
-                [class.rv-profile__status--archived]="profile.status === 'archived'"
-              >{{ profile.status }}</span>
-              · {{ profile.sessionCount }} session(s)
-            </span>
-            @if (profile.activeSessionId) {
-              <span class="rv-profile__live"
-                >▸ {{ profile.activeSessionId }}</span
-              >
-            }
-          </button>
-        </li>
-      }
-    </ul>
+          · {{ profile.sessionCount }} session(s)
+        </span>
+        @if (profile.activeSessionId) {
+        <span class="rv-profile__live">▸ {{ profile.activeSessionId }}</span>
+        } @if (admin.profilePauseCount(profile.profileId, profile.sessions) > 0)
+        {
+        <span class="rv-profile__paused">runtime paused</span>
+        }
+      </button>
+    </li>
+    }
+  </ul>
   }
 
   <button type="button" class="rv-profiles__refresh" (click)="onRefresh()">

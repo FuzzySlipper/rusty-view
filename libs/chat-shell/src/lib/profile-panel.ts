@@ -4,7 +4,7 @@ import {
   computed,
   inject,
 } from '@angular/core';
-import { ChatStore } from '@rusty-view/chat-store';
+import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 
 /**
  * Brain profile sidebar panel — the primary navigation surface for
@@ -27,20 +27,23 @@ import { ChatStore } from '@rusty-view/chat-store';
 })
 export class ProfilePanelComponent {
   protected readonly store = inject(ChatStore);
+  protected readonly admin = inject(AdminStore);
 
   protected readonly profiles = computed(() => this.store.profiles());
-  protected readonly selectedProfileId = computed(
-    () => this.store.selectedProfileId(),
+  protected readonly selectedProfileId = computed(() =>
+    this.store.selectedProfileId(),
   );
-  protected readonly hasProfiles = computed(
-    () => this.profiles().length > 0,
-  );
+  protected readonly hasProfiles = computed(() => this.profiles().length > 0);
   protected readonly statusLabel = computed(() => {
     if (this.profiles().length === 0 && this.store.sessions().length === 0) {
       return 'empty';
     }
     return 'ready';
   });
+
+  constructor() {
+    void this.admin.refresh();
+  }
 
   protected onSelectProfile(profileId: string): void {
     void this.store.selectProfile(profileId);

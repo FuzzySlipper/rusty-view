@@ -93,6 +93,17 @@
   color: var(--rv-color-accent);
 }
 
+.rv-profile__paused {
+  width: fit-content;
+  border: 1px solid var(--rv-color-warning);
+  border-radius: var(--rv-radius);
+  color: var(--rv-color-warning);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  padding: 1px var(--rv-space-xs);
+  text-transform: uppercase;
+}
+
 .rv-profiles__refresh {
   padding: var(--rv-space-sm);
   border: none;

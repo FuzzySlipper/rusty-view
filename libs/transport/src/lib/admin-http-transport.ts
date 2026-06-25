@@ -4,6 +4,7 @@ import { HEADER_NAMES } from './chat-routes';
 import type {
   AdminAgentDiagnostics,
   AdminApiEnvelope,
+  ApiCapabilityRegistry,
   AdminControlResponse,
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
@@ -11,8 +12,12 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  RuntimePauseControlRequest,
+  RuntimePauseControlResult,
+  RuntimeResumeNoopResult,
   RuntimeConfigApplyResult,
   RuntimeConfigValidationReport,
+  RuntimePauseScope,
   RuntimeSessionDiagnostics,
 } from './admin-api-types';
 
@@ -75,6 +80,10 @@ export class AdminHttpTransport {
     return this.request('GET', '/v1/admin/diagnostics/config');
   }
 
+  capabilities(): Promise<ApiCapabilityRegistry> {
+    return this.request('GET', '/v1/admin/capabilities');
+  }
+
   createProfile(
     request: CreateAdminProfileRequest,
   ): Promise<AdminControlResponse<CreatedServiceProfile>> {
@@ -88,6 +97,28 @@ export class AdminHttpTransport {
   ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
     return this.request('POST', '/v1/admin/control/config/reload', {
       body: { reason },
+    });
+  }
+
+  pauseRuntime(
+    scope: RuntimePauseScope,
+    targetId: string,
+    request: RuntimePauseControlRequest,
+  ): Promise<AdminControlResponse<RuntimePauseControlResult>> {
+    return this.request('POST', runtimePausePath(scope, targetId, 'pause'), {
+      body: compactRecord(request),
+    });
+  }
+
+  resumeRuntime(
+    scope: RuntimePauseScope,
+    targetId: string,
+    request: RuntimePauseControlRequest = {},
+  ): Promise<
+    AdminControlResponse<RuntimePauseControlResult | RuntimeResumeNoopResult>
+  > {
+    return this.request('POST', runtimePausePath(scope, targetId, 'resume'), {
+      body: compactRecord(request),
     });
   }
 
@@ -164,6 +195,7 @@ export class AdminHttpTransport {
             : 'http_error',
         message: envelope.error.message,
         statusCode: response.status,
+        apiError: envelope.error,
       });
     }
 
@@ -187,4 +219,27 @@ function compactRecord(value: object): Record<string, unknown> {
     }
   }
   return next;
+}
+
+function runtimePausePath(
+  scope: RuntimePauseScope,
+  targetId: string,
+  action: 'pause' | 'resume',
+): string {
+  const family =
+    scope === 'session'
+      ? 'sessions'
+      : scope === 'profile'
+        ? 'profiles'
+        : 'agents';
+  const targetKey =
+    scope === 'session'
+      ? 'session_id'
+      : scope === 'profile'
+        ? 'profile_id'
+        : 'agent_id';
+  return `/v1/admin/control/${family}/{${targetKey}}/runtime/${action}`.replace(
+    `{${targetKey}}`,
+    encodeURIComponent(targetId),
+  );
 }

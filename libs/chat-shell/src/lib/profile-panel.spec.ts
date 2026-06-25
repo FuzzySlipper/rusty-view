@@ -2,7 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import type { ChatSessionSummary } from '@rusty-view/protocol';
-import { ChatStore, CHAT_STORAGE_ADAPTER } from '@rusty-view/chat-store';
+import {
+  AdminStore,
+  ChatStore,
+  CHAT_STORAGE_ADAPTER,
+} from '@rusty-view/chat-store';
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 import { ChatTransport } from '@rusty-view/transport';
 
@@ -11,19 +15,27 @@ import { ProfilePanelComponent } from './profile-panel';
 // ---- stubs ----
 
 class InMemStorage implements ChatStorageAdapter {
-  async putSession(): Promise<void> { /* noop */ }
-  async putEvents(): Promise<void> { /* noop */ }
+  async putSession(): Promise<void> {
+    /* noop */
+  }
+  async putEvents(): Promise<void> {
+    /* noop */
+  }
   async getEvents(): Promise<never[]> {
     return [];
   }
   async getSessions(): Promise<never[]> {
     return [];
   }
-  async clearSession(): Promise<void> { /* noop */ }
+  async clearSession(): Promise<void> {
+    /* noop */
+  }
   async getUiState(): Promise<ChatUiState | null> {
     return null;
   }
-  async setUiState(): Promise<void> { /* noop */ }
+  async setUiState(): Promise<void> {
+    /* noop */
+  }
 }
 
 function makeSession(
@@ -58,9 +70,58 @@ function makeTransport(sessions: ChatSessionSummary[]): ChatTransport {
       has_more_before: false,
     }),
     listCommands: async () => ({ commands: [] }),
+    adminDiagnostics: async () => ({
+      overview: {
+        generatedAt: '2026-06-25T00:00:00Z',
+        health: 'ok',
+        degraded: false,
+        reasonCodes: [],
+        summary: {
+          sessions: sessions.length,
+          activeSessions: sessions.filter((s) => s.status === 'active').length,
+          idleSessions: sessions.filter((s) => s.status === 'idle').length,
+          archivedSessions: sessions.filter((s) => s.status === 'archived')
+            .length,
+          delegatedSessions: 0,
+          blockedDelegations: 0,
+          pendingQueueItems: 0,
+          expiredQueueItems: 0,
+          toolErrors: 0,
+          recentErrors: 0,
+        },
+        runtime: {
+          brainModules: [],
+          sessions: [],
+          delegatedSessions: [],
+          runtimePauses: [],
+        },
+      },
+      health: {},
+    }),
+    adminSessions: async () => ({
+      items: [],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    }),
+    adminAgents: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
+    adminMcpSurfaces: async () => ({
+      items: [],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    }),
+    adminConfigValidation: async () => null,
+    adminCapabilities: async () => ({
+      schema_version: 1,
+      slash_commands: [],
+      capabilities: [],
+    }),
     streamEvents: () =>
       ({
-        events: async function* () { /* noop */ },
+        events: async function* () {
+          /* noop */
+        },
         onStateChange: () => () => undefined,
         getState: () => ({ status: 'idle' }),
         getLastCursor: () => undefined,
@@ -74,6 +135,7 @@ async function createPanel(sessions: ChatSessionSummary[]) {
     imports: [ProfilePanelComponent],
     providers: [
       ChatStore,
+      AdminStore,
       { provide: ChatTransport, useValue: makeTransport(sessions) },
       { provide: CHAT_STORAGE_ADAPTER, useClass: InMemStorage },
     ],
@@ -107,9 +169,9 @@ describe('ProfilePanelComponent', () => {
         updated_at: '2026-06-05T00:00:00Z',
       }),
     ]);
-    const rows = (
-      fixture.nativeElement as HTMLElement
-    ).querySelectorAll('.rv-profile');
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      '.rv-profile',
+    );
     expect(rows.length).toBe(2);
   });
 
@@ -124,9 +186,9 @@ describe('ProfilePanelComponent', () => {
     ]);
     await store.selectProfile('p1');
     fixture.detectChanges();
-    const selected = (
-      fixture.nativeElement as HTMLElement
-    ).querySelector('.rv-profile--selected');
+    const selected = (fixture.nativeElement as HTMLElement).querySelector(
+      '.rv-profile--selected',
+    );
     expect(selected?.textContent).toContain('p1');
   });
 });

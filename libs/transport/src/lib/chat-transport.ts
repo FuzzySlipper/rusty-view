@@ -31,11 +31,16 @@ import type {
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
   AdminPage,
+  ApiCapabilityRegistry,
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
   RuntimeConfigApplyResult,
   RuntimeConfigValidationReport,
+  RuntimePauseControlRequest,
+  RuntimePauseControlResult,
+  RuntimePauseScope,
+  RuntimeResumeNoopResult,
   RuntimeSessionDiagnostics,
 } from './admin-api-types';
 import type { AdminListQuery } from './admin-http-transport';
@@ -152,6 +157,10 @@ export class ChatTransport {
     return this.adminHttp.configValidation();
   }
 
+  adminCapabilities(): Promise<ApiCapabilityRegistry> {
+    return this.adminHttp.capabilities();
+  }
+
   createAdminProfile(
     request: CreateAdminProfileRequest,
   ): Promise<AdminControlResponse<CreatedServiceProfile>> {
@@ -162,6 +171,24 @@ export class ChatTransport {
     reason?: string,
   ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
     return this.adminHttp.reloadConfig(reason);
+  }
+
+  pauseRuntime(
+    scope: RuntimePauseScope,
+    targetId: string,
+    request: RuntimePauseControlRequest,
+  ): Promise<AdminControlResponse<RuntimePauseControlResult>> {
+    return this.adminHttp.pauseRuntime(scope, targetId, request);
+  }
+
+  resumeRuntime(
+    scope: RuntimePauseScope,
+    targetId: string,
+    request?: RuntimePauseControlRequest,
+  ): Promise<
+    AdminControlResponse<RuntimePauseControlResult | RuntimeResumeNoopResult>
+  > {
+    return this.adminHttp.resumeRuntime(scope, targetId, request);
   }
 
   // ---- SSE event stream ----

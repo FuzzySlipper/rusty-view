@@ -21,53 +21,135 @@
       All
     </button>
     @for (pid of profileIds(); track pid) {
-      <button
-        type="button"
-        class="rv-sessions-panel__chip"
-        [class.rv-sessions-panel__chip--active]="filterProfileId() === pid"
-        (click)="setFilter(pid)"
-      >
-        {{ pid }}
-      </button>
+    <button
+      type="button"
+      class="rv-sessions-panel__chip"
+      [class.rv-sessions-panel__chip--active]="filterProfileId() === pid"
+      (click)="setFilter(pid)"
+    >
+      {{ pid }}
+    </button>
     }
   </div>
 
   <div class="rv-sessions-panel__body">
-    @if (!hasSessions()) {
-      <div class="rv-sessions-panel__empty">No sessions.</div>
+    @if (admin.error() !== null) {
+    <div class="rv-sessions-panel__error" role="alert">{{ admin.error() }}</div>
+    } @if (localControlError() !== null) {
+    <div class="rv-sessions-panel__error" role="alert">
+      {{ localControlError() }}
+    </div>
+    } @if (admin.runtimePauseResult()?.outcome; as outcome) {
+    <div class="rv-sessions-panel__notice" role="status">
+      <strong>{{ outcome.status }}</strong>
+      <span>{{ outcome.summary }}</span>
+      @if (outcome.reasonCode) {
+      <span>{{ outcome.reasonCode }}</span>
+      }
+    </div>
+    } @if (admin.runtimeResumeResult()?.outcome; as outcome) {
+    <div class="rv-sessions-panel__notice" role="status">
+      <strong>{{ outcome.status }}</strong>
+      <span>{{ outcome.summary }}</span>
+      @if (outcome.reasonCode) {
+      <span>{{ outcome.reasonCode }}</span>
+      }
+    </div>
+    } @if (!hasSessions()) {
+    <div class="rv-sessions-panel__empty">No sessions.</div>
     } @else {
-      <ul class="rv-sessions-panel__list">
-        @for (session of sessions(); track session.session_id) {
-          <li>
-            <button
-              type="button"
-              class="rv-sessions-panel__row"
-              [class.rv-sessions-panel__row--active]="
+    <ul class="rv-sessions-panel__list">
+      @for (session of sessions(); track session.session_id) {
+      <li
+        class="rv-sessions-panel__item"
+        [class.rv-sessions-panel__item--paused]="
+              admin.pauseForSession(session.session_id) !== undefined
+            "
+      >
+        <button
+          type="button"
+          class="rv-sessions-panel__row"
+          [class.rv-sessions-panel__row--active]="
                 store.activeSessionId() === session.session_id
               "
-              (click)="onSelectSession(session.session_id)"
-            >
-              <span class="rv-sessions-panel__title">
-                {{ session.title ?? session.session_id }}
-              </span>
-              <span class="rv-sessions-panel__meta">
-                {{ session.profile_id }} ·
-                <span
-                  class="rv-sessions-panel__status"
-                  [class.rv-sessions-panel__status--active]="
+          (click)="onSelectSession(session.session_id)"
+        >
+          <span class="rv-sessions-panel__title">
+            {{ session.title ?? session.session_id }}
+          </span>
+          <span class="rv-sessions-panel__meta">
+            {{ session.profile_id }} ·
+            <span
+              class="rv-sessions-panel__status"
+              [class.rv-sessions-panel__status--active]="
                     session.status === 'active'
                   "
-                  [class.rv-sessions-panel__status--idle]="
+              [class.rv-sessions-panel__status--idle]="
                     session.status === 'idle'
                   "
-                >{{ session.status }}</span>
-                · {{ session.message_count ?? 0 }} msgs
-                · {{ session.updated_at | date: 'short' }}
-              </span>
-            </button>
-          </li>
+              >{{ session.status }}</span
+            >
+            · {{ session.message_count ?? 0 }} msgs · {{ session.updated_at |
+            date: 'short' }}
+          </span>
+        </button>
+        @if (admin.pauseForSession(session.session_id); as pause) {
+        <div class="rv-sessions-panel__pause">
+          <div class="rv-sessions-panel__pause-heading">
+            <strong>runtime paused</strong>
+            <span>{{ pause.scope }} {{ pause.targetId }}</span>
+          </div>
+          <div class="rv-sessions-panel__pause-meta">
+            <span>by {{ pause.pausedBy }}</span>
+            <span>{{ pause.pausedAt | date: 'short' }}</span>
+            <span>{{ pause.inFlightWakeCount }} in-flight wake(s)</span>
+            @if (pause.reasonCode) {
+            <span>{{ pause.reasonCode }}</span>
+            }
+          </div>
+          @if (pause.reason) {
+          <div class="rv-sessions-panel__pause-reason">{{ pause.reason }}</div>
+          }
+          <div class="rv-sessions-panel__pause-limitation">
+            {{ pause.limitation }}
+          </div>
+          <button
+            type="button"
+            class="rv-sessions-panel__control"
+            (click)="resumeSessionRuntime(session.session_id)"
+            [disabled]="
+                    admin.saving() ||
+                    sessionResumeCapabilityState() === 'unavailable'
+                  "
+            title="Resume runtime wake/delivery claims for this session. This is not archive, delete, or shutdown."
+          >
+            Resume Runtime
+          </button>
+        </div>
+        } @else {
+        <div class="rv-sessions-panel__actions">
+          <button
+            type="button"
+            class="rv-sessions-panel__control rv-sessions-panel__control--danger"
+            (click)="pauseSessionRuntime(session.session_id)"
+            [disabled]="
+                    admin.saving() ||
+                    sessionPauseCapabilityState() === 'unavailable'
+                  "
+            title="Emergency runtime pause suppresses new wakes/delivery claims. It does not archive, delete, or shut down this session."
+          >
+            Pause Runtime
+          </button>
+          @if (sessionPauseCapabilityState() === 'unknown') {
+          <span class="rv-sessions-panel__capability">
+            capability registry unavailable
+          </span>
+          }
+        </div>
         }
-      </ul>
+      </li>
+      }
+    </ul>
     }
   </div>
 </div>

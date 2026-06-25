@@ -4,7 +4,14 @@ export interface AdminApiMeta {
 }
 
 export interface AdminApiError {
-  readonly code: string;
+  readonly code:
+    | 'unauthorized'
+    | 'forbidden'
+    | 'not_found'
+    | 'invalid_input'
+    | 'failed_precondition'
+    | 'conflict'
+    | 'internal_error';
   readonly reason_code: string;
   readonly message: string;
   readonly retryable: boolean;
@@ -50,6 +57,9 @@ export interface AdminDiagnosticsOverview {
 }
 
 export interface AdminDiagnosticsBundle {
+  readonly runtime?: {
+    readonly runtimePauses?: readonly RuntimePauseDiagnostics[];
+  };
   readonly overview: {
     readonly generatedAt: string;
     readonly health: string;
@@ -60,6 +70,7 @@ export interface AdminDiagnosticsBundle {
       readonly brainModules: readonly RuntimeBrainModuleDiagnostics[];
       readonly sessions: readonly RuntimeSessionDiagnostics[];
       readonly delegatedSessions: readonly RuntimeDelegationDiagnostics[];
+      readonly runtimePauses?: readonly RuntimePauseDiagnostics[];
     };
     readonly issues?: readonly RuntimeDiagnosticsIssue[];
   };
@@ -98,6 +109,38 @@ export interface RuntimeDelegationDiagnostics {
   readonly runStatus?: string;
   readonly terminal: boolean;
   readonly blocked: boolean;
+}
+
+export type RuntimePauseScope = 'session' | 'profile' | 'agent';
+
+export interface RuntimePauseDiagnostics {
+  readonly pauseId: string;
+  readonly scope: RuntimePauseScope;
+  readonly targetId: string;
+  readonly pausedBy: string;
+  readonly pausedAt: string;
+  readonly reason?: string;
+  readonly reasonCode?: string;
+  readonly affectedSessionIds: readonly string[];
+  readonly inFlightWakeCount: number;
+  readonly cancellationSupported: boolean;
+  readonly limitation: string;
+}
+
+export interface RuntimePauseControlResult extends RuntimePauseDiagnostics {
+  readonly resumedAt?: string;
+}
+
+export interface RuntimeResumeNoopResult {
+  readonly paused: false;
+  readonly scope: RuntimePauseScope;
+  readonly targetId: string;
+}
+
+export interface RuntimePauseControlRequest {
+  readonly reason?: string;
+  readonly reasonCode?: string;
+  readonly denRefs?: readonly string[];
 }
 
 export interface RuntimeDiagnosticsIssue {
@@ -248,4 +291,42 @@ export interface AdminControlResponse<TResult = unknown> {
     readonly started?: string;
     readonly terminal?: string;
   };
+}
+
+export type ApiCapabilityAuth = 'none' | 'chat' | 'admin';
+export type ApiCapabilityMutation = 'read' | 'write' | 'control';
+export type ApiCapabilityStability = 'stable' | 'experimental';
+export type ApiCapabilityScope =
+  | 'attachment'
+  | 'chat'
+  | 'conversation'
+  | 'diagnostics'
+  | 'profile'
+  | 'session'
+  | 'delegation'
+  | 'mcp'
+  | 'config'
+  | 'maintenance'
+  | 'scheduler'
+  | 'search'
+  | 'curator'
+  | 'service';
+
+export interface ApiCapabilityDescriptor {
+  readonly id: string;
+  readonly method: 'DELETE' | 'GET' | 'POST';
+  readonly path_template: string;
+  readonly description: string;
+  readonly auth: ApiCapabilityAuth;
+  readonly mutation: ApiCapabilityMutation;
+  readonly stability: ApiCapabilityStability;
+  readonly tags: readonly ApiCapabilityScope[];
+  readonly public: boolean;
+  readonly command_name?: string;
+}
+
+export interface ApiCapabilityRegistry {
+  readonly schema_version: 1;
+  readonly slash_commands: readonly unknown[];
+  readonly capabilities: readonly ApiCapabilityDescriptor[];
 }

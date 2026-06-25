@@ -1,16 +1,23 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
   ChatTransport,
+  ChatTransportError,
   type AdminAgentDiagnostics,
   type AdminControlResponse,
   type AdminDiagnosticsBundle,
   type AdminPage,
+  type ApiCapabilityRegistry,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
   type RuntimeBrainModuleDiagnostics,
   type RuntimeConfigApplyResult,
   type RuntimeConfigValidationReport,
+  type RuntimePauseControlRequest,
+  type RuntimePauseControlResult,
+  type RuntimePauseDiagnostics,
+  type RuntimePauseScope,
+  type RuntimeResumeNoopResult,
   type RuntimeSessionDiagnostics,
 } from '@rusty-view/transport';
 
@@ -40,6 +47,7 @@ export class AdminStore {
     signal<AdminPage<McpSurfaceDiagnostics> | null>(null);
   private readonly _configValidation =
     signal<RuntimeConfigValidationReport | null>(null);
+  private readonly _capabilities = signal<ApiCapabilityRegistry | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
   private readonly _error = signal<string | null>(null);
@@ -47,19 +55,35 @@ export class AdminStore {
     signal<AdminControlResponse<CreatedServiceProfile> | null>(null);
   private readonly _reloadResult =
     signal<AdminControlResponse<RuntimeConfigApplyResult> | null>(null);
+  private readonly _runtimePauseResult =
+    signal<AdminControlResponse<RuntimePauseControlResult> | null>(null);
+  private readonly _runtimeResumeResult = signal<AdminControlResponse<
+    RuntimePauseControlResult | RuntimeResumeNoopResult
+  > | null>(null);
 
   readonly diagnostics = this._diagnostics.asReadonly();
   readonly sessions = this._sessions.asReadonly();
   readonly agents = this._agents.asReadonly();
   readonly mcpSurfaces = this._mcpSurfaces.asReadonly();
   readonly configValidation = this._configValidation.asReadonly();
+  readonly capabilities = this._capabilities.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly saving = this._saving.asReadonly();
   readonly error = this._error.asReadonly();
   readonly createResult = this._createResult.asReadonly();
   readonly reloadResult = this._reloadResult.asReadonly();
+  readonly runtimePauseResult = this._runtimePauseResult.asReadonly();
+  readonly runtimeResumeResult = this._runtimeResumeResult.asReadonly();
 
   readonly overview = computed(() => this._diagnostics()?.overview ?? null);
+  readonly runtimePauses = computed<readonly RuntimePauseDiagnostics[]>(() => {
+    const diagnostics = this._diagnostics();
+    return (
+      diagnostics?.runtime?.runtimePauses ??
+      diagnostics?.overview.runtime.runtimePauses ??
+      []
+    );
+  });
 
   readonly profiles = computed<readonly AdminProfileSummary[]>(() => {
     const sessions = this._sessions()?.items ?? [];
@@ -85,19 +109,27 @@ export class AdminStore {
     this._loading.set(true);
     this._error.set(null);
     try {
-      const [diagnostics, sessions, agents, mcpSurfaces, configValidation] =
-        await Promise.all([
-          this.transport.adminDiagnostics(),
-          this.transport.adminSessions({ limit: 100 }),
-          this.transport.adminAgents({ limit: 100 }),
-          this.transport.adminMcpSurfaces({ limit: 100 }),
-          this.transport.adminConfigValidation(),
-        ]);
+      const [
+        diagnostics,
+        sessions,
+        agents,
+        mcpSurfaces,
+        configValidation,
+        capabilities,
+      ] = await Promise.all([
+        this.transport.adminDiagnostics(),
+        this.transport.adminSessions({ limit: 100 }),
+        this.transport.adminAgents({ limit: 100 }),
+        this.transport.adminMcpSurfaces({ limit: 100 }),
+        this.transport.adminConfigValidation(),
+        this.transport.adminCapabilities().catch(() => null),
+      ]);
       this._diagnostics.set(diagnostics);
       this._sessions.set(sessions);
       this._agents.set(agents);
       this._mcpSurfaces.set(mcpSurfaces);
       this._configValidation.set(configValidation);
+      this._capabilities.set(capabilities);
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -133,6 +165,86 @@ export class AdminStore {
     } finally {
       this._saving.set(false);
     }
+  }
+
+  async pauseRuntime(
+    scope: RuntimePauseScope,
+    targetId: string,
+    request: RuntimePauseControlRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._runtimePauseResult.set(null);
+    this._runtimeResumeResult.set(null);
+    try {
+      const result = await this.transport.pauseRuntime(
+        scope,
+        targetId,
+        request,
+      );
+      this._runtimePauseResult.set(result);
+      await this.refresh();
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async resumeRuntime(
+    scope: RuntimePauseScope,
+    targetId: string,
+    request: RuntimePauseControlRequest = {},
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._runtimePauseResult.set(null);
+    this._runtimeResumeResult.set(null);
+    try {
+      const result = await this.transport.resumeRuntime(
+        scope,
+        targetId,
+        request,
+      );
+      this._runtimeResumeResult.set(result);
+      await this.refresh();
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  pauseForSession(sessionId: string): RuntimePauseDiagnostics | undefined {
+    return this.runtimePauses().find(
+      (pause) =>
+        (pause.scope === 'session' && pause.targetId === sessionId) ||
+        pause.affectedSessionIds.includes(sessionId),
+    );
+  }
+
+  profilePauseCount(
+    profileId: string,
+    sessions: readonly { readonly session_id: string }[],
+  ): number {
+    const sessionIds = new Set(sessions.map((session) => session.session_id));
+    return this.runtimePauses().filter(
+      (pause) =>
+        (pause.scope === 'profile' && pause.targetId === profileId) ||
+        pause.affectedSessionIds.some((sessionId) => sessionIds.has(sessionId)),
+    ).length;
+  }
+
+  controlCapabilityState(
+    capabilityId: string,
+  ): 'available' | 'unavailable' | 'unknown' {
+    const registry = this._capabilities();
+    if (registry === null) return 'unknown';
+    return registry.capabilities.some(
+      (capability) => capability.id === capabilityId,
+    )
+      ? 'available'
+      : 'unavailable';
   }
 }
 
@@ -197,5 +309,8 @@ function sumAgentCount(
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof ChatTransportError && error.apiError !== undefined) {
+    return `${error.message} (${error.apiError.reason_code})`;
+  }
   return error instanceof Error ? error.message : String(error);
 }

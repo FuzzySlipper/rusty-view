@@ -30,6 +30,8 @@ export type { AdminListQuery } from './lib/admin-http-transport';
 export type {
   AdminAgentDiagnostics,
   AdminApiEnvelope,
+  ApiCapabilityDescriptor,
+  ApiCapabilityRegistry,
   AdminControlOutcome,
   AdminControlResponse,
   AdminDiagnosticsBundle,
@@ -42,6 +44,11 @@ export type {
   RuntimeConfigApplyResult,
   RuntimeConfigDiagnostic,
   RuntimeConfigValidationReport,
+  RuntimePauseControlRequest,
+  RuntimePauseControlResult,
+  RuntimePauseDiagnostics,
+  RuntimePauseScope,
+  RuntimeResumeNoopResult,
   RuntimeSessionDiagnostics,
 } from './lib/admin-api-types';
 

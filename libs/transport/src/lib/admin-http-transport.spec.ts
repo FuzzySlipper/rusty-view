@@ -184,4 +184,113 @@ describe('AdminHttpTransport', () => {
     expect(lastRequest().url).toContain('/v1/admin/control/config/reload');
     expect(lastRequest().body).toContain('rusty-view service config reload');
   });
+
+  it('reads the admin capability registry', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        schema_version: 1,
+        slash_commands: [],
+        capabilities: [
+          {
+            id: 'admin.control.sessions.runtime.pause',
+            method: 'POST',
+            path_template:
+              '/v1/admin/control/sessions/{session_id}/runtime/pause',
+            description: 'Pause runtime work for one session.',
+            auth: 'admin',
+            mutation: 'control',
+            stability: 'stable',
+            tags: ['session', 'service'],
+            public: true,
+            command_name: 'pause_runtime',
+          },
+        ],
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const registry = await transport.capabilities();
+
+    expect(registry.capabilities).toHaveLength(1);
+    expect(lastRequest().method).toBe('GET');
+    expect(lastRequest().url).toContain('/v1/admin/capabilities');
+  });
+
+  it('pauses a session runtime through the control route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        command: {
+          name: 'pause_runtime',
+          target: { scope: 'session', sessionId: 'session alpha' },
+          requestId: 'req',
+          reason: 'operator emergency stop',
+          reasonCode: 'runtime_pause_operator',
+        },
+        outcome: {
+          status: 'completed',
+          summary: 'runtime session session alpha paused',
+          result: {
+            pauseId: 'pause:session:session_alpha:1',
+            scope: 'session',
+            targetId: 'session alpha',
+            pausedBy: 'operator',
+            pausedAt: '2026-06-25T00:00:00Z',
+            reason: 'operator emergency stop',
+            reasonCode: 'runtime_pause_operator',
+            affectedSessionIds: ['session alpha'],
+            inFlightWakeCount: 0,
+            cancellationSupported: false,
+            limitation: 'suppresses new wakes only',
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.pauseRuntime('session', 'session alpha', {
+      reason: 'operator emergency stop',
+      reasonCode: 'runtime_pause_operator',
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/control/sessions/session%20alpha/runtime/pause',
+    );
+    expect(req.body).toContain('operator emergency stop');
+    expect(req.body).toContain('runtime_pause_operator');
+  });
+
+  it('resumes a session runtime through the control route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        command: {
+          name: 'resume_runtime',
+          target: { scope: 'session', sessionId: 'session-alpha' },
+          requestId: 'req',
+        },
+        outcome: {
+          status: 'completed',
+          summary: 'runtime session session-alpha resumed',
+          result: {
+            paused: false,
+            scope: 'session',
+            targetId: 'session-alpha',
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.resumeRuntime('session', 'session-alpha');
+
+    expect(lastRequest().method).toBe('POST');
+    expect(lastRequest().url).toContain(
+      '/v1/admin/control/sessions/session-alpha/runtime/resume',
+    );
+  });
 });
