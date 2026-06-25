@@ -73,6 +73,15 @@
   overflow: hidden;
 }
 
+.rv-debug__command-error {
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-danger);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
 .rv-debug__no-session {
   display: flex;
   align-items: center;

@@ -96,3 +96,15 @@
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
+
+.rv-command__result {
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-command__result--error {
+  color: var(--rv-color-danger);
+}

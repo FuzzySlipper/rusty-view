@@ -24,33 +24,34 @@
     <main class="rv-debug__main">
       <!-- Historical session banner -->
       @if (isViewingHistorical()) {
-        <div class="rv-debug__historical-banner" role="status">
-          <span class="rv-debug__historical-banner__label">
-            Viewing historical session: {{ viewingSessionId() }}
-          </span>
-          <button
-            type="button"
-            class="rv-debug__historical-banner__return"
-            (click)="onReturnToActive()"
-          >
-            Return to active
-          </button>
-        </div>
-      }
-
-      @if (store.activeSessionId()) {
+      <div class="rv-debug__historical-banner" role="status">
+        <span class="rv-debug__historical-banner__label">
+          Viewing historical session: {{ viewingSessionId() }}
+        </span>
+        <button
+          type="button"
+          class="rv-debug__historical-banner__return"
+          (click)="onReturnToActive()"
+        >
+          Return to active
+        </button>
+      </div>
+      } @if (store.activeSessionId()) {
       <div class="rv-debug__transcript">
         <rv-transcript-viewport [messages]="store.messages()" />
       </div>
       @if (!isViewingHistorical()) {
-        <rv-message-input
-          [disabled]="inputDisabled()"
-          [commands]="store.commands()"
-          [commandHistory]="store.commandHistory()"
-          (send)="onSendMessage($event)"
-        />
-      }
-      } @else {
+      <rv-message-input
+        [disabled]="inputDisabled()"
+        [commands]="inputCommands()"
+        [commandHistory]="store.commandHistory()"
+        (send)="onSendMessage($event)"
+      />
+      @if (pluginCommandError()) {
+      <div class="rv-debug__command-error" role="alert">
+        {{ pluginCommandError() }}
+      </div>
+      } } } @else {
       <div class="rv-debug__no-session">
         Select a profile from the sidebar to begin.
       </div>

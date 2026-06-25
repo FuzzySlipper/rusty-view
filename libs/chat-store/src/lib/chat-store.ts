@@ -99,9 +99,7 @@ export class ChatStore implements OnDestroy {
   readonly pendingCommands = this._pendingCommands.asReadonly();
   /** True when a message or command is currently in flight. */
   readonly isSubmitting = computed(
-    () =>
-      this._pendingSends().length > 0 ||
-      this._pendingCommands().length > 0,
+    () => this._pendingSends().length > 0 || this._pendingCommands().length > 0,
   );
 
   // ---- computed signals ----
@@ -154,9 +152,7 @@ export class ChatStore implements OnDestroy {
     () => {
       const id = this._selectedProfileId();
       if (id === null) return [];
-      return (
-        this.profiles().find((p) => p.profileId === id)?.sessions ?? []
-      );
+      return this.profiles().find((p) => p.profileId === id)?.sessions ?? [];
     },
   );
   /** All sessions across profiles, newest first (for the Sessions menu). */
@@ -223,7 +219,7 @@ export class ChatStore implements OnDestroy {
    * navigation. Consecutive duplicates are skipped. Bounded to
    * {@link MAX_COMMAND_HISTORY} entries (newest-first).
    */
-  private recordCommand(command: string): void {
+  recordCommand(command: string): void {
     const trimmed = command.trim();
     if (trimmed.length === 0) return;
     this._commandHistory.update((prev) => {

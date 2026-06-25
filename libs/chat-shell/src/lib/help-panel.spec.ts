@@ -5,6 +5,7 @@ import { ChatStore } from '@rusty-view/chat-store';
 import type { ChatCommandDescriptor } from '@rusty-view/protocol';
 
 import { HelpPanelComponent } from './help-panel';
+import { CHAT_SLASH_COMMANDS } from './plugin-api';
 
 function makeCommand(
   overrides: Partial<ChatCommandDescriptor>,
@@ -21,14 +22,19 @@ function makeCommand(
 }
 
 describe('HelpPanelComponent', () => {
-  async function createHelp(commands: ChatCommandDescriptor[]) {
+  async function createHelp(
+    commands: ChatCommandDescriptor[],
+    providers: Parameters<
+      typeof TestBed.configureTestingModule
+    >[0]['providers'] = [],
+  ) {
     const store = {
       commands: () => commands,
     } as unknown as ChatStore;
 
     await TestBed.configureTestingModule({
       imports: [HelpPanelComponent],
-      providers: [{ provide: ChatStore, useValue: store }],
+      providers: [{ provide: ChatStore, useValue: store }, ...providers],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(HelpPanelComponent);
@@ -39,7 +45,11 @@ describe('HelpPanelComponent', () => {
   it('lists commands from the registry', async () => {
     const fixture = await createHelp([
       makeCommand({ name: 'status', description: 'Show status.' }),
-      makeCommand({ name: 'new', description: 'Start a new session.', mutating: true }),
+      makeCommand({
+        name: 'new',
+        description: 'Start a new session.',
+        mutating: true,
+      }),
     ]);
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('/status');
@@ -65,5 +75,33 @@ describe('HelpPanelComponent', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('r, rl');
     expect(host.textContent).toContain('target, force');
+  });
+
+  it('lists plugin-registered slash commands', async () => {
+    const fixture = await createHelp(
+      [],
+      [
+        {
+          provide: CHAT_SLASH_COMMANDS,
+          useValue: [
+            {
+              name: 'inspect',
+              aliases: ['i'],
+              description: 'Inspect local state',
+              sideEffect: 'read',
+              arguments: [{ name: 'target', type: 'string' }],
+              async run() {
+                return { type: 'silent' };
+              },
+            },
+          ],
+        },
+      ],
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.textContent).toContain('/inspect');
+    expect(host.textContent).toContain('Inspect local state');
+    expect(host.textContent).toContain('target');
   });
 });

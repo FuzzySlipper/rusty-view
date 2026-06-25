@@ -45,6 +45,17 @@ export {
   CHAT_SLASH_COMMANDS,
   provideChatPlugins,
 } from './lib/plugin-api';
+export {
+  coerceSlashCommandArguments,
+  commandsForPalette,
+  completeSlashCommand,
+  executeSlashCommand,
+  findSlashCommand,
+  normalizeSlashCommandText,
+  parseSlashCommand,
+  pluginCommandArgsSchema,
+  pluginCommandDescriptor,
+} from './lib/slash-command-runtime';
 export type {
   ChatMessageToolbarAction,
   ChatMessageToolbarContext,
@@ -68,6 +79,14 @@ export type {
   ChatSettingsPanel,
   ChatSidebarPanel,
 } from './lib/plugin-api';
+export type {
+  ParsedSlashCommand,
+  SlashCommandCompletion,
+  SlashCommandCompletionContext,
+  SlashCommandParseFailure,
+  SlashCommandParseResult,
+  TypedSlashCommandArguments,
+} from './lib/slash-command-runtime';
 export type {
   ChatContentRenderer,
   ChatContentRenderContext,

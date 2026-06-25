@@ -10,7 +10,7 @@
       (keydown)="onKeydown($event)"
     />
     <button type="button" class="rv-command__run" (click)="submit()">
-      Run
+      {{ isExecuting() ? 'Running' : 'Run' }}
     </button>
     <button type="button" class="rv-command__toggle" (click)="toggleRegistry()">
       {{ showRegistry() ? 'Hide' : 'Commands' }}
@@ -32,6 +32,16 @@
     <div class="rv-command__registry-empty">
       No commands loaded. Run refresh.
     </div>
+    }
+  </div>
+  } @if (lastResult(); as result) {
+  <div
+    class="rv-command__result"
+    [class.rv-command__result--error]="result.type === 'error'"
+  >
+    @switch (result.type) { @case ('message') { {{ result.content }} } @case
+    ('error') { {{ result.message }} } @case ('value') { {{ result.value }} }
+    @case ('abort') { Command aborted. } @case ('silent') { Command completed. }
     }
   </div>
   }

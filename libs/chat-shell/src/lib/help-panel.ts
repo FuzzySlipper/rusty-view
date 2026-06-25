@@ -5,6 +5,8 @@ import {
   inject,
 } from '@angular/core';
 import { ChatStore } from '@rusty-view/chat-store';
+import { CHAT_SLASH_COMMANDS } from './plugin-api';
+import { pluginCommandDescriptor } from './slash-command-runtime';
 
 /**
  * Help panel: lists every command available in the current command registry.
@@ -22,8 +24,13 @@ import { ChatStore } from '@rusty-view/chat-store';
 })
 export class HelpPanelComponent {
   protected readonly store = inject(ChatStore);
+  private readonly slashCommands =
+    inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
 
-  protected readonly commands = computed(() => this.store.commands());
+  protected readonly commands = computed(() => [
+    ...this.store.commands(),
+    ...this.slashCommands.map((command) => pluginCommandDescriptor(command)),
+  ]);
 
   /** Render the args_schema JSON compactly, or a placeholder when absent. */
   protected argsLabel(cmd: {

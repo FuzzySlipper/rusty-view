@@ -31,10 +31,7 @@ export type ChatPluginActionEffect =
   | 'destructive'
   | 'external';
 
-export type ChatPluginPalette =
-  | 'chat-input'
-  | 'global'
-  | 'message-context';
+export type ChatPluginPalette = 'chat-input' | 'global' | 'message-context';
 
 export type ChatPluginAutoTrigger =
   | 'onAppStart'
@@ -94,7 +91,7 @@ export interface ChatPluginSlashCommand {
   readonly sideEffect?: ChatPluginActionEffect;
   readonly confirmation?: ChatPluginConfirmationPolicy;
   run(
-    args: readonly string[],
+    args: readonly unknown[],
     named: Readonly<Record<string, unknown>>,
     context: ChatPluginCommandContext,
   ): Promise<ChatPluginCommandResult>;
@@ -158,9 +155,17 @@ export interface ChatPluginDataActionContext {
 }
 
 export type ChatPluginDataActionResult =
-  | { readonly status: 'completed'; readonly summary: string; readonly data?: unknown }
+  | {
+      readonly status: 'completed';
+      readonly summary: string;
+      readonly data?: unknown;
+    }
   | { readonly status: 'cancelled'; readonly summary: string }
-  | { readonly status: 'failed'; readonly summary: string; readonly error?: unknown };
+  | {
+      readonly status: 'failed';
+      readonly summary: string;
+      readonly error?: unknown;
+    };
 
 export interface ChatPluginDataAction {
   readonly id: string;
@@ -176,7 +181,9 @@ export interface ChatPluginDataAction {
   readonly sideEffect: ChatPluginActionEffect;
   readonly confirmation?: ChatPluginConfirmationPolicy;
   readonly inputSchema?: Readonly<Record<string, unknown>>;
-  run(context: ChatPluginDataActionContext): Promise<ChatPluginDataActionResult>;
+  run(
+    context: ChatPluginDataActionContext,
+  ): Promise<ChatPluginDataActionResult>;
 }
 
 export interface ChatPluginEvent {
@@ -185,7 +192,10 @@ export interface ChatPluginEvent {
 }
 
 export interface ChatPluginEventBus {
-  subscribe(type: string, handler: (event: ChatPluginEvent) => void): () => void;
+  subscribe(
+    type: string,
+    handler: (event: ChatPluginEvent) => void,
+  ): () => void;
   emit(event: ChatPluginEvent): void;
 }
 
@@ -240,7 +250,10 @@ export function provideChatPlugins(
   const providers: Provider[] = [];
   const topMenuItems = flatMapPluginValues(plugins, (p) => p.topMenuItems);
   const settingsPanels = flatMapPluginValues(plugins, (p) => p.settingsPanels);
-  const contentRenderers = flatMapPluginValues(plugins, (p) => p.contentRenderers);
+  const contentRenderers = flatMapPluginValues(
+    plugins,
+    (p) => p.contentRenderers,
+  );
   const slashCommands = flatMapPluginValues(plugins, (p) => p.slashCommands);
   const enumProviders = flatMapPluginValues(plugins, (p) => p.enumProviders);
   const autoExecuteHooks = flatMapPluginValues(
