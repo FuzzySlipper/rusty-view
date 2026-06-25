@@ -11,7 +11,7 @@ import type { ChatMessage } from '@rusty-view/chat-domain';
  * scrollToOffset) requires real DOM measurements unavailable in jsdom.
  *
  * The real-browser anchor behavior is covered by the Playwright test in
- * apps/debug-chat-e2e/src/scroll-anchor.spec.ts.
+ * apps/rusty-view-e2e/src/scroll-anchor.spec.ts.
  */
 
 // Re-implement the helper here for testing (it's private in the component).

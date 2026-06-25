@@ -3,7 +3,7 @@ export type FetchImpl = typeof fetch;
 
 /**
  * Configuration for a {@link ChatTransport} instance. No hardcoded host/port —
- * every value comes from the caller (debug app config, env, etc.).
+ * every value comes from the caller (app config, env, etc.).
  *
  * `bearerToken` is absent in no-auth LAN/dev mode
  * (`RUSTY_CREW_ADMIN_AUTH_MODE=none`). When present, transport adds

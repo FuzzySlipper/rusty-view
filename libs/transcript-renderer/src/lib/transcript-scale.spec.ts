@@ -17,7 +17,7 @@ import { MessageItemComponent } from './message-item';
  * component **accepts** large-scale data without error rather than exercising
  * the virtualization itself. The CDK virtual scroll's DOM-level guarantees are
  * architecturally inherent (only visible items exist in the DOM regardless of
- * total count) and are proven by the live e2e in apps/debug-chat-e2e.
+ * total count) and are proven by the live e2e in apps/rusty-view-e2e.
  *
  * These tests prove:
  * - The component accepts 10k+ messages without throwing.

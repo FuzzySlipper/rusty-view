@@ -90,7 +90,11 @@ const MESSAGE_EVENTS = [
     sequence_id: 6,
     created_at: '2026-06-22T10:00:06Z',
     kind: 'message_created',
-    payload: { message_id: 'msg_user_2', role: 'user', body: 'What happens next?' },
+    payload: {
+      message_id: 'msg_user_2',
+      role: 'user',
+      body: 'What happens next?',
+    },
   },
 ];
 

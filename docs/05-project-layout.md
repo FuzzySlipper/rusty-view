@@ -191,7 +191,7 @@ The frontend architecture is already designed in detail in
 ### Two-repo separation
 
 ```
-rusty-view       — boring debug chat client + reusable chat kit
+rusty-view       — boring operator chat client + reusable chat kit
   ↓ versioned package dependency
 rusty-roleplay — roleplay frontend, consumes rusty-view packages
 ```
@@ -217,7 +217,7 @@ controls).
 ```
 rusty-view/
   apps/
-    debug-chat/           # brutal, useful debug client
+    rusty-view/           # durable operator chat client
   libs/
     protocol/             # generated TS types from Rust
     transport/            # HTTP/SSE/WS client for rusty-crew
@@ -225,7 +225,7 @@ rusty-view/
     chat-store/           # Angular-facing store (Signals/SignalStore)
     transcript-renderer/  # virtualized transcript, scroll anchoring
     chat-components/      # dumb presentational components
-    chat-shell/           # debug app layout
+    chat-shell/           # app layout
     design-tokens/        # colors, spacing, typography
     testing-fixtures/     # fake sessions, giant transcripts, streaming fixtures
     workspace-generators/ # Nx generators for scaffolding
@@ -276,16 +276,16 @@ RP system design in these docs connects at:
 
 ### Implementation note
 
-The `rusty-view` debug client is the natural spike frontend — it validates
+The `rusty-view` operator client is the natural spike frontend — it validates
 the session transport against rusty-crew without any RP complexity.
 `rusty-roleplay` can begin once the narrator profile and tool surface are
-proven through the debug client.
+proven through the operator client.
 
 ## Implementation sequencing
 
 This is not a schedule estimate — it's dependency ordering. Each phase has
 a clear validation gate. The key difference from the earlier sketch is that
-UX is day-1: the users won't use a debug client, so the RP frontend is in
+UX is day-1: the users won't use a bare operator client, so the RP frontend is in
 the critical path.
 
 ### Phase 0: lorekeep contract
@@ -317,9 +317,9 @@ Test with the users' migrated lore. If narrative quality doesn't match or
 beat ST, the architecture is wrong and needs revisiting before any frontend
 work.
 
-### Phase 4: rusty-view debug client + protocol plumbing
+### Phase 4: rusty-view operator client + protocol plumbing
 
-**Produce:** Working debug chat client against rusty-crew session API.
+**Produce:** Working rusty-view client against rusty-crew session API.
 Protocol types generated from Rust. Transport layer proven.
 **Validate:** Can send/receive messages, see session events, survive reconnect.
 **Dev-only tool** — not shown to users.
@@ -391,7 +391,7 @@ Once the lorekeep contract (Phase 0) is locked:
 - lorekeep service (Phase 1) and rusty-crew tool definitions can proceed in
   parallel — the TS types just need the contract, not the implementation
 - Migration script (Phase 2) can proceed once Phase 1 has basic entry CRUD
-- rusty-view debug client (Phase 4) can proceed once Phase 3 has a working
+- rusty-view operator client (Phase 4) can proceed once Phase 3 has a working
   narrator session, even before the full tool suite is complete
 - rusty-roleplay profile system (Phase 5) depends on the RP frontend but
   the profile model is simple enough to develop in parallel

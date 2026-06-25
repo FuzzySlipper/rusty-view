@@ -1,28 +1,28 @@
 {
-  "name": "debug-chat",
+  "name": "rusty-view",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "prefix": "rv",
-  "sourceRoot": "apps/debug-chat/src",
-  "tags": ["type:app", "scope:debug-chat"],
+  "sourceRoot": "apps/rusty-view/src",
+  "tags": ["type:app", "scope:rusty-view"],
   "targets": {
     "build": {
       "executor": "@angular/build:application",
       "outputs": ["{options.outputPath}"],
       "defaultConfiguration": "production",
       "options": {
-        "outputPath": "dist/apps/debug-chat",
-        "browser": "apps/debug-chat/src/main.ts",
-        "tsConfig": "apps/debug-chat/tsconfig.app.json",
+        "outputPath": "dist/apps/rusty-view",
+        "browser": "apps/rusty-view/src/main.ts",
+        "tsConfig": "apps/rusty-view/tsconfig.app.json",
         "assets": [
           {
             "glob": "**/*",
-            "input": "apps/debug-chat/public"
+            "input": "apps/rusty-view/public"
           }
         ],
         "styles": [
           "libs/design-tokens/src/styles/tokens.css",
-          "apps/debug-chat/src/styles.css"
+          "apps/rusty-view/src/styles.css"
         ]
       },
       "configurations": {
@@ -54,10 +54,10 @@
       "defaultConfiguration": "development",
       "configurations": {
         "production": {
-          "buildTarget": "debug-chat:build:production"
+          "buildTarget": "rusty-view:build:production"
         },
         "development": {
-          "buildTarget": "debug-chat:build:development"
+          "buildTarget": "rusty-view:build:development"
         }
       }
     },
@@ -74,9 +74,9 @@
       "continuous": true,
       "executor": "@nx/web:file-server",
       "options": {
-        "buildTarget": "debug-chat:build",
+        "buildTarget": "rusty-view:build",
         "port": 4200,
-        "staticFilePath": "dist/apps/debug-chat/browser",
+        "staticFilePath": "dist/apps/rusty-view/browser",
         "spa": true
       }
     },

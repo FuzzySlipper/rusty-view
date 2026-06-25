@@ -45,7 +45,7 @@ the broader roleplay system design documents.
 ```text
 /rusty-view
   /apps
-    /debug-chat              # brutally useful debug client (reference implementation)
+    /rusty-view              # durable operator chat client (reference implementation)
   /libs
     /protocol               # generated TypeScript types (no Angular, no app logic)
     /transport              # HTTP/SSE client for rusty-crew (no components)
@@ -54,7 +54,7 @@ the broader roleplay system design documents.
     /chat-theme             # appearance settings + live token application
     /transcript-renderer    # virtualized transcript rendering (roleplay-agnostic)
     /chat-components        # dumb presentational components (no service injection)
-    /chat-shell             # debug app layout (session list, transcript, inspectors)
+    /chat-shell             # app layout (session list, transcript, inspectors)
     /design-tokens          # colors, spacing, typography (no app assumptions)
     /testing-fixtures        # fake sessions, giant transcripts, streaming fixtures
     /workspace-generators   # Nx generators for approved scaffolding
@@ -96,7 +96,7 @@ must not own or fork core transcript mechanics.
 # Install dependencies
 npm install
 
-# Development server (debug-chat app)
+# Development server (rusty-view app)
 npm start
 
 # Full CI gate
@@ -112,8 +112,8 @@ npm run build
 npm run e2e
 
 # Nx-specific
-npx nx run debug-chat:serve
-npx nx run debug-chat:build
+npx nx run rusty-view:serve
+npx nx run rusty-view:build
 npx nx run-many --target=test --all
 npx nx graph
 ```
@@ -301,7 +301,7 @@ a reviewer can look at each line and immediately know why it's there.
 - TypeScript protocol files are generated or schema-derived.
 - Generated files are not manually edited.
 - Frontend command/event handling must be exhaustive by event kind.
-- Unknown event kinds must fail safely and visibly in the debug client.
+- Unknown event kinds must fail safely and visibly in the operator client.
 
 ## Transcript Rules
 

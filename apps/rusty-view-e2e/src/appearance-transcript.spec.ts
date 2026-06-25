@@ -38,16 +38,12 @@ test('appearance font-scale change reaches rendered transcript text', async ({
       const el =
         document.querySelector('.rv-block__markdown') ??
         document.querySelector('.rv-block__content');
-      return el !== null
-        ? getComputedStyle(el).fontSize
-        : '';
+      return el !== null ? getComputedStyle(el).fontSize : '';
     });
   }
 
   // It may take a moment for the transcript to populate.
-  await expect
-    .poll(chatTextFontSize, { timeout: 10_000 })
-    .not.toBe('');
+  await expect.poll(chatTextFontSize, { timeout: 10_000 }).not.toBe('');
 
   const before = await chatTextFontSize();
 
@@ -58,10 +54,8 @@ test('appearance font-scale change reaches rendered transcript text', async ({
   await page.locator('.rv-options__close').click();
 
   // The rendered chat text must grow with the token change (13px → 20px at 1.5×).
-  await expect
-    .poll(chatTextFontSize, { timeout: 5_000 })
-    .not.toBe(before);
-  expect(parseInt((await chatTextFontSize()) ?? '0', 10)).toBeGreaterThanOrEqual(
-    19,
-  );
+  await expect.poll(chatTextFontSize, { timeout: 5_000 }).not.toBe(before);
+  expect(
+    parseInt((await chatTextFontSize()) ?? '0', 10),
+  ).toBeGreaterThanOrEqual(19);
 });

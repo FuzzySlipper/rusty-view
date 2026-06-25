@@ -1,7 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 /**
- * Smoke tests for the debug-chat reference app.
+ * Smoke tests for the rusty-view reference app.
  *
  * When the rusty-crew backend is reachable at http://127.0.0.1:9347, these
  * prove the full live stack: browser app → CORS → transport → backend →
@@ -23,7 +23,7 @@ test.beforeAll(async () => {
   }
 });
 
-test('debug-chat renders the shell with sidebar and header', async ({
+test('rusty-view renders the shell with sidebar and header', async ({
   page,
 }) => {
   await page.goto('/');
@@ -31,7 +31,6 @@ test('debug-chat renders the shell with sidebar and header', async ({
   const header = page.locator('.rv-debug__header');
   await expect(header).toBeVisible();
   await expect(header).toContainText('rusty-view');
-  await expect(header).toContainText('debug-chat');
 
   await expect(page.locator('rv-profile-panel')).toBeVisible();
   await expect(page.locator('rv-stream-status')).toBeVisible();

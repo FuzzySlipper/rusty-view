@@ -4,9 +4,9 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "start": "nx serve debug-chat",
+    "start": "nx serve rusty-view",
     "build": "nx run-many -t build --all",
-    "build:debug-chat": "nx build debug-chat",
+    "build:rusty-view": "nx build rusty-view",
     "lint": "nx run-many -t lint --all",
     "lint:affected": "nx affected -t lint",
     "typecheck": "nx run-many -t typecheck --all",

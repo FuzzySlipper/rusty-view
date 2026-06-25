@@ -21,9 +21,9 @@ import {
 import { TRANSCRIPT_TEXT_RENDER_MODE } from '@rusty-view/transcript-renderer';
 
 /**
- * Configuration for the debug-chat app's transport connection to rusty-crew.
+ * Configuration for the rusty-view app's transport connection to rusty-crew.
  */
-export interface DebugChatConfig {
+export interface RustyViewConfig {
   /** Backend URL, e.g. http://192.168.1.10:9347 */
   readonly baseUrl: string;
   /** Optional bearer token (omit for no-auth LAN mode). */
@@ -63,7 +63,7 @@ declare global {
  * browser on a workstation, rusty-crew on a headless box) got "No sessions"
  * because `127.0.0.1` resolved to their own device.
  */
-export function resolveDebugChatConfig(): DebugChatConfig {
+export function resolveRustyViewConfig(): RustyViewConfig {
   const windowConfig = window.__RUSTY_VIEW_CONFIG__;
   const queryBaseUrl = new URLSearchParams(window.location.search)
     .get('api')
@@ -91,15 +91,15 @@ function deriveBaseUrlFromLocation(): string {
 }
 
 /**
- * Provide all debug-chat DI wiring: ChatTransport (with config),
+ * Provide all rusty-view DI wiring: ChatTransport (with config),
  * ChatStorageAdapter (IndexedDB), and ChatStore. Also triggers an initial
  * session list refresh + command registry load on startup.
  *
  * Called with no argument, the backend config is resolved at runtime via
- * {@link resolveDebugChatConfig}. Tests and embedders may pass an explicit config.
+ * {@link resolveRustyViewConfig}. Tests and embedders may pass an explicit config.
  */
-export function provideDebugChat(
-  config: DebugChatConfig = resolveDebugChatConfig(),
+export function provideRustyView(
+  config: RustyViewConfig = resolveRustyViewConfig(),
 ): EnvironmentProviders {
   const transport = new ChatTransport({
     baseUrl: config.baseUrl,

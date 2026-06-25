@@ -653,6 +653,6 @@ within the deployment.
 
 ### Relationship to rusty-view
 
-`rusty-view` (the debug client) does NOT need profile support. It's a
+`rusty-view` (the operator client) does NOT need profile support. It's a
 dev tool that connects directly to rusty-crew. Profiles are a
 `rusty-roleplay` concern only.

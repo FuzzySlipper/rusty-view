@@ -11,7 +11,7 @@ import { expect, test } from '@playwright/test';
  * can only run in a browser via Playwright, not in jsdom.
  *
  * The test:
- * 1. Loads the debug-chat app
+ * 1. Loads the rusty-view app
  * 2. Injects a set of messages via the store and scrolls to a middle position
  * 3. Records which message is visible at the top of the viewport
  * 4. Injects 50 prepended messages (simulating cursor-based replay)

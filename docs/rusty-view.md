@@ -22,7 +22,7 @@ Goal: build a formal, durable frontend architecture for interacting with `rusty-
 
 There are two frontend projects:
 
-1. A boring, technically strong debug/direct chat client.
+1. A boring, technically strong operator/direct chat client.
 2. A descendant roleplay frontend that reuses the basic chat client work while adding custom roleplay-specific presentation and menu complexity.
 
 The intended user base is tiny, currently household-scale, not public SaaS. However, the frontend should still be architecturally strict because frontend projects rot quickly when agents are allowed to improvise.
@@ -31,7 +31,7 @@ The intended user base is tiny, currently household-scale, not public SaaS. Howe
 
 Do not build “the roleplay app” first.
 
-Build a boring, industrial, reusable chat client kit first, with a debug app as its reference implementation.
+Build a boring, industrial, reusable chat client kit first, with rusty-view as its reference implementation.
 
 Then build the roleplay frontend as a separate repo that consumes the base chat packages and adds roleplay-specific UI.
 
@@ -122,14 +122,14 @@ Protocol sharing:
 
 ## `rusty-view` Repo Shape
 
-`rusty-view` should be a formal Angular/Nx workspace containing a runnable debug app plus publishable libraries.
+`rusty-view` should be a formal Angular/Nx workspace containing a runnable operator app plus publishable libraries.
 
 Suggested structure:
 
 ```text
 rusty-view/
   apps/
-    debug-chat/
+    rusty-view/
 
   libs/
     protocol/
@@ -199,7 +199,7 @@ rusty-view/
 
 `chat-shell/`
 
-* Higher-level layout pieces for the debug app.
+* Higher-level layout pieces for the operator app.
 * Session list.
 * Transcript region.
 * Inspector panels.
@@ -225,7 +225,7 @@ rusty-view/
 
 ## `rusty-view` Debug App Requirements
 
-The debug app is not supposed to be beautiful. It should be brutally useful.
+The operator app is not supposed to be decorative. It should be brutally useful.
 
 Minimum capabilities:
 
@@ -247,7 +247,7 @@ Minimum capabilities:
 Purpose:
 
 ```text
-If a behavior fails in debug-chat, investigate backend/base client.
+If a behavior fails in rusty-view, investigate backend/base client.
 If it only fails in rusty-roleplay, investigate roleplay presentation layer.
 ```
 
@@ -481,7 +481,7 @@ noFallthroughCasesInSwitch
 * TypeScript protocol files are generated or schema-derived.
 * Generated files are not manually edited.
 * Frontend command/event handling must be exhaustive by event kind.
-* Unknown event kinds must fail safely and visibly in debug client.
+* Unknown event kinds must fail safely and visibly in the operator client.
 
 ### Transcript Rules
 
@@ -564,7 +564,7 @@ Deliverables:
 * Generated/shared TypeScript types
 * Fake backend fixture for frontend tests
 
-### Milestone 2: Debug Chat MVP
+### Milestone 2: Rusty View MVP
 
 Goal:
 

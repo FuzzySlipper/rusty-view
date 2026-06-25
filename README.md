@@ -1,8 +1,8 @@
 # rusty-view
 
-Boring, industrial, **roleplay-agnostic** chat client kit and debug console for
+Boring, industrial, **roleplay-agnostic** chat client kit and operator console for
 [Rusty Crew](../rusty-crew) sessions. Built as an Angular + Nx monorepo of
-strictly-boundaried libraries plus a `debug-chat` reference app.
+strictly-boundaried libraries plus a `rusty-view` reference app.
 
 `rusty-view` knows nothing about roleplay. A future `rusty-roleplay` repo will
 consume these packages and add roleplay presentation — without forking the core
@@ -21,8 +21,8 @@ TypeScript strict mode with the full paranoid flag set. See
 
 ```text
 apps/
-  debug-chat/            brutally useful debug client (reference implementation)
-  debug-chat-e2e/        Playwright smoke for debug-chat
+  rusty-view/            durable operator chat client (reference implementation)
+  rusty-view-e2e/        Playwright smoke for rusty-view
 libs/
   protocol/              generated TS wire types from the rusty-crew OpenAPI
   transport/             HTTP/SSE client (framework-agnostic)
@@ -30,7 +30,7 @@ libs/
   chat-store/            Angular Signals store
   transcript-renderer/   virtualized transcript rendering (10k+ messages)
   chat-components/       dumb presentational components
-  chat-shell/            debug app layout / container components
+  chat-shell/            app layout / container components
   design-tokens/         CSS custom properties + typed token names
   testing-fixtures/      fake sessions, giant transcripts, stream fixtures
   workspace-generators/  rv:component / rv:fixture / rv:library generators
@@ -53,20 +53,20 @@ Requires Node 20+ and pnpm 11+.
 
 ```bash
 pnpm install
-pnpm start            # serve debug-chat (http://localhost:4200)
+pnpm start            # serve rusty-view (http://localhost:4200)
 ```
 
 ## Commands
 
 | Script                              | What it does                                                                       |
 | ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm start`                        | Serve `debug-chat`                                                                 |
+| `pnpm start`                        | Serve `rusty-view`                                                                 |
 | `pnpm build`                        | Build all projects                                                                 |
 | `pnpm lint`                         | ESLint (incl. module-boundary + forbidden-pattern rules)                           |
 | `pnpm typecheck`                    | `tsc --noEmit` per project                                                         |
 | `pnpm test`                         | Unit tests (vitest) for all projects                                               |
 | `pnpm test:affected`                | Unit tests for affected projects only                                              |
-| `pnpm e2e`                          | Playwright smoke for `debug-chat` (needs browsers: `pnpm exec playwright install`) |
+| `pnpm e2e`                          | Playwright smoke for `rusty-view` (needs browsers: `pnpm exec playwright install`) |
 | `pnpm format` / `pnpm format:check` | Prettier write / check                                                             |
 | `pnpm run ci`                       | Full gate: format check → lint → typecheck → test → build                          |
 | `pnpm graph`                        | Open the Nx project graph                                                          |

@@ -8,7 +8,7 @@ export interface PendingSend {
   readonly error: string | undefined;
 }
 
-/** Default actor for the debug app — overridden by the shell if needed. */
+/** Default actor for the operator app — overridden by the shell if needed. */
 export const DEBUG_ACTOR: ChatActor = {
   id: 'debug-user',
   kind: 'human',

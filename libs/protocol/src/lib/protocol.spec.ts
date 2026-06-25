@@ -154,7 +154,7 @@ describe('@rusty-view/protocol wire types parse representative envelopes', () =>
 
     // The `raw` field is unique to UnknownEventPayload, so its presence narrows
     // the oneOf payload without a type assertion. It carries a debug summary
-    // plus the original event blob, so the debug client can render future/
+    // plus the original event blob, so the operator client can render future/
     // unrecognized backend events generically.
     if ('raw' in event.payload) {
       expect(event.payload.summary).toContain('future_thing');

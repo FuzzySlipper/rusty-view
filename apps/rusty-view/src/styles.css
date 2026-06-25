@@ -1,5 +1,5 @@
 /*
- * Global stylesheet for the debug-chat app. Per the design policy
+ * Global stylesheet for the rusty-view app. Per the design policy
  * (docs/rusty-view.md), the ONLY global CSS allowed is a reset plus design
  * tokens. All other styling is component-scoped and token-driven.
  *

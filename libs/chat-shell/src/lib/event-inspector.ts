@@ -3,7 +3,7 @@ import type { ChatEvent } from '@rusty-view/protocol';
 import { JsonInspectorComponent } from '@rusty-view/chat-components';
 
 /**
- * Raw event stream inspector for the debug app. Shows the raw protocol events
+ * Raw event stream inspector for the operator app. Shows the raw protocol events
  * (from the store's rawEvents signal) in a scrollable list, with per-event JSON
  * detail on selection. Uses actual ChatEvent.kind values from the contract.
  */

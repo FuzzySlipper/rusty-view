@@ -1,9 +1,0 @@
-{
-  "name": "debug-chat-e2e",
-  "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "projectType": "application",
-  "sourceRoot": "apps/debug-chat-e2e/src",
-  "implicitDependencies": ["debug-chat"],
-  "// targets": "to see all targets run: nx show project debug-chat-e2e --web",
-  "targets": {}
-}

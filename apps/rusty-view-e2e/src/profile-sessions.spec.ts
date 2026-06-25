@@ -27,9 +27,7 @@ test('profile sidebar, active session, and sessions menu historical flow', async
   await expect(page.locator('rv-session-list')).toHaveCount(0);
 
   // Wait for profiles to load.
-  const profileCount = await page
-    .locator('.rv-profile')
-    .count();
+  const profileCount = await page.locator('.rv-profile').count();
   test.skip(
     profileCount === 0,
     'no profiles available — needs a backend with sessions',
@@ -70,9 +68,7 @@ test('profile sidebar, active session, and sessions menu historical flow', async
   }
 
   // 5. Return to active.
-  await page
-    .locator('.rv-debug__historical-banner__return')
-    .click();
+  await page.locator('.rv-debug__historical-banner__return').click();
   await expect(page.locator('.rv-debug__historical-banner')).toHaveCount(0);
   // Message input should be back.
   await expect(page.locator('rv-message-input')).toBeVisible();

@@ -19,7 +19,7 @@ import {
 } from './slash-command-runtime';
 
 /**
- * Command composer for the debug app. Slash command input backed by the
+ * Command composer for the operator app. Slash command input backed by the
  * command registry from the store. Supports direct raw command mode for
  * debug operations like /new and /reload-mcp.
  *

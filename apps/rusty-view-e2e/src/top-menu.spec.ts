@@ -56,7 +56,9 @@ test('top menu opens options, applies an appearance change, opens help', async (
   //    the live token override lands on the document root (polled — the write
   //    runs through the zoneless signal scheduler).
   await page.locator('.rv-appearance__range').fill('1.5');
-  await expect.poll(fontMdToken.bind(null, page), { timeout: 5_000 }).toBe('20px');
+  await expect
+    .poll(fontMdToken.bind(null, page), { timeout: 5_000 })
+    .toBe('20px');
 
   // 4. Close Options, open Help.
   await page.locator('.rv-options__close').click();

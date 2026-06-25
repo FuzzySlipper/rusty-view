@@ -209,7 +209,7 @@ platform-specific builds. One deployment target. Updates are server-side
 
 ### UX is day-1, not deferred
 
-A debug client isn't enough. The users need to be comfortable leaving
+An operator client isn't enough. The users need to be comfortable leaving
 SillyTavern, which means the RP frontend must feel usable from day one.
 This doesn't mean cloning ST's UI — much of their UX is confusing, and the
 internal architecture is part of why. But transition friction needs to be
