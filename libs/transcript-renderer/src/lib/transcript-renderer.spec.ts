@@ -5,12 +5,13 @@ import type {
 } from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
 import { Component, input, signal } from '@angular/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
 import {
+  TRANSCRIPT_MARKDOWN_POLICY,
   TRANSCRIPT_TEXT_RENDER_MODE,
   type TextRenderMode,
 } from './render-mode-token';
@@ -188,6 +189,55 @@ describe('MessageBlockComponent', () => {
     expect(sheet).toContain('rv-block__markdown');
     expect(sheet).toContain('var(--rv-color-text-primary)');
     expect(sheet).toContain('var(--rv-font-size-md)');
+  });
+
+  it('bypasses markdown for configured literal exclusions', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '== literal separator ==' }),
+      [
+        {
+          provide: TRANSCRIPT_MARKDOWN_POLICY,
+          useValue: {
+            literalExclusions: [
+              { value: '== literal separator ==', match: 'line' },
+            ],
+            enableUnderscoreHorizontalRules: false,
+            showCodeBlockLanguageLabels: true,
+            showCodeBlockCopyButtons: true,
+          },
+        },
+      ],
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+    expect(host.textContent).toContain('== literal separator ==');
+  });
+
+  it('copies generated markdown code blocks through delegated controls', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: '```ts\nconst x = 1;\n```' }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const button = host.querySelector('.rv-md-code-copy') as HTMLElement | null;
+    expect(button).not.toBeNull();
+    button?.click();
+    await Promise.resolve();
+
+    expect(writeText).toHaveBeenCalledWith('const x = 1;');
   });
 
   it('renders custom block types with a registered content renderer', async () => {

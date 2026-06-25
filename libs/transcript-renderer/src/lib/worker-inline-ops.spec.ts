@@ -46,9 +46,31 @@ describe('processRequestInline (inline worker fallback)', () => {
         content: '```ts\nconst x = 1;\n```',
       });
       if (response.kind === 'parse-markdown') {
-        expect(response.html).toContain('<pre class="rv-md-code"');
+        expect(response.html).toContain('<pre class="rv-md-code');
         expect(response.html).toContain('lang-ts');
         expect(response.html).toContain('const x = 1;');
+        expect(response.html).toContain('rv-md-code-header');
+        expect(response.html).toContain('rv-md-code-copy');
+        expect(response.html).toContain('ts');
+      }
+    });
+
+    it('can disable code block labels and copy controls', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 41,
+        content: '```ts\nconst x = 1;\n```',
+        policy: {
+          literalExclusions: [],
+          enableUnderscoreHorizontalRules: false,
+          showCodeBlockLanguageLabels: false,
+          showCodeBlockCopyButtons: false,
+        },
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).not.toContain('rv-md-code-header');
+        expect(response.html).not.toContain('rv-md-code-copy');
+        expect(response.html).toContain('<pre class="rv-md-code lang-ts"');
       }
     });
 
@@ -202,6 +224,35 @@ describe('processRequestInline (inline worker fallback)', () => {
       }
     });
 
+    it('does not treat underscore-only lines as horizontal rules by default', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 151,
+        content: 'above\n\n___\n\nbelow',
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).not.toContain('<hr>');
+        expect(response.html).toContain('___');
+      }
+    });
+
+    it('can enable underscore horizontal rules through policy', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 152,
+        content: 'above\n\n___\n\nbelow',
+        policy: {
+          literalExclusions: [],
+          enableUnderscoreHorizontalRules: true,
+          showCodeBlockLanguageLabels: true,
+          showCodeBlockCopyButtons: true,
+        },
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).toContain('<hr>');
+      }
+    });
+
     it('renders tables', () => {
       const response = processRequestInline({
         kind: 'parse-markdown',
@@ -236,7 +287,8 @@ describe('processRequestInline (inline worker fallback)', () => {
       const response = processRequestInline({
         kind: 'parse-markdown',
         id: 18,
-        content: '##\n\n**bold without close\n| broken table\n```\nunclosed code',
+        content:
+          '##\n\n**bold without close\n| broken table\n```\nunclosed code',
       });
       expect(response.kind).toBe('parse-markdown');
       if (response.kind === 'parse-markdown') {
@@ -344,7 +396,9 @@ describe('processRequestInline (inline worker fallback)', () => {
     }
 
     it('allows basic formatting tags', () => {
-      const html = sanitize('<p>Hello <b>bold</b> <i>italic</i> <em>em</em></p>');
+      const html = sanitize(
+        '<p>Hello <b>bold</b> <i>italic</i> <em>em</em></p>',
+      );
       expect(html).toContain('<p>');
       expect(html).toContain('<b>bold</b>');
       expect(html).toContain('<i>italic</i>');
@@ -377,7 +431,9 @@ describe('processRequestInline (inline worker fallback)', () => {
     });
 
     it('strips iframe tags entirely', () => {
-      const html = sanitize('<iframe src="https://evil.com"></iframe><p>ok</p>');
+      const html = sanitize(
+        '<iframe src="https://evil.com"></iframe><p>ok</p>',
+      );
       expect(html).not.toContain('<iframe');
       expect(html).toContain('<p>ok</p>');
     });
@@ -413,7 +469,9 @@ describe('processRequestInline (inline worker fallback)', () => {
     });
 
     it('strips data: protocol in src', () => {
-      const html = sanitize('<img src="data:text/html,<script>alert(1)</script>">');
+      const html = sanitize(
+        '<img src="data:text/html,<script>alert(1)</script>">',
+      );
       expect(html).not.toContain('data:text/html');
     });
 
@@ -430,7 +488,9 @@ describe('processRequestInline (inline worker fallback)', () => {
     });
 
     it('allows tables', () => {
-      const html = sanitize('<table><thead><tr><th>Col</th></tr></thead><tbody><tr><td>val</td></tr></tbody></table>');
+      const html = sanitize(
+        '<table><thead><tr><th>Col</th></tr></thead><tbody><tr><td>val</td></tr></tbody></table>',
+      );
       expect(html).toContain('<table>');
       expect(html).toContain('<th>Col</th>');
       expect(html).toContain('<td>val</td>');

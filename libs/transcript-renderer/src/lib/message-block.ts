@@ -13,7 +13,10 @@ import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
 import { AttachmentBlockComponent } from './attachment-block';
 import { WorkerManager } from './worker-manager';
 import {
+  TRANSCRIPT_MARKDOWN_POLICY,
   TRANSCRIPT_TEXT_RENDER_MODE,
+  type MarkdownLiteralExclusion,
+  type MarkdownRenderPolicy,
   type TextRenderMode,
 } from './render-mode-token';
 import {
@@ -100,6 +103,7 @@ export class MessageBlockComponent {
   private readonly contentRenderers =
     inject(CHAT_CONTENT_RENDERERS, { optional: true }) ?? [];
   protected readonly renderMode = inject(TRANSCRIPT_TEXT_RENDER_MODE);
+  protected readonly markdownPolicy = inject(TRANSCRIPT_MARKDOWN_POLICY);
 
   readonly block = input.required<MessageBlock>();
   readonly message = input<ChatMessage | undefined>(undefined);
@@ -250,6 +254,27 @@ export class MessageBlockComponent {
     this.showRaw.update((v) => !v);
   }
 
+  protected onMarkdownInteraction(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const control = target.closest<HTMLElement>('.rv-md-code-copy');
+    if (control === null) return;
+    event.preventDefault();
+
+    const block = control.closest('.rv-md-code-block');
+    const code = block?.querySelector('code')?.textContent;
+    if (code === undefined || code === null) return;
+
+    void copyText(code).then((copied) => {
+      if (!copied) return;
+      const previous = control.textContent ?? 'Copy';
+      control.textContent = 'Copied';
+      setTimeout(() => {
+        control.textContent = previous;
+      }, 1200);
+    });
+  }
+
   private async renderFormatted(
     content: string,
     mode: FormattedTextRenderMode,
@@ -258,7 +283,7 @@ export class MessageBlockComponent {
     const html =
       mode === 'sanitized-html'
         ? await this.workerManager.sanitizeHtml(content)
-        : await this.workerManager.parseMarkdown(content);
+        : await this.workerManager.parseMarkdown(content, this.markdownPolicy);
     // Only update if the block hasn't changed during async processing
     // AND the render mode is still active.
     if (
@@ -274,10 +299,54 @@ export class MessageBlockComponent {
     content: string,
     mode: TextRenderMode,
   ): ResolvedTextRenderMode {
+    if (
+      mode === 'markdown' &&
+      shouldBypassMarkdown(content, this.markdownPolicy)
+    ) {
+      return 'raw';
+    }
     if (mode !== 'auto') return mode;
+    if (shouldBypassMarkdown(content, this.markdownPolicy)) return 'raw';
     if (hasBalancedAllowedHtml(content)) return 'sanitized-html';
-    if (hasMeaningfulMarkdown(content)) return 'markdown';
+    if (hasMeaningfulMarkdown(content, this.markdownPolicy)) return 'markdown';
     return 'raw';
+  }
+}
+
+function shouldBypassMarkdown(
+  content: string,
+  policy: MarkdownRenderPolicy,
+): boolean {
+  return policy.literalExclusions.some((rule) =>
+    matchesLiteralRule(content, rule),
+  );
+}
+
+function matchesLiteralRule(
+  content: string,
+  rule: MarkdownLiteralExclusion,
+): boolean {
+  const mode = rule.match ?? 'contains';
+  const source = rule.caseSensitive === true ? content : content.toLowerCase();
+  const value =
+    rule.caseSensitive === true ? rule.value : rule.value.toLowerCase();
+
+  if (value.length === 0) return false;
+  if (mode === 'exact') return source.trim() === value.trim();
+  if (mode === 'line') {
+    return source.split(/\r?\n/).some((line) => line.trim() === value.trim());
+  }
+  return source.includes(value);
+}
+
+async function copyText(text: string): Promise<boolean> {
+  const clipboard = globalThis.navigator?.clipboard;
+  if (clipboard === undefined) return false;
+  try {
+    await clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -307,14 +376,20 @@ function hasBalancedAllowedHtml(content: string): boolean {
   return sawAllowedTag && stack.length === 0;
 }
 
-function hasMeaningfulMarkdown(content: string): boolean {
+function hasMeaningfulMarkdown(
+  content: string,
+  policy: MarkdownRenderPolicy,
+): boolean {
+  const hrPattern = policy.enableUnderscoreHorizontalRules
+    ? /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/m
+    : /^ {0,3}([-*])(?:\s*\1){2,}\s*$/m;
   return (
     hasClosedCodeFence(content) ||
     /^ {0,3}#{1,6}\s+\S/m.test(content) ||
     /^ {0,3}>\s+\S/m.test(content) ||
     /^ {0,3}[-*+]\s+\S/m.test(content) ||
     /^ {0,3}\d+\.\s+\S/m.test(content) ||
-    /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/m.test(content) ||
+    hrPattern.test(content) ||
     /^\|.+\|\s*\n\|[\s:-]+\|/m.test(content) ||
     /\*\*[^*\n][\s\S]*?\*\*/.test(content) ||
     /~~[^~\n][\s\S]*?~~/.test(content) ||

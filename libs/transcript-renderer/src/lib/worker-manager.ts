@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 
 import { processRequestInline } from './worker-inline-ops';
+import type { MarkdownRenderPolicy } from './render-mode-token';
 import type {
   WorkerOperationKind,
   WorkerRequest,
@@ -30,8 +31,11 @@ export class WorkerManager {
   private workerSupported: boolean = typeof Worker !== 'undefined';
 
   /** Parse markdown content into HTML (off-thread if possible). */
-  parseMarkdown(content: string): Promise<string> {
-    return this.dispatch('parse-markdown', content);
+  parseMarkdown(
+    content: string,
+    policy?: MarkdownRenderPolicy,
+  ): Promise<string> {
+    return this.dispatch('parse-markdown', content, undefined, policy);
   }
 
   /** Sanitize raw HTML for safe rendering (off-thread if possible). */
@@ -72,18 +76,23 @@ export class WorkerManager {
     kind: WorkerOperationKind,
     content: string,
     language?: string,
+    policy?: MarkdownRenderPolicy,
   ): Promise<string> {
     const id = this.nextId++;
 
     if (!this.workerSupported) {
       // Inline fallback — no worker available.
-      return Promise.resolve(this.processInline(kind, id, content, language));
+      return Promise.resolve(
+        this.processInline(kind, id, content, language, policy),
+      );
     }
 
     this.ensureWorker();
     if (this.worker === null) {
       // Worker creation failed — fall back to inline.
-      return Promise.resolve(this.processInline(kind, id, content, language));
+      return Promise.resolve(
+        this.processInline(kind, id, content, language, policy),
+      );
     }
 
     // this.worker is guaranteed non-null here (checked above).
@@ -91,7 +100,7 @@ export class WorkerManager {
     return new Promise<string>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
 
-      const request = this.buildRequest(kind, id, content, language);
+      const request = this.buildRequest(kind, id, content, language, policy);
       worker.postMessage(request);
     });
   }
@@ -138,12 +147,16 @@ export class WorkerManager {
     id: number,
     content: string,
     language?: string,
+    policy?: MarkdownRenderPolicy,
   ): WorkerRequest {
     if (kind === 'highlight-code' && language !== undefined) {
       return { kind: 'highlight-code', id, content, language };
     }
     if (kind === 'parse-markdown') {
-      return { kind: 'parse-markdown', id, content };
+      if (policy === undefined) {
+        return { kind: 'parse-markdown', id, content };
+      }
+      return { kind: 'parse-markdown', id, content, policy };
     }
     if (kind === 'sanitize-html') {
       return { kind: 'sanitize-html', id, content };
@@ -156,8 +169,9 @@ export class WorkerManager {
     id: number,
     content: string,
     language?: string,
+    policy?: MarkdownRenderPolicy,
   ): string {
-    const request = this.buildRequest(kind, id, content, language);
+    const request = this.buildRequest(kind, id, content, language, policy);
     const response = processRequestInline(request);
     if (response.kind === 'error') {
       throw new Error(response.message);

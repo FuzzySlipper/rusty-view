@@ -1,9 +1,9 @@
 import type { WorkerRequest, WorkerResponse } from './worker-message-protocol';
 import {
-  DEFAULT_ALLOWED_HTML_ATTRS,
-  DEFAULT_ALLOWED_HTML_TAGS,
   DEFAULT_HTML_SANITIZER_POLICY,
+  DEFAULT_MARKDOWN_RENDER_POLICY,
   type HtmlSanitizerPolicy,
+  type MarkdownRenderPolicy,
 } from './render-mode-token';
 
 /**
@@ -39,7 +39,10 @@ function escapeHtml(text: string): string {
  * rendered as plain text. No raw HTML from the source ever reaches the output
  * as executable markup.
  */
-function parseMarkdown(content: string): string {
+function parseMarkdown(
+  content: string,
+  policy: MarkdownRenderPolicy = DEFAULT_MARKDOWN_RENDER_POLICY,
+): string {
   const escaped = escapeHtml(content);
   const lines = escaped.split('\n');
 
@@ -60,23 +63,28 @@ function parseMarkdown(content: string): string {
     if (line === undefined) break;
 
     // ---- Code fence ----
-    const codeFenceMatch = line.match(/^```(\w*)$/);
+    const codeFenceMatch = line.match(/^```([\w-]*)$/);
     if (codeFenceMatch !== null) {
       flushParagraph();
       const lang = codeFenceMatch[1] ?? '';
       const codeLines: string[] = [];
       i++;
       let codeLine = lines[i];
-      while (i < lines.length && codeLine !== undefined && codeLine.match(/^```$/) === null) {
+      while (
+        i < lines.length &&
+        codeLine !== undefined &&
+        codeLine.match(/^```$/) === null
+      ) {
         codeLines.push(codeLine);
         i++;
         codeLine = lines[i];
       }
       i++; // skip closing fence (or move past end)
       const code = codeLines.join('\n');
-      const langClass = lang ? ` class="lang-${lang}"` : '';
+      const langClass = lang ? ` lang-${escapeHtml(lang)}` : '';
+      const controls = codeBlockControls(lang, policy);
       htmlParts.push(
-        `<pre class="rv-md-code"${langClass}><code>${code}</code></pre>`,
+        `<figure class="rv-md-code-block">${controls}<pre class="rv-md-code${langClass}"><code>${code}</code></pre></figure>`,
       );
       continue;
     }
@@ -96,7 +104,7 @@ function parseMarkdown(content: string): string {
     }
 
     // ---- Horizontal rule ----
-    if (line.match(/^(-{3,}|\*{3,}|_{3,})\s*$/)) {
+    if (isHorizontalRule(line, policy)) {
       flushParagraph();
       htmlParts.push('<hr>');
       i++;
@@ -127,7 +135,11 @@ function parseMarkdown(content: string): string {
       flushParagraph();
       const items: string[] = [];
       let liLine = lines[i];
-      while (i < lines.length && liLine !== undefined && liLine.match(/^\s*[-*+]\s+/)) {
+      while (
+        i < lines.length &&
+        liLine !== undefined &&
+        liLine.match(/^\s*[-*+]\s+/)
+      ) {
         const item = liLine.replace(/^\s*[-*+]\s+/, '');
         items.push(`<li>${formatInline(item)}</li>`);
         i++;
@@ -142,7 +154,11 @@ function parseMarkdown(content: string): string {
       flushParagraph();
       const items: string[] = [];
       let liLine = lines[i];
-      while (i < lines.length && liLine !== undefined && liLine.match(/^\s*\d+\.\s+/)) {
+      while (
+        i < lines.length &&
+        liLine !== undefined &&
+        liLine.match(/^\s*\d+\.\s+/)
+      ) {
         const item = liLine.replace(/^\s*\d+\.\s+/, '');
         items.push(`<li>${formatInline(item)}</li>`);
         i++;
@@ -164,11 +180,13 @@ function parseMarkdown(content: string): string {
       i += 2; // skip header + separator
       const bodyRows: string[] = [];
       let tableLine = lines[i];
-      while (i < lines.length && tableLine !== undefined && tableLine.startsWith('|')) {
+      while (
+        i < lines.length &&
+        tableLine !== undefined &&
+        tableLine.startsWith('|')
+      ) {
         const cells = splitTableRow(tableLine);
-        const tds = cells
-          .map((c) => `<td>${formatInline(c)}</td>`)
-          .join('');
+        const tds = cells.map((c) => `<td>${formatInline(c)}</td>`).join('');
         bodyRows.push(`<tr>${tds}</tr>`);
         i++;
         tableLine = lines[i];
@@ -196,6 +214,31 @@ function parseMarkdown(content: string): string {
 
   flushParagraph();
   return htmlParts.join('');
+}
+
+function codeBlockControls(
+  language: string,
+  policy: MarkdownRenderPolicy,
+): string {
+  const showLabel =
+    policy.showCodeBlockLanguageLabels && language.trim().length > 0;
+  const showCopy = policy.showCodeBlockCopyButtons;
+  if (!showLabel && !showCopy) return '';
+
+  const label = showLabel
+    ? `<span class="rv-md-code-lang">${escapeHtml(language)}</span>`
+    : '<span class="rv-md-code-lang"></span>';
+  const copy = showCopy
+    ? '<a class="rv-md-code-copy" href="#copy-code" role="button">Copy</a>'
+    : '';
+  return `<figcaption class="rv-md-code-header">${label}${copy}</figcaption>`;
+}
+
+function isHorizontalRule(line: string, policy: MarkdownRenderPolicy): boolean {
+  if (line.match(/^(-{3,}|\*{3,})\s*$/)) return true;
+  return (
+    policy.enableUnderscoreHorizontalRules && line.match(/^_{3,}\s*$/) !== null
+  );
 }
 
 /** Split a table row into cell contents (without leading/trailing pipes). */
@@ -231,21 +274,26 @@ function safeUrl(url: string): string | null {
 
 /** Format inline markdown: links, bold, italic, inline code, strikethrough. */
 function formatInline(text: string): string {
-  return text
-    // Inline code first (prevent formatting inside code spans).
-    .replaceAll(/`([^`]+)`/g, '<code>$1</code>')
-    // Links [text](url) — URL validated for safe protocol.
-    .replaceAll(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText: string, url: string) => {
-      const safe = safeUrl(url);
-      if (safe === null) return match; // render as plain text if unsafe
-      return `<a href="${safe}" rel="noopener noreferrer">${linkText}</a>`;
-    })
-    // Bold
-    .replaceAll(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replaceAll(/\*([^*]+)\*/g, '<em>$1</em>')
-    // Strikethrough
-    .replaceAll(/~~([^~]+)~~/g, '<del>$1</del>');
+  return (
+    text
+      // Inline code first (prevent formatting inside code spans).
+      .replaceAll(/`([^`]+)`/g, '<code>$1</code>')
+      // Links [text](url) — URL validated for safe protocol.
+      .replaceAll(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        (match, linkText: string, url: string) => {
+          const safe = safeUrl(url);
+          if (safe === null) return match; // render as plain text if unsafe
+          return `<a href="${safe}" rel="noopener noreferrer">${linkText}</a>`;
+        },
+      )
+      // Bold
+      .replaceAll(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      // Italic
+      .replaceAll(/\*([^*]+)\*/g, '<em>$1</em>')
+      // Strikethrough
+      .replaceAll(/~~([^~]+)~~/g, '<del>$1</del>')
+  );
 }
 
 /**
@@ -310,9 +358,24 @@ function sanitizeHtml(content: string, policy: HtmlSanitizerPolicy): string {
 
   // Tags whose content must be stripped entirely (not just the tag itself).
   const stripContentTags = new Set([
-    'script', 'style', 'iframe', 'object', 'embed', 'noscript',
-    'template', 'form', 'input', 'button', 'select', 'option',
-    'textarea', 'link', 'meta', 'base', 'title', 'head',
+    'script',
+    'style',
+    'iframe',
+    'object',
+    'embed',
+    'noscript',
+    'template',
+    'form',
+    'input',
+    'button',
+    'select',
+    'option',
+    'textarea',
+    'link',
+    'meta',
+    'base',
+    'title',
+    'head',
   ]);
 
   let result = content;
@@ -364,7 +427,8 @@ function sanitizeAttributes(
   const kept: string[] = [];
 
   // Match attribute name="value" or name='value' or name=value or name
-  const attrRegex = /([a-zA-Z-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+  const attrRegex =
+    /([a-zA-Z-]+)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
   let match: RegExpExecArray | null;
   while ((match = attrRegex.exec(attrs)) !== null) {
     const attrName = match[1]?.toLowerCase();
@@ -404,7 +468,7 @@ export function processRequestInline(request: WorkerRequest): WorkerResponse {
         return {
           kind: 'parse-markdown',
           id: request.id,
-          html: parseMarkdown(request.content),
+          html: parseMarkdown(request.content, request.policy),
         };
       case 'sanitize-html':
         return {

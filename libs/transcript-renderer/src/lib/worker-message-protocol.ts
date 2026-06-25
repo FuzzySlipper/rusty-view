@@ -1,3 +1,5 @@
+import type { MarkdownRenderPolicy } from './render-mode-token';
+
 /**
  * Typed message protocol for the transcript worker.
  *
@@ -11,6 +13,7 @@ export type WorkerRequest =
       readonly kind: 'parse-markdown';
       readonly id: number;
       readonly content: string;
+      readonly policy?: MarkdownRenderPolicy;
     }
   | {
       readonly kind: 'sanitize-html';

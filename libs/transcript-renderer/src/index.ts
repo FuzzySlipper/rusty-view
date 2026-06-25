@@ -26,7 +26,9 @@ export type {
 } from './lib/worker-message-protocol';
 export { processRequestInline } from './lib/worker-inline-ops';
 export {
+  DEFAULT_MARKDOWN_RENDER_POLICY,
   TRANSCRIPT_TEXT_RENDER_MODE,
+  TRANSCRIPT_MARKDOWN_POLICY,
   TRANSCRIPT_HTML_POLICY,
   DEFAULT_HTML_SANITIZER_POLICY,
   DEFAULT_ALLOWED_HTML_TAGS,
@@ -34,6 +36,9 @@ export {
 } from './lib/render-mode-token';
 export type {
   TextRenderMode,
+  MarkdownLiteralExclusion,
+  MarkdownLiteralMatchMode,
+  MarkdownRenderPolicy,
   HtmlSanitizerPolicy,
 } from './lib/render-mode-token';
 export { CHAT_CONTENT_RENDERERS } from './lib/content-renderers';

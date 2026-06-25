@@ -64,7 +64,14 @@
   [class.rv-block--search-match]="searchMatched()"
 >
   @if (shouldRenderFormatted() && renderedHtml()) {
-  <div class="rv-block__markdown" [innerHTML]="renderedHtml()"></div>
+  <div
+    class="rv-block__markdown"
+    [innerHTML]="renderedHtml()"
+    tabindex="0"
+    (click)="onMarkdownInteraction($event)"
+    (keydown.enter)="onMarkdownInteraction($event)"
+    (keydown.space)="$event.preventDefault(); onMarkdownInteraction($event)"
+  ></div>
   } @else {
   <p class="rv-block__content">
     @for (segment of highlightedSegments(); track $index) { @if

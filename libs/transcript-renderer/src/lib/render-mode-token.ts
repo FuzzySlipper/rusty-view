@@ -19,6 +19,36 @@ import { InjectionToken, signal, type Signal } from '@angular/core';
  */
 export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
 
+export type MarkdownLiteralMatchMode = 'exact' | 'contains' | 'line';
+
+export interface MarkdownLiteralExclusion {
+  readonly value: string;
+  readonly match?: MarkdownLiteralMatchMode;
+  readonly caseSensitive?: boolean;
+}
+
+export interface MarkdownRenderPolicy {
+  /**
+   * Literal strings that should bypass Markdown parsing and render as raw text.
+   * Downstream consumers can use this for product-specific separators or syntax
+   * without baking those strings into the base renderer.
+   */
+  readonly literalExclusions: readonly MarkdownLiteralExclusion[];
+  /** Treat underscore-only lines as Markdown horizontal rules. */
+  readonly enableUnderscoreHorizontalRules: boolean;
+  /** Render fenced code-block language labels. */
+  readonly showCodeBlockLanguageLabels: boolean;
+  /** Render copy buttons for fenced code blocks. */
+  readonly showCodeBlockCopyButtons: boolean;
+}
+
+export const DEFAULT_MARKDOWN_RENDER_POLICY: MarkdownRenderPolicy = {
+  literalExclusions: [],
+  enableUnderscoreHorizontalRules: false,
+  showCodeBlockLanguageLabels: true,
+  showCodeBlockCopyButtons: true,
+};
+
 /**
  * DI token for the global text render mode preference.
  *
@@ -36,13 +66,18 @@ export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
  *     deps: [ChatTheme],
  *   }
  */
-export const TRANSCRIPT_TEXT_RENDER_MODE = new InjectionToken<Signal<TextRenderMode>>(
-  'TRANSCRIPT_TEXT_RENDER_MODE',
-  {
+export const TRANSCRIPT_TEXT_RENDER_MODE = new InjectionToken<
+  Signal<TextRenderMode>
+>('TRANSCRIPT_TEXT_RENDER_MODE', {
+  providedIn: 'root',
+  factory: (): Signal<TextRenderMode> => signal('auto'),
+});
+
+export const TRANSCRIPT_MARKDOWN_POLICY =
+  new InjectionToken<MarkdownRenderPolicy>('TRANSCRIPT_MARKDOWN_POLICY', {
     providedIn: 'root',
-    factory: (): Signal<TextRenderMode> => signal('auto'),
-  },
-);
+    factory: (): MarkdownRenderPolicy => DEFAULT_MARKDOWN_RENDER_POLICY,
+  });
 
 /**
  * Allowed HTML tag set for the default sanitized-HTML policy.
@@ -51,9 +86,38 @@ export const TRANSCRIPT_TEXT_RENDER_MODE = new InjectionToken<Signal<TextRenderM
  * forms, and other executable/layout-breaking tags are stripped.
  */
 export const DEFAULT_ALLOWED_HTML_TAGS: readonly string[] = [
-  'p', 'br', 'b', 'i', 'em', 'strong', 'code', 'pre', 'kbd', 's', 'del',
-  'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr',
-  'a', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption',
+  'p',
+  'br',
+  'b',
+  'i',
+  'em',
+  'strong',
+  'code',
+  'pre',
+  'kbd',
+  's',
+  'del',
+  'ul',
+  'ol',
+  'li',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'blockquote',
+  'hr',
+  'a',
+  'span',
+  'div',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
+  'caption',
   'img',
 ];
 
@@ -62,7 +126,14 @@ export const DEFAULT_ALLOWED_HTML_TAGS: readonly string[] = [
  * All `on*` event handler attributes and `style` attributes are stripped.
  */
 export const DEFAULT_ALLOWED_HTML_ATTRS: readonly string[] = [
-  'href', 'src', 'alt', 'title', 'colspan', 'rowspan', 'target', 'rel',
+  'href',
+  'src',
+  'alt',
+  'title',
+  'colspan',
+  'rowspan',
+  'target',
+  'rel',
 ];
 
 /**

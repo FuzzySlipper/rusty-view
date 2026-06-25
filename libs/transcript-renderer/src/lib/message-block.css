@@ -84,6 +84,47 @@
   color: var(--rv-color-text-primary);
 }
 
+.rv-block__markdown .rv-md-code-block {
+  margin: 0 0 var(--rv-space-sm);
+}
+
+.rv-block__markdown .rv-md-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-bottom: none;
+  border-radius: var(--rv-radius) var(--rv-radius) 0 0;
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-block__markdown .rv-md-code-copy {
+  padding: 0 var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: 3px;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.rv-block__markdown .rv-md-code-copy:hover,
+.rv-block__markdown .rv-md-code-copy:focus-visible {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-block__markdown .rv-md-code-header + pre {
+  border-radius: 0 0 var(--rv-radius) var(--rv-radius);
+}
+
 .rv-block__markdown pre code {
   padding: 0;
   border: none;
