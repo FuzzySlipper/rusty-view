@@ -316,6 +316,10 @@ Rule:
 * Do not use class inheritance as the primary reuse mechanism.
 * Use composition, typed contracts, provider overrides, and extension tokens.
 
+See `07-rusty-view-plugin-api.md` for the current plugin contribution contract,
+including generic user-data actions that agent/mechanic sessions can inspect or
+execute with declared side-effect and confirmation policies.
+
 ## Long Chat / Novel-Sized Transcript Design
 
 Assume roleplay chats will become extremely long, potentially novel-sized.

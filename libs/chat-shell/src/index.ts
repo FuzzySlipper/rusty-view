@@ -34,5 +34,41 @@ export type {
   ChatTopMenuItem,
   ChatOptionsTab,
 } from './lib/shell-extension-tokens';
+export {
+  CHAT_AUTO_EXECUTE_HOOKS,
+  CHAT_CONTENT_RENDERERS,
+  CHAT_DATA_ACTIONS,
+  CHAT_ENUM_PROVIDERS,
+  CHAT_MESSAGE_TOOLBAR_ACTIONS,
+  CHAT_PLUGINS,
+  CHAT_SIDEBAR_PANELS,
+  CHAT_SLASH_COMMANDS,
+  provideChatPlugins,
+} from './lib/plugin-api';
+export type {
+  ChatContentRenderer,
+  ChatContentRenderContext,
+  ChatMessageToolbarAction,
+  ChatMessageToolbarContext,
+  ChatPlugin,
+  ChatPluginActionEffect,
+  ChatPluginAutoExecuteHook,
+  ChatPluginAutoTrigger,
+  ChatPluginCommandArgument,
+  ChatPluginCommandContext,
+  ChatPluginCommandResult,
+  ChatPluginConfirmationPolicy,
+  ChatPluginDataAction,
+  ChatPluginDataActionContext,
+  ChatPluginDataActionResult,
+  ChatPluginEnumProvider,
+  ChatPluginEnumProviderContext,
+  ChatPluginEvent,
+  ChatPluginEventBus,
+  ChatPluginPalette,
+  ChatPluginSlashCommand,
+  ChatSettingsPanel,
+  ChatSidebarPanel,
+} from './lib/plugin-api';
 
 export const CHAT_SHELL_VERSION = '0.0.0' as const;

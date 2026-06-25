@@ -40,6 +40,7 @@ Existing docs in this directory that informed this design:
 | `04-quillforge-postmortem.md` | What QuillForge did right/wrong, what carries forward |
 | `06-context-compaction.md` | Scene-aware compaction, director's notes, fact extraction, tool-result lifecycle |
 | `05-project-layout.md` | Proposed repos, services, dependency graph |
+| `07-rusty-view-plugin-api.md` | Generic Rusty View plugin hooks for downstream UI and agent/mechanic actions |
 
 ## Naming
 
