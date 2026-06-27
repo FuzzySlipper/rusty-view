@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AdminHttpTransport } from './admin-http-transport';
 import type { ChatTransportConfig, FetchImpl } from './chat-transport-config';
 import { resolveChatTransportConfig } from './chat-transport-config';
+import type { AdminProfileRegistryDiagnostics } from './admin-api-types';
 
 interface CapturedRequest {
   readonly url: string;
@@ -291,6 +292,93 @@ describe('AdminHttpTransport', () => {
     expect(lastRequest().method).toBe('POST');
     expect(lastRequest().url).toContain(
       '/v1/admin/control/sessions/session-alpha/runtime/resume',
+    );
+  });
+
+  it('lists profile registry records through the registry route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({ items: [], total: 0, limit: 50, offset: 0 }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.profileRegistry({
+      source: 'file_fallback',
+      lifecycleStatus: 'active',
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('GET');
+    expect(req.url).toContain('/v1/admin/profiles/registry');
+    expect(req.url).toContain('source=file_fallback');
+    expect(req.url).toContain('lifecycle_status=active');
+  });
+
+  it('reads a single profile registry record by profile id', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        source: 'registry',
+        profileId: 'field-prime',
+        lifecycleStatus: 'active',
+        activeRuntimeRefs: [],
+        sourceAssetRefs: [],
+        sourceAssetStatuses: [],
+        diagnostics: [],
+        fallbackStatus: 'registry_authoritative',
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const record = await transport.profileRegistryRecord('field prime');
+
+    expect(record.profileId).toBe('field-prime');
+    expect(lastRequest().url).toContain(
+      '/v1/admin/profiles/registry/field%20prime',
+    );
+  });
+
+  it('reads profile registry diagnostics', async () => {
+    const bundle: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-26T00:00:00Z',
+      records: [],
+      registryCount: 0,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(bundle));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.profileDiagnostics();
+
+    expect(result?.registryCount).toBe(0);
+    expect(lastRequest().url).toContain('/v1/admin/diagnostics/profiles');
+  });
+
+  it('requests a profile bundle export plan', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        profileId: 'field-prime',
+        generatedAt: '2026-06-26T00:00:00Z',
+        source: 'registry',
+        lifecycleStatus: 'active',
+        fallbackStatus: 'registry_authoritative',
+        bundleRootName: 'field-prime-profile-bundle',
+        entries: [],
+        activeDbStateEntries: [],
+        fileAssetEntries: [],
+        optionalEntries: [],
+        diagnostics: [],
+        warnings: [],
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const plan = await transport.profileExportPlan('field-prime');
+
+    expect(plan.profileId).toBe('field-prime');
+    expect(lastRequest().url).toContain(
+      '/v1/admin/profiles/registry/field-prime/export-plan',
     );
   });
 });

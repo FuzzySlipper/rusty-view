@@ -31,10 +31,14 @@ import type {
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
   AdminPage,
+  AdminProfileRegistryDiagnostics,
+  AdminProfileRegistryQuery,
+  AdminProfileRegistryRecord,
   ApiCapabilityRegistry,
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  ProfileBundleExportPlan,
   RuntimeConfigApplyResult,
   RuntimeConfigValidationReport,
   RuntimePauseControlRequest,
@@ -159,6 +163,26 @@ export class ChatTransport {
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {
     return this.adminHttp.capabilities();
+  }
+
+  adminProfileRegistry(
+    query?: AdminProfileRegistryQuery,
+  ): Promise<AdminPage<AdminProfileRegistryRecord>> {
+    return this.adminHttp.profileRegistry(query);
+  }
+
+  adminProfileRegistryRecord(
+    profileId: string,
+  ): Promise<AdminProfileRegistryRecord> {
+    return this.adminHttp.profileRegistryRecord(profileId);
+  }
+
+  adminProfileDiagnostics(): Promise<AdminProfileRegistryDiagnostics | null> {
+    return this.adminHttp.profileDiagnostics();
+  }
+
+  adminProfileExportPlan(profileId: string): Promise<ProfileBundleExportPlan> {
+    return this.adminHttp.profileExportPlan(profileId);
   }
 
   createAdminProfile(

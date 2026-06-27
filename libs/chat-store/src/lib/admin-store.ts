@@ -6,10 +6,13 @@ import {
   type AdminControlResponse,
   type AdminDiagnosticsBundle,
   type AdminPage,
+  type AdminProfileRegistryDiagnostics,
+  type AdminProfileRegistryRecord,
   type ApiCapabilityRegistry,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
+  type ProfileBundleExportPlan,
   type RuntimeBrainModuleDiagnostics,
   type RuntimeConfigApplyResult,
   type RuntimeConfigValidationReport,
@@ -48,6 +51,9 @@ export class AdminStore {
   private readonly _configValidation =
     signal<RuntimeConfigValidationReport | null>(null);
   private readonly _capabilities = signal<ApiCapabilityRegistry | null>(null);
+  private readonly _profileDiagnostics =
+    signal<AdminProfileRegistryDiagnostics | null>(null);
+  private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
   private readonly _error = signal<string | null>(null);
@@ -67,6 +73,8 @@ export class AdminStore {
   readonly mcpSurfaces = this._mcpSurfaces.asReadonly();
   readonly configValidation = this._configValidation.asReadonly();
   readonly capabilities = this._capabilities.asReadonly();
+  readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
+  readonly exportPlan = this._exportPlan.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly saving = this._saving.asReadonly();
   readonly error = this._error.asReadonly();
@@ -105,6 +113,15 @@ export class AdminStore {
       );
   });
 
+  /**
+   * Profile registry records from the DB-backed registry diagnostics,
+   * including file-backed fallback projections. Empty when the backend has
+   * not exposed the registry diagnostics route.
+   */
+  readonly registryRecords = computed<readonly AdminProfileRegistryRecord[]>(
+    () => this._profileDiagnostics()?.records ?? [],
+  );
+
   async refresh(): Promise<void> {
     this._loading.set(true);
     this._error.set(null);
@@ -116,6 +133,7 @@ export class AdminStore {
         mcpSurfaces,
         configValidation,
         capabilities,
+        profileDiagnostics,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
         this.transport.adminSessions({ limit: 100 }),
@@ -123,6 +141,7 @@ export class AdminStore {
         this.transport.adminMcpSurfaces({ limit: 100 }),
         this.transport.adminConfigValidation(),
         this.transport.adminCapabilities().catch(() => null),
+        this.transport.adminProfileDiagnostics().catch(() => null),
       ]);
       this._diagnostics.set(diagnostics);
       this._sessions.set(sessions);
@@ -130,6 +149,7 @@ export class AdminStore {
       this._mcpSurfaces.set(mcpSurfaces);
       this._configValidation.set(configValidation);
       this._capabilities.set(capabilities);
+      this._profileDiagnostics.set(profileDiagnostics);
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -165,6 +185,30 @@ export class AdminStore {
     } finally {
       this._saving.set(false);
     }
+  }
+
+  /**
+   * Request a profile bundle export plan for backup/review. The plan
+   * distinguishes active DB state entries from file asset entries and does
+   * not mutate service config or sessions. See ADR 0019.
+   */
+  async loadExportPlan(profileId: string): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._exportPlan.set(null);
+    try {
+      const plan = await this.transport.adminProfileExportPlan(profileId);
+      this._exportPlan.set(plan);
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /** Clear the currently loaded export plan without affecting other state. */
+  clearExportPlan(): void {
+    this._exportPlan.set(null);
   }
 
   async pauseRuntime(

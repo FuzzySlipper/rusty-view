@@ -330,3 +330,178 @@ export interface ApiCapabilityRegistry {
   readonly slash_commands: readonly unknown[];
   readonly capabilities: readonly ApiCapabilityDescriptor[];
 }
+
+// ---- DB-backed profile registry (ADR 0019) ----
+
+/**
+ * Whether a profile registry record is backed by the DB registry or by a
+ * file-backed compatibility projection. See ADR 0019.
+ */
+export type AdminProfileRegistrySource = 'registry' | 'file_fallback';
+
+/**
+ * Drift status for a profile source asset referenced by the registry.
+ * `tracked` means the on-disk fingerprint matches the registry snapshot.
+ */
+export type AdminProfileAssetStatus =
+  | 'tracked'
+  | 'missing'
+  | 'changed'
+  | 'unknown';
+
+/**
+ * A reference to a file-backed profile asset (e.g. `soul.md`, `memory.md`,
+ * `profile.yaml`, profile-local skills). File assets remain the authoritative
+ * home for human-authored prompt material; the registry stores references and
+ * fingerprints, not raw prompt text.
+ */
+export interface ProfileRegistrySourceAssetRef {
+  readonly assetKind: string;
+  readonly path: string;
+  readonly contentHash?: string;
+  readonly lastSeenAt?: string;
+  readonly metadataJson: unknown;
+}
+
+/**
+ * A derived runtime graph reference produced from registry state (brain,
+ * session, scheduled job, channel binding, or MCP binding). Derived refs are
+ * a snapshot/plan and must be applied through service APIs.
+ */
+export interface ProfileRegistryDerivedRuntimeRef {
+  readonly refKind: string;
+  readonly refId: string;
+  readonly status: string;
+  readonly updatedAt?: string;
+  readonly metadataJson: unknown;
+}
+
+/**
+ * Live status of a source asset, comparing the registry snapshot fingerprint
+ * to the current on-disk fingerprint. Used to surface drift/missing assets.
+ */
+export interface AdminProfileRegistryAssetStatus {
+  readonly assetKind: string;
+  readonly path: string;
+  readonly contentHash?: string;
+  readonly currentContentHash?: string;
+  readonly status: AdminProfileAssetStatus;
+  readonly metadataJson?: unknown;
+}
+
+/**
+ * Safe admin projection of a profile registry record. Active runtime settings
+ * and raw prompt/file contents are intentionally not exposed here; the record
+ * carries registry-owned metadata, derived runtime refs, and source asset
+ * refs/fingerprints so the UI can distinguish DB-active state from file
+ * assets.
+ */
+export interface AdminProfileRegistryRecord {
+  readonly source: AdminProfileRegistrySource;
+  readonly profileId: string;
+  readonly lifecycleStatus: string;
+  readonly displayName?: string;
+  readonly summary?: string;
+  readonly defaultSessionKind?: string;
+  readonly agentId?: string;
+  readonly ownerId?: string;
+  readonly revision?: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly importedFrom?: string;
+  readonly importedAt?: string;
+  readonly activeRuntimeRefs: readonly ProfileRegistryDerivedRuntimeRef[];
+  readonly sourceAssetRefs: readonly ProfileRegistrySourceAssetRef[];
+  readonly sourceAssetStatuses: readonly AdminProfileRegistryAssetStatus[];
+  readonly diagnostics: readonly RuntimeConfigDiagnostic[];
+  readonly fallbackStatus: 'registry_authoritative' | 'file_backed_fallback';
+}
+
+/**
+ * Profile registry diagnostics bundle. Aggregates registry records (including
+ * file-backed fallback projections) plus drift/missing-asset diagnostics and
+ * registry/file fallback counts.
+ */
+export interface AdminProfileRegistryDiagnostics {
+  readonly generatedAt: string;
+  readonly records: readonly AdminProfileRegistryRecord[];
+  readonly registryCount: number;
+  readonly fileFallbackCount: number;
+  readonly driftCount: number;
+  readonly missingAssetCount: number;
+  readonly diagnostics: readonly RuntimeConfigDiagnostic[];
+}
+
+/**
+ * Query filters for the profile registry list route. `source` and
+ * `fallbackStatus` select registry vs file-backed fallback records.
+ */
+export interface AdminProfileRegistryQuery {
+  readonly limit?: number;
+  readonly offset?: number;
+  readonly lifecycleStatus?: string;
+  readonly source?: AdminProfileRegistrySource;
+  readonly fallbackStatus?: 'registry_authoritative' | 'file_backed_fallback';
+}
+
+// ---- profile bundle export plan (ADR 0019) ----
+
+/**
+ * Origin category for a profile bundle export entry. `registry_active_state`
+ * entries are generated from DB-backed registry state; `file_asset` entries
+ * are planned file copies of prompt/assets; `memory_space_optional` entries
+ * are optional separate memory-space exports.
+ */
+export type ProfileBundleExportSource =
+  | 'registry_active_state'
+  | 'file_asset'
+  | 'generated_metadata'
+  | 'memory_space_optional';
+
+/**
+ * Kind of artifact a profile bundle export entry materializes in the bundle.
+ */
+export type ProfileBundleExportEntryKind =
+  | 'generated_profile_yaml'
+  | 'copy_file_asset'
+  | 'generated_registry_json'
+  | 'generated_runtime_plan_json'
+  | 'generated_checksums_json'
+  | 'optional_memory_space_export';
+
+/**
+ * One planned entry in a profile bundle export. Raw file content is never
+ * embedded in the plan; file assets are referenced by origin path and hash.
+ */
+export interface ProfileBundleExportEntry {
+  readonly targetPath: string;
+  readonly kind: ProfileBundleExportEntryKind;
+  readonly source: ProfileBundleExportSource;
+  readonly originPath?: string;
+  readonly originAssetKind?: string;
+  readonly contentHash?: string;
+  readonly currentContentHash?: string;
+  readonly assetStatus?: string;
+  readonly contentJson?: unknown;
+  readonly notes: readonly string[];
+}
+
+/**
+ * A profile bundle export plan. Distinguishes active DB state entries from
+ * file asset entries and optional memory-space entries. The plan is a
+ * snapshot for backup/review and does not mutate service config or sessions.
+ */
+export interface ProfileBundleExportPlan {
+  readonly profileId: string;
+  readonly generatedAt: string;
+  readonly source: AdminProfileRegistrySource;
+  readonly lifecycleStatus: string;
+  readonly fallbackStatus: 'registry_authoritative' | 'file_backed_fallback';
+  readonly bundleRootName: string;
+  readonly entries: readonly ProfileBundleExportEntry[];
+  readonly activeDbStateEntries: readonly string[];
+  readonly fileAssetEntries: readonly string[];
+  readonly optionalEntries: readonly string[];
+  readonly diagnostics: readonly RuntimeConfigDiagnostic[];
+  readonly warnings: readonly string[];
+}

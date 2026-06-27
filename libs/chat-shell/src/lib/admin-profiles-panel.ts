@@ -7,7 +7,11 @@ import {
   signal,
 } from '@angular/core';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
-import type { CreateAdminProfileRequest } from '@rusty-view/transport';
+import type {
+  AdminProfileRegistryRecord,
+  CreateAdminProfileRequest,
+  ProfileBundleExportEntry,
+} from '@rusty-view/transport';
 
 interface ProfileFormState {
   readonly profileId: string;
@@ -90,12 +94,17 @@ export class AdminProfilesPanelComponent {
 
   protected readonly capabilityRows = CAPABILITY_ROWS;
   protected readonly form = signal<ProfileFormState>(INITIAL_FORM);
+  protected readonly exportProfileId = signal<string | null>(null);
   protected readonly createDisabled = computed(
     () =>
       this.admin.saving() ||
       this.form().profileId.trim() === '' ||
       this.form().provider.trim() === '' ||
       this.form().modelName.trim() === '',
+  );
+  protected readonly exportPlan = computed(() => this.admin.exportPlan());
+  protected readonly exportPlanMatchesProfile = computed(
+    () => this.exportPlan()?.profileId === this.exportProfileId(),
   );
 
   constructor() {
@@ -109,6 +118,32 @@ export class AdminProfilesPanelComponent {
   protected refresh(): void {
     void this.admin.refresh();
     void this.chatStore.refreshSessions();
+  }
+
+  protected requestExportPlan(profileId: string): void {
+    this.exportProfileId.set(profileId);
+    void this.admin.loadExportPlan(profileId);
+  }
+
+  protected closeExportPlan(): void {
+    this.exportProfileId.set(null);
+    this.admin.clearExportPlan();
+  }
+
+  protected isFileAssetEntry(entry: ProfileBundleExportEntry): boolean {
+    return entry.source === 'file_asset';
+  }
+
+  protected isActiveDbStateEntry(entry: ProfileBundleExportEntry): boolean {
+    return entry.source === 'registry_active_state';
+  }
+
+  protected sourceLabel(record: AdminProfileRegistryRecord): string {
+    return record.source === 'registry' ? 'DB registry' : 'file fallback';
+  }
+
+  protected planSourceLabel(source: 'registry' | 'file_fallback'): string {
+    return source === 'registry' ? 'DB registry' : 'file fallback';
   }
 
   protected updateText(

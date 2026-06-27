@@ -142,6 +142,126 @@
   </section>
 
   <section class="rv-admin-profiles__section">
+    <h2>Profile Registry</h2>
+    @if (admin.registryRecords().length === 0) {
+    <div class="rv-admin-profiles__empty">
+      No profile registry records. Backend may not expose the registry API.
+    </div>
+    } @else {
+    <ul class="rv-admin-profiles__list">
+      @for (record of admin.registryRecords(); track record.profileId) {
+      <li class="rv-admin-profiles__profile rv-admin-profiles__registry">
+        <div class="rv-admin-profiles__profile-header">
+          <span>{{ record.profileId }}</span>
+          <span
+            class="rv-admin-profiles__source"
+            [class.rv-admin-profiles__source--registry]="
+              record.source === 'registry'
+            "
+            [class.rv-admin-profiles__source--file-fallback]="
+              record.source === 'file_fallback'
+            "
+          >
+            {{ sourceLabel(record) }}
+          </span>
+        </div>
+        <div class="rv-admin-profiles__meta">
+          <span>lifecycle {{ record.lifecycleStatus }}</span>
+          <span>revision {{ record.revision ?? '-' }}</span>
+          <span>kind {{ record.defaultSessionKind ?? '-' }}</span>
+          <span>agent {{ record.agentId ?? '-' }}</span>
+          <span>owner {{ record.ownerId ?? '-' }}</span>
+        </div>
+
+        <div class="rv-admin-profiles__registry-group">
+          <span class="rv-admin-profiles__group-label"
+            >Active registry fields (DB state)</span
+          >
+          <div class="rv-admin-profiles__subgrid">
+            <span>name</span>
+            <span>{{ record.displayName ?? '-' }}</span>
+            <span>summary</span>
+            <span>{{ record.summary ?? '-' }}</span>
+          </div>
+          @if (record.activeRuntimeRefs.length > 0) {
+          <div class="rv-admin-profiles__runtime-refs">
+            @for (ref of record.activeRuntimeRefs; track ref.refId) {
+            <span>{{ ref.refKind }}: {{ ref.refId }} ({{ ref.status }})</span>
+            }
+          </div>
+          } @else {
+          <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
+            no derived runtime refs
+          </div>
+          }
+        </div>
+
+        <div class="rv-admin-profiles__registry-group">
+          <span class="rv-admin-profiles__group-label"
+            >File assets (soul.md / memory.md / templates)</span
+          >
+          @if (record.sourceAssetStatuses.length === 0) {
+          <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
+            no referenced file assets
+          </div>
+          } @else {
+          <div class="rv-admin-profiles__asset-list">
+            @for (asset of record.sourceAssetStatuses; track asset.path) {
+            <span
+              class="rv-admin-profiles__asset"
+              [class.rv-admin-profiles__asset--tracked]="
+                asset.status === 'tracked'
+              "
+              [class.rv-admin-profiles__asset--changed]="
+                asset.status === 'changed'
+              "
+              [class.rv-admin-profiles__asset--missing]="
+                asset.status === 'missing'
+              "
+            >
+              {{ asset.assetKind }} · {{ asset.status }}
+            </span>
+            }
+          </div>
+          }
+        </div>
+
+        @if (record.diagnostics.length > 0) {
+        <div class="rv-admin-profiles__registry-group">
+          <span class="rv-admin-profiles__group-label">Diagnostics</span>
+          <div class="rv-admin-profiles__runtime-refs">
+            @for (diag of record.diagnostics; track diag.code) {
+            <span
+              class="rv-admin-profiles__diag"
+              [class.rv-admin-profiles__diag--error]="
+                diag.severity === 'error'
+              "
+              [class.rv-admin-profiles__diag--warning]="
+                diag.severity === 'warning'
+              "
+            >
+              {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
+            </span>
+            }
+          </div>
+        </div>
+        }
+
+        <button
+          type="button"
+          class="rv-admin-profiles__button"
+          (click)="requestExportPlan(record.profileId)"
+          [disabled]="admin.saving()"
+        >
+          Export plan
+        </button>
+      </li>
+      }
+    </ul>
+    }
+  </section>
+
+  <section class="rv-admin-profiles__section">
     <h2>Configured Profiles</h2>
     @if (admin.profiles().length === 0) {
     <div class="rv-admin-profiles__empty">No configured profiles.</div>
@@ -175,6 +295,78 @@
       </li>
       }
     </ul>
+    }
+  </section>
+
+  <section class="rv-admin-profiles__section">
+    <h2>Export Plan</h2>
+    @if (exportPlan(); as plan) {
+    <div class="rv-admin-profiles__export-plan">
+      <div class="rv-admin-profiles__profile-header">
+        <span>{{ plan.profileId }}</span>
+        <button
+          type="button"
+          class="rv-admin-profiles__close"
+          (click)="closeExportPlan()"
+          aria-label="Close export plan"
+        >
+          x
+        </button>
+      </div>
+      <div class="rv-admin-profiles__meta">
+        <span>bundle {{ plan.bundleRootName }}</span>
+        <span>lifecycle {{ plan.lifecycleStatus }}</span>
+        <span>{{ planSourceLabel(plan.source) }}</span>
+      </div>
+      @if (plan.warnings.length > 0) {
+      <div class="rv-admin-profiles__export-warnings" role="alert">
+        @for (warning of plan.warnings; track $index) {
+        <span>{{ warning }}</span>
+        }
+      </div>
+      }
+      <div class="rv-admin-profiles__export-groups">
+        <span>active DB state: {{ plan.activeDbStateEntries.length }}</span>
+        <span>file assets: {{ plan.fileAssetEntries.length }}</span>
+        <span>optional: {{ plan.optionalEntries.length }}</span>
+      </div>
+      <ul class="rv-admin-profiles__list">
+        @for (entry of plan.entries; track entry.targetPath) {
+        <li
+          class="rv-admin-profiles__export-entry"
+          [class.rv-admin-profiles__export-entry--file]="
+            isFileAssetEntry(entry)
+          "
+          [class.rv-admin-profiles__export-entry--active]="
+            isActiveDbStateEntry(entry)
+          "
+        >
+          <span class="rv-admin-profiles__export-target"
+            >{{ entry.targetPath }}</span
+          >
+          <span class="rv-admin-profiles__export-kind">{{ entry.kind }}</span>
+          @if (entry.originPath; as origin) {
+          <span class="rv-admin-profiles__muted">from {{ origin }}</span>
+          } @if (entry.assetStatus; as status) {
+          <span class="rv-admin-profiles__muted">asset {{ status }}</span>
+          }
+        </li>
+        }
+      </ul>
+      <p class="rv-admin-profiles__muted">
+        Export plan is a snapshot for backup/review. It does not mutate service
+        config or sessions. Prompt asset editing must go through explicit asset
+        APIs or this export flow, not implicit registry mutation.
+      </p>
+    </div>
+    } @else if (exportProfileId() !== null) {
+    <div class="rv-admin-profiles__empty">
+      Loading export plan for {{ exportProfileId() }}…
+    </div>
+    } @else {
+    <div class="rv-admin-profiles__empty">
+      Select a profile above to request an export bundle plan.
+    </div>
     }
   </section>
 

@@ -9,9 +9,13 @@ import type {
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
   AdminPage,
+  AdminProfileRegistryDiagnostics,
+  AdminProfileRegistryQuery,
+  AdminProfileRegistryRecord,
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  ProfileBundleExportPlan,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimeResumeNoopResult,
@@ -82,6 +86,55 @@ export class AdminHttpTransport {
 
   capabilities(): Promise<ApiCapabilityRegistry> {
     return this.request('GET', '/v1/admin/capabilities');
+  }
+
+  /**
+   * List DB-backed profile registry records (including file-backed fallback
+   * projections). See ADR 0019. Returns a paginated admin page.
+   */
+  profileRegistry(
+    query?: AdminProfileRegistryQuery,
+  ): Promise<AdminPage<AdminProfileRegistryRecord>> {
+    return this.request(
+      'GET',
+      '/v1/admin/profiles/registry',
+      optionsForRegistryQuery(query),
+    );
+  }
+
+  /**
+   * Read a single profile registry record by profile id. Throws a
+   * `not_found` admin error when the profile is not in the registry and has
+   * no file-backed fallback projection.
+   */
+  profileRegistryRecord(
+    profileId: string,
+  ): Promise<AdminProfileRegistryRecord> {
+    return this.request(
+      'GET',
+      `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}`,
+    );
+  }
+
+  /**
+   * Profile registry diagnostics: lifecycle status, revision, derived runtime
+   * refs, source asset refs/fingerprints, and registry/file drift. Returns
+   * `null` when the backend does not expose the registry diagnostics route.
+   */
+  profileDiagnostics(): Promise<AdminProfileRegistryDiagnostics | null> {
+    return this.request('GET', '/v1/admin/diagnostics/profiles');
+  }
+
+  /**
+   * Plan a profile bundle export for backup/review. The plan distinguishes
+   * active DB state entries from file asset entries and optional memory-space
+   * entries; it does not mutate service config or sessions.
+   */
+  profileExportPlan(profileId: string): Promise<ProfileBundleExportPlan> {
+    return this.request(
+      'GET',
+      `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}/export-plan`,
+    );
   }
 
   createProfile(
@@ -209,6 +262,23 @@ export class AdminHttpTransport {
 
 function optionsForQuery(query?: AdminListQuery): RequestOptions {
   return query === undefined ? {} : { query: { ...query } };
+}
+
+function optionsForRegistryQuery(
+  query?: AdminProfileRegistryQuery,
+): RequestOptions {
+  if (query === undefined) return {};
+  const params: Record<string, unknown> = {};
+  if (query.limit !== undefined) params['limit'] = query.limit;
+  if (query.offset !== undefined) params['offset'] = query.offset;
+  if (query.lifecycleStatus !== undefined) {
+    params['lifecycle_status'] = query.lifecycleStatus;
+  }
+  if (query.source !== undefined) params['source'] = query.source;
+  if (query.fallbackStatus !== undefined) {
+    params['fallback_status'] = query.fallbackStatus;
+  }
+  return { query: params };
 }
 
 function compactRecord(value: object): Record<string, unknown> {
