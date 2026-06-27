@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEST_DIR="/home/agents/rusty-crew/site"
+DEST_DIR="/home/system/rusty-crew/site"
 
 echo "Building rusty-view..."
 cd "$REPO_ROOT"

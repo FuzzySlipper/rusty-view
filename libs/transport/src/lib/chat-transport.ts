@@ -38,6 +38,14 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  ModelProviderPage,
+  ModelProviderProtocol,
+  ModelProviderQuery,
+  ModelProviderRecord,
+  ModelProviderRefreshMode,
+  ModelProviderStatus,
+  ModelProviderWriteRequest,
+  ModelProviderWriteResponse,
   ProfileBundleExportPlan,
   RuntimeConfigApplyResult,
   RuntimeConfigValidationReport,
@@ -183,6 +191,29 @@ export class ChatTransport {
 
   adminProfileExportPlan(profileId: string): Promise<ProfileBundleExportPlan> {
     return this.adminHttp.profileExportPlan(profileId);
+  }
+
+  adminModelProviders(query?: ModelProviderQuery): Promise<ModelProviderPage> {
+    return this.adminHttp.modelProviders(query);
+  }
+
+  adminModelProvider(alias: string): Promise<ModelProviderRecord> {
+    return this.adminHttp.modelProvider(alias);
+  }
+
+  createAdminModelProvider(
+    request: ModelProviderWriteRequest,
+    refresh?: ModelProviderRefreshMode,
+  ): Promise<ModelProviderWriteResponse> {
+    return this.adminHttp.createModelProvider(request, refresh);
+  }
+
+  updateAdminModelProvider(
+    alias: string,
+    request: ModelProviderWriteRequest,
+    refresh?: ModelProviderRefreshMode,
+  ): Promise<ModelProviderWriteResponse> {
+    return this.adminHttp.updateModelProvider(alias, request, refresh);
   }
 
   createAdminProfile(

@@ -68,3 +68,4 @@ export const SERVICE_PANEL_ID = 'service' as const;
 export const OPTIONS_PANEL_ID = 'options' as const;
 export const HELP_PANEL_ID = 'help' as const;
 export const SESSIONS_PANEL_ID = 'sessions' as const;
+export const PROVIDERS_PANEL_ID = 'providers' as const;

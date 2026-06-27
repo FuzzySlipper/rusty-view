@@ -15,6 +15,14 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  ModelProviderPage,
+  ModelProviderProtocol,
+  ModelProviderQuery,
+  ModelProviderRecord,
+  ModelProviderRefreshMode,
+  ModelProviderStatus,
+  ModelProviderWriteRequest,
+  ModelProviderWriteResponse,
   ProfileBundleExportPlan,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
@@ -137,6 +145,67 @@ export class AdminHttpTransport {
     );
   }
 
+  /**
+   * List reusable model provider aliases (tasks #3534/#3537). Secrets are
+   * redacted on read; `credential.hasSecret` indicates whether a key is set.
+   */
+  modelProviders(query?: ModelProviderQuery): Promise<ModelProviderPage> {
+    return this.request(
+      'GET',
+      '/v1/admin/model-providers',
+      optionsForProviderQuery(query),
+    );
+  }
+
+  /**
+   * Read one model provider alias by alias. Returns redacted credential
+   * status.
+   */
+  modelProvider(alias: string): Promise<ModelProviderRecord> {
+    return this.request(
+      'GET',
+      `/v1/admin/model-providers/${encodeURIComponent(alias)}`,
+    );
+  }
+
+  /**
+   * Create a model provider alias (POST). Optionally trigger a runtime
+   * refresh of profiles referencing this alias via `refresh`.
+   */
+  createModelProvider(
+    request: ModelProviderWriteRequest,
+    refresh: ModelProviderRefreshMode = 'none',
+  ): Promise<ModelProviderWriteResponse> {
+    return this.request('POST', providerWritePath(refresh), {
+      body: compactRecord(providerWriteBody(request)) as Record<
+        string,
+        unknown
+      >,
+    });
+  }
+
+  /**
+   * Update a model provider alias by alias (PATCH). Use `refresh` to plan or
+   * apply runtime rebuilds for affected profiles. `expectedRevision` guards
+   * concurrent edits.
+   */
+  updateModelProvider(
+    alias: string,
+    request: ModelProviderWriteRequest,
+    refresh: ModelProviderRefreshMode = 'none',
+  ): Promise<ModelProviderWriteResponse> {
+    return this.request(
+      'PATCH',
+      `${providerItemPath(alias)}?refresh=${encodeURIComponent(refresh)}`,
+      {
+        body: compactRecord(providerWriteBody(request)) as Record<
+          string,
+          unknown
+        >,
+      },
+    );
+  }
+
   createProfile(
     request: CreateAdminProfileRequest,
   ): Promise<AdminControlResponse<CreatedServiceProfile>> {
@@ -203,7 +272,7 @@ export class AdminHttpTransport {
   }
 
   private async request<T>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     options: RequestOptions = {},
   ): Promise<T> {
@@ -279,6 +348,85 @@ function optionsForRegistryQuery(
     params['fallback_status'] = query.fallbackStatus;
   }
   return { query: params };
+}
+
+function optionsForProviderQuery(query?: ModelProviderQuery): RequestOptions {
+  if (query === undefined) return {};
+  const params: Record<string, unknown> = {};
+  if (query.status !== undefined) params['status'] = query.status;
+  if (query.aliasPrefix !== undefined) {
+    params['aliasPrefix'] = query.aliasPrefix;
+  }
+  if (query.limit !== undefined) params['limit'] = query.limit;
+  if (query.offset !== undefined) params['offset'] = query.offset;
+  return { query: params };
+}
+
+function providerWritePath(refresh: ModelProviderRefreshMode): string {
+  return refresh === 'none'
+    ? '/v1/admin/model-providers'
+    : `/v1/admin/model-providers?refresh=${encodeURIComponent(refresh)}`;
+}
+
+function providerItemPath(alias: string): string {
+  return `/v1/admin/model-providers/${encodeURIComponent(alias)}`;
+}
+
+/**
+ * Build the provider write body, normalizing the secret alias. The backend
+ * accepts both `secret` and `apiKey`; we forward whichever the caller set.
+ */
+function providerWriteBody(
+  request: ModelProviderWriteRequest,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    protocol: request.protocol,
+    modelId: request.modelId,
+  };
+  if (request.alias !== undefined) body['alias'] = request.alias;
+  if (request.status !== undefined) body['status'] = request.status;
+  if (request.providerKind !== undefined) {
+    body['providerKind'] = request.providerKind;
+  }
+  if (request.displayName !== undefined) {
+    body['displayName'] = request.displayName;
+  }
+  if (request.description !== undefined) {
+    body['description'] = request.description;
+  }
+  if (request.baseUrl !== undefined) body['baseUrl'] = request.baseUrl;
+  if (request.contextWindowTokens !== undefined) {
+    body['contextWindowTokens'] = request.contextWindowTokens;
+  }
+  if (request.maxOutputTokens !== undefined) {
+    body['maxOutputTokens'] = request.maxOutputTokens;
+  }
+  if (request.temperatureMilli !== undefined) {
+    body['temperatureMilli'] = request.temperatureMilli;
+  }
+  if (request.reasoningEffort !== undefined) {
+    body['reasoningEffort'] = request.reasoningEffort;
+  }
+  if (request.reasoningFormat !== undefined) {
+    body['reasoningFormat'] = request.reasoningFormat;
+  }
+  if (request.clearSecret !== undefined) {
+    body['clearSecret'] = request.clearSecret;
+  }
+  if (request.metadataJson !== undefined) {
+    body['metadataJson'] = request.metadataJson;
+  }
+  if (request.expectedRevision !== undefined) {
+    body['expectedRevision'] = request.expectedRevision;
+  }
+  // The caller should set at most one; forward the secret under both keys the
+  // backend accepts so the explicit `secret` field is honored.
+  if (request.secret !== undefined) {
+    body['secret'] = request.secret;
+  } else if (request.apiKey !== undefined) {
+    body['apiKey'] = request.apiKey;
+  }
+  return body;
 }
 
 function compactRecord(value: object): Record<string, unknown> {

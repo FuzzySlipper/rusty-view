@@ -94,6 +94,7 @@ function makeTransport(
       capabilities: capabilityIds.map(capability),
     }),
     adminProfileDiagnostics: async () => profileDiagnostics ?? null,
+    adminModelProviders: async () => null,
     adminProfileExportPlan: async () =>
       exportPlan ?? {
         profileId: 'field-prime',
@@ -515,6 +516,30 @@ describe('AdminProfilesPanelComponent', () => {
 
     const request = lastCreateRequest(transport.createAdminProfile);
     expect(request.kind).toBe('worker');
+    expect(request).not.toHaveProperty('modelConfig');
+  });
+
+  it('sends providerAlias when the user selects a reusable provider', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId' | 'providerAlias',
+        event: { target: { value: string } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'alias-prime' } });
+    component.updateText('providerAlias', { target: { value: 'default' } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.providerAlias).toBe('default');
     expect(request).not.toHaveProperty('modelConfig');
   });
 });

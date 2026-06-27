@@ -112,6 +112,8 @@ function makeTransport(sessions: ChatSessionSummary[]): ChatTransport {
       offset: 0,
     }),
     adminConfigValidation: async () => null,
+    adminProfileDiagnostics: async () => null,
+    adminModelProviders: async () => null,
     adminCapabilities: async () => ({
       schema_version: 1,
       slash_commands: [],

@@ -111,5 +111,25 @@
       <rv-admin-service-panel (dismissed)="closePanel()" />
     </div>
   </div>
+  } @if (providersOpen()) {
+  <div
+    class="rv-top-menu__overlay"
+    role="button"
+    tabindex="0"
+    aria-label="Close providers"
+    (click)="closePanel()"
+    (keydown.enter)="closePanel()"
+    (keydown.space)="closePanel()"
+  >
+    <div
+      class="rv-top-menu__panel"
+      role="dialog"
+      aria-label="Model Providers"
+      (click)="$event.stopPropagation()"
+      (keydown)="$event.stopPropagation()"
+    >
+      <rv-admin-providers-panel (dismissed)="closePanel()" />
+    </div>
+  </div>
   }
 </div>

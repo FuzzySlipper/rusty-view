@@ -152,6 +152,7 @@ function makeTransport(
     }),
     adminConfigValidation: async () => null,
     adminProfileDiagnostics: async () => null,
+    adminModelProviders: async () => null,
     adminCapabilities: async () => ({
       schema_version: 1,
       slash_commands: [],

@@ -233,6 +233,13 @@ export interface CreateAdminProfileRequest {
   readonly implementationId?: string;
   readonly kind?: 'full' | 'worker' | 'delegated';
   readonly mcpToolProfile?: string;
+  /**
+   * Reference to a reusable model provider alias (task #3534/#3538). Preferred
+   * over `modelConfig` for profiles that should reuse a configured provider.
+   * When set, the backend resolves model/provider config from the alias and
+   * omits inline `modelConfig` from the created profile.
+   */
+  readonly providerAlias?: string;
   readonly modelConfig?: {
     readonly provider: string;
     readonly modelName: string;
@@ -522,4 +529,127 @@ export interface ProfileBundleExportPlan {
   readonly optionalEntries: readonly string[];
   readonly diagnostics: readonly RuntimeConfigDiagnostic[];
   readonly warnings: readonly string[];
+}
+
+// ---- service-level model provider registry (tasks #3534/#3537) ----
+
+/** Lifecycle status for a model provider alias. */
+export type ModelProviderStatus = 'active' | 'disabled' | 'archived';
+
+/** Wire protocol the provider speaks. */
+export type ModelProviderProtocol = 'responses' | 'chat_completions';
+
+/**
+ * Redacted credential status for a model provider. The backend never returns
+ * the raw secret; `hasSecret` tells the UI whether a key is configured and
+ * `secretRef`/`updatedAt` give provenance for intentional set/replace/clear.
+ */
+export interface ModelProviderCredential {
+  readonly hasSecret: boolean;
+  readonly secretRef?: string;
+  readonly updatedAt?: string;
+}
+
+/**
+ * A reusable model provider alias. Profiles reference it by `alias` instead
+ * of embedding full model/provider config. Secrets are redacted on read.
+ */
+export interface ModelProviderRecord {
+  readonly alias: string;
+  readonly status: ModelProviderStatus;
+  readonly protocol: ModelProviderProtocol;
+  readonly providerKind: string;
+  readonly displayName?: string;
+  readonly description?: string;
+  readonly baseUrl?: string;
+  readonly modelId: string;
+  readonly contextWindowTokens?: number;
+  readonly maxOutputTokens?: number;
+  readonly temperatureMilli?: number;
+  readonly reasoningEffort?: string;
+  readonly reasoningFormat?: string;
+  readonly credential: ModelProviderCredential;
+  readonly metadataJson: unknown;
+  readonly revision: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+/** Query filters for the model provider list route. */
+export interface ModelProviderQuery {
+  readonly status?: ModelProviderStatus;
+  readonly aliasPrefix?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+/**
+ * Create/update body for a model provider (POST create, PATCH update by alias).
+ * `secret` sets/replaces the API key; `clearSecret` removes it. `apiKey` is an
+ * accepted alias for `secret` (backend compatibility). `expectedRevision`
+ * guards concurrent PATCH edits.
+ */
+export interface ModelProviderWriteRequest {
+  readonly alias?: string;
+  readonly status?: ModelProviderStatus;
+  readonly protocol: ModelProviderProtocol;
+  readonly providerKind?: string;
+  readonly displayName?: string;
+  readonly description?: string;
+  readonly baseUrl?: string;
+  readonly modelId: string;
+  readonly contextWindowTokens?: number;
+  readonly maxOutputTokens?: number;
+  readonly temperatureMilli?: number;
+  readonly reasoningEffort?: string;
+  readonly reasoningFormat?: string;
+  readonly secret?: string;
+  readonly apiKey?: string;
+  readonly clearSecret?: boolean;
+  readonly metadataJson?: Record<string, unknown>;
+  readonly expectedRevision?: number;
+}
+/**
+ * Refresh mode applied after a provider write: `none` (no rebuild), `plan`
+ * (prepare runtime rebuild plans for affected profiles), or `apply` (execute
+ * the rebuilds). Sent as the `?refresh=` query param.
+ */
+export type ModelProviderRefreshMode = 'none' | 'plan' | 'apply';
+
+/** One affected profile when refreshing after a provider write. */
+export interface ModelProviderRefreshProfile {
+  readonly profileId: string;
+  readonly sessionIds: readonly string[];
+  readonly configuredSessionIds: readonly string[];
+  readonly activeSessionIds: readonly string[];
+}
+
+/** Per-profile outcome of a refresh plan/apply. */
+export interface ModelProviderRefreshOutcome {
+  readonly profileId: string;
+  readonly status: 'planned' | 'applied' | 'blocked' | 'failed';
+  readonly summary: string;
+  readonly reasonCode?: string;
+  readonly result?: unknown;
+}
+
+/** Refresh envelope returned alongside a created/updated provider. */
+export interface ModelProviderRefreshResult {
+  readonly mode: ModelProviderRefreshMode;
+  readonly affectedProfiles: readonly ModelProviderRefreshProfile[];
+  readonly outcomes: readonly ModelProviderRefreshOutcome[];
+}
+
+/** Response for a provider create/update (POST/PATCH). */
+export interface ModelProviderWriteResponse {
+  readonly provider: ModelProviderRecord;
+  readonly refresh: ModelProviderRefreshResult;
+}
+
+/** Paginated list response for model providers. */
+export interface ModelProviderPage {
+  readonly items: readonly ModelProviderRecord[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
 }

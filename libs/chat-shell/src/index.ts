@@ -20,6 +20,7 @@ export { HelpPanelComponent } from './lib/help-panel';
 export { ProfilePanelComponent } from './lib/profile-panel';
 export { SessionsPanelComponent } from './lib/sessions-panel';
 export { AdminProfilesPanelComponent } from './lib/admin-profiles-panel';
+export { AdminProvidersPanelComponent } from './lib/admin-providers-panel';
 export { AdminServicePanelComponent } from './lib/admin-service-panel';
 export {
   CHAT_TOP_MENU_ITEMS,
@@ -27,6 +28,7 @@ export {
   OPTIONS_PANEL_ID,
   HELP_PANEL_ID,
   PROFILES_PANEL_ID,
+  PROVIDERS_PANEL_ID,
   SERVICE_PANEL_ID,
   SESSIONS_PANEL_ID,
 } from './lib/shell-extension-tokens';

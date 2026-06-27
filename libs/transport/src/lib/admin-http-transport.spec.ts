@@ -381,4 +381,99 @@ describe('AdminHttpTransport', () => {
       '/v1/admin/profiles/registry/field-prime/export-plan',
     );
   });
+
+  it('lists model providers through the provider registry route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({ items: [], total: 0, limit: 100, offset: 0 }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.modelProviders({ status: 'active', aliasPrefix: 'loc' });
+
+    const req = lastRequest();
+    expect(req.method).toBe('GET');
+    expect(req.url).toContain('/v1/admin/model-providers');
+    expect(req.url).toContain('status=active');
+    expect(req.url).toContain('aliasPrefix=loc');
+  });
+
+  it('reads a single model provider by alias', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        alias: 'default',
+        status: 'active',
+        protocol: 'chat_completions',
+        providerKind: 'local',
+        modelId: 'deterministic',
+        credential: { hasSecret: false },
+        metadataJson: null,
+        revision: 1,
+        createdAt: '2026-06-27T00:00:00Z',
+        updatedAt: '2026-06-27T00:00:00Z',
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const provider = await transport.modelProvider('default');
+
+    expect(provider.alias).toBe('default');
+    expect(lastRequest().url).toContain('/v1/admin/model-providers/default');
+  });
+
+  it('creates a model provider with an optional refresh', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        provider: { alias: 'default', credential: { hasSecret: true } },
+        refresh: { mode: 'plan', affectedProfiles: [], outcomes: [] },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.createModelProvider(
+      {
+        protocol: 'chat_completions',
+        modelId: 'deterministic',
+        secret: 'super-secret',
+      },
+      'plan',
+    );
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain('/v1/admin/model-providers');
+    expect(req.url).toContain('refresh=plan');
+    expect(req.body).toContain('chat_completions');
+    expect(req.body).toContain('super-secret');
+    expect(result.refresh.mode).toBe('plan');
+    // Secret must never echo back in the response.
+    expect(req.body).not.toContain('hasSecret');
+  });
+
+  it('updates a model provider by alias via PATCH', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        provider: { alias: 'alternate', status: 'disabled' },
+        refresh: { mode: 'apply', affectedProfiles: [], outcomes: [] },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.updateModelProvider(
+      'alternate',
+      {
+        protocol: 'chat_completions',
+        modelId: 'deterministic-updated',
+        status: 'disabled',
+        expectedRevision: 3,
+      },
+      'apply',
+    );
+
+    const req = lastRequest();
+    expect(req.method).toBe('PATCH');
+    expect(req.url).toContain('/v1/admin/model-providers/alternate');
+    expect(req.url).toContain('refresh=apply');
+    expect(req.body).toContain('disabled');
+    expect(req.body).toContain('"expectedRevision":3');
+  });
 });

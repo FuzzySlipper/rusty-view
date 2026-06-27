@@ -11,6 +11,7 @@ import {
 } from '@rusty-view/chat-components';
 
 import { AdminProfilesPanelComponent } from './admin-profiles-panel';
+import { AdminProvidersPanelComponent } from './admin-providers-panel';
 import { AdminServicePanelComponent } from './admin-service-panel';
 import { HelpPanelComponent } from './help-panel';
 import { OptionsPanelComponent } from './options-panel';
@@ -20,6 +21,7 @@ import {
   HELP_PANEL_ID,
   OPTIONS_PANEL_ID,
   PROFILES_PANEL_ID,
+  PROVIDERS_PANEL_ID,
   SERVICE_PANEL_ID,
   SESSIONS_PANEL_ID,
   type ChatTopMenuItem,
@@ -40,6 +42,13 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
     kind: 'panel',
     panelId: PROFILES_PANEL_ID,
     order: 20,
+  },
+  {
+    id: PROVIDERS_PANEL_ID,
+    label: 'Providers',
+    kind: 'panel',
+    panelId: PROVIDERS_PANEL_ID,
+    order: 25,
   },
   {
     id: SERVICE_PANEL_ID,
@@ -82,6 +91,7 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
     HelpPanelComponent,
     SessionsPanelComponent,
     AdminProfilesPanelComponent,
+    AdminProvidersPanelComponent,
     AdminServicePanelComponent,
   ],
   templateUrl: './top-menu.html',
@@ -123,6 +133,9 @@ export class TopMenuComponent {
   );
   protected readonly profilesOpen = computed(
     () => this.openPanelId() === PROFILES_PANEL_ID,
+  );
+  protected readonly providersOpen = computed(
+    () => this.openPanelId() === PROVIDERS_PANEL_ID,
   );
   protected readonly serviceOpen = computed(
     () => this.openPanelId() === SERVICE_PANEL_ID,

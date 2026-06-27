@@ -86,13 +86,25 @@
           <option value="delegated">delegated</option>
         </select>
       </label>
+      <label>
+        <span>Provider alias</span>
+        <select
+          [value]="form().providerAlias"
+          (change)="updateText('providerAlias', $event)"
+        >
+          <option value="">backend default</option>
+          @for (provider of admin.providerAliases(); track provider.alias) {
+          <option [value]="provider.alias">{{ provider.alias }}</option>
+          }
+        </select>
+      </label>
       <label class="rv-admin-profiles__toggle">
         <input
           type="checkbox"
           [checked]="form().modelOverrideEnabled"
           (change)="toggleModelOverride($event)"
         />
-        <span>Override model defaults</span>
+        <span>Override model defaults (ignores alias)</span>
       </label>
       @if (form().modelOverrideEnabled) {
       <label>

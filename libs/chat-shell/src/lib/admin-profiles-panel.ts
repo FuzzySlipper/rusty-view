@@ -23,6 +23,12 @@ interface ProfileFormState {
   readonly implementationId: string;
   /** '' means use the backend default session kind. */
   readonly kind: '' | 'full' | 'worker' | 'delegated';
+  /**
+   * Reference to a reusable model provider alias. Preferred over the inline
+   * model override. '' means no alias; the backend then applies defaults
+   * unless the inline override is enabled.
+   */
+  readonly providerAlias: string;
   readonly modelOverrideEnabled: boolean;
   readonly provider: string;
   readonly modelName: string;
@@ -109,6 +115,7 @@ const INITIAL_FORM: ProfileFormState = {
   sessionId: '',
   implementationId: '',
   kind: '',
+  providerAlias: '',
   modelOverrideEnabled: false,
   provider: '',
   modelName: '',
@@ -320,6 +327,7 @@ function buildCreateProfileRequest(
     ...optionalString('sessionId', form.sessionId),
     ...optionalString('implementationId', form.implementationId),
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
+    ...optionalString('providerAlias', form.providerAlias),
     ...optionalKind(form.kind),
     ...buildModelConfig(form),
   };

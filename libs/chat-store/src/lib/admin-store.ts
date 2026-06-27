@@ -12,6 +12,11 @@ import {
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
+  type ModelProviderPage,
+  type ModelProviderRefreshMode,
+  type ModelProviderRecord,
+  type ModelProviderWriteRequest,
+  type ModelProviderWriteResponse,
   type ProfileBundleExportPlan,
   type RuntimeBrainModuleDiagnostics,
   type RuntimeConfigApplyResult,
@@ -54,6 +59,9 @@ export class AdminStore {
   private readonly _profileDiagnostics =
     signal<AdminProfileRegistryDiagnostics | null>(null);
   private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
+  private readonly _modelProviders = signal<ModelProviderPage | null>(null);
+  private readonly _providerWriteResult =
+    signal<ModelProviderWriteResponse | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
   private readonly _error = signal<string | null>(null);
@@ -75,6 +83,8 @@ export class AdminStore {
   readonly capabilities = this._capabilities.asReadonly();
   readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
   readonly exportPlan = this._exportPlan.asReadonly();
+  readonly modelProviders = this._modelProviders.asReadonly();
+  readonly providerWriteResult = this._providerWriteResult.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly saving = this._saving.asReadonly();
   readonly error = this._error.asReadonly();
@@ -122,6 +132,15 @@ export class AdminStore {
     () => this._profileDiagnostics()?.records ?? [],
   );
 
+  /**
+   * Model provider aliases loaded from the service-level provider registry
+   * (tasks #3534/#3537). Profiles reference these by alias instead of
+   * embedding full model/provider config.
+   */
+  readonly providerAliases = computed<readonly ModelProviderRecord[]>(
+    () => this._modelProviders()?.items ?? [],
+  );
+
   async refresh(): Promise<void> {
     this._loading.set(true);
     this._error.set(null);
@@ -134,6 +153,7 @@ export class AdminStore {
         configValidation,
         capabilities,
         profileDiagnostics,
+        modelProviders,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
         this.transport.adminSessions({ limit: 100 }),
@@ -142,6 +162,7 @@ export class AdminStore {
         this.transport.adminConfigValidation(),
         this.transport.adminCapabilities().catch(() => null),
         this.transport.adminProfileDiagnostics().catch(() => null),
+        this.transport.adminModelProviders({ limit: 100 }).catch(() => null),
       ]);
       this._diagnostics.set(diagnostics);
       this._sessions.set(sessions);
@@ -150,6 +171,7 @@ export class AdminStore {
       this._configValidation.set(configValidation);
       this._capabilities.set(capabilities);
       this._profileDiagnostics.set(profileDiagnostics);
+      this._modelProviders.set(modelProviders);
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -209,6 +231,63 @@ export class AdminStore {
   /** Clear the currently loaded export plan without affecting other state. */
   clearExportPlan(): void {
     this._exportPlan.set(null);
+  }
+
+  /**
+   * Create a reusable model provider alias (task #3534). Optionally trigger a
+   * runtime refresh of profiles referencing this alias via `refresh`.
+   */
+  async createModelProvider(
+    request: ModelProviderWriteRequest,
+    refresh: ModelProviderRefreshMode = 'none',
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._providerWriteResult.set(null);
+    try {
+      const result = await this.transport.createAdminModelProvider(
+        request,
+        refresh,
+      );
+      this._providerWriteResult.set(result);
+      await this.refresh();
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Update a model provider alias by alias (task #3534). Use `refresh` to plan
+   * or apply runtime rebuilds for affected profiles.
+   */
+  async updateModelProvider(
+    alias: string,
+    request: ModelProviderWriteRequest,
+    refresh: ModelProviderRefreshMode = 'none',
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._providerWriteResult.set(null);
+    try {
+      const result = await this.transport.updateAdminModelProvider(
+        alias,
+        request,
+        refresh,
+      );
+      this._providerWriteResult.set(result);
+      await this.refresh();
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /** Clear the provider write result (e.g. after dismissing its panel). */
+  clearProviderWriteResult(): void {
+    this._providerWriteResult.set(null);
   }
 
   async pauseRuntime(
