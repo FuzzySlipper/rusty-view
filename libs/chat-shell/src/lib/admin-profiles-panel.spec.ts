@@ -329,6 +329,7 @@ describe('AdminProfilesPanelComponent', () => {
     const request = lastCreateRequest(transport.createAdminProfile);
     expect(request.profileId).toBe('minimal-prime');
     expect(request).not.toHaveProperty('modelConfig');
+    expect(request).not.toHaveProperty('kind');
   });
 
   it('includes modelConfig only when the user opts into a model override', async () => {
@@ -358,6 +359,31 @@ describe('AdminProfilesPanelComponent', () => {
       provider: 'openai',
       modelName: 'gpt-4o',
     });
+  });
+
+  it('sends kind only when the user explicitly selects a session kind', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      updateKind(event: { target: { value: string } }): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'kind-prime' } });
+    component.updateKind({ target: { value: 'worker' } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.kind).toBe('worker');
+    expect(request).not.toHaveProperty('modelConfig');
   });
 });
 

@@ -78,8 +78,9 @@
         />
       </label>
       <label>
-        <span>Kind</span>
+        <span>Session kind</span>
         <select [value]="form().kind" (change)="updateKind($event)">
+          <option value="">backend default</option>
           <option value="full">full</option>
           <option value="worker">worker</option>
           <option value="delegated">delegated</option>

@@ -19,7 +19,8 @@ interface ProfileFormState {
   readonly agentId: string;
   readonly sessionId: string;
   readonly implementationId: string;
-  readonly kind: 'full' | 'worker' | 'delegated';
+  /** '' means use the backend default session kind. */
+  readonly kind: '' | 'full' | 'worker' | 'delegated';
   readonly modelOverrideEnabled: boolean;
   readonly provider: string;
   readonly modelName: string;
@@ -45,7 +46,7 @@ const INITIAL_FORM: ProfileFormState = {
   agentId: '',
   sessionId: '',
   implementationId: '',
-  kind: 'full',
+  kind: '',
   modelOverrideEnabled: false,
   provider: '',
   modelName: '',
@@ -171,7 +172,12 @@ export class AdminProfilesPanelComponent {
 
   protected updateKind(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    if (value === 'full' || value === 'worker' || value === 'delegated') {
+    if (
+      value === '' ||
+      value === 'full' ||
+      value === 'worker' ||
+      value === 'delegated'
+    ) {
       this.form.update((current) => ({ ...current, kind: value }));
     }
   }
@@ -212,16 +218,27 @@ function buildCreateProfileRequest(
 ): CreateAdminProfileRequest {
   const request: CreateAdminProfileRequest = {
     profileId: form.profileId.trim(),
-    kind: form.kind,
     reason: 'created from rusty-view profiles panel',
     ...optionalString('displayName', form.displayName),
     ...optionalString('agentId', form.agentId),
     ...optionalString('sessionId', form.sessionId),
     ...optionalString('implementationId', form.implementationId),
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
+    ...optionalKind(form.kind),
     ...buildModelConfig(form),
   };
   return request;
+}
+
+/**
+ * Only include kind when the user explicitly selects a session kind. The
+ * default '' selection omits kind so the backend applies the official default
+ * session kind (ADR 0019).
+ */
+function optionalKind(
+  kind: '' | 'full' | 'worker' | 'delegated',
+): { kind: 'full' | 'worker' | 'delegated' } | Record<string, never> {
+  return kind === '' ? {} : { kind };
 }
 
 /**
