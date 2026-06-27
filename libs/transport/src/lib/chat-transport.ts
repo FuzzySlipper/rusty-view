@@ -47,6 +47,10 @@ import type {
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
   ProfileBundleExportPlan,
+  ProfileRegistryFieldUpdateRequest,
+  ProfileRegistryLifecycleRequest,
+  ProfileRegistryWriteApplyResult,
+  ProfileRegistryWritePlan,
   RuntimeConfigApplyResult,
   RuntimeConfigValidationReport,
   RuntimePauseControlRequest,
@@ -191,6 +195,34 @@ export class ChatTransport {
 
   adminProfileExportPlan(profileId: string): Promise<ProfileBundleExportPlan> {
     return this.adminHttp.profileExportPlan(profileId);
+  }
+
+  planAdminProfileRegistryUpdate(
+    profileId: string,
+    request: ProfileRegistryFieldUpdateRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.adminHttp.planProfileRegistryUpdate(profileId, request);
+  }
+
+  applyAdminProfileRegistryUpdate(
+    profileId: string,
+    request: ProfileRegistryFieldUpdateRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.adminHttp.applyProfileRegistryUpdate(profileId, request);
+  }
+
+  planAdminProfileRegistryLifecycle(
+    profileId: string,
+    request: ProfileRegistryLifecycleRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.adminHttp.planProfileRegistryLifecycle(profileId, request);
+  }
+
+  applyAdminProfileRegistryLifecycle(
+    profileId: string,
+    request: ProfileRegistryLifecycleRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.adminHttp.applyProfileRegistryLifecycle(profileId, request);
   }
 
   adminModelProviders(query?: ModelProviderQuery): Promise<ModelProviderPage> {

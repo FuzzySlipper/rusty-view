@@ -13,6 +13,10 @@ import type {
   CreateAdminProfileRequest,
   ProfileBundleExportEntry,
   ProfileRegistryDerivedRuntimeRef,
+  ProfileRegistryFieldUpdateRequest,
+  ProfileRegistryLifecycleRequest,
+  ProfileRegistryLifecycleStatus,
+  ProfileRegistryWritePlan,
 } from '@rusty-view/transport';
 
 interface ProfileFormState {
@@ -108,6 +112,30 @@ const INITIAL_FORM: ProfileFormState = {
   mcpToolProfile: '',
 };
 
+/** Editable registry-owned fields for an existing profile (#3519). */
+interface RegistryEditFormState {
+  readonly displayName: string;
+  readonly summary: string;
+  readonly ownerId: string;
+  readonly agentId: string;
+  readonly defaultSessionKind: '' | 'full' | 'worker' | 'delegated';
+}
+
+const INITIAL_REGISTRY_EDIT: RegistryEditFormState = {
+  displayName: '',
+  summary: '',
+  ownerId: '',
+  agentId: '',
+  defaultSessionKind: '',
+};
+
+const LIFECYCLE_STATUSES: readonly ProfileRegistryLifecycleStatus[] = [
+  'active',
+  'paused',
+  'decommissioned',
+  'archived',
+];
+
 const CAPABILITY_ROWS: readonly CapabilityRow[] = [
   {
     label: 'Create profile',
@@ -156,8 +184,16 @@ export class AdminProfilesPanelComponent {
   readonly dismissed = output<void>();
 
   protected readonly capabilityRows = CAPABILITY_ROWS;
+  protected readonly lifecycleStatuses = LIFECYCLE_STATUSES;
   protected readonly form = signal<ProfileFormState>(INITIAL_FORM);
   protected readonly exportProfileId = signal<string | null>(null);
+  protected readonly editingRegistryProfileId = signal<string | null>(null);
+  protected readonly registryEditForm = signal<RegistryEditFormState>(
+    INITIAL_REGISTRY_EDIT,
+  );
+  protected readonly lifecycleTargetProfileId = signal<string | null>(null);
+  protected readonly lifecycleTargetStatus =
+    signal<ProfileRegistryLifecycleStatus>('paused');
   protected readonly createDisabled = computed(
     () => this.admin.saving() || this.form().profileId.trim() === '',
   );
@@ -165,6 +201,15 @@ export class AdminProfilesPanelComponent {
   protected readonly exportPlanMatchesProfile = computed(
     () => this.exportPlan()?.profileId === this.exportProfileId(),
   );
+  /** The active registry write plan, scoped to the profile being edited. */
+  protected readonly registryWritePlan =
+    computed<ProfileRegistryWritePlan | null>(() => {
+      const plan = this.admin.registryWritePlan();
+      return plan?.profileId === this.editingRegistryProfileId() ||
+        plan?.profileId === this.lifecycleTargetProfileId()
+        ? plan
+        : null;
+    });
 
   /**
    * Derived runtime graph actions from the most recent create-profile call
@@ -199,6 +244,179 @@ export class AdminProfilesPanelComponent {
   protected closeExportPlan(): void {
     this.exportProfileId.set(null);
     this.admin.clearExportPlan();
+  }
+
+  /** Open the registry-field edit form for a profile, seeded from its record. */
+  protected startRegistryEdit(record: AdminProfileRegistryRecord): void {
+    this.lifecycleTargetProfileId.set(null);
+    this.admin.clearRegistryWrite();
+    this.editingRegistryProfileId.set(record.profileId);
+    this.registryEditForm.set({
+      displayName: record.displayName ?? '',
+      summary: record.summary ?? '',
+      ownerId: record.ownerId ?? '',
+      agentId: record.agentId ?? '',
+      defaultSessionKind:
+        record.defaultSessionKind === 'full' ||
+        record.defaultSessionKind === 'worker' ||
+        record.defaultSessionKind === 'delegated'
+          ? record.defaultSessionKind
+          : '',
+    });
+  }
+
+  protected cancelRegistryEdit(): void {
+    this.editingRegistryProfileId.set(null);
+    this.registryEditForm.set(INITIAL_REGISTRY_EDIT);
+    this.admin.clearRegistryWrite();
+  }
+
+  protected updateRegistryEditText(
+    field: Exclude<keyof RegistryEditFormState, 'defaultSessionKind'>,
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.registryEditForm.update((current) => ({ ...current, [field]: value }));
+  }
+
+  protected updateRegistryEditKind(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (
+      value === '' ||
+      value === 'full' ||
+      value === 'worker' ||
+      value === 'delegated'
+    ) {
+      this.registryEditForm.update((current) => ({
+        ...current,
+        defaultSessionKind: value,
+      }));
+    }
+  }
+
+  /**
+   * Build the update request from the edit form. Omitted fields keep their
+   * current value; the backend treats `null` as a clear, so empty strings are
+   * only sent as clears for fields the operator explicitly blanked.
+   */
+  protected buildRegistryUpdateRequest(
+    record: AdminProfileRegistryRecord,
+  ): ProfileRegistryFieldUpdateRequest {
+    const form = this.registryEditForm();
+    const request: ProfileRegistryFieldUpdateRequest = {
+      expectedRevision: record.revision ?? 0,
+      ...registryFieldEntry(
+        'displayName',
+        form.displayName,
+        record.displayName,
+      ),
+      ...registryFieldEntry('summary', form.summary, record.summary),
+      ...registryFieldEntry('ownerId', form.ownerId, record.ownerId),
+      ...registryFieldEntry('agentId', form.agentId, record.agentId),
+      ...(form.defaultSessionKind === ''
+        ? {}
+        : { defaultSessionKind: form.defaultSessionKind }),
+    };
+    return request;
+  }
+
+  protected planRegistryUpdate(record: AdminProfileRegistryRecord): void {
+    void this.admin.planRegistryUpdate(
+      record.profileId,
+      this.buildRegistryUpdateRequest(record),
+    );
+  }
+
+  protected applyRegistryUpdate(record: AdminProfileRegistryRecord): void {
+    void this.admin.applyRegistryUpdate(
+      record.profileId,
+      this.buildRegistryUpdateRequest(record),
+    );
+  }
+
+  /** Open the lifecycle transition control for a profile. */
+  protected startLifecycleTransition(record: AdminProfileRegistryRecord): void {
+    this.editingRegistryProfileId.set(null);
+    this.admin.clearRegistryWrite();
+    this.lifecycleTargetProfileId.set(record.profileId);
+    this.lifecycleTargetStatus.set(
+      record.lifecycleStatus === 'active'
+        ? 'paused'
+        : ((record.lifecycleStatus as ProfileRegistryLifecycleStatus) ??
+            'paused'),
+    );
+  }
+
+  protected cancelLifecycleTransition(): void {
+    this.lifecycleTargetProfileId.set(null);
+    this.admin.clearRegistryWrite();
+  }
+
+  protected updateLifecycleTarget(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (
+      value === 'active' ||
+      value === 'paused' ||
+      value === 'decommissioned' ||
+      value === 'archived'
+    ) {
+      this.lifecycleTargetStatus.set(value);
+    }
+  }
+
+  protected buildLifecycleRequest(
+    record: AdminProfileRegistryRecord,
+  ): ProfileRegistryLifecycleRequest {
+    return {
+      expectedRevision: record.revision ?? 0,
+      lifecycleStatus: this.lifecycleTargetStatus(),
+    };
+  }
+
+  protected planLifecycleTransition(record: AdminProfileRegistryRecord): void {
+    void this.admin.planRegistryLifecycle(
+      record.profileId,
+      this.buildLifecycleRequest(record),
+    );
+  }
+
+  protected applyLifecycleTransition(record: AdminProfileRegistryRecord): void {
+    void this.admin.applyRegistryLifecycle(
+      record.profileId,
+      this.buildLifecycleRequest(record),
+    );
+  }
+
+  /** Whether a registry record can be edited (registry-backed only). */
+  protected isRegistryEditable(record: AdminProfileRegistryRecord): boolean {
+    return record.source === 'registry';
+  }
+
+  /** The registry record currently being field-edited, or undefined. */
+  protected registryEditRecord(): AdminProfileRegistryRecord | undefined {
+    const profileId = this.editingRegistryProfileId();
+    if (profileId === null) return undefined;
+    return this.admin
+      .registryRecords()
+      .find((record) => record.profileId === profileId);
+  }
+
+  /** The registry record currently targeted for a lifecycle transition. */
+  protected lifecycleEditRecord(): AdminProfileRegistryRecord | undefined {
+    const profileId = this.lifecycleTargetProfileId();
+    if (profileId === null) return undefined;
+    return this.admin
+      .registryRecords()
+      .find((record) => record.profileId === profileId);
+  }
+
+  /** Lifecycle reason shown when a file-backed profile can't be edited. */
+  protected registryEditBlockReason(
+    record: AdminProfileRegistryRecord,
+  ): string {
+    return record.source === 'registry'
+      ? ''
+      : 'Import this file-backed profile into the registry before editing registry-owned fields.';
   }
 
   protected isFileAssetEntry(entry: ProfileBundleExportEntry): boolean {
@@ -316,4 +534,21 @@ function optionalString<TKey extends string>(
 ): Record<TKey, string> | Record<string, never> {
   const trimmed = value.trim();
   return trimmed === '' ? {} : ({ [key]: trimmed } as Record<TKey, string>);
+}
+
+/**
+ * Build a registry field entry for the update request. If the operator left
+ * the field equal to the current record value, omit it (no change); if they
+ * blanked it, send `null` to clear; otherwise send the new value.
+ */
+type RegistryNullableField = 'displayName' | 'summary' | 'ownerId' | 'agentId';
+
+function registryFieldEntry(
+  key: RegistryNullableField,
+  formValue: string,
+  currentValue: string | undefined,
+): Partial<Record<RegistryNullableField, string | null>> {
+  const trimmed = formValue.trim();
+  if (trimmed === (currentValue ?? '')) return {};
+  return { [key]: trimmed === '' ? null : trimmed };
 }

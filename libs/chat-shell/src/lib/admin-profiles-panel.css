@@ -199,6 +199,13 @@
   font-size: var(--rv-font-size-xs);
 }
 
+.rv-admin-profiles__actions,
+.rv-admin-profiles__profile-actions {
+  display: flex;
+  gap: var(--rv-space-sm);
+  flex-wrap: wrap;
+}
+
 .rv-admin-profiles__registry {
   gap: var(--rv-space-sm);
 }

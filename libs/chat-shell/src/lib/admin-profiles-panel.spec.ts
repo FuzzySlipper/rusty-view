@@ -6,6 +6,7 @@ import {
   ChatTransport,
   type AdminControlResponse,
   type AdminProfileRegistryDiagnostics,
+  type AdminProfileRegistryRecord,
   type ApiCapabilityDescriptor,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
@@ -152,6 +153,101 @@ function makeTransport(
         observation: {},
       }),
     ),
+    planAdminProfileRegistryUpdate: vi.fn(async () => ({
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'update',
+      mode: 'plan',
+      expectedRevision: 3,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 4, displayName: 'Updated' },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: false,
+        lifecycleEffects: 'none' as const,
+      },
+    })),
+    applyAdminProfileRegistryUpdate: vi.fn(async () => ({
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'update',
+      mode: 'apply',
+      expectedRevision: 3,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 4 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: false,
+        lifecycleEffects: 'none' as const,
+      },
+      applied: true as const,
+      record: { profileId: 'field-prime', revision: 4, displayName: 'Updated' },
+    })),
+    planAdminProfileRegistryLifecycle: vi.fn(async () => ({
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'lifecycle',
+      mode: 'plan',
+      expectedRevision: 3,
+      current: {
+        profileId: 'field-prime',
+        revision: 3,
+        lifecycleStatus: 'active',
+      },
+      next: {
+        profileId: 'field-prime',
+        revision: 4,
+        lifecycleStatus: 'paused',
+      },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects:
+          'archive_active_sessions_and_unregister_brain' as const,
+      },
+    })),
+    applyAdminProfileRegistryLifecycle: vi.fn(async () => ({
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'lifecycle',
+      mode: 'apply',
+      expectedRevision: 3,
+      current: {
+        profileId: 'field-prime',
+        revision: 3,
+        lifecycleStatus: 'active',
+      },
+      next: {
+        profileId: 'field-prime',
+        revision: 4,
+        lifecycleStatus: 'paused',
+      },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects:
+          'archive_active_sessions_and_unregister_brain' as const,
+      },
+      applied: true as const,
+      record: {
+        profileId: 'field-prime',
+        revision: 4,
+        lifecycleStatus: 'paused',
+      },
+      effects: { archivedSessionIds: [], preservedAssets: true as const },
+    })),
   } as unknown as ChatTransport;
 }
 
@@ -512,6 +608,104 @@ describe('AdminProfilesPanelComponent', () => {
     const request = lastCreateRequest(transport.createAdminProfile);
     expect(request.providerAlias).toBe('default');
     expect(request).not.toHaveProperty('modelConfig');
+  });
+
+  it('plans a registry field update for a registry-backed profile', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'field-prime',
+          lifecycleStatus: 'active',
+          revision: 3,
+          displayName: 'Field Prime',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryUpdate: {
+        mock: { calls: unknown[] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      startRegistryEdit(record: AdminProfileRegistryRecord): void;
+      updateRegistryEditText(
+        field: 'displayName',
+        event: { target: { value: string } },
+      ): void;
+      planRegistryUpdate(record: AdminProfileRegistryRecord): void;
+    };
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'field-prime');
+    if (record === undefined) {
+      throw new Error('field-prime registry record not found');
+    }
+
+    component.startRegistryEdit(record);
+    component.updateRegistryEditText('displayName', {
+      target: { value: 'Updated Name' },
+    });
+    fixture.detectChanges();
+    component.planRegistryUpdate(record);
+    await fixture.whenStable();
+
+    expect(transport.planAdminProfileRegistryUpdate.mock.calls).toHaveLength(1);
+  });
+
+  it('blocks registry edits for a file-backed fallback profile', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'file_fallback',
+          profileId: 'file-only',
+          lifecycleStatus: 'active',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'file_backed_fallback',
+        },
+      ],
+      registryCount: 0,
+      fileFallbackCount: 1,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'file-only');
+    if (record === undefined) {
+      throw new Error('file-only registry record not found');
+    }
+    const component = fixture.componentInstance as unknown as {
+      isRegistryEditable(record: AdminProfileRegistryRecord): boolean;
+      registryEditBlockReason(record: AdminProfileRegistryRecord): string;
+    };
+
+    expect(component.isRegistryEditable(record)).toBe(false);
+    expect(component.registryEditBlockReason(record)).toContain(
+      'Import this file-backed profile',
+    );
   });
 });
 

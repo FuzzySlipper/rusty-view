@@ -18,6 +18,10 @@ import {
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
   type ProfileBundleExportPlan,
+  type ProfileRegistryFieldUpdateRequest,
+  type ProfileRegistryLifecycleRequest,
+  type ProfileRegistryWriteApplyResult,
+  type ProfileRegistryWritePlan,
   type RuntimeBrainModuleDiagnostics,
   type RuntimeConfigApplyResult,
   type RuntimeConfigValidationReport,
@@ -59,6 +63,11 @@ export class AdminStore {
   private readonly _profileDiagnostics =
     signal<AdminProfileRegistryDiagnostics | null>(null);
   private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
+  private readonly _registryWritePlan = signal<ProfileRegistryWritePlan | null>(
+    null,
+  );
+  private readonly _registryWriteResult =
+    signal<ProfileRegistryWriteApplyResult | null>(null);
   private readonly _modelProviders = signal<ModelProviderPage | null>(null);
   private readonly _providerWriteResult =
     signal<ModelProviderWriteResponse | null>(null);
@@ -89,6 +98,8 @@ export class AdminStore {
   readonly capabilities = this._capabilities.asReadonly();
   readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
   readonly exportPlan = this._exportPlan.asReadonly();
+  readonly registryWritePlan = this._registryWritePlan.asReadonly();
+  readonly registryWriteResult = this._registryWriteResult.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
   readonly providerLoadError = this._providerLoadError.asReadonly();
@@ -239,6 +250,117 @@ export class AdminStore {
   /** Clear the currently loaded export plan without affecting other state. */
   clearExportPlan(): void {
     this._exportPlan.set(null);
+  }
+
+  /**
+   * Plan a registry field update (#3519) without applying it. The projected
+   * `next` record and any diagnostics (e.g. revision mismatch) are exposed via
+   * `registryWritePlan`.
+   */
+  async planRegistryUpdate(
+    profileId: string,
+    request: ProfileRegistryFieldUpdateRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWritePlan.set(null);
+    this._registryWriteResult.set(null);
+    try {
+      const plan = await this.transport.planAdminProfileRegistryUpdate(
+        profileId,
+        request,
+      );
+      this._registryWritePlan.set(plan);
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Apply a registry field update (#3519). Requires `expectedRevision`; on
+   * success the persisted record (bumped revision) is exposed via
+   * `registryWriteResult` and the registry diagnostics are refreshed.
+   */
+  async applyRegistryUpdate(
+    profileId: string,
+    request: ProfileRegistryFieldUpdateRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWriteResult.set(null);
+    try {
+      const result = await this.transport.applyAdminProfileRegistryUpdate(
+        profileId,
+        request,
+      );
+      this._registryWriteResult.set(result);
+      await this.refresh();
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Plan a registry lifecycle transition (#3521) without applying it. The
+   * projected `next` record and lifecycle implications are exposed via
+   * `registryWritePlan`.
+   */
+  async planRegistryLifecycle(
+    profileId: string,
+    request: ProfileRegistryLifecycleRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWritePlan.set(null);
+    this._registryWriteResult.set(null);
+    try {
+      const plan = await this.transport.planAdminProfileRegistryLifecycle(
+        profileId,
+        request,
+      );
+      this._registryWritePlan.set(plan);
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Apply a registry lifecycle transition (#3521). Non-active transitions
+   * disable derived runtime refs, archive sessions, and unregister the brain;
+   * assets/memory are preserved. Result + effects are exposed via
+   * `registryWriteResult`.
+   */
+  async applyRegistryLifecycle(
+    profileId: string,
+    request: ProfileRegistryLifecycleRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWriteResult.set(null);
+    try {
+      const result = await this.transport.applyAdminProfileRegistryLifecycle(
+        profileId,
+        request,
+      );
+      this._registryWriteResult.set(result);
+      await this.refresh();
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /** Clear the current registry write plan/result (e.g. after dismissing). */
+  clearRegistryWrite(): void {
+    this._registryWritePlan.set(null);
+    this._registryWriteResult.set(null);
   }
 
   /**

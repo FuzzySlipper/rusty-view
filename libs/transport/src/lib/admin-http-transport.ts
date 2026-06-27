@@ -24,6 +24,10 @@ import type {
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
   ProfileBundleExportPlan,
+  ProfileRegistryFieldUpdateRequest,
+  ProfileRegistryLifecycleRequest,
+  ProfileRegistryWriteApplyResult,
+  ProfileRegistryWritePlan,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimeResumeNoopResult,
@@ -142,6 +146,67 @@ export class AdminHttpTransport {
     return this.request(
       'GET',
       `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}/export-plan`,
+    );
+  }
+
+  /**
+   * Plan a registry field update (task #3519) without applying it. Returns the
+   * projected `next` record and any diagnostics (e.g. revision mismatch).
+   */
+  planProfileRegistryUpdate(
+    profileId: string,
+    request: ProfileRegistryFieldUpdateRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'update', 'plan'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
+   * Apply a registry field update (task #3519). Requires `expectedRevision`;
+   * on success the persisted record is returned with a bumped revision.
+   */
+  applyProfileRegistryUpdate(
+    profileId: string,
+    request: ProfileRegistryFieldUpdateRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'update', 'apply'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
+   * Plan a registry lifecycle transition (task #3521) without applying it.
+   * Returns the projected `next` record and lifecycle implications.
+   */
+  planProfileRegistryLifecycle(
+    profileId: string,
+    request: ProfileRegistryLifecycleRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'lifecycle', 'plan'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
+   * Apply a registry lifecycle transition (task #3521). Non-active transitions
+   * disable derived runtime refs, archive active sessions, and unregister the
+   * profile brain; assets and memory are preserved.
+   */
+  applyProfileRegistryLifecycle(
+    profileId: string,
+    request: ProfileRegistryLifecycleRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'lifecycle', 'apply'),
+      { body: request as unknown as Record<string, unknown> },
     );
   }
 
@@ -370,6 +435,14 @@ function providerWritePath(refresh: ModelProviderRefreshMode): string {
 
 function providerItemPath(alias: string): string {
   return `/v1/admin/model-providers/${encodeURIComponent(alias)}`;
+}
+
+function registryWritePath(
+  profileId: string,
+  kind: 'update' | 'lifecycle',
+  mode: 'plan' | 'apply',
+): string {
+  return `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}/${kind}/${mode}`;
 }
 
 /**

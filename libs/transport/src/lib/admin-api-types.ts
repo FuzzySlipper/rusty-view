@@ -469,6 +469,111 @@ export interface AdminProfileRegistryQuery {
   readonly fallbackStatus?: 'registry_authoritative' | 'file_backed_fallback';
 }
 
+// ---- profile registry field update + lifecycle (tasks #3519/#3521) ----
+
+/**
+ * Lifecycle status a registry record can transition to through the lifecycle
+ * plan/apply routes (#3521). Non-active transitions disable derived runtime
+ * refs, archive active sessions, and unregister the profile brain; assets and
+ * memory are preserved.
+ */
+export type ProfileRegistryLifecycleStatus =
+  | 'active'
+  | 'paused'
+  | 'decommissioned'
+  | 'archived';
+
+/**
+ * Body for the registry field update plan/apply routes (#3519). All fields
+ * are optional; omitted fields keep their current value. `null` clears a
+ * field. `expectedRevision` is required for optimistic concurrency.
+ */
+export interface ProfileRegistryFieldUpdateRequest {
+  readonly expectedRevision: number;
+  readonly displayName?: string | null | undefined;
+  readonly summary?: string | null | undefined;
+  readonly defaultSessionKind?:
+    | 'full'
+    | 'worker'
+    | 'delegated'
+    | null
+    | undefined;
+  readonly agentId?: string | null | undefined;
+  readonly ownerId?: string | null | undefined;
+}
+
+/**
+ * Body for the registry lifecycle plan/apply routes (#3521). `lifecycleStatus`
+ * is the target status. `expectedRevision` is required for optimistic concurrency.
+ */
+export interface ProfileRegistryLifecycleRequest {
+  readonly expectedRevision: number;
+  readonly lifecycleStatus: ProfileRegistryLifecycleStatus;
+}
+
+/**
+ * Diagnostic from a registry write plan (e.g. revision mismatch). Mirrors the
+ * `RuntimeConfigDiagnostic` shape the backend emits.
+ */
+export interface ProfileRegistryWriteDiagnostic {
+  readonly severity: 'error' | 'warning' | 'info';
+  readonly code: string;
+  readonly path: string;
+  readonly message: string;
+}
+
+/**
+ * Implications of a registry write, as reported by the planner. Reassures the
+ * UI that files/service config are untouched and whether a runtime rebuild is
+ * recommended.
+ */
+export interface ProfileRegistryWriteImplications {
+  readonly registryRevisionWillIncrement: true;
+  readonly profileFilesUnchanged: true;
+  readonly serviceConfigUnchanged: true;
+  readonly runtimeRebuildRecommended: boolean;
+  readonly lifecycleEffects:
+    | 'none'
+    | 'archive_active_sessions_and_unregister_brain';
+}
+
+/**
+ * Plan result for a registry field update or lifecycle transition. `ok` is
+ * false when diagnostics contain an error (e.g. revision mismatch); the plan
+ * is still returned so the UI can show the mismatch. `current`/`next` are the
+ * before/after records; `next` is the projected post-apply record.
+ */
+export interface ProfileRegistryWritePlan {
+  readonly ok: boolean;
+  readonly profileId: string;
+  readonly kind: 'update' | 'lifecycle';
+  readonly mode: 'plan' | 'apply';
+  readonly expectedRevision: number;
+  readonly current: AdminProfileRegistryRecord;
+  readonly next: AdminProfileRegistryRecord;
+  readonly diagnostics: readonly ProfileRegistryWriteDiagnostic[];
+  readonly implications: ProfileRegistryWriteImplications;
+}
+
+/**
+ * Apply result for a registry write. Same as the plan plus `applied: true` and
+ * the persisted `record` (with bumped revision). For lifecycle applies, `effects`
+ * describes the runtime side effects.
+ */
+export interface ProfileRegistryWriteApplyResult
+  extends ProfileRegistryWritePlan {
+  readonly applied: true;
+  readonly record: AdminProfileRegistryRecord;
+  readonly effects?: ProfileRegistryLifecycleEffects;
+}
+
+/** Runtime side effects of a lifecycle apply (#3521). */
+export interface ProfileRegistryLifecycleEffects {
+  readonly archivedSessionIds: readonly string[];
+  readonly unregisteredBrainImplementationId?: string;
+  readonly preservedAssets: true;
+}
+
 // ---- profile bundle export plan (ADR 0019) ----
 
 /**

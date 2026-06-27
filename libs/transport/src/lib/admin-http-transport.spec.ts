@@ -382,6 +382,121 @@ describe('AdminHttpTransport', () => {
     );
   });
 
+  it('plans and applies a registry field update', async () => {
+    const planResponse = {
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'update',
+      mode: 'plan',
+      expectedRevision: 3,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 4, displayName: 'Updated' },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: true,
+        serviceConfigUnchanged: true,
+        runtimeRebuildRecommended: false,
+        lifecycleEffects: 'none',
+      },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(planResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const plan = await transport.planProfileRegistryUpdate('field-prime', {
+      expectedRevision: 3,
+      displayName: 'Updated',
+    });
+
+    expect(plan.kind).toBe('update');
+    expect(plan.mode).toBe('plan');
+    const planReq = lastRequest();
+    expect(planReq.method).toBe('POST');
+    expect(planReq.url).toContain(
+      '/v1/admin/profiles/registry/field-prime/update/plan',
+    );
+    expect(planReq.body).toContain('"expectedRevision":3');
+    expect(planReq.body).toContain('Updated');
+  });
+
+  it('applies a registry field update', async () => {
+    const applyResponse = {
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'update',
+      mode: 'apply',
+      expectedRevision: 3,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 4 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: true,
+        serviceConfigUnchanged: true,
+        runtimeRebuildRecommended: false,
+        lifecycleEffects: 'none',
+      },
+      applied: true,
+      record: { profileId: 'field-prime', revision: 4, displayName: 'Updated' },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(applyResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.applyProfileRegistryUpdate('field prime', {
+      expectedRevision: 3,
+      displayName: 'Updated',
+    });
+
+    expect(result.applied).toBe(true);
+    expect(result.record.revision).toBe(4);
+    expect(lastRequest().url).toContain(
+      '/v1/admin/profiles/registry/field%20prime/update/apply',
+    );
+  });
+
+  it('plans and applies a registry lifecycle transition', async () => {
+    const lifecycleResponse = {
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'lifecycle',
+      mode: 'apply',
+      expectedRevision: 4,
+      current: { profileId: 'field-prime', revision: 4, lifecycleStatus: 'active' },
+      next: { profileId: 'field-prime', revision: 5, lifecycleStatus: 'paused' },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: true,
+        serviceConfigUnchanged: true,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'archive_active_sessions_and_unregister_brain',
+      },
+      applied: true,
+      record: { profileId: 'field-prime', revision: 5, lifecycleStatus: 'paused' },
+      effects: {
+        archivedSessionIds: ['field-prime-session'],
+        unregisteredBrainImplementationId: 'field-prime-brain',
+        preservedAssets: true,
+      },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(lifecycleResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.applyProfileRegistryLifecycle('field-prime', {
+      expectedRevision: 4,
+      lifecycleStatus: 'paused',
+    });
+
+    expect(result.applied).toBe(true);
+    expect(result.effects?.archivedSessionIds).toEqual(['field-prime-session']);
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/profiles/registry/field-prime/lifecycle/apply',
+    );
+    expect(req.body).toContain('"lifecycleStatus":"paused"');
+  });
+
   it('lists model providers through the provider registry route', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({ items: [], total: 0, limit: 100, offset: 0 }),

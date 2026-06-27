@@ -279,19 +279,219 @@
         </div>
         }
 
-        <button
-          type="button"
-          class="rv-admin-profiles__button"
-          (click)="requestExportPlan(record.profileId)"
-          [disabled]="admin.saving()"
-        >
-          Export plan
-        </button>
+        <div class="rv-admin-profiles__profile-actions">
+          <button
+            type="button"
+            class="rv-admin-profiles__button"
+            (click)="requestExportPlan(record.profileId)"
+            [disabled]="admin.saving()"
+          >
+            Export plan
+          </button>
+          @if (isRegistryEditable(record)) {
+          <button
+            type="button"
+            class="rv-admin-profiles__button"
+            (click)="startRegistryEdit(record)"
+            [disabled]="admin.saving()"
+          >
+            Edit registry fields
+          </button>
+          <button
+            type="button"
+            class="rv-admin-profiles__button"
+            (click)="startLifecycleTransition(record)"
+            [disabled]="admin.saving()"
+          >
+            Lifecycle
+          </button>
+          } @else {
+          <span class="rv-admin-profiles__muted"
+            >{{ registryEditBlockReason(record) }}</span
+          >
+          }
+        </div>
       </li>
       }
     </ul>
     }
   </section>
+
+  @if (editingRegistryProfileId() !== null) {
+  <section class="rv-admin-profiles__section">
+    <h2>Edit Registry Fields — {{ editingRegistryProfileId() }}</h2>
+    <p class="rv-admin-profiles__hint">
+      Edits DB-backed registry fields only (#3519); profile files and
+      <code>service.json</code> are unchanged. Omitted fields keep their value;
+      blanking a field clears it. Requires the current revision for optimistic
+      concurrency.
+    </p>
+    <div class="rv-admin-profiles__form-grid">
+      <label>
+        <span>Display Name</span>
+        <input
+          type="text"
+          [value]="registryEditForm().displayName"
+          (input)="updateRegistryEditText('displayName', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Summary</span>
+        <input
+          type="text"
+          [value]="registryEditForm().summary"
+          (input)="updateRegistryEditText('summary', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Owner ID</span>
+        <input
+          type="text"
+          [value]="registryEditForm().ownerId"
+          (input)="updateRegistryEditText('ownerId', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Agent ID</span>
+        <input
+          type="text"
+          [value]="registryEditForm().agentId"
+          (input)="updateRegistryEditText('agentId', $event)"
+          autocomplete="off"
+        />
+      </label>
+      <label>
+        <span>Default Session Kind</span>
+        <select
+          [value]="registryEditForm().defaultSessionKind"
+          (change)="updateRegistryEditKind($event)"
+        >
+          <option value="">keep current</option>
+          <option value="full">full</option>
+          <option value="worker">worker</option>
+          <option value="delegated">delegated</option>
+        </select>
+      </label>
+    </div>
+    @if (registryEditRecord(); as editRecord) {
+    <div class="rv-admin-profiles__actions">
+      <button
+        type="button"
+        class="rv-admin-profiles__button"
+        (click)="planRegistryUpdate(editRecord)"
+        [disabled]="admin.saving()"
+      >
+        Plan
+      </button>
+      <button
+        type="button"
+        class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+        (click)="applyRegistryUpdate(editRecord)"
+        [disabled]="admin.saving()"
+      >
+        Apply
+      </button>
+      <button
+        type="button"
+        class="rv-admin-profiles__button"
+        (click)="cancelRegistryEdit()"
+      >
+        Cancel
+      </button>
+    </div>
+    } @if (registryWritePlan(); as plan) {
+    <div class="rv-admin-profiles__result" role="status">
+      <span>ok {{ plan.ok }}</span>
+      <span
+        >revision {{ plan.expectedRevision }} → {{ plan.next.revision }}</span
+      >
+      <span
+        >rebuild recommended {{ plan.implications.runtimeRebuildRecommended
+        }}</span
+      >
+      @for (diag of plan.diagnostics; track diag.code) {
+      <span
+        class="rv-admin-profiles__diag"
+        [class.rv-admin-profiles__diag--error]="diag.severity === 'error'"
+        [class.rv-admin-profiles__diag--warning]="diag.severity === 'warning'"
+      >
+        {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
+      </span>
+      }
+    </div>
+    }
+  </section>
+  } @if (lifecycleTargetProfileId() !== null) {
+  <section class="rv-admin-profiles__section">
+    <h2>Lifecycle Transition — {{ lifecycleTargetProfileId() }}</h2>
+    <p class="rv-admin-profiles__hint">
+      Registry-authoritative lifecycle transition (#3521). Non-active
+      transitions disable derived runtime refs, archive active sessions, and
+      unregister the profile brain; assets and memory are preserved.
+    </p>
+    <div class="rv-admin-profiles__form-grid">
+      <label>
+        <span>Target lifecycle status</span>
+        <select
+          [value]="lifecycleTargetStatus()"
+          (change)="updateLifecycleTarget($event)"
+        >
+          @for (status of lifecycleStatuses; track status) {
+          <option [value]="status">{{ status }}</option>
+          }
+        </select>
+      </label>
+    </div>
+    @if (lifecycleEditRecord(); as lifecycleRecord) {
+    <div class="rv-admin-profiles__actions">
+      <button
+        type="button"
+        class="rv-admin-profiles__button"
+        (click)="planLifecycleTransition(lifecycleRecord)"
+        [disabled]="admin.saving()"
+      >
+        Plan
+      </button>
+      <button
+        type="button"
+        class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+        (click)="applyLifecycleTransition(lifecycleRecord)"
+        [disabled]="admin.saving()"
+      >
+        Apply
+      </button>
+      <button
+        type="button"
+        class="rv-admin-profiles__button"
+        (click)="cancelLifecycleTransition()"
+      >
+        Cancel
+      </button>
+    </div>
+    } @if (registryWritePlan(); as plan) {
+    <div class="rv-admin-profiles__result" role="status">
+      <span>ok {{ plan.ok }}</span>
+      <span>lifecycle effects {{ plan.implications.lifecycleEffects }}</span>
+      <span
+        >rebuild recommended {{ plan.implications.runtimeRebuildRecommended
+        }}</span
+      >
+      @for (diag of plan.diagnostics; track diag.code) {
+      <span
+        class="rv-admin-profiles__diag"
+        [class.rv-admin-profiles__diag--error]="diag.severity === 'error'"
+        [class.rv-admin-profiles__diag--warning]="diag.severity === 'warning'"
+      >
+        {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
+      </span>
+      }
+    </div>
+    }
+  </section>
+  }
 
   <section class="rv-admin-profiles__section">
     <h2>Configured Profiles</h2>
