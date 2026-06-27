@@ -447,10 +447,54 @@ describe('AdminHttpTransport', () => {
       displayName: 'Updated',
     });
 
+    if (!('applied' in result)) {
+      throw new Error('expected an applied result');
+    }
     expect(result.applied).toBe(true);
     expect(result.record.revision).toBe(4);
     expect(lastRequest().url).toContain(
       '/v1/admin/profiles/registry/field%20prime/update/apply',
+    );
+  });
+
+  it('returns a non-applied plan when an apply fails (revision mismatch)', async () => {
+    // Backend returns the plain plan (no applied/record) when !plan.ok.
+    const failedResponse = {
+      ok: false,
+      profileId: 'field-prime',
+      kind: 'update',
+      mode: 'apply',
+      expectedRevision: 9,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 3 },
+      diagnostics: [
+        {
+          severity: 'error',
+          code: 'profile_registry_revision_mismatch',
+          path: 'expectedRevision',
+          message: 'expected revision 9, found 3',
+        },
+      ],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: true,
+        serviceConfigUnchanged: true,
+        runtimeRebuildRecommended: false,
+        lifecycleEffects: 'none',
+      },
+    };
+    const { fetch } = capturingFetch(jsonOk(failedResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.applyProfileRegistryUpdate('field-prime', {
+      expectedRevision: 9,
+      displayName: 'Stale',
+    });
+
+    expect(result.ok).toBe(false);
+    expect('applied' in result).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe(
+      'profile_registry_revision_mismatch',
     );
   });
 
@@ -474,21 +518,29 @@ describe('AdminHttpTransport', () => {
       applied: true,
       record: { profileId: 'field-prime', revision: 5, lifecycleStatus: 'paused' },
       effects: {
-        archivedSessionIds: ['field-prime-session'],
-        unregisteredBrainImplementationId: 'field-prime-brain',
-        preservedAssets: true,
+        sessionsArchived: ['field-prime-session'],
+        brainHandle: { action: 'removed' },
       },
     };
     const { fetch, lastRequest } = capturingFetch(jsonOk(lifecycleResponse));
     const transport = new AdminHttpTransport(makeConfig(fetch));
 
-    const result = await transport.applyProfileRegistryLifecycle('field-prime', {
-      expectedRevision: 4,
-      lifecycleStatus: 'paused',
-    });
+    const result = await transport.applyProfileRegistryLifecycle(
+      'field-prime',
+      {
+        expectedRevision: 4,
+        lifecycleStatus: 'paused',
+      },
+    );
 
+    if (!('applied' in result)) {
+      throw new Error('expected an applied result');
+    }
     expect(result.applied).toBe(true);
-    expect(result.effects?.archivedSessionIds).toEqual(['field-prime-session']);
+    expect(result.effects?.sessionsArchived).toEqual([
+      'field-prime-session',
+    ]);
+    expect(result.effects?.brainHandle.action).toBe('removed');
     const req = lastRequest();
     expect(req.method).toBe('POST');
     expect(req.url).toContain(

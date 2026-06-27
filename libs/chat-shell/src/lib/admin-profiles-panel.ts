@@ -118,7 +118,16 @@ interface RegistryEditFormState {
   readonly summary: string;
   readonly ownerId: string;
   readonly agentId: string;
-  readonly defaultSessionKind: '' | 'full' | 'worker' | 'delegated';
+  /**
+   * '' keeps the current value; '__clear__' sends null to clear it back to the
+   * backend default; otherwise an explicit full/worker/delegated selection.
+   */
+  readonly defaultSessionKind:
+    | ''
+    | '__clear__'
+    | 'full'
+    | 'worker'
+    | 'delegated';
 }
 
 const INITIAL_REGISTRY_EDIT: RegistryEditFormState = {
@@ -280,9 +289,11 @@ export class AdminProfilesPanelComponent {
   }
 
   protected updateRegistryEditKind(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
+    const value = (event.target as HTMLSelectElement)
+      .value as RegistryEditFormState['defaultSessionKind'];
     if (
       value === '' ||
+      value === '__clear__' ||
       value === 'full' ||
       value === 'worker' ||
       value === 'delegated'
@@ -315,7 +326,9 @@ export class AdminProfilesPanelComponent {
       ...registryFieldEntry('agentId', form.agentId, record.agentId),
       ...(form.defaultSessionKind === ''
         ? {}
-        : { defaultSessionKind: form.defaultSessionKind }),
+        : form.defaultSessionKind === '__clear__'
+          ? { defaultSessionKind: null }
+          : { defaultSessionKind: form.defaultSessionKind }),
     };
     return request;
   }
@@ -455,6 +468,17 @@ export class AdminProfilesPanelComponent {
       metadataJson: action.metadataJson ?? null,
     }));
     return groupRuntimeRefs(refs);
+  }
+
+  /**
+   * Runtime-graph groups projected by the current registry write plan's `next`
+   * record (e.g. which refs a lifecycle transition will disable). Empty when no
+   * plan is loaded for the profile being edited.
+   */
+  protected plannedRuntimeRefGroups(): readonly RuntimeRefGroup[] {
+    const next = this.registryWritePlan()?.next;
+    if (next === undefined) return [];
+    return groupRuntimeRefs(next.activeRuntimeRefs);
   }
 
   protected updateText(

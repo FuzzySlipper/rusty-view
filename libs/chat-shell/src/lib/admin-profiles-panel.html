@@ -370,6 +370,7 @@
           (change)="updateRegistryEditKind($event)"
         >
           <option value="">keep current</option>
+          <option value="__clear__">backend default (clear)</option>
           <option value="full">full</option>
           <option value="worker">worker</option>
           <option value="delegated">delegated</option>
@@ -489,7 +490,27 @@
       </span>
       }
     </div>
-    }
+    @if (plannedRuntimeRefGroups().length > 0) {
+    <div class="rv-admin-profiles__preview rv-admin-profiles__plan-preview">
+      <span class="rv-admin-profiles__group-label"
+        >Planned runtime graph after transition (read-only)</span
+      >
+      <div class="rv-admin-profiles__preview-groups">
+        @for (group of plannedRuntimeRefGroups(); track group.refKind) {
+        <div class="rv-admin-profiles__preview-group">
+          <span class="rv-admin-profiles__preview-group-label"
+            >{{ group.label }}</span
+          >
+          <div class="rv-admin-profiles__runtime-refs">
+            @for (ref of group.refs; track ref.refId) {
+            <span>{{ ref.refId }} ({{ ref.status }})</span>
+            }
+          </div>
+        </div>
+        }
+      </div>
+    </div>
+    } }
   </section>
   }
 

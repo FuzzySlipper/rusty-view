@@ -556,22 +556,39 @@ export interface ProfileRegistryWritePlan {
 }
 
 /**
- * Apply result for a registry write. Same as the plan plus `applied: true` and
- * the persisted `record` (with bumped revision). For lifecycle applies, `effects`
- * describes the runtime side effects.
+ * Apply result for a registry write. The backend returns a plain
+ * {@link ProfileRegistryWritePlan} (no `applied`/`record`/`effects`) when the
+ * plan is not `ok` (e.g. revision mismatch), so the apply response is a union:
+ * either the non-applied plan or the applied result. For lifecycle applies,
+ * `effects` describes the runtime side effects.
  */
-export interface ProfileRegistryWriteApplyResult
+export type ProfileRegistryWriteApplyResult =
+  | ProfileRegistryAppliedWriteResult
+  | ProfileRegistryWritePlan;
+
+/**
+ * A successful registry apply: the plan plus `applied: true`, the persisted
+ * `record` (with bumped revision), and (lifecycle only) runtime `effects`.
+ */
+export interface ProfileRegistryAppliedWriteResult
   extends ProfileRegistryWritePlan {
   readonly applied: true;
   readonly record: AdminProfileRegistryRecord;
   readonly effects?: ProfileRegistryLifecycleEffects;
 }
 
-/** Runtime side effects of a lifecycle apply (#3521). */
+/**
+ * Runtime side effects of a lifecycle apply (#3521). `sessionsArchived` lists
+ * the sessions archived; `brainHandle` reports whether the profile brain was
+ * removed or already absent. Assets and memory are preserved (V1 does not
+ * purge).
+ */
 export interface ProfileRegistryLifecycleEffects {
-  readonly archivedSessionIds: readonly string[];
-  readonly unregisteredBrainImplementationId?: string;
-  readonly preservedAssets: true;
+  readonly sessionsArchived: readonly string[];
+  readonly brainHandle: {
+    readonly action: 'removed' | 'already_absent';
+    readonly handle?: unknown;
+  };
 }
 
 // ---- profile bundle export plan (ADR 0019) ----

@@ -246,7 +246,10 @@ function makeTransport(
         revision: 4,
         lifecycleStatus: 'paused',
       },
-      effects: { archivedSessionIds: [], preservedAssets: true as const },
+      effects: {
+        sessionsArchived: [],
+        brainHandle: { action: 'already_absent' },
+      },
     })),
   } as unknown as ChatTransport;
 }
@@ -706,6 +709,168 @@ describe('AdminProfilesPanelComponent', () => {
     expect(component.registryEditBlockReason(record)).toContain(
       'Import this file-backed profile',
     );
+  });
+
+  it('clears defaultSessionKind when the clear option is selected', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'kind-prime',
+          lifecycleStatus: 'active',
+          revision: 2,
+          defaultSessionKind: 'worker',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryUpdate: {
+        mock: { calls: unknown[] };
+      };
+    };
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'kind-prime');
+    if (record === undefined) {
+      throw new Error('kind-prime registry record not found');
+    }
+    const component = fixture.componentInstance as unknown as {
+      startRegistryEdit(record: AdminProfileRegistryRecord): void;
+      updateRegistryEditKind(event: { target: { value: string } }): void;
+      applyRegistryUpdate(record: AdminProfileRegistryRecord): void;
+    };
+
+    component.startRegistryEdit(record);
+    component.updateRegistryEditKind({ target: { value: '__clear__' } });
+    fixture.detectChanges();
+    component.applyRegistryUpdate(record);
+    await fixture.whenStable();
+
+    const applyMock = transport.applyAdminProfileRegistryUpdate;
+    const lastCall = (applyMock.mock.calls[applyMock.mock.calls.length - 1] ??
+      undefined) as
+      | [string, { defaultSessionKind?: string | null }]
+      | undefined;
+    if (lastCall === undefined) {
+      throw new Error('applyAdminProfileRegistryUpdate was not called');
+    }
+    expect(lastCall[1].defaultSessionKind).toBeNull();
+  });
+
+  it('shows the planned runtime graph impact before applying a lifecycle transition', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'life-prime',
+          lifecycleStatus: 'active',
+          revision: 5,
+          activeRuntimeRefs: [
+            {
+              refKind: 'session',
+              refId: 'life-prime-session',
+              status: 'active',
+              metadataJson: null,
+            },
+          ],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    // Override the lifecycle plan mock to return a next record with disabled refs.
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryLifecycle: (
+        profileId: string,
+        request: { expectedRevision: number; lifecycleStatus: string },
+      ) => Promise<{
+        profileId: string;
+        next: {
+          activeRuntimeRefs: {
+            refKind: string;
+            refId: string;
+            status: string;
+          }[];
+        };
+        implications: { lifecycleEffects: string };
+      }>;
+    };
+    transport.planAdminProfileRegistryLifecycle = async () => ({
+      ok: true,
+      profileId: 'life-prime',
+      kind: 'lifecycle',
+      mode: 'plan',
+      expectedRevision: 5,
+      current: { profileId: 'life-prime', revision: 5 },
+      next: {
+        profileId: 'life-prime',
+        revision: 5,
+        activeRuntimeRefs: [
+          {
+            refKind: 'session',
+            refId: 'life-prime-session',
+            status: 'paused',
+          },
+        ],
+      },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects:
+          'archive_active_sessions_and_unregister_brain' as const,
+      },
+    });
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'life-prime');
+    if (record === undefined) {
+      throw new Error('life-prime registry record not found');
+    }
+    const component = fixture.componentInstance as unknown as {
+      startLifecycleTransition(record: AdminProfileRegistryRecord): void;
+      planLifecycleTransition(record: AdminProfileRegistryRecord): void;
+    };
+
+    component.startLifecycleTransition(record);
+    fixture.detectChanges();
+    component.planLifecycleTransition(record);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const preview =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__plan-preview',
+      )?.textContent ?? '';
+    expect(preview).toContain('Planned runtime graph after transition');
+    expect(preview).toContain('life-prime-session (paused)');
   });
 });
 
