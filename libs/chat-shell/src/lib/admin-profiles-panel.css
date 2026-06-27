@@ -219,6 +219,30 @@
   color: var(--rv-color-text-muted);
 }
 
+.rv-admin-profiles__preview-groups {
+  display: grid;
+  gap: var(--rv-space-sm);
+}
+
+.rv-admin-profiles__preview-group {
+  display: grid;
+  gap: var(--rv-space-xs);
+}
+
+.rv-admin-profiles__preview-group-label {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-admin-profiles__create-preview {
+  margin-top: var(--rv-space-sm);
+  border: 1px dashed var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  padding: var(--rv-space-sm);
+}
+
 .rv-admin-profiles__muted {
   color: var(--rv-color-text-muted);
   font-family: var(--rv-font-mono);

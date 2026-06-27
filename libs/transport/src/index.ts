@@ -44,6 +44,7 @@ export type {
   AdminProfileRegistryRecord,
   AdminProfileRegistrySource,
   CreateAdminProfileRequest,
+  CreatedProfileRuntimeAction,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
   ProfileBundleExportEntry,

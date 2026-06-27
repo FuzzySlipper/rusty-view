@@ -149,7 +149,27 @@
       <span>sessionId {{ created.sessionId }}</span>
       <span>implementationId {{ created.implementationId }}</span>
     </div>
-    }
+    @if (createdActionGroups().length > 0) {
+    <div class="rv-admin-profiles__preview rv-admin-profiles__create-preview">
+      <span class="rv-admin-profiles__group-label"
+        >Planned runtime graph (from create plan, read-only)</span
+      >
+      <div class="rv-admin-profiles__preview-groups">
+        @for (group of createdActionGroups(); track group.refKind) {
+        <div class="rv-admin-profiles__preview-group">
+          <span class="rv-admin-profiles__preview-group-label"
+            >{{ group.label }}</span
+          >
+          <div class="rv-admin-profiles__runtime-refs">
+            @for (ref of group.refs; track ref.refId) {
+            <span>{{ ref.refId }}</span>
+            }
+          </div>
+        </div>
+        }
+      </div>
+    </div>
+    } }
   </section>
 
   <section class="rv-admin-profiles__section">
@@ -194,12 +214,33 @@
             <span>summary</span>
             <span>{{ record.summary ?? '-' }}</span>
           </div>
-          @if (record.activeRuntimeRefs.length > 0) {
-          <div class="rv-admin-profiles__runtime-refs">
-            @for (ref of record.activeRuntimeRefs; track ref.refId) {
-            <span>{{ ref.refKind }}: {{ ref.refId }} ({{ ref.status }})</span>
+        </div>
+
+        <div
+          class="rv-admin-profiles__registry-group rv-admin-profiles__preview"
+        >
+          <span class="rv-admin-profiles__group-label"
+            >Runtime graph impact (read-only)</span
+          >
+          @if (runtimeRefGroups(record).length > 0) {
+          <div class="rv-admin-profiles__preview-groups">
+            @for (group of runtimeRefGroups(record); track group.refKind) {
+            <div class="rv-admin-profiles__preview-group">
+              <span class="rv-admin-profiles__preview-group-label"
+                >{{ group.label }}</span
+              >
+              <div class="rv-admin-profiles__runtime-refs">
+                @for (ref of group.refs; track ref.refId) {
+                <span>{{ ref.refId }} ({{ ref.status }})</span>
+                }
+              </div>
+            </div>
             }
           </div>
+          <p class="rv-admin-profiles__muted">
+            Derived runtime graph from registry state. Full snapshot available
+            via the export plan (runtime-plan.json).
+          </p>
           } @else {
           <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
             no derived runtime refs

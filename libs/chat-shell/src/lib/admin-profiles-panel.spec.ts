@@ -137,6 +137,14 @@ function makeTransport(
               sessionsMissing: 0,
               scheduledJobsRegistered: 0,
             },
+            derivedRuntimeActions: [
+              { refKind: 'brain', refId: `${request.profileId}-brain` },
+              { refKind: 'session', refId: `${request.profileId}-session` },
+              {
+                refKind: 'profile_mcp_config',
+                refId: `${request.profileId}-mcp`,
+              },
+            ],
           },
         },
         audit: { started: true, terminal: true },
@@ -247,6 +255,130 @@ describe('AdminProfilesPanelComponent', () => {
     expect(text).toContain('tracked');
     // Raw prompt content is not exposed; only the asset kind and status.
     expect(text).not.toContain('sha256:abc');
+  });
+
+  it('renders the runtime-graph impact preview grouped by ref kind', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-26T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'graph-prime',
+          lifecycleStatus: 'active',
+          activeRuntimeRefs: [
+            {
+              refKind: 'brain',
+              refId: 'graph-prime-brain',
+              status: 'active',
+              metadataJson: null,
+            },
+            {
+              refKind: 'session',
+              refId: 'graph-prime-session',
+              status: 'idle',
+              metadataJson: null,
+            },
+            {
+              refKind: 'profile_mcp_config',
+              refId: 'graph-prime-mcp',
+              status: 'configured',
+              metadataJson: null,
+            },
+          ],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    const preview =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__preview',
+      )?.textContent ?? '';
+
+    expect(preview).toContain('Runtime graph impact (read-only)');
+    // Groups are labeled and refs rendered with their id and status.
+    expect(preview).toContain('Brains');
+    expect(preview).toContain('graph-prime-brain');
+    expect(preview).toContain('Sessions');
+    expect(preview).toContain('graph-prime-session (idle)');
+    expect(preview).toContain('MCP bindings');
+    expect(preview).toContain('graph-prime-mcp');
+    // Points to the export plan for the full snapshot.
+    expect(preview).toContain('runtime-plan.json');
+  });
+
+  it('shows an empty runtime-graph preview for a file_fallback profile', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-26T00:00:00Z',
+      records: [
+        {
+          source: 'file_fallback',
+          profileId: 'file-only',
+          lifecycleStatus: 'active',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'file_backed_fallback',
+        },
+      ],
+      registryCount: 0,
+      fileFallbackCount: 1,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    const preview =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__preview',
+      )?.textContent ?? '';
+
+    expect(preview).toContain('no derived runtime refs');
+  });
+
+  it('surfaces the planned runtime graph from the create flow', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const adminStore = TestBed.inject(AdminStore);
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'planned-prime' } });
+    fixture.detectChanges();
+    await adminStore.createProfile({
+      profileId: 'planned-prime',
+      reason: 'test',
+    });
+    fixture.detectChanges();
+
+    const preview =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__create-preview',
+      )?.textContent ?? '';
+
+    expect(preview).toContain('Planned runtime graph');
+    expect(preview).toContain('planned-prime-brain');
+    expect(preview).toContain('planned-prime-session');
+    expect(preview).toContain('planned-prime-mcp');
   });
 
   it('requests and renders a profile bundle export plan', async () => {

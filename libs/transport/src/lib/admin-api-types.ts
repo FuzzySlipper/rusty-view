@@ -254,6 +254,13 @@ export interface CreatedServiceProfile {
   readonly profilePath: string;
   readonly runtimeConfigPath: string;
   readonly applyResult: RuntimeConfigApplyResult;
+  /**
+   * Derived runtime graph actions produced by the create-profile planner
+   * (task #3407): brains/sessions/jobs/channel/MCP bindings the backend will
+   * create. Surfaced for a runtime-graph-impact preview before/after create.
+   * Optional for backends that do not return the planner envelope.
+   */
+  readonly derivedRuntimeActions?: readonly CreatedProfileRuntimeAction[];
 }
 
 export interface RuntimeConfigApplyResult {
@@ -374,6 +381,17 @@ export interface ProfileRegistryDerivedRuntimeRef {
   readonly status: string;
   readonly updatedAt?: string;
   readonly metadataJson: unknown;
+}
+
+/**
+ * A derived runtime graph action from the create-profile planner (task #3407):
+ * the brain/session/job/channel/MCP binding the backend will create. Surfaced
+ * for a runtime-graph-impact preview of the create flow.
+ */
+export interface CreatedProfileRuntimeAction {
+  readonly refKind: string;
+  readonly refId: string;
+  readonly metadataJson?: unknown;
 }
 
 /**

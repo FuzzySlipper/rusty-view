@@ -9,8 +9,10 @@ import {
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type {
   AdminProfileRegistryRecord,
+  CreatedProfileRuntimeAction,
   CreateAdminProfileRequest,
   ProfileBundleExportEntry,
+  ProfileRegistryDerivedRuntimeRef,
 } from '@rusty-view/transport';
 
 interface ProfileFormState {
@@ -32,6 +34,66 @@ interface CreateProfileModelConfig {
   readonly provider: string;
   readonly modelName: string;
   readonly baseUrl?: string;
+}
+
+/** A group of derived runtime refs sharing a `refKind`, for preview rendering. */
+interface RuntimeRefGroup {
+  readonly refKind: string;
+  readonly label: string;
+  readonly refs: readonly ProfileRegistryDerivedRuntimeRef[];
+}
+
+const RUNTIME_REF_KIND_ORDER: readonly string[] = [
+  'brain',
+  'session',
+  'scheduled_job',
+  'channel_binding',
+  'mcp_binding',
+  'profile_mcp_config',
+];
+
+function groupRuntimeRefs(
+  refs: readonly ProfileRegistryDerivedRuntimeRef[],
+): readonly RuntimeRefGroup[] {
+  if (refs.length === 0) return [];
+  const buckets = new Map<string, ProfileRegistryDerivedRuntimeRef[]>();
+  for (const ref of refs) {
+    const existing = buckets.get(ref.refKind);
+    if (existing === undefined) {
+      buckets.set(ref.refKind, [ref]);
+    } else {
+      existing.push(ref);
+    }
+  }
+  const orderedKinds = [
+    ...RUNTIME_REF_KIND_ORDER.filter((kind) => buckets.has(kind)),
+    ...[...buckets.keys()]
+      .filter((kind) => !RUNTIME_REF_KIND_ORDER.includes(kind))
+      .sort(),
+  ];
+  return orderedKinds.map((refKind) => ({
+    refKind,
+    label: runtimeRefKindLabel(refKind),
+    refs: buckets.get(refKind) ?? [],
+  }));
+}
+
+function runtimeRefKindLabel(refKind: string): string {
+  switch (refKind) {
+    case 'brain':
+      return 'Brains';
+    case 'session':
+      return 'Sessions';
+    case 'scheduled_job':
+      return 'Scheduled jobs';
+    case 'channel_binding':
+      return 'Channel bindings';
+    case 'mcp_binding':
+    case 'profile_mcp_config':
+      return 'MCP bindings';
+    default:
+      return refKind;
+  }
 }
 
 interface CapabilityRow {
@@ -123,6 +185,18 @@ export class AdminProfilesPanelComponent {
     () => this.exportPlan()?.profileId === this.exportProfileId(),
   );
 
+  /**
+   * Derived runtime graph actions from the most recent create-profile call
+   * (task #3407 planner output). Surfaced as a before/after preview of the
+   * runtime graph that was created.
+   */
+  protected readonly createdRuntimeActions = computed<
+    readonly CreatedProfileRuntimeAction[]
+  >(
+    () =>
+      this.admin.createResult()?.outcome?.result?.derivedRuntimeActions ?? [],
+  );
+
   constructor() {
     void this.admin.refresh();
   }
@@ -160,6 +234,28 @@ export class AdminProfilesPanelComponent {
 
   protected planSourceLabel(source: 'registry' | 'file_fallback'): string {
     return source === 'registry' ? 'DB registry' : 'file fallback';
+  }
+
+  /**
+   * Group a profile's derived runtime refs by `refKind` for the runtime-graph
+   * preview. Returns groups in a stable order (brains, sessions, jobs,
+   * channel bindings, MCP bindings, then any other kinds).
+   */
+  protected runtimeRefGroups(
+    record: AdminProfileRegistryRecord,
+  ): readonly RuntimeRefGroup[] {
+    return groupRuntimeRefs(record.activeRuntimeRefs);
+  }
+
+  protected createdActionGroups(): readonly RuntimeRefGroup[] {
+    const actions = this.createdRuntimeActions();
+    const refs: ProfileRegistryDerivedRuntimeRef[] = actions.map((action) => ({
+      refKind: action.refKind,
+      refId: action.refId,
+      status: 'planned',
+      metadataJson: action.metadataJson ?? null,
+    }));
+    return groupRuntimeRefs(refs);
   }
 
   protected updateText(
