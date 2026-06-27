@@ -62,6 +62,12 @@ export class AdminStore {
   private readonly _modelProviders = signal<ModelProviderPage | null>(null);
   private readonly _providerWriteResult =
     signal<ModelProviderWriteResponse | null>(null);
+  /**
+   * Provider-specific load error. Unlike the compatibility-diagnostic routes,
+   * the model-provider registry is a first-class part of this panel; a failure
+   * to load it must be visible rather than looking like an empty registry.
+   */
+  private readonly _providerLoadError = signal<string | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
   private readonly _error = signal<string | null>(null);
@@ -85,6 +91,7 @@ export class AdminStore {
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
+  readonly providerLoadError = this._providerLoadError.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly saving = this._saving.asReadonly();
   readonly error = this._error.asReadonly();
@@ -153,7 +160,7 @@ export class AdminStore {
         configValidation,
         capabilities,
         profileDiagnostics,
-        modelProviders,
+        modelProvidersResult,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
         this.transport.adminSessions({ limit: 100 }),
@@ -162,7 +169,7 @@ export class AdminStore {
         this.transport.adminConfigValidation(),
         this.transport.adminCapabilities().catch(() => null),
         this.transport.adminProfileDiagnostics().catch(() => null),
-        this.transport.adminModelProviders({ limit: 100 }).catch(() => null),
+        loadModelProviders(this.transport),
       ]);
       this._diagnostics.set(diagnostics);
       this._sessions.set(sessions);
@@ -171,7 +178,8 @@ export class AdminStore {
       this._configValidation.set(configValidation);
       this._capabilities.set(capabilities);
       this._profileDiagnostics.set(profileDiagnostics);
-      this._modelProviders.set(modelProviders);
+      this._modelProviders.set(modelProvidersResult.page);
+      this._providerLoadError.set(modelProvidersResult.error);
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -436,4 +444,20 @@ function errorMessage(error: unknown): string {
     return `${error.message} (${error.apiError.reason_code})`;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Load model providers, capturing any failure as a provider-specific error so
+ * the Providers panel can distinguish a broken registry from an empty one.
+ */
+async function loadModelProviders(transport: ChatTransport): Promise<{
+  page: ModelProviderPage | null;
+  error: string | null;
+}> {
+  try {
+    const page = await transport.adminModelProviders({ limit: 100 });
+    return { page, error: null };
+  } catch (error) {
+    return { page: null, error: errorMessage(error) };
+  }
 }

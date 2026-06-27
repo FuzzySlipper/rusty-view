@@ -31,6 +31,7 @@ function makeProvider(alias: string, hasSecret = false): ModelProviderRecord {
 
 function makeTransport(
   providers: readonly ModelProviderRecord[],
+  providerLoadFails = false,
 ): ChatTransport {
   const page: ModelProviderPage = {
     items: providers,
@@ -81,7 +82,11 @@ function makeTransport(
       capabilities: [],
     }),
     adminProfileDiagnostics: async () => null,
-    adminModelProviders: async () => page,
+    adminModelProviders: providerLoadFails
+      ? async () => {
+          throw new Error('boom');
+        }
+      : async () => page,
     createAdminModelProvider: vi.fn(
       async (
         request: ModelProviderWriteRequest,
@@ -102,12 +107,18 @@ function makeTransport(
   } as unknown as ChatTransport;
 }
 
-async function createPanel(providers: readonly ModelProviderRecord[]) {
+async function createPanel(
+  providers: readonly ModelProviderRecord[],
+  providerLoadFails = false,
+) {
   await TestBed.configureTestingModule({
     imports: [AdminProvidersPanelComponent],
     providers: [
       AdminStore,
-      { provide: ChatTransport, useValue: makeTransport(providers) },
+      {
+        provide: ChatTransport,
+        useValue: makeTransport(providers, providerLoadFails),
+      },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(AdminProvidersPanelComponent);
@@ -175,5 +186,18 @@ describe('AdminProvidersPanelComponent', () => {
     };
     // Initial form: alias and modelId both blank.
     expect(component.saveDisabled()).toBe(true);
+  });
+
+  it('surfaces a provider load failure visibly instead of an empty state', async () => {
+    const fixture = await createPanel([], true);
+    const text =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-providers',
+      )?.textContent ?? '';
+
+    // A failed provider load must not look like a legitimately empty registry.
+    expect(text).toContain('Failed to load providers');
+    expect(text).toContain('boom');
+    expect(text).not.toContain('No configured providers');
   });
 });

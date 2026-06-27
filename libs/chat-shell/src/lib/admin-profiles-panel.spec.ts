@@ -465,35 +465,6 @@ describe('AdminProfilesPanelComponent', () => {
     expect(request).not.toHaveProperty('kind');
   });
 
-  it('includes modelConfig only when the user opts into a model override', async () => {
-    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
-    const transport = TestBed.inject(ChatTransport) as unknown as {
-      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
-    };
-    const component = fixture.componentInstance as unknown as {
-      updateText(
-        field: 'profileId' | 'provider' | 'modelName',
-        event: { target: { value: string } },
-      ): void;
-      toggleModelOverride(event: { target: { checked: boolean } }): void;
-      createProfile(): void;
-    };
-
-    component.updateText('profileId', { target: { value: 'override-prime' } });
-    component.toggleModelOverride({ target: { checked: true } });
-    component.updateText('provider', { target: { value: 'openai' } });
-    component.updateText('modelName', { target: { value: 'gpt-4o' } });
-    fixture.detectChanges();
-    component.createProfile();
-    await fixture.whenStable();
-
-    const request = lastCreateRequest(transport.createAdminProfile);
-    expect(request.modelConfig).toEqual({
-      provider: 'openai',
-      modelName: 'gpt-4o',
-    });
-  });
-
   it('sends kind only when the user explicitly selects a session kind', async () => {
     const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
     const transport = TestBed.inject(ChatTransport) as unknown as {

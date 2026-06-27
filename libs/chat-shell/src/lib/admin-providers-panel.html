@@ -224,7 +224,11 @@
 
   <section class="rv-admin-providers__section">
     <h2>Configured Providers</h2>
-    @if (admin.providerAliases().length === 0) {
+    @if (admin.providerLoadError() !== null) {
+    <div class="rv-admin-providers__error" role="alert">
+      Failed to load providers: {{ admin.providerLoadError() }}
+    </div>
+    } @else if (admin.providerAliases().length === 0) {
     <div class="rv-admin-providers__empty">No configured providers.</div>
     } @else {
     <ul class="rv-admin-providers__list">

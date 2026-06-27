@@ -98,43 +98,11 @@
           }
         </select>
       </label>
-      <label class="rv-admin-profiles__toggle">
-        <input
-          type="checkbox"
-          [checked]="form().modelOverrideEnabled"
-          (change)="toggleModelOverride($event)"
-        />
-        <span>Override model defaults (ignores alias)</span>
-      </label>
-      @if (form().modelOverrideEnabled) {
-      <label>
-        <span>Provider</span>
-        <input
-          type="text"
-          [value]="form().provider"
-          (input)="updateText('provider', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Model</span>
-        <input
-          type="text"
-          [value]="form().modelName"
-          (input)="updateText('modelName', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Base URL</span>
-        <input
-          type="text"
-          [value]="form().baseUrl"
-          (input)="updateText('baseUrl', $event)"
-          autocomplete="off"
-        />
-      </label>
-      }
+      <p class="rv-admin-profiles__hint">
+        Model/provider config is owned by the selected provider alias (manage
+        aliases in the Providers panel). Inline model overrides are not honored
+        by the create route.
+      </p>
       <label>
         <span>MCP Tool Profile</span>
         <input

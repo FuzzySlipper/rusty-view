@@ -25,21 +25,10 @@ interface ProfileFormState {
   readonly kind: '' | 'full' | 'worker' | 'delegated';
   /**
    * Reference to a reusable model provider alias. Preferred over the inline
-   * model override. '' means no alias; the backend then applies defaults
-   * unless the inline override is enabled.
+   * model override. '' means no alias; the backend then applies defaults.
    */
   readonly providerAlias: string;
-  readonly modelOverrideEnabled: boolean;
-  readonly provider: string;
-  readonly modelName: string;
-  readonly baseUrl: string;
   readonly mcpToolProfile: string;
-}
-
-interface CreateProfileModelConfig {
-  readonly provider: string;
-  readonly modelName: string;
-  readonly baseUrl?: string;
 }
 
 /** A group of derived runtime refs sharing a `refKind`, for preview rendering. */
@@ -116,10 +105,6 @@ const INITIAL_FORM: ProfileFormState = {
   implementationId: '',
   kind: '',
   providerAlias: '',
-  modelOverrideEnabled: false,
-  provider: '',
-  modelName: '',
-  baseUrl: '',
   mcpToolProfile: '',
 };
 
@@ -173,20 +158,9 @@ export class AdminProfilesPanelComponent {
   protected readonly capabilityRows = CAPABILITY_ROWS;
   protected readonly form = signal<ProfileFormState>(INITIAL_FORM);
   protected readonly exportProfileId = signal<string | null>(null);
-  protected readonly createDisabled = computed(() => {
-    const form = this.form();
-    if (this.admin.saving() || form.profileId.trim() === '') return true;
-    // Provider/model are only required when the user explicitly opts into a
-    // model override. The default create path omits modelConfig so the backend
-    // applies official registry defaults (ADR 0019).
-    if (
-      form.modelOverrideEnabled &&
-      (form.provider.trim() === '' || form.modelName.trim() === '')
-    ) {
-      return true;
-    }
-    return false;
-  });
+  protected readonly createDisabled = computed(
+    () => this.admin.saving() || this.form().profileId.trim() === '',
+  );
   protected readonly exportPlan = computed(() => this.admin.exportPlan());
   protected readonly exportPlanMatchesProfile = computed(
     () => this.exportPlan()?.profileId === this.exportProfileId(),
@@ -285,14 +259,6 @@ export class AdminProfilesPanelComponent {
     }
   }
 
-  protected toggleModelOverride(event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.form.update((current) => ({
-      ...current,
-      modelOverrideEnabled: checked,
-    }));
-  }
-
   protected createProfile(): void {
     const request = buildCreateProfileRequest(this.form());
     void this.admin.createProfile(request).then(() => {
@@ -329,7 +295,6 @@ function buildCreateProfileRequest(
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
     ...optionalString('providerAlias', form.providerAlias),
     ...optionalKind(form.kind),
-    ...buildModelConfig(form),
   };
   return request;
 }
@@ -343,28 +308,6 @@ function optionalKind(
   kind: '' | 'full' | 'worker' | 'delegated',
 ): { kind: 'full' | 'worker' | 'delegated' } | Record<string, never> {
   return kind === '' ? {} : { kind };
-}
-
-/**
- * Only include modelConfig when the user explicitly opts into a model
- * override. The default create path omits it so the backend applies official
- * registry defaults (ADR 0019).
- */
-function buildModelConfig(
-  form: ProfileFormState,
-): { modelConfig: CreateProfileModelConfig } | Record<string, never> {
-  if (!form.modelOverrideEnabled) return {};
-  const provider = form.provider.trim();
-  const modelName = form.modelName.trim();
-  if (provider === '' || modelName === '') return {};
-  const baseUrl = form.baseUrl.trim();
-  return {
-    modelConfig: {
-      provider,
-      modelName,
-      ...(baseUrl === '' ? {} : { baseUrl }),
-    },
-  };
 }
 
 function optionalString<TKey extends string>(
