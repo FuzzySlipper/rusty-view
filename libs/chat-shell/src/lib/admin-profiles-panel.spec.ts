@@ -4,8 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import {
   ChatTransport,
+  type AdminControlResponse,
   type AdminProfileRegistryDiagnostics,
   type ApiCapabilityDescriptor,
+  type CreateAdminProfileRequest,
+  type CreatedServiceProfile,
   type ProfileBundleExportPlan,
 } from '@rusty-view/transport';
 
@@ -106,6 +109,40 @@ function makeTransport(
         diagnostics: [],
         warnings: [],
       },
+    createAdminProfile: vi.fn(
+      async (
+        request: CreateAdminProfileRequest,
+      ): Promise<AdminControlResponse<CreatedServiceProfile>> => ({
+        command: {
+          name: 'create_profile',
+          target: { profileId: request.profileId },
+          requestId: 'req',
+        },
+        outcome: {
+          status: 'completed',
+          summary: `profile ${request.profileId} created`,
+          result: {
+            profileId: request.profileId,
+            agentId: request.profileId,
+            sessionId: `${request.profileId}-session`,
+            implementationId: `${request.profileId}-brain`,
+            profilePath: '/tmp/profile.json',
+            runtimeConfigPath: '/tmp/service.json',
+            applyResult: {
+              brainsRegistered: 1,
+              brainsAlreadyPresent: 0,
+              sessionsCreated: 1,
+              sessionsAlreadyPresent: 0,
+              sessionsReactivated: 0,
+              sessionsMissing: 0,
+              scheduledJobsRegistered: 0,
+            },
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    ),
   } as unknown as ChatTransport;
 }
 
@@ -266,4 +303,75 @@ describe('AdminProfilesPanelComponent', () => {
     expect(exportText).toContain('active DB state: 1');
     expect(exportText).toContain('file assets: 1');
   });
+
+  it('creates a minimal profile using backend-owned defaults (omits modelConfig)', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      createProfile(): void;
+    };
+
+    // Default path: only a profile id is provided. The model override toggle
+    // stays off so the backend applies official registry defaults.
+    component.updateText('profileId', {
+      target: { value: 'minimal-prime' },
+    });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.profileId).toBe('minimal-prime');
+    expect(request).not.toHaveProperty('modelConfig');
+  });
+
+  it('includes modelConfig only when the user opts into a model override', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId' | 'provider' | 'modelName',
+        event: { target: { value: string } },
+      ): void;
+      toggleModelOverride(event: { target: { checked: boolean } }): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'override-prime' } });
+    component.toggleModelOverride({ target: { checked: true } });
+    component.updateText('provider', { target: { value: 'openai' } });
+    component.updateText('modelName', { target: { value: 'gpt-4o' } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.modelConfig).toEqual({
+      provider: 'openai',
+      modelName: 'gpt-4o',
+    });
+  });
 });
+
+/**
+ * Pull the most recent createAdminProfile request off a vitest mock. Throws
+ * when the spy was never called so the failing assertion is obvious.
+ */
+function lastCreateRequest(spy: {
+  mock: { calls: [CreateAdminProfileRequest][] };
+}): CreateAdminProfileRequest {
+  const calls = spy.mock.calls;
+  const last = calls[calls.length - 1];
+  if (last === undefined) {
+    throw new Error('createAdminProfile was never called');
+  }
+  return last[0];
+}

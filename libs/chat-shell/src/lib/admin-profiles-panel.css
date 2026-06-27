@@ -181,6 +181,16 @@
   font-weight: var(--rv-font-weight-bold);
 }
 
+.rv-admin-profiles__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-xs);
+  grid-column: 1 / -1;
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
 .rv-admin-profiles__registry {
   gap: var(--rv-space-sm);
 }

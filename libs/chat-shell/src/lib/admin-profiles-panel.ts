@@ -20,10 +20,17 @@ interface ProfileFormState {
   readonly sessionId: string;
   readonly implementationId: string;
   readonly kind: 'full' | 'worker' | 'delegated';
+  readonly modelOverrideEnabled: boolean;
   readonly provider: string;
   readonly modelName: string;
   readonly baseUrl: string;
   readonly mcpToolProfile: string;
+}
+
+interface CreateProfileModelConfig {
+  readonly provider: string;
+  readonly modelName: string;
+  readonly baseUrl?: string;
 }
 
 interface CapabilityRow {
@@ -39,8 +46,9 @@ const INITIAL_FORM: ProfileFormState = {
   sessionId: '',
   implementationId: '',
   kind: 'full',
-  provider: 'local',
-  modelName: 'deterministic',
+  modelOverrideEnabled: false,
+  provider: '',
+  modelName: '',
   baseUrl: '',
   mcpToolProfile: '',
 };
@@ -95,13 +103,20 @@ export class AdminProfilesPanelComponent {
   protected readonly capabilityRows = CAPABILITY_ROWS;
   protected readonly form = signal<ProfileFormState>(INITIAL_FORM);
   protected readonly exportProfileId = signal<string | null>(null);
-  protected readonly createDisabled = computed(
-    () =>
-      this.admin.saving() ||
-      this.form().profileId.trim() === '' ||
-      this.form().provider.trim() === '' ||
-      this.form().modelName.trim() === '',
-  );
+  protected readonly createDisabled = computed(() => {
+    const form = this.form();
+    if (this.admin.saving() || form.profileId.trim() === '') return true;
+    // Provider/model are only required when the user explicitly opts into a
+    // model override. The default create path omits modelConfig so the backend
+    // applies official registry defaults (ADR 0019).
+    if (
+      form.modelOverrideEnabled &&
+      (form.provider.trim() === '' || form.modelName.trim() === '')
+    ) {
+      return true;
+    }
+    return false;
+  });
   protected readonly exportPlan = computed(() => this.admin.exportPlan());
   protected readonly exportPlanMatchesProfile = computed(
     () => this.exportPlan()?.profileId === this.exportProfileId(),
@@ -147,7 +162,7 @@ export class AdminProfilesPanelComponent {
   }
 
   protected updateText(
-    field: Exclude<keyof ProfileFormState, 'kind'>,
+    field: Exclude<keyof ProfileFormState, 'kind' | 'modelOverrideEnabled'>,
     event: Event,
   ): void {
     const value = (event.target as HTMLInputElement).value;
@@ -159,6 +174,14 @@ export class AdminProfilesPanelComponent {
     if (value === 'full' || value === 'worker' || value === 'delegated') {
       this.form.update((current) => ({ ...current, kind: value }));
     }
+  }
+
+  protected toggleModelOverride(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.form.update((current) => ({
+      ...current,
+      modelOverrideEnabled: checked,
+    }));
   }
 
   protected createProfile(): void {
@@ -190,19 +213,37 @@ function buildCreateProfileRequest(
   const request: CreateAdminProfileRequest = {
     profileId: form.profileId.trim(),
     kind: form.kind,
-    modelConfig: {
-      provider: form.provider.trim(),
-      modelName: form.modelName.trim(),
-      ...(form.baseUrl.trim() === '' ? {} : { baseUrl: form.baseUrl.trim() }),
-    },
     reason: 'created from rusty-view profiles panel',
     ...optionalString('displayName', form.displayName),
     ...optionalString('agentId', form.agentId),
     ...optionalString('sessionId', form.sessionId),
     ...optionalString('implementationId', form.implementationId),
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
+    ...buildModelConfig(form),
   };
   return request;
+}
+
+/**
+ * Only include modelConfig when the user explicitly opts into a model
+ * override. The default create path omits it so the backend applies official
+ * registry defaults (ADR 0019).
+ */
+function buildModelConfig(
+  form: ProfileFormState,
+): { modelConfig: CreateProfileModelConfig } | Record<string, never> {
+  if (!form.modelOverrideEnabled) return {};
+  const provider = form.provider.trim();
+  const modelName = form.modelName.trim();
+  if (provider === '' || modelName === '') return {};
+  const baseUrl = form.baseUrl.trim();
+  return {
+    modelConfig: {
+      provider,
+      modelName,
+      ...(baseUrl === '' ? {} : { baseUrl }),
+    },
+  };
 }
 
 function optionalString<TKey extends string>(

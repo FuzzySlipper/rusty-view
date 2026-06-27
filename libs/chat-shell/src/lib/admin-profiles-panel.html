@@ -85,6 +85,15 @@
           <option value="delegated">delegated</option>
         </select>
       </label>
+      <label class="rv-admin-profiles__toggle">
+        <input
+          type="checkbox"
+          [checked]="form().modelOverrideEnabled"
+          (change)="toggleModelOverride($event)"
+        />
+        <span>Override model defaults</span>
+      </label>
+      @if (form().modelOverrideEnabled) {
       <label>
         <span>Provider</span>
         <input
@@ -112,6 +121,7 @@
           autocomplete="off"
         />
       </label>
+      }
       <label>
         <span>MCP Tool Profile</span>
         <input
