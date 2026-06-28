@@ -8,6 +8,7 @@ import type {
   AdminControlResponse,
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
+  AdminMcpCatalog,
   AdminPage,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
@@ -95,6 +96,16 @@ export class AdminHttpTransport {
 
   configValidation(): Promise<RuntimeConfigValidationReport | null> {
     return this.request('GET', '/v1/admin/diagnostics/config');
+  }
+
+  /**
+   * MCP server catalog (task #3647): configured MCP servers, known tool
+   * profile keys, and current binding resolution details. Used to populate
+   * MCP server choices for profile creation instead of asking for a free-form
+   * base URL.
+   */
+  mcpCatalog(): Promise<AdminMcpCatalog> {
+    return this.request('GET', '/v1/admin/mcp/servers');
   }
 
   capabilities(): Promise<ApiCapabilityRegistry> {

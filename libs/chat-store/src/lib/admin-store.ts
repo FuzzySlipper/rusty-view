@@ -6,6 +6,9 @@ import {
   type AdminControlResponse,
   type AdminDiagnosticsBundle,
   type AdminPage,
+  type AdminMcpBinding,
+  type AdminMcpCatalog,
+  type AdminMcpServer,
   type AdminProfileRegistryDiagnostics,
   type AdminProfileRegistryRecord,
   type ApiCapabilityRegistry,
@@ -63,6 +66,7 @@ export class AdminStore {
   private readonly _capabilities = signal<ApiCapabilityRegistry | null>(null);
   private readonly _profileDiagnostics =
     signal<AdminProfileRegistryDiagnostics | null>(null);
+  private readonly _mcpCatalog = signal<AdminMcpCatalog | null>(null);
   private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
   private readonly _registryWritePlan = signal<ProfileRegistryWritePlan | null>(
     null,
@@ -98,6 +102,7 @@ export class AdminStore {
   readonly configValidation = this._configValidation.asReadonly();
   readonly capabilities = this._capabilities.asReadonly();
   readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
+  readonly mcpCatalog = this._mcpCatalog.asReadonly();
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly registryWritePlan = this._registryWritePlan.asReadonly();
   readonly registryWriteResult = this._registryWriteResult.asReadonly();
@@ -160,6 +165,29 @@ export class AdminStore {
     () => this._modelProviders()?.items ?? [],
   );
 
+  /**
+   * Configured MCP servers from the Crew catalog (task #3647). Empty when the
+   * backend has not exposed the MCP catalog route; the create-profile flow
+   * still allows profiles with no MCP bindings in that case.
+   */
+  readonly mcpServers = computed<readonly AdminMcpServer[]>(
+    () => this._mcpCatalog()?.servers ?? [],
+  );
+
+  /** Known tool profile keys from current runtime bindings (task #3647). */
+  readonly mcpToolProfiles = computed<readonly string[]>(
+    () => this._mcpCatalog()?.toolProfiles ?? [],
+  );
+
+  /**
+   * Current MCP binding resolution details from the catalog (task #3649).
+   * Surfaced read-only so operators can distinguish explicit server bindings
+   * from compatibility fallback (`endpointServerId` vs `resolvedServerId`).
+   */
+  readonly mcpBindings = computed<readonly AdminMcpBinding[]>(
+    () => this._mcpCatalog()?.bindings ?? [],
+  );
+
   async refresh(): Promise<void> {
     this._loading.set(true);
     this._error.set(null);
@@ -172,6 +200,7 @@ export class AdminStore {
         configValidation,
         capabilities,
         profileDiagnostics,
+        mcpCatalog,
         modelProvidersResult,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
@@ -181,6 +210,7 @@ export class AdminStore {
         this.transport.adminConfigValidation(),
         this.transport.adminCapabilities().catch(() => null),
         this.transport.adminProfileDiagnostics().catch(() => null),
+        loadMcpCatalog(this.transport),
         loadModelProviders(this.transport),
       ]);
       this._diagnostics.set(diagnostics);
@@ -190,6 +220,7 @@ export class AdminStore {
       this._configValidation.set(configValidation);
       this._capabilities.set(capabilities);
       this._profileDiagnostics.set(profileDiagnostics);
+      this._mcpCatalog.set(mcpCatalog);
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
     } catch (error) {
@@ -651,6 +682,22 @@ function errorMessage(error: unknown): string {
     return `${error.message} (${error.apiError.reason_code})`;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Load the MCP server catalog (task #3647). The catalog is an optional,
+ * compatibility-gated route: backends that have not exposed it (or that omit
+ * the method on the transport) yield `null` so the create-profile flow falls
+ * back to a non-blocking empty state rather than failing the whole refresh.
+ */
+async function loadMcpCatalog(
+  transport: ChatTransport,
+): Promise<AdminMcpCatalog | null> {
+  try {
+    return await transport.adminMcpCatalog();
+  } catch {
+    return null;
+  }
 }
 
 /**

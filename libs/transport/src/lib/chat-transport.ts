@@ -30,6 +30,7 @@ import type {
   AdminControlResponse,
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
+  AdminMcpCatalog,
   AdminPage,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
@@ -172,6 +173,10 @@ export class ChatTransport {
 
   adminConfigValidation(): Promise<RuntimeConfigValidationReport | null> {
     return this.adminHttp.configValidation();
+  }
+
+  adminMcpCatalog(): Promise<AdminMcpCatalog> {
+    return this.adminHttp.mcpCatalog();
   }
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {

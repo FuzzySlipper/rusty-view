@@ -443,3 +443,65 @@
   padding: 0.15rem 0.5rem;
   font-size: var(--rv-font-size-xs);
 }
+
+.rv-admin-profiles__mcp-select,
+.rv-admin-profiles__advanced {
+  display: grid;
+  gap: var(--rv-space-xs);
+  margin-top: var(--rv-space-sm);
+}
+
+.rv-admin-profiles__mcp-server-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--rv-space-xs);
+}
+
+.rv-admin-profiles__mcp-server {
+  display: grid;
+  gap: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+}
+
+.rv-admin-profiles__mcp-server-toggle,
+.rv-admin-profiles__mcp-tool-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-sm);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-admin-profiles__mcp-tool-profile input {
+  flex: 1;
+}
+
+.rv-admin-profiles__mcp-binding {
+  display: grid;
+  gap: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  margin-top: var(--rv-space-xs);
+}
+
+.rv-admin-profiles__mcp-binding-header,
+.rv-admin-profiles__mcp-binding-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-xs) var(--rv-space-sm);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-admin-profiles__mcp-binding-status--degraded {
+  color: var(--rv-color-warning, #c08b00);
+}
+
+.rv-admin-profiles__mcp-binding-fallback {
+  color: var(--rv-color-text-muted);
+}

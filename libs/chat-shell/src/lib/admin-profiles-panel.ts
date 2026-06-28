@@ -8,9 +8,12 @@ import {
 } from '@angular/core';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type {
+  AdminMcpBinding,
+  AdminMcpServer,
   AdminProfileRegistryRecord,
   CreatedProfileRuntimeAction,
   CreateAdminProfileRequest,
+  CreateProfileMcpBinding,
   ProfileBundleExportEntry,
   ProfileRegistryDerivedRuntimeRef,
   ProfileRegistryFieldUpdateRequest,
@@ -33,7 +36,29 @@ interface ProfileFormState {
    * model override. '' means no alias; the backend then applies defaults.
    */
   readonly providerAlias: string;
+  /**
+   * Legacy free-form MCP tool profile string. Superseded by `mcpBindings`
+   * selected from the backend MCP catalog (#3648); retained only as an
+   * advanced compatibility field.
+   */
   readonly mcpToolProfile: string;
+}
+
+/**
+ * Draft selection of an MCP server binding in the create-profile form (#3648).
+ * `serverId` comes from the backend MCP catalog; `toolProfileKey` is an
+ * optional per-server override left blank by default so the backend applies
+ * its default for the binding.
+ */
+interface McpBindingDraft {
+  readonly serverId: string;
+  readonly toolProfileKey: string;
+}
+
+/** MCP runtime bindings grouped by profile id, for the diagnostics view (#3649). */
+interface McpBindingGroup {
+  readonly profileId: string;
+  readonly bindings: readonly AdminMcpBinding[];
 }
 
 /** A group of derived runtime refs sharing a `refKind`, for preview rendering. */
@@ -216,6 +241,15 @@ export class AdminProfilesPanelComponent {
   protected readonly capabilityRows = CAPABILITY_ROWS;
   protected readonly lifecycleStatuses = LIFECYCLE_STATUSES;
   protected readonly form = signal<ProfileFormState>(INITIAL_FORM);
+  /**
+   * Whether the advanced create fields (explicit session/implementation ids and
+   * the legacy MCP tool profile) are revealed. Hidden by default so the create
+   * flow only asks for user-meaningful fields (#3632); omitted advanced fields
+   * let Crew generate session/implementation ids.
+   */
+  protected readonly advancedOpen = signal(false);
+  /** Selected MCP server bindings for the create-profile request (#3648). */
+  protected readonly mcpSelections = signal<readonly McpBindingDraft[]>([]);
   protected readonly exportProfileId = signal<string | null>(null);
   protected readonly editingRegistryProfileId = signal<string | null>(null);
   protected readonly registryEditForm = signal<RegistryEditFormState>(
@@ -672,14 +706,115 @@ export class AdminProfilesPanelComponent {
     }
   }
 
+  protected toggleAdvanced(): void {
+    this.advancedOpen.update((open) => !open);
+  }
+
+  /** Configured MCP servers from the backend catalog (#3647). */
+  protected mcpServers(): readonly AdminMcpServer[] {
+    return this.admin.mcpServers();
+  }
+
+  /** Whether an MCP server is currently selected for the new profile. */
+  protected isMcpServerSelected(serverId: string): boolean {
+    return this.mcpSelections().some(
+      (selection) => selection.serverId === serverId,
+    );
+  }
+
+  /** Toggle an MCP server binding on/off from a checkbox. */
+  protected toggleMcpServer(serverId: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.mcpSelections.update((selections) => {
+      const without = selections.filter(
+        (selection) => selection.serverId !== serverId,
+      );
+      return checked ? [...without, { serverId, toolProfileKey: '' }] : without;
+    });
+  }
+
+  /** Current tool profile key override for a selected MCP server (#3648). */
+  protected mcpToolProfileKeyFor(serverId: string): string {
+    return (
+      this.mcpSelections().find((selection) => selection.serverId === serverId)
+        ?.toolProfileKey ?? ''
+    );
+  }
+
+  /** Update the optional tool profile key for a selected MCP server. */
+  protected updateMcpToolProfileKey(serverId: string, event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.mcpSelections.update((selections) =>
+      selections.map((selection) =>
+        selection.serverId === serverId
+          ? { ...selection, toolProfileKey: value }
+          : selection,
+      ),
+    );
+  }
+
+  /**
+   * Human-readable label for an MCP server option (#3647). Surfaces server id,
+   * optional label, transport, and source so operators can distinguish servers.
+   */
+  protected mcpServerLabel(server: AdminMcpServer): string {
+    const name =
+      server.label === undefined ? server.id : `${server.id} (${server.label})`;
+    return `${name} · ${server.transport} · ${server.source}`;
+  }
+
   protected createProfile(): void {
-    const request = buildCreateProfileRequest(this.form());
+    const request = buildCreateProfileRequest(
+      this.form(),
+      this.mcpSelections(),
+    );
     void this.admin.createProfile(request).then(() => {
       if (this.admin.error() === null) {
         this.form.set(INITIAL_FORM);
+        this.mcpSelections.set([]);
         void this.chatStore.refreshSessions();
       }
     });
+  }
+
+  /**
+   * Current MCP runtime bindings grouped by profile id (#3649). Read-only
+   * diagnostics sourced from the Crew catalog; View does not infer resolution
+   * from URLs itself.
+   */
+  protected mcpBindingGroups(): readonly McpBindingGroup[] {
+    const bindings = this.admin.mcpBindings();
+    if (bindings.length === 0) return [];
+    const buckets = new Map<string, AdminMcpBinding[]>();
+    for (const binding of bindings) {
+      const existing = buckets.get(binding.profileId);
+      if (existing === undefined) {
+        buckets.set(binding.profileId, [binding]);
+      } else {
+        existing.push(binding);
+      }
+    }
+    return [...buckets.keys()].sort().map((profileId) => ({
+      profileId,
+      bindings: buckets.get(profileId) ?? [],
+    }));
+  }
+
+  /**
+   * Whether a binding resolved to a different server than its endpoint declared
+   * (#3649) — i.e. compatibility fallback (e.g. a profile-derived endpoint
+   * resolving to an `env-default` server). Visible but not treated as an error.
+   */
+  protected isMcpBindingFallback(binding: AdminMcpBinding): boolean {
+    return binding.endpointServerId !== binding.resolvedServerId;
+  }
+
+  /** Whether a binding is in a degraded/non-active state (#3649). */
+  protected isMcpBindingDegraded(binding: AdminMcpBinding): boolean {
+    return (
+      binding.degradedReason !== undefined ||
+      binding.status.toLowerCase() !== 'active'
+    );
   }
 
   protected capabilityStatus(row: CapabilityRow): string {
@@ -697,6 +832,7 @@ export class AdminProfilesPanelComponent {
 
 function buildCreateProfileRequest(
   form: ProfileFormState,
+  mcpSelections: readonly McpBindingDraft[],
 ): CreateAdminProfileRequest {
   const request: CreateAdminProfileRequest = {
     profileId: form.profileId.trim(),
@@ -708,8 +844,30 @@ function buildCreateProfileRequest(
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
     ...optionalString('providerAlias', form.providerAlias),
     ...optionalKind(form.kind),
+    ...optionalMcpBindings(mcpSelections),
   };
   return request;
+}
+
+/**
+ * Build the `mcpBindings` entry from the selected servers (#3648). Omitted
+ * entirely when no servers are selected so a profile is created with no MCP
+ * tools. Each binding carries its `serverId`; the optional `toolProfileKey` is
+ * only included when the operator typed one (prefer `toolProfileKey` over the
+ * legacy `mcpToolProfile` spelling).
+ */
+function optionalMcpBindings(
+  selections: readonly McpBindingDraft[],
+): { mcpBindings: readonly CreateProfileMcpBinding[] } | Record<string, never> {
+  const bindings = selections
+    .filter((selection) => selection.serverId.trim() !== '')
+    .map((selection) => {
+      const toolProfileKey = selection.toolProfileKey.trim();
+      return toolProfileKey === ''
+        ? { serverId: selection.serverId }
+        : { serverId: selection.serverId, toolProfileKey };
+    });
+  return bindings.length === 0 ? {} : { mcpBindings: bindings };
 }
 
 /**

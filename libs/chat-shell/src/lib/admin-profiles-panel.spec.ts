@@ -5,6 +5,7 @@ import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import {
   ChatTransport,
   type AdminControlResponse,
+  type AdminMcpCatalog,
   type AdminProfileRegistryDiagnostics,
   type AdminProfileRegistryRecord,
   type ApiCapabilityDescriptor,
@@ -46,6 +47,7 @@ function makeTransport(
   capabilityIds: readonly string[],
   profileDiagnostics?: AdminProfileRegistryDiagnostics | null,
   exportPlan?: ProfileBundleExportPlan | null,
+  mcpCatalog?: AdminMcpCatalog | null,
 ): ChatTransport {
   return {
     adminDiagnostics: async () => ({
@@ -95,6 +97,7 @@ function makeTransport(
       capabilities: capabilityIds.map(capability),
     }),
     adminProfileDiagnostics: async () => profileDiagnostics ?? null,
+    adminMcpCatalog: async () => mcpCatalog ?? null,
     adminModelProviders: async () => null,
     adminProfileExportPlan: async () =>
       exportPlan ?? {
@@ -294,6 +297,7 @@ async function createPanel(
   capabilityIds: readonly string[],
   profileDiagnostics?: AdminProfileRegistryDiagnostics | null,
   exportPlan?: ProfileBundleExportPlan | null,
+  mcpCatalog?: AdminMcpCatalog | null,
 ) {
   await TestBed.configureTestingModule({
     imports: [AdminProfilesPanelComponent],
@@ -307,7 +311,12 @@ async function createPanel(
       },
       {
         provide: ChatTransport,
-        useValue: makeTransport(capabilityIds, profileDiagnostics, exportPlan),
+        useValue: makeTransport(
+          capabilityIds,
+          profileDiagnostics,
+          exportPlan,
+          mcpCatalog,
+        ),
       },
     ],
   }).compileComponents();
@@ -649,6 +658,179 @@ describe('AdminProfilesPanelComponent', () => {
     const request = lastCreateRequest(transport.createAdminProfile);
     expect(request.providerAlias).toBe('default');
     expect(request).not.toHaveProperty('modelConfig');
+  });
+
+  it('omits sessionId/implementationId/mcpToolProfile and mcpBindings by default', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'default-prime' } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.profileId).toBe('default-prime');
+    expect(request).not.toHaveProperty('sessionId');
+    expect(request).not.toHaveProperty('implementationId');
+    expect(request).not.toHaveProperty('mcpToolProfile');
+    expect(request).not.toHaveProperty('mcpBindings');
+  });
+
+  it('preserves advanced session/implementation overrides when set', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId' | 'sessionId' | 'implementationId',
+        event: { target: { value: string } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'override-prime' } });
+    component.updateText('sessionId', { target: { value: 'custom-session' } });
+    component.updateText('implementationId', {
+      target: { value: 'custom-brain' },
+    });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.sessionId).toBe('custom-session');
+    expect(request.implementationId).toBe('custom-brain');
+  });
+
+  it('renders configured MCP servers from the catalog as selectable choices', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      mcpCatalog(),
+    );
+    const select =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__mcp-select',
+      )?.textContent ?? '';
+
+    expect(select).toContain('den');
+    expect(select).toContain('streamable_http');
+    expect(select).toContain('runtime');
+    expect(select).toContain('files');
+    // No free-form global MCP base URL prompt.
+    expect(select).not.toContain('base URL');
+  });
+
+  it('shows a non-blocking empty state when no MCP servers are configured', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const select =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__mcp-select',
+      )?.textContent ?? '';
+
+    expect(select).toContain('No MCP servers configured');
+  });
+
+  it('sends mcpBindings for each selected server with optional tool profile key', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      mcpCatalog(),
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      toggleMcpServer(
+        serverId: string,
+        event: { target: { checked: boolean } },
+      ): void;
+      updateMcpToolProfileKey(
+        serverId: string,
+        event: { target: { value: string } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'mcp-prime' } });
+    component.toggleMcpServer('den', { target: { checked: true } });
+    component.updateMcpToolProfileKey('den', { target: { value: 'planner' } });
+    component.toggleMcpServer('files', { target: { checked: true } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.mcpBindings).toEqual([
+      { serverId: 'den', toolProfileKey: 'planner' },
+      { serverId: 'files' },
+    ]);
+  });
+
+  it('drops a deselected MCP server from the bindings', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      mcpCatalog(),
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      toggleMcpServer(
+        serverId: string,
+        event: { target: { checked: boolean } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'toggle-prime' } });
+    component.toggleMcpServer('den', { target: { checked: true } });
+    component.toggleMcpServer('den', { target: { checked: false } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request).not.toHaveProperty('mcpBindings');
+  });
+
+  it('shows MCP binding resolution details and flags compatibility fallback', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      mcpCatalog(),
+    );
+    const text = (fixture.nativeElement as HTMLElement).innerHTML;
+
+    expect(text).toContain('MCP Binding Resolution');
+    expect(text).toContain('legacy-files');
+    expect(text).toContain('env-default');
+    expect(text).toContain('compatibility fallback');
+    expect(text).toContain('degraded server unreachable');
   });
 
   it('plans a registry field update for a registry-backed profile', async () => {
@@ -1266,6 +1448,63 @@ describe('AdminProfilesPanelComponent', () => {
     expect(html.toLowerCase()).toContain('import');
   });
 });
+
+/**
+ * A representative MCP catalog: one runtime server, one explicit binding, and
+ * one legacy/profile-derived binding whose endpoint resolves to a different
+ * (env-default) server via compatibility fallback.
+ */
+function mcpCatalog(): AdminMcpCatalog {
+  return {
+    servers: [
+      {
+        id: 'den',
+        label: 'Den',
+        baseUrl: 'https://den.example/mcp',
+        transport: 'streamable_http',
+        source: 'runtime',
+        configuredBindingCount: 1,
+      },
+      {
+        id: 'files',
+        baseUrl: 'https://files.example/mcp',
+        transport: 'streamable_http',
+        source: 'env',
+        configuredBindingCount: 0,
+      },
+    ],
+    toolProfiles: ['planner', 'files'],
+    bindings: [
+      {
+        bindingId: 'den-binding',
+        adapterId: 'mcp-den',
+        agentId: 'agent-prime',
+        profileId: 'prime',
+        endpointRef: 'config://mcp/den',
+        endpointServerId: 'den',
+        resolvedServerId: 'den',
+        transport: 'streamable_http',
+        toolProfileKey: 'planner',
+        serverNames: ['den'],
+        status: 'active',
+      },
+      {
+        bindingId: 'legacy-files',
+        adapterId: 'mcp-ts-files',
+        agentId: 'agent-legacy',
+        profileId: 'legacy',
+        endpointRef: 'config://mcp/legacy',
+        endpointServerId: 'legacy',
+        resolvedServerId: 'env-default',
+        transport: 'streamable_http',
+        toolProfileKey: 'files',
+        serverNames: ['files'],
+        status: 'degraded',
+        degradedReason: 'degraded server unreachable',
+      },
+    ],
+  };
+}
 
 /**
  * Pull the most recent createAdminProfile request off a vitest mock. Throws

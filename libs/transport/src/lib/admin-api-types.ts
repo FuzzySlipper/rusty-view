@@ -225,6 +225,79 @@ export interface RuntimeConfigValidationReport {
   };
 }
 
+/**
+ * Where a configured MCP server entry came from (task #3647). `env` is
+ * compatibility/default config (e.g. `RUSTY_CREW_MCP_BASE_URL`); `runtime` is
+ * an explicitly configured server. The frontend treats neither as special —
+ * Den MCP is just one possible `env` or `runtime` server.
+ */
+export type AdminMcpServerSource = 'env' | 'runtime';
+
+/**
+ * A configured MCP server from the Crew catalog (`GET /v1/admin/mcp/servers`,
+ * alias `/v1/admin/mcp/catalog`). Profiles bind to a server by `id`; the
+ * frontend renders these as selectable choices instead of asking for a
+ * free-form base URL.
+ */
+export interface AdminMcpServer {
+  readonly id: string;
+  readonly label?: string;
+  readonly baseUrl: string;
+  readonly transport: string;
+  readonly requestTimeoutMs?: number;
+  readonly source: AdminMcpServerSource;
+  readonly configuredBindingCount: number;
+}
+
+/**
+ * A current MCP runtime binding from the catalog (task #3647/#3649). Used for
+ * read-only diagnostics: `endpointServerId` vs `resolvedServerId` distinguishes
+ * explicit server bindings from compatibility fallback (e.g. a profile-derived
+ * `endpointServerId` resolving to an `env-default` server). A divergence is not
+ * an error by itself but is surfaced so operators can see the fallback.
+ */
+export interface AdminMcpBinding {
+  readonly bindingId: string;
+  readonly adapterId: string;
+  readonly agentId: string;
+  readonly sessionId?: string;
+  readonly profileId: string;
+  readonly endpointRef: string;
+  readonly endpointServerId: string;
+  readonly resolvedServerId: string;
+  readonly transport: string;
+  readonly toolProfileKey: string;
+  readonly serverNames: readonly string[];
+  readonly status: string;
+  readonly degradedReason?: string;
+}
+
+/**
+ * MCP server catalog response (task #3647). `servers` are the configured MCP
+ * servers; `toolProfiles` are known tool profile keys from current runtime
+ * bindings; `bindings` are current binding resolution details for diagnostics.
+ */
+export interface AdminMcpCatalog {
+  readonly servers: readonly AdminMcpServer[];
+  readonly toolProfiles: readonly string[];
+  readonly bindings: readonly AdminMcpBinding[];
+}
+
+/**
+ * A single MCP server binding for the create-profile request (task #3648).
+ * Only `serverId` is required (sourced from the MCP catalog); the remaining
+ * fields are advanced overrides that are omitted in the simple create flow.
+ * Prefer `toolProfileKey` over the legacy `toolProfile` input spelling.
+ */
+export interface CreateProfileMcpBinding {
+  readonly serverId: string;
+  readonly bindingId?: string;
+  readonly adapterId?: string;
+  readonly serverNames?: readonly string[];
+  readonly transport?: string;
+  readonly toolProfileKey?: string;
+}
+
 export interface CreateAdminProfileRequest {
   readonly profileId: string;
   readonly displayName?: string;
@@ -232,6 +305,17 @@ export interface CreateAdminProfileRequest {
   readonly sessionId?: string;
   readonly implementationId?: string;
   readonly kind?: 'full' | 'worker' | 'delegated';
+  /**
+   * Explicit MCP server bindings (task #3648). Omit for a profile with no MCP
+   * tools. Each binding requires `serverId` from the MCP catalog; optional
+   * fields default on the backend. Preferred over the legacy
+   * `mcpToolProfile` free-form string for new UI paths.
+   */
+  readonly mcpBindings?: readonly CreateProfileMcpBinding[];
+  /**
+   * Legacy free-form MCP tool profile string. Superseded by `mcpBindings`
+   * (task #3648); retained only as an advanced/import compatibility affordance.
+   */
   readonly mcpToolProfile?: string;
   /**
    * Reference to a reusable model provider alias (task #3534/#3538). Preferred
