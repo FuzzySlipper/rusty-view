@@ -8,6 +8,7 @@ import {
   type AdminMcpCatalog,
   type AdminProfileRegistryDiagnostics,
   type AdminProfileRegistryRecord,
+  type AdminToolCatalog,
   type ApiCapabilityDescriptor,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
@@ -48,6 +49,7 @@ function makeTransport(
   profileDiagnostics?: AdminProfileRegistryDiagnostics | null,
   exportPlan?: ProfileBundleExportPlan | null,
   mcpCatalog?: AdminMcpCatalog | null,
+  toolCatalog?: AdminToolCatalog | null,
 ): ChatTransport {
   return {
     adminDiagnostics: async () => ({
@@ -98,6 +100,7 @@ function makeTransport(
     }),
     adminProfileDiagnostics: async () => profileDiagnostics ?? null,
     adminMcpCatalog: async () => mcpCatalog ?? null,
+    adminToolCatalog: async () => toolCatalog ?? null,
     adminModelProviders: async () => null,
     adminProfileExportPlan: async () =>
       exportPlan ?? {
@@ -298,6 +301,7 @@ async function createPanel(
   profileDiagnostics?: AdminProfileRegistryDiagnostics | null,
   exportPlan?: ProfileBundleExportPlan | null,
   mcpCatalog?: AdminMcpCatalog | null,
+  toolCatalog?: AdminToolCatalog | null,
 ) {
   await TestBed.configureTestingModule({
     imports: [AdminProfilesPanelComponent],
@@ -316,6 +320,7 @@ async function createPanel(
           profileDiagnostics,
           exportPlan,
           mcpCatalog,
+          toolCatalog,
         ),
       },
     ],
@@ -684,6 +689,7 @@ describe('AdminProfilesPanelComponent', () => {
     expect(request).not.toHaveProperty('implementationId');
     expect(request).not.toHaveProperty('mcpToolProfile');
     expect(request).not.toHaveProperty('mcpBindings');
+    expect(request).not.toHaveProperty('toolPolicy');
   });
 
   it('preserves advanced session/implementation overrides when set', async () => {
@@ -831,6 +837,122 @@ describe('AdminProfilesPanelComponent', () => {
     expect(text).toContain('env-default');
     expect(text).toContain('compatibility fallback');
     expect(text).toContain('degraded server unreachable');
+  });
+
+  it('renders built-in toolsets and tools from the catalog as selectable choices', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      null,
+      toolCatalog(),
+    );
+    const policy =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__tool-policy',
+      )?.textContent ?? '';
+
+    // Toolsets and tools are surfaced with readable labels, not blind ids.
+    expect(policy).toContain('local_code_read');
+    expect(policy).toContain('Local code read');
+    expect(policy).toContain('3 tools');
+    expect(policy).toContain('memory_profile');
+    expect(policy).toContain('Individual tools');
+    expect(policy).toContain('todo');
+  });
+
+  it('shows a non-blocking empty state when no tool catalog is reported', async () => {
+    const fixture = await createPanel(LANDED_PROFILE_CONTROL_CAPABILITY_IDS);
+    const policy =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__tool-policy',
+      )?.textContent ?? '';
+
+    expect(policy).toContain('No built-in tool catalog reported');
+  });
+
+  it('sends toolPolicy with selected toolsets/tools and shows the review', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      null,
+      toolCatalog(),
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      toggleToolset(
+        toolsetId: string,
+        event: { target: { checked: boolean } },
+      ): void;
+      toggleTool(
+        toolName: string,
+        event: { target: { checked: boolean } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'tools-prime' } });
+    component.toggleToolset('local_code_read', { target: { checked: true } });
+    component.toggleTool('todo', { target: { checked: true } });
+    fixture.detectChanges();
+
+    // The selected policy is visible in the create review before submit.
+    const review =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__tool-policy-review',
+      )?.textContent ?? '';
+    expect(review).toContain('local_code_read');
+    expect(review).toContain('todo');
+
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.toolPolicy).toEqual({
+      requestedToolsets: ['local_code_read'],
+      requestedTools: ['todo'],
+    });
+  });
+
+  it('omits toolPolicy when a deselected toolset leaves nothing selected', async () => {
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      null,
+      null,
+      null,
+      toolCatalog(),
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminProfile: { mock: { calls: [CreateAdminProfileRequest][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'profileId',
+        event: { target: { value: string } },
+      ): void;
+      toggleToolset(
+        toolsetId: string,
+        event: { target: { checked: boolean } },
+      ): void;
+      createProfile(): void;
+    };
+
+    component.updateText('profileId', { target: { value: 'untool-prime' } });
+    component.toggleToolset('local_code_read', { target: { checked: true } });
+    component.toggleToolset('local_code_read', { target: { checked: false } });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request).not.toHaveProperty('toolPolicy');
   });
 
   it('plans a registry field update for a registry-backed profile', async () => {
@@ -1501,6 +1623,34 @@ function mcpCatalog(): AdminMcpCatalog {
         serverNames: ['files'],
         status: 'degraded',
         degradedReason: 'degraded server unreachable',
+      },
+    ],
+  };
+}
+
+/**
+ * A representative built-in tool catalog: two toolsets (one with a label and
+ * tool count, one bare) and one individually selectable tool.
+ */
+function toolCatalog(): AdminToolCatalog {
+  return {
+    toolsets: [
+      {
+        id: 'local_code_read',
+        label: 'Local code read',
+        description: 'Read files from the local workspace',
+        toolCount: 3,
+        tools: ['read_file', 'list_files', 'grep'],
+      },
+      {
+        id: 'memory_profile',
+      },
+    ],
+    tools: [
+      {
+        name: 'todo',
+        toolsets: ['planning_session'],
+        description: 'Manage a task list',
       },
     ],
   };

@@ -31,6 +31,7 @@ import type {
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
   AdminMcpCatalog,
+  AdminToolCatalog,
   AdminPage,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
@@ -177,6 +178,10 @@ export class ChatTransport {
 
   adminMcpCatalog(): Promise<AdminMcpCatalog> {
     return this.adminHttp.mcpCatalog();
+  }
+
+  adminToolCatalog(): Promise<AdminToolCatalog> {
+    return this.adminHttp.toolCatalog();
   }
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {

@@ -11,6 +11,9 @@ import {
   type AdminMcpServer,
   type AdminProfileRegistryDiagnostics,
   type AdminProfileRegistryRecord,
+  type AdminToolCatalog,
+  type AdminToolDescriptor,
+  type AdminToolsetDescriptor,
   type ApiCapabilityRegistry,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
@@ -67,6 +70,7 @@ export class AdminStore {
   private readonly _profileDiagnostics =
     signal<AdminProfileRegistryDiagnostics | null>(null);
   private readonly _mcpCatalog = signal<AdminMcpCatalog | null>(null);
+  private readonly _toolCatalog = signal<AdminToolCatalog | null>(null);
   private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
   private readonly _registryWritePlan = signal<ProfileRegistryWritePlan | null>(
     null,
@@ -103,6 +107,7 @@ export class AdminStore {
   readonly capabilities = this._capabilities.asReadonly();
   readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
   readonly mcpCatalog = this._mcpCatalog.asReadonly();
+  readonly toolCatalog = this._toolCatalog.asReadonly();
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly registryWritePlan = this._registryWritePlan.asReadonly();
   readonly registryWriteResult = this._registryWriteResult.asReadonly();
@@ -188,6 +193,20 @@ export class AdminStore {
     () => this._mcpCatalog()?.bindings ?? [],
   );
 
+  /**
+   * Built-in (non-MCP) toolsets from Crew's tool catalog (task #3686). Empty
+   * when the backend has not exposed the tool catalog route; profile creation
+   * still works with no built-in tools selected in that case.
+   */
+  readonly toolsetCatalog = computed<readonly AdminToolsetDescriptor[]>(
+    () => this._toolCatalog()?.toolsets ?? [],
+  );
+
+  /** Built-in (non-MCP) individual tools from Crew's tool catalog (#3686). */
+  readonly toolCatalogTools = computed<readonly AdminToolDescriptor[]>(
+    () => this._toolCatalog()?.tools ?? [],
+  );
+
   async refresh(): Promise<void> {
     this._loading.set(true);
     this._error.set(null);
@@ -201,6 +220,7 @@ export class AdminStore {
         capabilities,
         profileDiagnostics,
         mcpCatalog,
+        toolCatalog,
         modelProvidersResult,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
@@ -211,6 +231,7 @@ export class AdminStore {
         this.transport.adminCapabilities().catch(() => null),
         this.transport.adminProfileDiagnostics().catch(() => null),
         loadMcpCatalog(this.transport),
+        loadToolCatalog(this.transport),
         loadModelProviders(this.transport),
       ]);
       this._diagnostics.set(diagnostics);
@@ -221,6 +242,7 @@ export class AdminStore {
       this._capabilities.set(capabilities);
       this._profileDiagnostics.set(profileDiagnostics);
       this._mcpCatalog.set(mcpCatalog);
+      this._toolCatalog.set(toolCatalog);
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
     } catch (error) {
@@ -695,6 +717,22 @@ async function loadMcpCatalog(
 ): Promise<AdminMcpCatalog | null> {
   try {
     return await transport.adminMcpCatalog();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the built-in tool catalog (task #3686). Like the MCP catalog this is an
+ * optional, compatibility-gated route: backends (or transport mocks) that have
+ * not exposed it yield `null` so the create-profile flow falls back to a
+ * non-blocking empty state rather than failing the whole refresh.
+ */
+async function loadToolCatalog(
+  transport: ChatTransport,
+): Promise<AdminToolCatalog | null> {
+  try {
+    return (await transport.adminToolCatalog?.()) ?? null;
   } catch {
     return null;
   }

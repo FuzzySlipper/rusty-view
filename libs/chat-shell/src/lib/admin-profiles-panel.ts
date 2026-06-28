@@ -11,9 +11,12 @@ import type {
   AdminMcpBinding,
   AdminMcpServer,
   AdminProfileRegistryRecord,
+  AdminToolDescriptor,
+  AdminToolsetDescriptor,
   CreatedProfileRuntimeAction,
   CreateAdminProfileRequest,
   CreateProfileMcpBinding,
+  CreateProfileToolPolicy,
   ProfileBundleExportEntry,
   ProfileRegistryDerivedRuntimeRef,
   ProfileRegistryFieldUpdateRequest,
@@ -250,6 +253,14 @@ export class AdminProfilesPanelComponent {
   protected readonly advancedOpen = signal(false);
   /** Selected MCP server bindings for the create-profile request (#3648). */
   protected readonly mcpSelections = signal<readonly McpBindingDraft[]>([]);
+  /**
+   * Selected built-in (non-MCP) toolset ids for the create-profile request
+   * (#3686). Sent as `toolPolicy.requestedToolsets`. Independent of MCP
+   * selection; empty by default so creation works with no built-in tools.
+   */
+  protected readonly toolsetSelections = signal<readonly string[]>([]);
+  /** Selected built-in individual tool names (`toolPolicy.requestedTools`, #3686). */
+  protected readonly toolSelections = signal<readonly string[]>([]);
   protected readonly exportProfileId = signal<string | null>(null);
   protected readonly editingRegistryProfileId = signal<string | null>(null);
   protected readonly registryEditForm = signal<RegistryEditFormState>(
@@ -763,15 +774,88 @@ export class AdminProfilesPanelComponent {
     return `${name} · ${server.transport} · ${server.source}`;
   }
 
+  /** Built-in (non-MCP) toolsets from Crew's tool catalog (#3686). */
+  protected toolsetCatalog(): readonly AdminToolsetDescriptor[] {
+    return this.admin.toolsetCatalog();
+  }
+
+  /** Built-in (non-MCP) individual tools from Crew's tool catalog (#3686). */
+  protected toolCatalogTools(): readonly AdminToolDescriptor[] {
+    return this.admin.toolCatalogTools();
+  }
+
+  /** Whether a built-in toolset is selected for the new profile (#3686). */
+  protected isToolsetSelected(toolsetId: string): boolean {
+    return this.toolsetSelections().includes(toolsetId);
+  }
+
+  /** Toggle a built-in toolset on/off from a checkbox (#3686). */
+  protected toggleToolset(toolsetId: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.toolsetSelections.update((selections) => {
+      const without = selections.filter((id) => id !== toolsetId);
+      return checked ? [...without, toolsetId] : without;
+    });
+  }
+
+  /** Whether a built-in tool is selected for the new profile (#3686). */
+  protected isToolSelected(toolName: string): boolean {
+    return this.toolSelections().includes(toolName);
+  }
+
+  /** Toggle a built-in tool on/off from a checkbox (#3686). */
+  protected toggleTool(toolName: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.toolSelections.update((selections) => {
+      const without = selections.filter((name) => name !== toolName);
+      return checked ? [...without, toolName] : without;
+    });
+  }
+
+  /**
+   * Human-readable label for a toolset option (#3686). Surfaces the id plus an
+   * optional Crew-provided label and tool count so operators don't type ids
+   * blindly. Falls back to the id alone when no label/count is provided.
+   */
+  protected toolsetLabel(toolset: AdminToolsetDescriptor): string {
+    const name =
+      toolset.label === undefined
+        ? toolset.id
+        : `${toolset.id} (${toolset.label})`;
+    const count = toolset.toolCount ?? toolset.tools?.length;
+    return count === undefined ? name : `${name} · ${count} tools`;
+  }
+
+  /** Human-readable label for an individual tool option (#3686). */
+  protected toolLabel(tool: AdminToolDescriptor): string {
+    return tool.label === undefined
+      ? tool.name
+      : `${tool.name} (${tool.label})`;
+  }
+
+  /**
+   * Read-only summary of the built-in tool policy that will be submitted
+   * (#3686). Shown in the create review so the operator can confirm the
+   * selection before submit. Empty when nothing is selected.
+   */
+  protected readonly selectedToolPolicySummary = computed(() => ({
+    toolsets: this.toolsetSelections(),
+    tools: this.toolSelections(),
+  }));
+
   protected createProfile(): void {
     const request = buildCreateProfileRequest(
       this.form(),
       this.mcpSelections(),
+      this.toolsetSelections(),
+      this.toolSelections(),
     );
     void this.admin.createProfile(request).then(() => {
       if (this.admin.error() === null) {
         this.form.set(INITIAL_FORM);
         this.mcpSelections.set([]);
+        this.toolsetSelections.set([]);
+        this.toolSelections.set([]);
         void this.chatStore.refreshSessions();
       }
     });
@@ -833,6 +917,8 @@ export class AdminProfilesPanelComponent {
 function buildCreateProfileRequest(
   form: ProfileFormState,
   mcpSelections: readonly McpBindingDraft[],
+  toolsetSelections: readonly string[],
+  toolSelections: readonly string[],
 ): CreateAdminProfileRequest {
   const request: CreateAdminProfileRequest = {
     profileId: form.profileId.trim(),
@@ -845,8 +931,30 @@ function buildCreateProfileRequest(
     ...optionalString('providerAlias', form.providerAlias),
     ...optionalKind(form.kind),
     ...optionalMcpBindings(mcpSelections),
+    ...optionalToolPolicy(toolsetSelections, toolSelections),
   };
   return request;
+}
+
+/**
+ * Build the `toolPolicy` entry from the selected built-in toolsets/tools
+ * (#3686). Omitted entirely when nothing is selected so a profile is created
+ * with no built-in tools. Kept separate from `mcpBindings`; MCP tools are never
+ * expressed here.
+ */
+function optionalToolPolicy(
+  toolsetSelections: readonly string[],
+  toolSelections: readonly string[],
+): { toolPolicy: CreateProfileToolPolicy } | Record<string, never> {
+  const requestedToolsets = toolsetSelections.filter((id) => id.trim() !== '');
+  const requestedTools = toolSelections.filter((name) => name.trim() !== '');
+  const policy: CreateProfileToolPolicy = {
+    ...(requestedToolsets.length === 0 ? {} : { requestedToolsets }),
+    ...(requestedTools.length === 0 ? {} : { requestedTools }),
+  };
+  return requestedToolsets.length === 0 && requestedTools.length === 0
+    ? {}
+    : { toolPolicy: policy };
 }
 
 /**

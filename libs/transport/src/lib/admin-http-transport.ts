@@ -9,6 +9,7 @@ import type {
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
   AdminMcpCatalog,
+  AdminToolCatalog,
   AdminPage,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
@@ -106,6 +107,15 @@ export class AdminHttpTransport {
    */
   mcpCatalog(): Promise<AdminMcpCatalog> {
     return this.request('GET', '/v1/admin/mcp/servers');
+  }
+
+  /**
+   * Built-in tool catalog (task #3686): valid non-MCP toolsets/tools from
+   * Crew's tool registry. Used to populate built-in tool policy choices for
+   * profile creation instead of hardcoding registry contents in the frontend.
+   */
+  toolCatalog(): Promise<AdminToolCatalog> {
+    return this.request('GET', '/v1/admin/tools/catalog');
   }
 
   capabilities(): Promise<ApiCapabilityRegistry> {

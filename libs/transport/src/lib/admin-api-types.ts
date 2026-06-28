@@ -298,6 +298,58 @@ export interface CreateProfileMcpBinding {
   readonly toolProfileKey?: string;
 }
 
+/**
+ * A built-in toolset from Crew's tool registry (task #3686). A toolset groups
+ * one or more non-MCP, code-defined tools. Profiles opt in by id via
+ * `toolPolicy.requestedToolsets`. `label`/`description` are optional human
+ * readable hints; the frontend falls back to `id` when absent. Dynamic MCP
+ * tool sets (`mcp:<toolProfileKey>`) are NOT part of this catalog — MCP tools
+ * are selected separately through `mcpBindings`.
+ */
+export interface AdminToolsetDescriptor {
+  readonly id: string;
+  readonly label?: string;
+  readonly description?: string;
+  readonly toolCount?: number;
+  readonly tools?: readonly string[];
+}
+
+/**
+ * A single built-in tool from Crew's tool registry (task #3686). Profiles may
+ * request individual tools by `name` via `toolPolicy.requestedTools` in
+ * addition to whole toolsets. `toolsets` lists the toolsets that include this
+ * tool (informational).
+ */
+export interface AdminToolDescriptor {
+  readonly name: string;
+  readonly label?: string;
+  readonly description?: string;
+  readonly toolsets?: readonly string[];
+}
+
+/**
+ * Built-in tool catalog response (task #3686). Exposes the valid non-MCP
+ * toolsets/tools from Crew's tool registry so the frontend can offer a
+ * selectable menu instead of hardcoding registry contents. Excludes dynamic
+ * `mcp:<toolProfileKey>` sets.
+ */
+export interface AdminToolCatalog {
+  readonly toolsets: readonly AdminToolsetDescriptor[];
+  readonly tools: readonly AdminToolDescriptor[];
+}
+
+/**
+ * Built-in (non-MCP) tool policy for the create-profile request (task #3686).
+ * `requestedToolsets` opts into whole toolsets; `requestedTools` opts into
+ * individual tool names. Omit (or send empty) for a profile with no built-in
+ * tools. This is independent of `mcpBindings` — MCP tools are never expressed
+ * here.
+ */
+export interface CreateProfileToolPolicy {
+  readonly requestedToolsets?: readonly string[];
+  readonly requestedTools?: readonly string[];
+}
+
 export interface CreateAdminProfileRequest {
   readonly profileId: string;
   readonly displayName?: string;
@@ -312,6 +364,12 @@ export interface CreateAdminProfileRequest {
    * `mcpToolProfile` free-form string for new UI paths.
    */
   readonly mcpBindings?: readonly CreateProfileMcpBinding[];
+  /**
+   * Built-in (non-MCP) tool policy (task #3686). Selected from Crew's tool
+   * catalog. Omit for a profile with no built-in tools. Kept separate from
+   * `mcpBindings`; MCP tools are never expressed here.
+   */
+  readonly toolPolicy?: CreateProfileToolPolicy;
   /**
    * Legacy free-form MCP tool profile string. Superseded by `mcpBindings`
    * (task #3648); retained only as an advanced/import compatibility affordance.
