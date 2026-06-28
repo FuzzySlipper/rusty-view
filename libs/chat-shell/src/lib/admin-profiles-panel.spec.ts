@@ -835,6 +835,9 @@ describe('AdminProfilesPanelComponent', () => {
     expect(component.registryEditBlockReason(record)).toContain(
       'Import this file-backed profile',
     );
+
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).not.toContain('Prompt text (DB-backed)');
   });
 
   it('clears defaultSessionKind when the clear option is selected', async () => {

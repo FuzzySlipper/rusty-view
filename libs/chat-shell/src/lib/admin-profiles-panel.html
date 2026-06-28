@@ -258,6 +258,7 @@
           }
         </div>
 
+        @if (record.source === 'registry') {
         <div class="rv-admin-profiles__registry-group">
           <span class="rv-admin-profiles__group-label"
             >Prompt text (DB-backed)</span
@@ -293,6 +294,7 @@
             </div>
           </div>
         </div>
+        }
 
         @if (record.diagnostics.length > 0) {
         <div class="rv-admin-profiles__registry-group">

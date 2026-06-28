@@ -576,7 +576,7 @@ export interface ProfileRegistryWriteImplications {
 export interface ProfileRegistryWritePlan {
   readonly ok: boolean;
   readonly profileId: string;
-  readonly kind: 'update' | 'lifecycle';
+  readonly kind: 'update' | 'lifecycle' | 'prompt';
   readonly mode: 'plan' | 'apply';
   readonly expectedRevision: number;
   readonly current: AdminProfileRegistryRecord;
