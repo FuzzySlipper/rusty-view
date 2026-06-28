@@ -670,6 +670,94 @@ describe('AdminProfilesPanelComponent', () => {
     expect(transport.planAdminProfileRegistryUpdate.mock.calls).toHaveLength(1);
   });
 
+  it('surfaces an apply-time revision mismatch in the plan diagnostics', async () => {
+    const profileDiagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'stale-prime',
+          lifecycleStatus: 'active',
+          revision: 3,
+          displayName: 'Stale Prime',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      profileDiagnostics,
+    );
+    // Backend returns a plain non-applied plan when the apply is not ok.
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryUpdate: () => Promise<{
+        ok: false;
+        profileId: string;
+        diagnostics: {
+          severity: string;
+          code: string;
+          path: string;
+          message: string;
+        }[];
+      }>;
+    };
+    transport.applyAdminProfileRegistryUpdate = async () => ({
+      ok: false,
+      profileId: 'stale-prime',
+      kind: 'update',
+      mode: 'apply',
+      expectedRevision: 3,
+      current: { profileId: 'stale-prime', revision: 4 },
+      next: { profileId: 'stale-prime', revision: 4 },
+      diagnostics: [
+        {
+          severity: 'error',
+          code: 'profile_registry_revision_mismatch',
+          path: 'expectedRevision',
+          message: 'expected revision 3, found 4',
+        },
+      ],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: false,
+        lifecycleEffects: 'none' as const,
+      },
+    });
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'stale-prime');
+    if (record === undefined) {
+      throw new Error('stale-prime registry record not found');
+    }
+    const component = fixture.componentInstance as unknown as {
+      startRegistryEdit(record: AdminProfileRegistryRecord): void;
+      applyRegistryUpdate(record: AdminProfileRegistryRecord): void;
+    };
+
+    component.startRegistryEdit(record);
+    fixture.detectChanges();
+    component.applyRegistryUpdate(record);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__diag--error',
+      )?.textContent ?? '';
+    expect(text).toContain('profile_registry_revision_mismatch');
+    expect(text).toContain('expected revision 3, found 4');
+  });
+
   it('blocks registry edits for a file-backed fallback profile', async () => {
     const profileDiagnostics: AdminProfileRegistryDiagnostics = {
       generatedAt: '2026-06-27T00:00:00Z',

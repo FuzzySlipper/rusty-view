@@ -290,13 +290,18 @@ export class AdminStore {
     this._saving.set(true);
     this._error.set(null);
     this._registryWriteResult.set(null);
+    this._registryWritePlan.set(null);
     try {
       const result = await this.transport.applyAdminProfileRegistryUpdate(
         profileId,
         request,
       );
-      this._registryWriteResult.set(result);
-      await this.refresh();
+      this.recordRegistryApplyResult(result);
+      // Only refresh on a successful apply; a failed apply (e.g. revision
+      // mismatch) leaves the current records unchanged.
+      if ('applied' in result) {
+        await this.refresh();
+      }
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -343,13 +348,16 @@ export class AdminStore {
     this._saving.set(true);
     this._error.set(null);
     this._registryWriteResult.set(null);
+    this._registryWritePlan.set(null);
     try {
       const result = await this.transport.applyAdminProfileRegistryLifecycle(
         profileId,
         request,
       );
-      this._registryWriteResult.set(result);
-      await this.refresh();
+      this.recordRegistryApplyResult(result);
+      if ('applied' in result) {
+        await this.refresh();
+      }
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -361,6 +369,25 @@ export class AdminStore {
   clearRegistryWrite(): void {
     this._registryWritePlan.set(null);
     this._registryWriteResult.set(null);
+  }
+
+  /**
+   * Route an apply response. A successful apply (has `applied`) is stored in
+   * `registryWriteResult` and the plan is cleared. A failed apply (the backend
+   * returns a plain non-applied plan, e.g. revision mismatch) is promoted into
+   * `registryWritePlan` so its diagnostics surface in the same panel the
+   * operator planned from.
+   */
+  private recordRegistryApplyResult(
+    result: ProfileRegistryWriteApplyResult,
+  ): void {
+    if ('applied' in result) {
+      this._registryWriteResult.set(result);
+      this._registryWritePlan.set(null);
+    } else {
+      this._registryWritePlan.set(result);
+      this._registryWriteResult.set(null);
+    }
   }
 
   /**
