@@ -26,6 +26,7 @@ import type {
   ProfileBundleExportPlan,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
+  ProfileRegistryPromptRequest,
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWritePlan,
   RuntimePauseControlRequest,
@@ -206,6 +207,38 @@ export class AdminHttpTransport {
     return this.request(
       'POST',
       registryWritePath(profileId, 'lifecycle', 'apply'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
+   * Plan a prompt text edit (soul/memory markdown) for a registry-backed
+   * profile (task #3555) without applying it. Missing fields mean no change;
+   * null clears; empty string is preserved.
+   */
+  planProfileRegistryPrompt(
+    profileId: string,
+    request: ProfileRegistryPromptRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'prompt', 'plan'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
+   * Apply a prompt text edit (soul/memory markdown) for a registry-backed
+   * profile (task #3555). Returns the applied record on success, or the
+   * non-applied plan with diagnostics on failure (e.g. revision mismatch).
+   */
+  applyProfileRegistryPrompt(
+    profileId: string,
+    request: ProfileRegistryPromptRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'prompt', 'apply'),
       { body: request as unknown as Record<string, unknown> },
     );
   }
@@ -439,7 +472,7 @@ function providerItemPath(alias: string): string {
 
 function registryWritePath(
   profileId: string,
-  kind: 'update' | 'lifecycle',
+  kind: 'update' | 'lifecycle' | 'prompt',
   mode: 'plan' | 'apply',
 ): string {
   return `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}/${kind}/${mode}`;

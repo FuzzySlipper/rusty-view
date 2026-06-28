@@ -16,6 +16,7 @@ import type {
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryLifecycleStatus,
+  ProfileRegistryPromptRequest,
   ProfileRegistryWritePlan,
 } from '@rusty-view/transport';
 
@@ -138,6 +139,26 @@ const INITIAL_REGISTRY_EDIT: RegistryEditFormState = {
   defaultSessionKind: '',
 };
 
+/**
+ * Draft state for the prompt viewer/editor (#3555). Per-field semantics:
+ * - `undefined`: keep current (field is omitted from the request).
+ * - `null`: explicit clear (sends `null` to the backend).
+ * - `string` (including `''`): set to this markdown value.
+ *
+ * Empty strings are valid markdown content; they are only sent when the
+ * operator has explicitly edited the textarea (i.e. the field has been
+ * transitioned from `undefined` to `''`).
+ */
+interface PromptEditFormState {
+  readonly soulMarkdown: string | null | undefined;
+  readonly memoryMarkdown: string | null | undefined;
+}
+
+const INITIAL_PROMPT_EDIT: PromptEditFormState = {
+  soulMarkdown: undefined,
+  memoryMarkdown: undefined,
+};
+
 const LIFECYCLE_STATUSES: readonly ProfileRegistryLifecycleStatus[] = [
   'active',
   'paused',
@@ -200,6 +221,9 @@ export class AdminProfilesPanelComponent {
   protected readonly registryEditForm = signal<RegistryEditFormState>(
     INITIAL_REGISTRY_EDIT,
   );
+  protected readonly promptEditProfileId = signal<string | null>(null);
+  protected readonly promptEditForm =
+    signal<PromptEditFormState>(INITIAL_PROMPT_EDIT);
   protected readonly lifecycleTargetProfileId = signal<string | null>(null);
   protected readonly lifecycleTargetStatus =
     signal<ProfileRegistryLifecycleStatus>('paused');
@@ -215,7 +239,8 @@ export class AdminProfilesPanelComponent {
     computed<ProfileRegistryWritePlan | null>(() => {
       const plan = this.admin.registryWritePlan();
       return plan?.profileId === this.editingRegistryProfileId() ||
-        plan?.profileId === this.lifecycleTargetProfileId()
+        plan?.profileId === this.lifecycleTargetProfileId() ||
+        plan?.profileId === this.promptEditProfileId()
         ? plan
         : null;
     });
@@ -421,6 +446,152 @@ export class AdminProfilesPanelComponent {
     return this.admin
       .registryRecords()
       .find((record) => record.profileId === profileId);
+  }
+
+  /** The registry record currently being prompt-edited, or undefined. */
+  protected promptEditRecord(): AdminProfileRegistryRecord | undefined {
+    const profileId = this.promptEditProfileId();
+    if (profileId === null) return undefined;
+    return this.admin
+      .registryRecords()
+      .find((record) => record.profileId === profileId);
+  }
+
+  /**
+   * Text shown in the soul textarea. When the draft is `undefined` (untouched)
+   * it shows the current DB value; after an explicit clear it surfaces a
+   * placeholder so the operator sees the pending state.
+   */
+  protected promptEditSoulValue(): string {
+    const draft = this.promptEditForm().soulMarkdown;
+    if (draft === undefined) {
+      const current = this.promptEditRecord()?.promptSoulMarkdown;
+      return current ?? '';
+    }
+    if (draft === null) return '';
+    return draft;
+  }
+
+  protected promptEditMemoryValue(): string {
+    const draft = this.promptEditForm().memoryMarkdown;
+    if (draft === undefined) {
+      const current = this.promptEditRecord()?.promptMemoryMarkdown;
+      return current ?? '';
+    }
+    if (draft === null) return '';
+    return draft;
+  }
+
+  /** `true` when soul is pending a clear (will send `null`). */
+  protected promptEditSoulCleared(): boolean {
+    return this.promptEditForm().soulMarkdown === null;
+  }
+
+  protected promptEditMemoryCleared(): boolean {
+    return this.promptEditForm().memoryMarkdown === null;
+  }
+
+  /** `true` when the operator has made any change (edit or clear). */
+  protected promptEditDirty(): boolean {
+    const form = this.promptEditForm();
+    return form.soulMarkdown !== undefined || form.memoryMarkdown !== undefined;
+  }
+
+  /** Open the prompt editor for a registry-backed profile. */
+  protected startPromptEdit(record: AdminProfileRegistryRecord): void {
+    this.editingRegistryProfileId.set(null);
+    this.lifecycleTargetProfileId.set(null);
+    this.admin.clearRegistryWrite();
+    this.promptEditProfileId.set(record.profileId);
+    this.promptEditForm.set(INITIAL_PROMPT_EDIT);
+  }
+
+  /** Close the prompt editor without applying. */
+  protected cancelPromptEdit(): void {
+    this.promptEditProfileId.set(null);
+    this.promptEditForm.set(INITIAL_PROMPT_EDIT);
+    this.admin.clearRegistryWrite();
+  }
+
+  protected updatePromptEditSoul(event: Event): void {
+    const value = (event.target as HTMLTextAreaElement | null)?.value ?? '';
+    this.promptEditForm.update((current) => ({
+      ...current,
+      soulMarkdown: value,
+    }));
+  }
+
+  protected updatePromptEditMemory(event: Event): void {
+    const value = (event.target as HTMLTextAreaElement | null)?.value ?? '';
+    this.promptEditForm.update((current) => ({
+      ...current,
+      memoryMarkdown: value,
+    }));
+  }
+
+  /** Explicit clear of the soul prompt — sends `null` to the backend. */
+  protected clearPromptEditSoul(): void {
+    this.promptEditForm.update((current) => ({
+      ...current,
+      soulMarkdown: null,
+    }));
+  }
+
+  protected clearPromptEditMemory(): void {
+    this.promptEditForm.update((current) => ({
+      ...current,
+      memoryMarkdown: null,
+    }));
+  }
+
+  /** Revert a single prompt field to "keep current" (omit from request). */
+  protected revertPromptEditSoul(): void {
+    this.promptEditForm.update((current) => ({
+      ...current,
+      soulMarkdown: undefined,
+    }));
+  }
+
+  protected revertPromptEditMemory(): void {
+    this.promptEditForm.update((current) => ({
+      ...current,
+      memoryMarkdown: undefined,
+    }));
+  }
+
+  /** Build the prompt plan/apply request from the current draft state. */
+  protected buildPromptEditRequest(
+    record: AdminProfileRegistryRecord,
+  ): ProfileRegistryPromptRequest {
+    const form = this.promptEditForm();
+    const request: ProfileRegistryPromptRequest = {
+      expectedRevision: record.revision ?? 0,
+    };
+    // Omit unchanged fields (`undefined`) entirely; include explicit clears as
+    // `null` and explicit edits as their string (including empty string).
+    if (form.soulMarkdown !== undefined) {
+      (request as { soulMarkdown?: string | null }).soulMarkdown =
+        form.soulMarkdown;
+    }
+    if (form.memoryMarkdown !== undefined) {
+      (request as { memoryMarkdown?: string | null }).memoryMarkdown =
+        form.memoryMarkdown;
+    }
+    return request;
+  }
+
+  protected planPromptEdit(record: AdminProfileRegistryRecord): void {
+    void this.admin.planPromptEdit(
+      record.profileId,
+      this.buildPromptEditRequest(record),
+    );
+  }
+
+  protected applyPromptEdit(record: AdminProfileRegistryRecord): void {
+    void this.admin.applyPromptEdit(
+      record.profileId,
+      this.buildPromptEditRequest(record),
+    );
   }
 
   /** Lifecycle reason shown when a file-backed profile can't be edited. */

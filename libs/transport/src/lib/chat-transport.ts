@@ -49,6 +49,7 @@ import type {
   ProfileBundleExportPlan,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
+  ProfileRegistryPromptRequest,
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWritePlan,
   RuntimeConfigApplyResult,
@@ -223,6 +224,20 @@ export class ChatTransport {
     request: ProfileRegistryLifecycleRequest,
   ): Promise<ProfileRegistryWriteApplyResult> {
     return this.adminHttp.applyProfileRegistryLifecycle(profileId, request);
+  }
+
+  planAdminProfileRegistryPrompt(
+    profileId: string,
+    request: ProfileRegistryPromptRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.adminHttp.planProfileRegistryPrompt(profileId, request);
+  }
+
+  applyAdminProfileRegistryPrompt(
+    profileId: string,
+    request: ProfileRegistryPromptRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.adminHttp.applyProfileRegistryPrompt(profileId, request);
   }
 
   adminModelProviders(query?: ModelProviderQuery): Promise<ModelProviderPage> {

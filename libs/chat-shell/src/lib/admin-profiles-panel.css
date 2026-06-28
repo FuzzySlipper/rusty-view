@@ -361,3 +361,85 @@
 .rv-admin-profiles__export-kind {
   color: var(--rv-color-text-muted);
 }
+
+/* --- Prompt viewer (read-only preview in record card) ------------------ */
+.rv-admin-profiles__prompt-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rv-admin-profiles__prompt-preview-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-left: 2px solid var(--rv-color-border);
+  padding-left: 0.5rem;
+}
+
+.rv-admin-profiles__prompt-preview-label {
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rv-admin-profiles__prompt-preview-pre {
+  margin: 0;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 8rem;
+  overflow: auto;
+  background: var(--rv-color-surface-alt, #fafafa);
+  padding: 0.4rem 0.5rem;
+  border-radius: 2px;
+}
+
+/* --- Prompt editor (textarea form) ------------------------------------- */
+.rv-admin-profiles__prompt-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.rv-admin-profiles__prompt-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.rv-admin-profiles__prompt-edit-label {
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rv-admin-profiles__prompt-edit-textarea {
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--rv-color-border);
+  border-radius: 2px;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  resize: vertical;
+}
+
+.rv-admin-profiles__prompt-edit-textarea:disabled {
+  background: var(--rv-color-surface-disabled, #f0f0f0);
+  color: var(--rv-color-text-muted);
+}
+
+.rv-admin-profiles__prompt-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.rv-admin-profiles__button--small {
+  padding: 0.15rem 0.5rem;
+  font-size: var(--rv-font-size-xs);
+}

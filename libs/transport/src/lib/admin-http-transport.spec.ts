@@ -505,8 +505,16 @@ describe('AdminHttpTransport', () => {
       kind: 'lifecycle',
       mode: 'apply',
       expectedRevision: 4,
-      current: { profileId: 'field-prime', revision: 4, lifecycleStatus: 'active' },
-      next: { profileId: 'field-prime', revision: 5, lifecycleStatus: 'paused' },
+      current: {
+        profileId: 'field-prime',
+        revision: 4,
+        lifecycleStatus: 'active',
+      },
+      next: {
+        profileId: 'field-prime',
+        revision: 5,
+        lifecycleStatus: 'paused',
+      },
       diagnostics: [],
       implications: {
         registryRevisionWillIncrement: true,
@@ -516,7 +524,11 @@ describe('AdminHttpTransport', () => {
         lifecycleEffects: 'archive_active_sessions_and_unregister_brain',
       },
       applied: true,
-      record: { profileId: 'field-prime', revision: 5, lifecycleStatus: 'paused' },
+      record: {
+        profileId: 'field-prime',
+        revision: 5,
+        lifecycleStatus: 'paused',
+      },
       effects: {
         sessionsArchived: ['field-prime-session'],
         brainHandle: { action: 'removed' },
@@ -537,9 +549,7 @@ describe('AdminHttpTransport', () => {
       throw new Error('expected an applied result');
     }
     expect(result.applied).toBe(true);
-    expect(result.effects?.sessionsArchived).toEqual([
-      'field-prime-session',
-    ]);
+    expect(result.effects?.sessionsArchived).toEqual(['field-prime-session']);
     expect(result.effects?.brainHandle.action).toBe('removed');
     const req = lastRequest();
     expect(req.method).toBe('POST');
@@ -547,6 +557,87 @@ describe('AdminHttpTransport', () => {
       '/v1/admin/profiles/registry/field-prime/lifecycle/apply',
     );
     expect(req.body).toContain('"lifecycleStatus":"paused"');
+  });
+
+  it('plans a registry prompt edit with soul and memory fields', async () => {
+    const planResponse = {
+      ok: true,
+      profileId: 'prompt-prime',
+      kind: 'prompt',
+      mode: 'plan',
+      expectedRevision: 3,
+      current: { profileId: 'prompt-prime', revision: 3 },
+      next: { profileId: 'prompt-prime', revision: 4 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: true,
+        serviceConfigUnchanged: true,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'none',
+      },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(planResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const plan = await transport.planProfileRegistryPrompt('prompt-prime', {
+      expectedRevision: 3,
+      soulMarkdown: 'new soul',
+      memoryMarkdown: 'new memory',
+    });
+
+    expect(plan.kind).toBe('prompt');
+    expect(plan.mode).toBe('plan');
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/profiles/registry/prompt-prime/prompt/plan',
+    );
+    expect(req.body).toContain('"soulMarkdown":"new soul"');
+    expect(req.body).toContain('"memoryMarkdown":"new memory"');
+  });
+
+  it('applies a registry prompt edit with a null clear for soul', async () => {
+    const applyResponse = {
+      ok: true,
+      profileId: 'prompt-prime',
+      kind: 'prompt',
+      mode: 'apply',
+      expectedRevision: 3,
+      current: { profileId: 'prompt-prime', revision: 3 },
+      next: { profileId: 'prompt-prime', revision: 4 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: true,
+        serviceConfigUnchanged: true,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'none',
+      },
+      applied: true,
+      record: { profileId: 'prompt-prime', revision: 4 },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(applyResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.applyProfileRegistryPrompt('prompt-prime', {
+      expectedRevision: 3,
+      soulMarkdown: null,
+      memoryMarkdown: '',
+    });
+
+    if (!('applied' in result)) {
+      throw new Error('expected an applied result');
+    }
+    expect(result.applied).toBe(true);
+    const req = lastRequest();
+    expect(req.url).toContain(
+      '/v1/admin/profiles/registry/prompt-prime/prompt/apply',
+    );
+    // null clear is serialized as the JSON null literal.
+    expect(req.body).toContain('"soulMarkdown":null');
+    // Empty string is serialized as a string, not coerced.
+    expect(req.body).toContain('"memoryMarkdown":""');
   });
 
   it('lists model providers through the provider registry route', async () => {

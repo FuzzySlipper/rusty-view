@@ -258,6 +258,42 @@
           }
         </div>
 
+        <div class="rv-admin-profiles__registry-group">
+          <span class="rv-admin-profiles__group-label"
+            >Prompt text (DB-backed)</span
+          >
+          <div class="rv-admin-profiles__prompt-preview">
+            <div class="rv-admin-profiles__prompt-preview-field">
+              <span class="rv-admin-profiles__prompt-preview-label"
+                >soul.md (soul prompt)</span
+              >
+              @if (record.promptSoulMarkdown === undefined) {
+              <span class="rv-admin-profiles__muted">not set</span>
+              } @else if (record.promptSoulMarkdown === '') {
+              <span class="rv-admin-profiles__muted">empty</span>
+              } @else {
+              <pre class="rv-admin-profiles__prompt-preview-pre">
+{{ record.promptSoulMarkdown }}</pre
+              >
+              }
+            </div>
+            <div class="rv-admin-profiles__prompt-preview-field">
+              <span class="rv-admin-profiles__prompt-preview-label"
+                >memory.md (memory prompt)</span
+              >
+              @if (record.promptMemoryMarkdown === undefined) {
+              <span class="rv-admin-profiles__muted">not set</span>
+              } @else if (record.promptMemoryMarkdown === '') {
+              <span class="rv-admin-profiles__muted">empty</span>
+              } @else {
+              <pre class="rv-admin-profiles__prompt-preview-pre">
+{{ record.promptMemoryMarkdown }}</pre
+              >
+              }
+            </div>
+          </div>
+        </div>
+
         @if (record.diagnostics.length > 0) {
         <div class="rv-admin-profiles__registry-group">
           <span class="rv-admin-profiles__group-label">Diagnostics</span>
@@ -304,6 +340,14 @@
             [disabled]="admin.saving()"
           >
             Lifecycle
+          </button>
+          <button
+            type="button"
+            class="rv-admin-profiles__button"
+            (click)="startPromptEdit(record)"
+            [disabled]="admin.saving()"
+          >
+            Edit prompts
           </button>
           } @else {
           <span class="rv-admin-profiles__muted"
@@ -511,6 +555,134 @@
       </div>
     </div>
     } }
+  </section>
+  } @if (promptEditProfileId() !== null) {
+  <section class="rv-admin-profiles__section">
+    <h2>Edit Prompts — {{ promptEditProfileId() }}</h2>
+    <p class="rv-admin-profiles__hint">
+      Edits the DB-backed static prompt text for soul/markdown and
+      memory/markdown (#3555). File-backed <code>soul.md</code> /
+      <code>memory.md</code> are import-only for registry-backed profiles.
+      Omitting a field keeps the current value; clicking <em>Clear</em> sends
+      <code>null</code> to delete the field; empty strings are saved as empty
+      strings (not coerced). Requires the current revision for optimistic
+      concurrency.
+    </p>
+    <div class="rv-admin-profiles__prompt-edit-grid">
+      <label class="rv-admin-profiles__prompt-edit-field">
+        <span class="rv-admin-profiles__prompt-edit-label">
+          soul.md (soul prompt) @if (promptEditSoulCleared()) {
+          <span class="rv-admin-profiles__diag rv-admin-profiles__diag--warning"
+            >will clear to null on apply</span
+          >
+          }
+        </span>
+        <textarea
+          class="rv-admin-profiles__prompt-edit-textarea"
+          rows="8"
+          spellcheck="false"
+          [value]="promptEditSoulValue()"
+          (input)="updatePromptEditSoul($event)"
+          [disabled]="promptEditSoulCleared()"
+        ></textarea>
+        <span class="rv-admin-profiles__prompt-edit-actions">
+          <button
+            type="button"
+            class="rv-admin-profiles__button rv-admin-profiles__button--small"
+            (click)="clearPromptEditSoul()"
+            [disabled]="promptEditSoulCleared() || admin.saving()"
+          >
+            Clear (send null)
+          </button>
+          <button
+            type="button"
+            class="rv-admin-profiles__button rv-admin-profiles__button--small"
+            (click)="revertPromptEditSoul()"
+            [disabled]="promptEditForm().soulMarkdown === undefined || admin.saving()"
+          >
+            Revert (keep current)
+          </button>
+        </span>
+      </label>
+      <label class="rv-admin-profiles__prompt-edit-field">
+        <span class="rv-admin-profiles__prompt-edit-label">
+          memory.md (memory prompt) @if (promptEditMemoryCleared()) {
+          <span class="rv-admin-profiles__diag rv-admin-profiles__diag--warning"
+            >will clear to null on apply</span
+          >
+          }
+        </span>
+        <textarea
+          class="rv-admin-profiles__prompt-edit-textarea"
+          rows="8"
+          spellcheck="false"
+          [value]="promptEditMemoryValue()"
+          (input)="updatePromptEditMemory($event)"
+          [disabled]="promptEditMemoryCleared()"
+        ></textarea>
+        <span class="rv-admin-profiles__prompt-edit-actions">
+          <button
+            type="button"
+            class="rv-admin-profiles__button rv-admin-profiles__button--small"
+            (click)="clearPromptEditMemory()"
+            [disabled]="promptEditMemoryCleared() || admin.saving()"
+          >
+            Clear (send null)
+          </button>
+          <button
+            type="button"
+            class="rv-admin-profiles__button rv-admin-profiles__button--small"
+            (click)="revertPromptEditMemory()"
+            [disabled]="promptEditForm().memoryMarkdown === undefined || admin.saving()"
+          >
+            Revert (keep current)
+          </button>
+        </span>
+      </label>
+    </div>
+    @if (promptEditRecord(); as editRecord) {
+    <div class="rv-admin-profiles__actions">
+      <button
+        type="button"
+        class="rv-admin-profiles__button"
+        (click)="planPromptEdit(editRecord)"
+        [disabled]="admin.saving() || !promptEditDirty()"
+      >
+        Plan
+      </button>
+      <button
+        type="button"
+        class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+        (click)="applyPromptEdit(editRecord)"
+        [disabled]="admin.saving() || !promptEditDirty()"
+      >
+        Apply
+      </button>
+      <button
+        type="button"
+        class="rv-admin-profiles__button"
+        (click)="cancelPromptEdit()"
+      >
+        Cancel
+      </button>
+    </div>
+    } @if (registryWritePlan(); as plan) {
+    <div class="rv-admin-profiles__result" role="status">
+      <span>ok {{ plan.ok }}</span>
+      <span
+        >revision {{ plan.expectedRevision }} → {{ plan.next.revision }}</span
+      >
+      @for (diag of plan.diagnostics; track diag.code) {
+      <span
+        class="rv-admin-profiles__diag"
+        [class.rv-admin-profiles__diag--error]="diag.severity === 'error'"
+        [class.rv-admin-profiles__diag--warning]="diag.severity === 'warning'"
+      >
+        {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
+      </span>
+      }
+    </div>
+    }
   </section>
   }
 

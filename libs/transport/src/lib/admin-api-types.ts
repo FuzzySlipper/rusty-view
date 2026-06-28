@@ -440,6 +440,19 @@ export interface AdminProfileRegistryRecord {
   readonly sourceAssetStatuses: readonly AdminProfileRegistryAssetStatus[];
   readonly diagnostics: readonly RuntimeConfigDiagnostic[];
   readonly fallbackStatus: 'registry_authoritative' | 'file_backed_fallback';
+  /**
+   * DB-backed static prompt text for the profile's soul (long-form
+   * persona/instruction text). Only populated for registry-backed records;
+   * file-backed fallback records omit this (prompt text lives in
+   * `soul.md`).
+   */
+  readonly promptSoulMarkdown?: string;
+  /**
+   * DB-backed static prompt text for the profile's memory (static prompt
+   * notes). Only populated for registry-backed records; file-backed fallback
+   * records omit this (prompt text lives in `memory.md`).
+   */
+  readonly promptMemoryMarkdown?: string;
 }
 
 /**
@@ -509,6 +522,23 @@ export interface ProfileRegistryFieldUpdateRequest {
 export interface ProfileRegistryLifecycleRequest {
   readonly expectedRevision: number;
   readonly lifecycleStatus: ProfileRegistryLifecycleStatus;
+}
+
+/**
+ * Body for the profile registry prompt plan/apply routes (task #3555).
+ * `soulMarkdown`/`memoryMarkdown` are the new prompt text values.
+ * - Missing fields: no change.
+ * - `null`: clear the field.
+ * - Empty string `""`: valid markdown content; sent as a string, not
+ *   coerced to null.
+ *
+ * The plan/apply responses reuse {@link ProfileRegistryWritePlan} /
+ * {@link ProfileRegistryWriteApplyResult}.
+ */
+export interface ProfileRegistryPromptRequest {
+  readonly expectedRevision: number;
+  readonly soulMarkdown?: string | null;
+  readonly memoryMarkdown?: string | null;
 }
 
 /**

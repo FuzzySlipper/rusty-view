@@ -68,6 +68,7 @@ export type {
   ProfileRegistryLifecycleEffects,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryLifecycleStatus,
+  ProfileRegistryPromptRequest,
   ProfileRegistrySourceAssetRef,
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWriteDiagnostic,

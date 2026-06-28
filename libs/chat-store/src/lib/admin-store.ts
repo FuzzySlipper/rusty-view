@@ -20,6 +20,7 @@ import {
   type ProfileBundleExportPlan,
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryLifecycleRequest,
+  type ProfileRegistryPromptRequest,
   type ProfileRegistryWriteApplyResult,
   type ProfileRegistryWritePlan,
   type RuntimeBrainModuleDiagnostics,
@@ -351,6 +352,63 @@ export class AdminStore {
     this._registryWritePlan.set(null);
     try {
       const result = await this.transport.applyAdminProfileRegistryLifecycle(
+        profileId,
+        request,
+      );
+      this.recordRegistryApplyResult(result);
+      if ('applied' in result) {
+        await this.refresh();
+      }
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Plan an edit to a registry-backed profile's static prompt text
+   * (soul/markdown / memory/markdown) (task #3555). Missing fields mean no
+   * change; `null` clears; empty strings are preserved.
+   */
+  async planPromptEdit(
+    profileId: string,
+    request: ProfileRegistryPromptRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWritePlan.set(null);
+    this._registryWriteResult.set(null);
+    try {
+      const plan = await this.transport.planAdminProfileRegistryPrompt(
+        profileId,
+        request,
+      );
+      this._registryWritePlan.set(plan);
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Apply an edit to a registry-backed profile's static prompt text
+   * (task #3555). On success the bumped record is exposed via
+   * `registryWriteResult` and the registry diagnostics are refreshed; a
+   * non-ok plan (e.g. revision mismatch) surfaces through
+   * `registryWritePlan` via `recordRegistryApplyResult`.
+   */
+  async applyPromptEdit(
+    profileId: string,
+    request: ProfileRegistryPromptRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWriteResult.set(null);
+    this._registryWritePlan.set(null);
+    try {
+      const result = await this.transport.applyAdminProfileRegistryPrompt(
         profileId,
         request,
       );

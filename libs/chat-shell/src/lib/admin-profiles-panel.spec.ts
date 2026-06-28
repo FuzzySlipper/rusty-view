@@ -251,6 +251,42 @@ function makeTransport(
         brainHandle: { action: 'already_absent' },
       },
     })),
+    planAdminProfileRegistryPrompt: vi.fn(async () => ({
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'prompt',
+      mode: 'plan',
+      expectedRevision: 3,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 4 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'none' as const,
+      },
+    })),
+    applyAdminProfileRegistryPrompt: vi.fn(async () => ({
+      ok: true,
+      profileId: 'field-prime',
+      kind: 'prompt',
+      mode: 'apply',
+      expectedRevision: 3,
+      current: { profileId: 'field-prime', revision: 3 },
+      next: { profileId: 'field-prime', revision: 4 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true as const,
+        profileFilesUnchanged: true as const,
+        serviceConfigUnchanged: true as const,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'none' as const,
+      },
+      applied: true as const,
+      record: { profileId: 'field-prime', revision: 4 },
+    })),
   } as unknown as ChatTransport;
 }
 
@@ -309,6 +345,8 @@ describe('AdminProfilesPanelComponent', () => {
           defaultSessionKind: 'full',
           agentId: 'field-prime',
           ownerId: 'operator',
+          promptSoulMarkdown: '# Field Prime\n\nYou are a field agent.',
+          promptMemoryMarkdown: 'remember this always',
           activeRuntimeRefs: [
             {
               refKind: 'session',
@@ -959,6 +997,270 @@ describe('AdminProfilesPanelComponent', () => {
       )?.textContent ?? '';
     expect(preview).toContain('Planned runtime graph after transition');
     expect(preview).toContain('life-prime-session (paused)');
+  });
+
+  it('shows current prompt text in the registry viewer for a DB-backed record', async () => {
+    const diagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'prompt-prime',
+          lifecycleStatus: 'active',
+          revision: 2,
+          displayName: 'Prompt Prime',
+          promptSoulMarkdown: '# Soul\n\nYou are a prompt agent.',
+          promptMemoryMarkdown: 'memory note',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      diagnostics,
+    );
+
+    const body = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(body).toContain('Prompt text (DB-backed)');
+    expect(body).toContain('You are a prompt agent.');
+    expect(body).toContain('memory note');
+    expect(body).toContain('Edit prompts');
+  });
+
+  it('plans a prompt edit for a registry-backed profile with both fields set', async () => {
+    const diagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'prompt-prime',
+          lifecycleStatus: 'active',
+          revision: 2,
+          promptSoulMarkdown: 'old soul',
+          promptMemoryMarkdown: 'old memory',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      diagnostics,
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryPrompt: {
+        mock: { calls: unknown[][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      startPromptEdit(record: AdminProfileRegistryRecord): void;
+      updatePromptEditSoul(event: Event): void;
+      updatePromptEditMemory(event: Event): void;
+      planPromptEdit(record: AdminProfileRegistryRecord): void;
+    };
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'prompt-prime');
+    if (record === undefined) {
+      throw new Error('prompt-prime registry record not found');
+    }
+
+    component.startPromptEdit(record);
+    component.updatePromptEditSoul({
+      target: { value: 'new soul' },
+    } as unknown as Event);
+    component.updatePromptEditMemory({
+      target: { value: 'new memory' },
+    } as unknown as Event);
+    fixture.detectChanges();
+    component.planPromptEdit(record);
+    await fixture.whenStable();
+
+    const calls = transport.planAdminProfileRegistryPrompt.mock.calls;
+    expect(calls).toHaveLength(1);
+    const [profileId, request] = calls[0] as [string, unknown];
+    expect(profileId).toBe('prompt-prime');
+    expect(request).toMatchObject({
+      expectedRevision: 2,
+      soulMarkdown: 'new soul',
+      memoryMarkdown: 'new memory',
+    });
+  });
+
+  it('sends null for a prompt field when the operator clicks Clear', async () => {
+    const diagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'clear-prime',
+          lifecycleStatus: 'active',
+          revision: 1,
+          promptSoulMarkdown: 'has soul',
+          promptMemoryMarkdown: 'has memory',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      diagnostics,
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryPrompt: {
+        mock: { calls: unknown[][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      startPromptEdit(record: AdminProfileRegistryRecord): void;
+      clearPromptEditSoul(): void;
+      applyPromptEdit(record: AdminProfileRegistryRecord): void;
+    };
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'clear-prime');
+    if (record === undefined) {
+      throw new Error('clear-prime registry record not found');
+    }
+
+    component.startPromptEdit(record);
+    component.clearPromptEditSoul();
+    fixture.detectChanges();
+    component.applyPromptEdit(record);
+    await fixture.whenStable();
+
+    const calls = transport.applyAdminProfileRegistryPrompt.mock.calls;
+    expect(calls).toHaveLength(1);
+    const [, request] = calls[0] as [string, unknown];
+    expect(request).toMatchObject({
+      expectedRevision: 1,
+      soulMarkdown: null,
+    });
+    // Memory was not touched; must not appear in the request.
+    expect(request).toHaveProperty('soulMarkdown', null);
+    expect('memoryMarkdown' in (request as object)).toBe(false);
+  });
+
+  it('preserves empty string as a valid markdown value (not coerced to null)', async () => {
+    const diagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'registry',
+          profileId: 'empty-prime',
+          lifecycleStatus: 'active',
+          revision: 1,
+          promptSoulMarkdown: 'not empty',
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'registry_authoritative',
+        },
+      ],
+      registryCount: 1,
+      fileFallbackCount: 0,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      diagnostics,
+    );
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryPrompt: {
+        mock: { calls: unknown[][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      startPromptEdit(record: AdminProfileRegistryRecord): void;
+      updatePromptEditSoul(event: Event): void;
+      planPromptEdit(record: AdminProfileRegistryRecord): void;
+    };
+    const records = TestBed.inject(AdminStore).registryRecords();
+    const record = records.find((entry) => entry.profileId === 'empty-prime');
+    if (record === undefined) {
+      throw new Error('empty-prime registry record not found');
+    }
+
+    component.startPromptEdit(record);
+    component.updatePromptEditSoul({
+      target: { value: '' },
+    } as unknown as Event);
+    fixture.detectChanges();
+    component.planPromptEdit(record);
+    await fixture.whenStable();
+
+    const calls = transport.planAdminProfileRegistryPrompt.mock.calls;
+    expect(calls).toHaveLength(1);
+    const [, request] = calls[0] as [string, unknown];
+    // Empty string is a valid markdown payload, NOT a clear.
+    expect(request).toMatchObject({
+      expectedRevision: 1,
+      soulMarkdown: '',
+    });
+  });
+
+  it('does not render an edit-prompts button for a file-backed fallback record', async () => {
+    const diagnostics: AdminProfileRegistryDiagnostics = {
+      generatedAt: '2026-06-27T00:00:00Z',
+      records: [
+        {
+          source: 'file_fallback',
+          profileId: 'file-only',
+          lifecycleStatus: 'active',
+          revision: 1,
+          activeRuntimeRefs: [],
+          sourceAssetRefs: [],
+          sourceAssetStatuses: [],
+          diagnostics: [],
+          fallbackStatus: 'file_backed_fallback',
+        },
+      ],
+      registryCount: 0,
+      fileFallbackCount: 1,
+      driftCount: 0,
+      missingAssetCount: 0,
+      diagnostics: [],
+    };
+    const fixture = await createPanel(
+      LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
+      diagnostics,
+    );
+
+    const html = (fixture.nativeElement as HTMLElement).outerHTML;
+    // File-backed records must not surface the prompt-edit affordance.
+    const buttons = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ).map((b) => b.textContent?.trim());
+    expect(buttons).not.toContain('Edit prompts');
+    // Sanity: the import-first guidance should be shown instead.
+    expect(html.toLowerCase()).toContain('import');
   });
 });
 
