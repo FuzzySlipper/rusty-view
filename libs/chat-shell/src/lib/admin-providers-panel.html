@@ -89,6 +89,7 @@
           type="text"
           [value]="form().baseUrl"
           (input)="updateText('baseUrl', $event)"
+          (blur)="probeProvider()"
           autocomplete="off"
         />
       </label>
@@ -178,6 +179,10 @@
         <span>Clear stored secret</span>
       </label>
     </div>
+
+    @if (probeStatus() !== '') {
+    <p class="rv-admin-providers__probe" role="status">{{ probeStatus() }}</p>
+    }
 
     <div class="rv-admin-providers__refresh-row">
       <label>

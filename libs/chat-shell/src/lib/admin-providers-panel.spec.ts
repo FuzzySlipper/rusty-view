@@ -310,6 +310,66 @@ describe('AdminProvidersPanelComponent', () => {
     expect(store.saving()).toBe(false);
   });
 
+  it('auto-fills context window and reasoning format from a den-router-style probe', async () => {
+    const fixture = await createPanel([]);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: 'qwen3', context_length: 40960, thinking_format: 'qwen' },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'baseUrl' | 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      probeProvider(): Promise<void>;
+      form(): { contextWindowTokens: string; reasoningFormat: string };
+      probeStatus(): string;
+    };
+
+    // Trailing /v1 is normalized away before hitting /v1/models.
+    component.updateText('baseUrl', {
+      target: { value: 'http://127.0.0.1:18082/v1' },
+    });
+    component.updateText('modelId', { target: { value: 'qwen3' } });
+    await component.probeProvider();
+
+    expect(fetchSpy).toHaveBeenCalledWith('http://127.0.0.1:18082/v1/models');
+    expect(component.form().contextWindowTokens).toBe('40960');
+    expect(component.form().reasoningFormat).toBe('qwen');
+    expect(component.probeStatus()).toContain('Detected');
+    fetchSpy.mockRestore();
+  });
+
+  it('degrades to a soft message when the provider probe is blocked or offline', async () => {
+    const fixture = await createPanel([]);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new TypeError('Failed to fetch'));
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'baseUrl',
+        event: { target: { value: string } },
+      ): void;
+      probeProvider(): Promise<void>;
+      form(): { contextWindowTokens: string };
+      probeStatus(): string;
+    };
+
+    component.updateText('baseUrl', { target: { value: 'http://10.0.0.5:9000' } });
+    await component.probeProvider();
+
+    expect(component.probeStatus()).toContain('Could not read');
+    // Fields are left untouched for manual entry.
+    expect(component.form().contextWindowTokens).toBe('');
+    fetchSpy.mockRestore();
+  });
+
   it('disables save when the alias or model id is blank on create', async () => {
     const fixture = await createPanel([]);
     const component = fixture.componentInstance as unknown as {

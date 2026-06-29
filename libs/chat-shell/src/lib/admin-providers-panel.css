@@ -66,10 +66,15 @@
 .rv-admin-providers__status,
 .rv-admin-providers__meta,
 .rv-admin-providers__empty,
-.rv-admin-providers__result {
+.rv-admin-providers__result,
+.rv-admin-providers__probe {
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
+}
+
+.rv-admin-providers__probe {
+  margin: 0 0 var(--rv-space-sm);
 }
 
 .rv-admin-providers__error {

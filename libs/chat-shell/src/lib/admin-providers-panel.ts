@@ -97,6 +97,8 @@ export class AdminProvidersPanelComponent {
   protected readonly form = signal<ProviderFormState>(INITIAL_FORM);
   protected readonly editingAlias = signal<string | null>(null);
   protected readonly refreshMode = signal<ModelProviderRefreshMode>('none');
+  /** Status line for the most recent base-URL capability probe (#3722 follow-up). */
+  protected readonly probeStatus = signal<string>('');
 
   protected readonly saveDisabled = computed(() => {
     const form = this.form();
@@ -127,6 +129,76 @@ export class AdminProvidersPanelComponent {
   ): void {
     const value = (event.target as HTMLInputElement).value;
     this.form.update((current) => ({ ...current, [field]: value }));
+  }
+
+  /**
+   * Best-effort capability probe (#3722 follow-up). den-router-style providers
+   * expose `GET {baseUrl}/v1/models` with no auth, and each model entry carries
+   * `context_length` and `thinking_format`. When the Base URL changes we read
+   * those for the configured model and auto-fill Context Window / Reasoning
+   * Format. The provider host is a different origin than Crew, so this is
+   * best-effort: CORS or an offline host degrades to a soft status message and
+   * leaves the operator to fill the fields manually.
+   */
+  protected async probeProvider(): Promise<void> {
+    const baseUrl = this.form().baseUrl.trim();
+    if (baseUrl === '') {
+      this.probeStatus.set('');
+      return;
+    }
+    this.probeStatus.set(`Checking ${baseUrl}…`);
+    let models: readonly ProbedModel[];
+    try {
+      models = await probeProviderModels(baseUrl);
+    } catch {
+      this.probeStatus.set(
+        `Could not read ${baseUrl}/v1/models (offline or blocked by CORS). Set context window / reasoning format manually.`,
+      );
+      return;
+    }
+    if (models.length === 0) {
+      this.probeStatus.set('Provider reported no models.');
+      return;
+    }
+    const modelId = this.form().modelId.trim();
+    const match =
+      modelId !== ''
+        ? models.find((model) => model.id === modelId)
+        : models.length === 1
+          ? models[0]
+          : undefined;
+    if (match === undefined) {
+      this.probeStatus.set(
+        `${models.length} models reported; set Model ID to auto-fill context window / reasoning format.`,
+      );
+      return;
+    }
+    const patch: { contextWindowTokens?: string; reasoningFormat?: string } = {};
+    const detected: string[] = [];
+    if (
+      typeof match.context_length === 'number' &&
+      Number.isFinite(match.context_length) &&
+      match.context_length > 0
+    ) {
+      patch.contextWindowTokens = String(match.context_length);
+      detected.push(`context ${match.context_length}`);
+    }
+    const format =
+      typeof match.thinking_format === 'string'
+        ? match.thinking_format.trim()
+        : '';
+    if (format !== '') {
+      patch.reasoningFormat = format;
+      detected.push(`reasoning format "${format}"`);
+    }
+    if (detected.length === 0) {
+      this.probeStatus.set(
+        `Found ${match.id}, but it reports no context window or reasoning format.`,
+      );
+      return;
+    }
+    this.form.update((current) => ({ ...current, ...patch }));
+    this.probeStatus.set(`Detected from ${match.id}: ${detected.join(', ')}.`);
   }
 
   protected updateProtocol(event: Event): void {
@@ -280,4 +352,39 @@ function optionalTemperatureMilli(
 /** Convert backend milli temperature (700) to a decimal string ("0.7"). */
 function milliToDecimal(milli: number): string {
   return String(milli / 1000);
+}
+
+/**
+ * One entry from a den-router-style `GET {baseUrl}/v1/models` payload. Only the
+ * fields the probe consumes are modelled; `context_length`/`thinking_format`
+ * mirror what den-router exposes per model.
+ */
+interface ProbedModel {
+  readonly id: string;
+  readonly context_length?: number;
+  readonly thinking_format?: string;
+}
+
+/**
+ * Best-effort fetch of a provider's model catalog (#3722 follow-up). Normalizes
+ * the base URL the same way den-pi does (drop trailing slash and a trailing
+ * `/v1`) before hitting `/v1/models`. Throws on network/HTTP failure so the
+ * caller can degrade gracefully. No auth is sent — targets local/LAN proxies
+ * like den-router that expose this openly.
+ */
+async function probeProviderModels(
+  baseUrl: string,
+  fetchImpl: typeof globalThis.fetch = globalThis.fetch.bind(globalThis),
+): Promise<readonly ProbedModel[]> {
+  const normalized = baseUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/v1$/i, '');
+  if (normalized === '') return [];
+  const response = await fetchImpl(`${normalized}/v1/models`);
+  if (!response.ok) {
+    throw new Error(`/v1/models returned HTTP ${response.status}`);
+  }
+  const payload = (await response.json()) as { data?: readonly ProbedModel[] };
+  return Array.isArray(payload.data) ? payload.data : [];
 }
