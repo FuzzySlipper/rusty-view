@@ -12,6 +12,8 @@ export const COLOR_TOKENS = {
   bg: '--rv-color-bg',
   surface: '--rv-color-surface',
   surfaceRaised: '--rv-color-surface-raised',
+  surfaceAlt: '--rv-color-surface-alt',
+  surfaceDisabled: '--rv-color-surface-disabled',
   border: '--rv-color-border',
   borderStrong: '--rv-color-border-strong',
   textPrimary: '--rv-color-text-primary',
@@ -24,6 +26,12 @@ export const COLOR_TOKENS = {
   warning: '--rv-color-warning',
   danger: '--rv-color-danger',
   stream: '--rv-color-stream',
+  scrim: '--rv-color-scrim',
+} as const;
+
+export const SHADOW_TOKENS = {
+  sm: '--rv-shadow-sm',
+  overlay: '--rv-shadow-overlay',
 } as const;
 
 export const SPACING_TOKENS = {
@@ -72,8 +80,24 @@ export const MOTION_TOKENS = {
  */
 export type DesignTokenName =
   | (typeof COLOR_TOKENS)[keyof typeof COLOR_TOKENS]
+  | (typeof SHADOW_TOKENS)[keyof typeof SHADOW_TOKENS]
   | (typeof SPACING_TOKENS)[keyof typeof SPACING_TOKENS]
   | (typeof TYPOGRAPHY_TOKENS)[keyof typeof TYPOGRAPHY_TOKENS]
   | (typeof DENSITY_TOKENS)[keyof typeof DENSITY_TOKENS]
   | (typeof Z_INDEX_TOKENS)[keyof typeof Z_INDEX_TOKENS]
   | (typeof MOTION_TOKENS)[keyof typeof MOTION_TOKENS];
+
+/**
+ * Every design-token custom-property name as a flat readonly array. Used as the
+ * single allowlist for the stylesheet token-reference check (task #3691) so a
+ * component referencing an unknown `--rv-*` token fails CI.
+ */
+export const ALL_DESIGN_TOKEN_NAMES: readonly DesignTokenName[] = [
+  ...Object.values(COLOR_TOKENS),
+  ...Object.values(SHADOW_TOKENS),
+  ...Object.values(SPACING_TOKENS),
+  ...Object.values(TYPOGRAPHY_TOKENS),
+  ...Object.values(DENSITY_TOKENS),
+  ...Object.values(Z_INDEX_TOKENS),
+  ...Object.values(MOTION_TOKENS),
+] as const;

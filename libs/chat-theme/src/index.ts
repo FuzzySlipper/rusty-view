@@ -21,7 +21,10 @@ export {
   type AppearanceColors,
   type AppearanceFontFamily,
   type AppearanceDensity,
+  type AppearanceThemeId,
   type TextRenderMode,
+  APPEARANCE_COLOR_FIELDS,
+  APPEARANCE_THEMES,
   DEFAULT_APPEARANCE,
   BASE_FONT_SIZES,
   BASE_DENSITY,
@@ -30,6 +33,7 @@ export {
   FONT_SCALE_STEP,
   clampFontScale,
   densityMultiplier,
+  normalizeThemeId,
 } from './lib/appearance-settings';
 
 /**

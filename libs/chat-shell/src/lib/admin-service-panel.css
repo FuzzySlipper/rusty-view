@@ -5,7 +5,7 @@
   background: var(--rv-color-surface);
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--rv-shadow-overlay);
   overflow: hidden;
 }
 

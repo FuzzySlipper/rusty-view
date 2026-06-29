@@ -1,0 +1,412 @@
+import type {
+  AdminControlResponse,
+  AdminLocalToolProfile,
+  AdminLocalToolProfileList,
+  AdminMcpCatalog,
+  AdminProfileRegistryDiagnostics,
+  AdminToolCatalog,
+  ApiCapabilityDescriptor,
+  ChatTransport,
+  CreateAdminProfileRequest,
+  CreatedServiceProfile,
+  ProfileBundleExportPlan,
+} from '@rusty-view/transport';
+
+/** Recording stub: a callable that records its call arguments like a vi.fn(). */
+type RecordingFn<A extends unknown[], R> = ((...args: A) => R) & {
+  readonly mock: { readonly calls: A[] };
+};
+
+function recordingFn<A extends unknown[], R>(
+  impl: (...args: A) => R,
+): RecordingFn<A, R> {
+  const calls: A[] = [];
+  const fn = (...args: A): R => {
+    calls.push(args);
+    return impl(...args);
+  };
+  (fn as unknown as { mock: { calls: A[] } }).mock = { calls };
+  return fn as RecordingFn<A, R>;
+}
+
+/**
+ * Shared test scaffolding for the profiles list/create/edit components (#3690).
+ * A single fake {@link ChatTransport} plus catalog fixtures, reused by the
+ * coordinator, create-window, and edit-window specs so the mock stays in one
+ * place.
+ */
+
+export const LANDED_PROFILE_CONTROL_CAPABILITY_IDS = [
+  'admin.control.profiles.create',
+  'admin.control.config.reload',
+  'admin.control.mcp.reload',
+  'admin.control.profiles.read',
+  'admin.control.profiles.update.plan',
+  'admin.control.profiles.update.apply',
+  'admin.control.sessions.rebuild_runtime.plan',
+  'admin.control.sessions.rebuild_runtime.apply',
+  'admin.control.profiles.rebuild_brain.plan',
+  'admin.control.profiles.rebuild_brain.apply',
+] as const;
+
+export function capability(id: string): ApiCapabilityDescriptor {
+  return {
+    id,
+    method: 'POST',
+    path_template: `/test/${id}`,
+    description: id,
+    auth: 'admin',
+    mutation: 'control',
+    stability: 'experimental',
+    tags: [],
+    public: false,
+  };
+}
+
+export interface TransportOptions {
+  readonly capabilityIds?: readonly string[];
+  readonly profileDiagnostics?: AdminProfileRegistryDiagnostics | null;
+  readonly exportPlan?: ProfileBundleExportPlan | null;
+  readonly mcpCatalog?: AdminMcpCatalog | null;
+  readonly toolCatalog?: AdminToolCatalog | null;
+  readonly localToolProfiles?: AdminLocalToolProfileList | null;
+}
+
+export function makeTransport(options: TransportOptions = {}): ChatTransport {
+  const capabilityIds =
+    options.capabilityIds ?? LANDED_PROFILE_CONTROL_CAPABILITY_IDS;
+  return {
+    adminDiagnostics: async () => ({
+      overview: {
+        generatedAt: '2026-06-25T00:00:00Z',
+        health: 'ok',
+        degraded: false,
+        reasonCodes: [],
+        summary: {
+          sessions: 0,
+          activeSessions: 0,
+          idleSessions: 0,
+          archivedSessions: 0,
+          delegatedSessions: 0,
+          blockedDelegations: 0,
+          pendingQueueItems: 0,
+          expiredQueueItems: 0,
+          toolErrors: 0,
+          recentErrors: 0,
+        },
+        runtime: {
+          brainModules: [],
+          sessions: [],
+          delegatedSessions: [],
+          runtimePauses: [],
+        },
+      },
+      health: {},
+    }),
+    adminSessions: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
+    adminAgents: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
+    adminMcpSurfaces: async () => ({
+      items: [],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    }),
+    adminConfigValidation: async () => null,
+    adminCapabilities: async () => ({
+      schema_version: 1,
+      slash_commands: [],
+      capabilities: capabilityIds.map(capability),
+    }),
+    adminProfileDiagnostics: async () => options.profileDiagnostics ?? null,
+    adminMcpCatalog: async () => options.mcpCatalog ?? null,
+    adminToolCatalog: async () => options.toolCatalog ?? null,
+    adminLocalToolProfiles: async () => options.localToolProfiles ?? null,
+    adminCreateLocalToolProfile: recordingFn(
+      async (body: unknown) =>
+        ({ id: 'created', ...(body as object) }) as unknown,
+    ),
+    adminUpdateLocalToolProfile: recordingFn(
+      async (_id: string, body: unknown) => body as unknown,
+    ),
+    adminDeleteLocalToolProfile: recordingFn(async (_id: string) => undefined),
+    adminModelProviders: async () => null,
+    adminProfileExportPlan: async () =>
+      options.exportPlan ?? {
+        profileId: 'field-prime',
+        generatedAt: '2026-06-26T00:00:00Z',
+        source: 'registry',
+        lifecycleStatus: 'active',
+        fallbackStatus: 'registry_authoritative',
+        bundleRootName: 'field-prime-profile-bundle',
+        entries: [],
+        activeDbStateEntries: [],
+        fileAssetEntries: [],
+        optionalEntries: [],
+        diagnostics: [],
+        warnings: [],
+      },
+    createAdminProfile: recordingFn(
+      async (
+        request: CreateAdminProfileRequest,
+      ): Promise<AdminControlResponse<CreatedServiceProfile>> => ({
+        command: {
+          name: 'create_profile',
+          target: { profileId: request.profileId },
+          requestId: 'req',
+        },
+        outcome: {
+          status: 'completed',
+          summary: `profile ${request.profileId} created`,
+          result: {
+            profileId: request.profileId,
+            agentId: request.profileId,
+            sessionId: `${request.profileId}-session`,
+            implementationId: `${request.profileId}-brain`,
+            profilePath: '/tmp/profile.json',
+            runtimeConfigPath: '/tmp/service.json',
+            applyResult: {
+              brainsRegistered: 1,
+              brainsAlreadyPresent: 0,
+              sessionsCreated: 1,
+              sessionsAlreadyPresent: 0,
+              sessionsReactivated: 0,
+              sessionsMissing: 0,
+              scheduledJobsRegistered: 0,
+            },
+            derivedRuntimeActions: [
+              { refKind: 'brain', refId: `${request.profileId}-brain` },
+              { refKind: 'session', refId: `${request.profileId}-session` },
+              {
+                refKind: 'profile_mcp_config',
+                refId: `${request.profileId}-mcp`,
+              },
+            ],
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    ),
+    planAdminProfileRegistryUpdate: recordingFn(async () =>
+      registryPlan('update'),
+    ),
+    applyAdminProfileRegistryUpdate: recordingFn(async () =>
+      appliedRegistryPlan('update'),
+    ),
+    planAdminProfileRegistryLifecycle: recordingFn(async () =>
+      registryPlan('lifecycle'),
+    ),
+    applyAdminProfileRegistryLifecycle: recordingFn(async () =>
+      appliedRegistryPlan('lifecycle'),
+    ),
+    planAdminProfileRegistryPrompt: recordingFn(async () =>
+      registryPlan('prompt'),
+    ),
+    applyAdminProfileRegistryPrompt: recordingFn(async () =>
+      appliedRegistryPlan('prompt'),
+    ),
+  } as unknown as ChatTransport;
+}
+
+function registryPlan(kind: 'update' | 'lifecycle' | 'prompt') {
+  return {
+    ok: true,
+    profileId: 'field-prime',
+    kind,
+    mode: 'plan',
+    expectedRevision: 3,
+    current: { profileId: 'field-prime', revision: 3 },
+    next: { profileId: 'field-prime', revision: 4, displayName: 'Updated' },
+    diagnostics: [],
+    implications: {
+      registryRevisionWillIncrement: true as const,
+      profileFilesUnchanged: true as const,
+      serviceConfigUnchanged: true as const,
+      runtimeRebuildRecommended: kind !== 'update',
+      lifecycleEffects:
+        kind === 'lifecycle'
+          ? ('archive_active_sessions_and_unregister_brain' as const)
+          : ('none' as const),
+    },
+  };
+}
+
+function appliedRegistryPlan(kind: 'update' | 'lifecycle' | 'prompt') {
+  return {
+    ...registryPlan(kind),
+    mode: 'apply',
+    applied: true as const,
+    record: { profileId: 'field-prime', revision: 4, displayName: 'Updated' },
+    ...(kind === 'lifecycle'
+      ? {
+          effects: {
+            sessionsArchived: [],
+            brainHandle: { action: 'already_absent' },
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * A representative MCP catalog: one runtime server, one explicit binding, and
+ * one legacy/profile-derived binding whose endpoint resolves to a different
+ * (env-default) server via compatibility fallback.
+ */
+export function mcpCatalog(): AdminMcpCatalog {
+  return {
+    servers: [
+      {
+        id: 'den',
+        label: 'Den',
+        baseUrl: 'https://den.example/mcp',
+        transport: 'streamable_http',
+        source: 'runtime',
+        configuredBindingCount: 1,
+      },
+      {
+        id: 'files',
+        baseUrl: 'https://files.example/mcp',
+        transport: 'streamable_http',
+        source: 'env',
+        configuredBindingCount: 0,
+      },
+    ],
+    toolProfiles: ['planner', 'files'],
+    bindings: [
+      {
+        bindingId: 'den-binding',
+        adapterId: 'mcp-den',
+        agentId: 'agent-prime',
+        profileId: 'field-prime',
+        endpointRef: 'config://mcp/den',
+        endpointServerId: 'den',
+        resolvedServerId: 'den',
+        transport: 'streamable_http',
+        toolProfileKey: 'planner',
+        serverNames: ['den'],
+        status: 'active',
+      },
+      {
+        bindingId: 'legacy-files',
+        adapterId: 'mcp-ts-files',
+        agentId: 'agent-legacy',
+        profileId: 'field-prime',
+        endpointRef: 'config://mcp/legacy',
+        endpointServerId: 'legacy',
+        resolvedServerId: 'env-default',
+        transport: 'streamable_http',
+        toolProfileKey: 'files',
+        serverNames: ['files'],
+        status: 'degraded',
+        degradedReason: 'degraded server unreachable',
+      },
+    ],
+  };
+}
+
+/**
+ * A representative built-in tool catalog: two toolsets (one with a label and
+ * tool count, one bare) and one individually selectable tool.
+ */
+export function toolCatalog(): AdminToolCatalog {
+  return {
+    toolsets: [
+      {
+        id: 'local_code_read',
+        label: 'Local code read',
+        description: 'Read files from the local workspace',
+        toolCount: 3,
+        tools: ['read_file', 'list_files', 'grep'],
+      },
+      { id: 'memory_profile' },
+    ],
+    tools: [
+      {
+        name: 'todo',
+        toolsets: ['planning_session'],
+        description: 'Manage a task list',
+      },
+    ],
+  };
+}
+
+/** A representative local tool profile list (task #3689). */
+export function localToolProfiles(): AdminLocalToolProfileList {
+  return {
+    profiles: [
+      {
+        id: 'planner-tools',
+        displayName: 'Planner tools',
+        description: 'Tools for planning sessions',
+        enabled: true,
+        system: false,
+        readOnly: false,
+        requestedToolsets: ['local_code_read'],
+        requestedTools: ['todo'],
+        revision: 2,
+      },
+      {
+        id: 'builtin-readonly',
+        displayName: 'Built-in (read only)',
+        enabled: true,
+        system: true,
+        readOnly: true,
+        requestedToolsets: ['memory_profile'],
+        requestedTools: [],
+        revision: 1,
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'tool_profile_stale_reference',
+            path: 'requestedToolsets[0]',
+            message: 'toolset memory_profile no longer in catalog',
+          },
+        ],
+      },
+    ] satisfies AdminLocalToolProfile[],
+  };
+}
+
+/** A single registry-backed record for edit-window tests. */
+export function registryDiagnostics(
+  record: Partial<AdminProfileRegistryDiagnostics['records'][number]> & {
+    readonly profileId: string;
+  },
+): AdminProfileRegistryDiagnostics {
+  return {
+    generatedAt: '2026-06-27T00:00:00Z',
+    records: [
+      {
+        source: 'registry',
+        lifecycleStatus: 'active',
+        activeRuntimeRefs: [],
+        sourceAssetRefs: [],
+        sourceAssetStatuses: [],
+        diagnostics: [],
+        fallbackStatus: 'registry_authoritative',
+        ...record,
+      },
+    ],
+    registryCount: 1,
+    fileFallbackCount: 0,
+    driftCount: 0,
+    missingAssetCount: 0,
+    diagnostics: [],
+  };
+}
+
+/**
+ * Pull the most recent createAdminProfile request off the transport mock.
+ * Throws when the spy was never called so the failing assertion is obvious.
+ */
+export function lastCreateRequest(spy: {
+  mock: { calls: [CreateAdminProfileRequest][] };
+}): CreateAdminProfileRequest {
+  const calls = spy.mock.calls;
+  const last = calls[calls.length - 1];
+  if (last === undefined) {
+    throw new Error('createAdminProfile was never called');
+  }
+  return last[0];
+}

@@ -9,6 +9,9 @@ import {
   type AdminMcpBinding,
   type AdminMcpCatalog,
   type AdminMcpServer,
+  type AdminLocalToolProfile,
+  type AdminLocalToolProfileList,
+  type AdminLocalToolProfileWriteRequest,
   type AdminProfileRegistryDiagnostics,
   type AdminProfileRegistryRecord,
   type AdminToolCatalog,
@@ -71,6 +74,13 @@ export class AdminStore {
     signal<AdminProfileRegistryDiagnostics | null>(null);
   private readonly _mcpCatalog = signal<AdminMcpCatalog | null>(null);
   private readonly _toolCatalog = signal<AdminToolCatalog | null>(null);
+  private readonly _localToolProfiles =
+    signal<AdminLocalToolProfileList | null>(null);
+  /**
+   * Error from the most recent local-tool-profile write (#3689). First-class
+   * (unlike the read which degrades to empty) so the editor surfaces failures.
+   */
+  private readonly _toolProfileWriteError = signal<string | null>(null);
   private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
   private readonly _registryWritePlan = signal<ProfileRegistryWritePlan | null>(
     null,
@@ -207,6 +217,18 @@ export class AdminStore {
     () => this._toolCatalog()?.tools ?? [],
   );
 
+  /**
+   * DB-backed local tool profiles (task #3689). Empty when the backend has not
+   * exposed the route; profile creation then falls back to inline/no built-in
+   * tools and the editor shows a non-blocking empty state.
+   */
+  readonly localToolProfiles = computed<readonly AdminLocalToolProfile[]>(
+    () => this._localToolProfiles()?.profiles ?? [],
+  );
+
+  /** Error from the latest local-tool-profile write, or null (#3689). */
+  readonly toolProfileWriteError = this._toolProfileWriteError.asReadonly();
+
   async refresh(): Promise<void> {
     this._loading.set(true);
     this._error.set(null);
@@ -221,6 +243,7 @@ export class AdminStore {
         profileDiagnostics,
         mcpCatalog,
         toolCatalog,
+        localToolProfiles,
         modelProvidersResult,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
@@ -232,6 +255,7 @@ export class AdminStore {
         this.transport.adminProfileDiagnostics().catch(() => null),
         loadMcpCatalog(this.transport),
         loadToolCatalog(this.transport),
+        loadLocalToolProfiles(this.transport),
         loadModelProviders(this.transport),
       ]);
       this._diagnostics.set(diagnostics);
@@ -243,6 +267,7 @@ export class AdminStore {
       this._profileDiagnostics.set(profileDiagnostics);
       this._mcpCatalog.set(mcpCatalog);
       this._toolCatalog.set(toolCatalog);
+      this._localToolProfiles.set(localToolProfiles);
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
     } catch (error) {
@@ -262,6 +287,58 @@ export class AdminStore {
       await this.refresh();
     } catch (error) {
       this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Create a local tool profile (#3689) and refresh. Captures failures in
+   * {@link toolProfileWriteError} so the editor can surface them. Returns true
+   * on success.
+   */
+  async createLocalToolProfile(
+    request: AdminLocalToolProfileWriteRequest,
+  ): Promise<boolean> {
+    return this.writeLocalToolProfile(() =>
+      this.transport.adminCreateLocalToolProfile(request),
+    );
+  }
+
+  /** Update a local tool profile by id (#3689) and refresh. */
+  async updateLocalToolProfile(
+    id: string,
+    request: AdminLocalToolProfileWriteRequest,
+  ): Promise<boolean> {
+    return this.writeLocalToolProfile(() =>
+      this.transport.adminUpdateLocalToolProfile(id, request),
+    );
+  }
+
+  /** Delete or archive a local tool profile by id (#3689) and refresh. */
+  async deleteLocalToolProfile(id: string): Promise<boolean> {
+    return this.writeLocalToolProfile(() =>
+      this.transport.adminDeleteLocalToolProfile(id),
+    );
+  }
+
+  /** Clear the last local-tool-profile write error (#3689). */
+  clearToolProfileWriteError(): void {
+    this._toolProfileWriteError.set(null);
+  }
+
+  private async writeLocalToolProfile(
+    write: () => Promise<unknown>,
+  ): Promise<boolean> {
+    this._saving.set(true);
+    this._toolProfileWriteError.set(null);
+    try {
+      await write();
+      await this.refresh();
+      return true;
+    } catch (error) {
+      this._toolProfileWriteError.set(errorMessage(error));
+      return false;
     } finally {
       this._saving.set(false);
     }
@@ -733,6 +810,21 @@ async function loadToolCatalog(
 ): Promise<AdminToolCatalog | null> {
   try {
     return (await transport.adminToolCatalog?.()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the DB-backed local tool profiles (task #3689). Optional,
+ * compatibility-gated route: backends (or transport mocks) without it yield
+ * `null` so the create flow and editor degrade to a non-blocking empty state.
+ */
+async function loadLocalToolProfiles(
+  transport: ChatTransport,
+): Promise<AdminLocalToolProfileList | null> {
+  try {
+    return (await transport.adminLocalToolProfiles?.()) ?? null;
   } catch {
     return null;
   }

@@ -1,5 +1,12 @@
 import { DOCUMENT } from '@angular/common';
-import { effect, inject, Injectable, Injector, runInInjectionContext, signal } from '@angular/core';
+import {
+  effect,
+  inject,
+  Injectable,
+  Injector,
+  runInInjectionContext,
+  signal,
+} from '@angular/core';
 
 import {
   COLOR_TOKENS,
@@ -13,18 +20,46 @@ import {
   type AppearanceFontFamily,
   type AppearanceSettings,
   type TextRenderMode,
+  APPEARANCE_COLOR_FIELDS,
   BASE_DENSITY,
   BASE_FONT_SIZES,
   clampFontScale,
   DEFAULT_APPEARANCE,
   densityMultiplier,
+  normalizeThemeId,
 } from './appearance-settings';
 import { CHAT_SETTINGS_STORAGE } from './chat-settings-storage';
 
 /**
+ * Maps every colour preference field to the token name it overrides (task
+ * #3691). Mirrors `AppearanceColors`/`COLOR_TOKENS` so the whole semantic
+ * palette is reachable by a theme, not a hand-maintained subset.
+ */
+const COLOR_FIELD_TOKENS: Readonly<Record<keyof AppearanceColors, string>> = {
+  bg: COLOR_TOKENS.bg,
+  surface: COLOR_TOKENS.surface,
+  surfaceRaised: COLOR_TOKENS.surfaceRaised,
+  surfaceAlt: COLOR_TOKENS.surfaceAlt,
+  surfaceDisabled: COLOR_TOKENS.surfaceDisabled,
+  border: COLOR_TOKENS.border,
+  borderStrong: COLOR_TOKENS.borderStrong,
+  textPrimary: COLOR_TOKENS.textPrimary,
+  textSecondary: COLOR_TOKENS.textSecondary,
+  textMuted: COLOR_TOKENS.textMuted,
+  accent: COLOR_TOKENS.accent,
+  accentHover: COLOR_TOKENS.accentHover,
+  accentText: COLOR_TOKENS.accentText,
+  success: COLOR_TOKENS.success,
+  warning: COLOR_TOKENS.warning,
+  danger: COLOR_TOKENS.danger,
+  stream: COLOR_TOKENS.stream,
+  scrim: COLOR_TOKENS.scrim,
+};
+
+/**
  * The complete set of `--rv-*` custom-property names this service manages.
  * Anything in this set is removed before re-applying, so a reset returns the
- * document to the `tokens.css` cascade.
+ * document to the `tokens.css` cascade (including any `data-rv-theme` block).
  */
 const MANAGED_TOKENS: readonly string[] = [
   TYPOGRAPHY_TOKENS.fontFamilySans,
@@ -35,27 +70,11 @@ const MANAGED_TOKENS: readonly string[] = [
   DENSITY_TOKENS.controlHeightSm,
   DENSITY_TOKENS.controlHeightMd,
   DENSITY_TOKENS.rowHeight,
-  COLOR_TOKENS.bg,
-  COLOR_TOKENS.surface,
-  COLOR_TOKENS.surfaceRaised,
-  COLOR_TOKENS.border,
-  COLOR_TOKENS.textPrimary,
-  COLOR_TOKENS.textSecondary,
-  COLOR_TOKENS.accent,
+  ...Object.values(COLOR_FIELD_TOKENS),
 ];
 
-/**
- * Maps a colour preference field to the token name it overrides.
- */
-const COLOR_FIELD_TOKENS: Readonly<Record<keyof AppearanceColors, string>> = {
-  bg: COLOR_TOKENS.bg,
-  surface: COLOR_TOKENS.surface,
-  surfaceRaised: COLOR_TOKENS.surfaceRaised,
-  border: COLOR_TOKENS.border,
-  textPrimary: COLOR_TOKENS.textPrimary,
-  textSecondary: COLOR_TOKENS.textSecondary,
-  accent: COLOR_TOKENS.accent,
-};
+/** The data attribute on the document root used to select a named base theme. */
+const THEME_DATA_ATTRIBUTE = 'data-rv-theme';
 
 /**
  * Angular Signals service that owns appearance preferences and applies them
@@ -124,6 +143,11 @@ export class ChatTheme {
     await this.persist(next);
   }
 
+  /** Select a named base theme (task #3691), apply live, and persist. */
+  async setTheme(themeId: AppearanceSettings['themeId']): Promise<void> {
+    await this.update({ themeId });
+  }
+
   /** Reset to defaults, apply live, and persist. */
   async reset(): Promise<void> {
     this._settings.set(DEFAULT_APPEARANCE);
@@ -146,6 +170,31 @@ export class ChatTheme {
     await this.storage.save(settings);
   }
 
+  /**
+   * Export the current appearance settings as a pretty-printed JSON string for
+   * sharing/backup (task #3691). Contains no secrets.
+   */
+  exportTheme(): string {
+    return JSON.stringify(this._settings(), null, 2);
+  }
+
+  /**
+   * Import appearance settings from a JSON string (task #3691). Invalid JSON or
+   * fields are rejected/normalized rather than throwing; returns true when the
+   * input parsed as an object and was applied.
+   */
+  async importTheme(json: string): Promise<boolean> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      return false;
+    }
+    if (typeof parsed !== 'object' || parsed === null) return false;
+    await this.set(this.normalize(parsed as Partial<AppearanceSettings>));
+    return true;
+  }
+
   /** Coerce arbitrary settings into a valid, clamped {@link AppearanceSettings}. */
   private normalize(settings: Partial<AppearanceSettings>): AppearanceSettings {
     const fontFamily: AppearanceFontFamily =
@@ -153,10 +202,11 @@ export class ChatTheme {
     const density: AppearanceDensity =
       settings.density === 'compact' ? 'compact' : 'normal';
     return {
+      themeId: normalizeThemeId(settings.themeId),
       fontFamily,
       fontScale: clampFontScale(settings.fontScale ?? 1),
       density,
-      colors: { ...settings.colors },
+      colors: normalizeColors(settings.colors),
       textRenderMode: normalizeTextRenderMode(settings.textRenderMode),
     };
   }
@@ -167,6 +217,14 @@ export class ChatTheme {
    */
   private applyToDom(settings: AppearanceSettings): void {
     const root = this.document.documentElement;
+
+    // Named base theme: select a palette block via the data attribute. `auto`
+    // removes it so the `prefers-color-scheme` cascade wins.
+    if (settings.themeId === 'auto') {
+      root.removeAttribute(THEME_DATA_ATTRIBUTE);
+    } else {
+      root.setAttribute(THEME_DATA_ATTRIBUTE, settings.themeId);
+    }
 
     // Clear all managed overrides so defaults cascade cleanly.
     for (const token of MANAGED_TOKENS) {
@@ -216,25 +274,10 @@ export class ChatTheme {
     );
 
     // Colours: set each provided override; unset ones were already removed.
-    this.applyColor(root, COLOR_FIELD_TOKENS.bg, settings.colors.bg);
-    this.applyColor(root, COLOR_FIELD_TOKENS.surface, settings.colors.surface);
-    this.applyColor(
-      root,
-      COLOR_FIELD_TOKENS.surfaceRaised,
-      settings.colors.surfaceRaised,
-    );
-    this.applyColor(root, COLOR_FIELD_TOKENS.border, settings.colors.border);
-    this.applyColor(
-      root,
-      COLOR_FIELD_TOKENS.textPrimary,
-      settings.colors.textPrimary,
-    );
-    this.applyColor(
-      root,
-      COLOR_FIELD_TOKENS.textSecondary,
-      settings.colors.textSecondary,
-    );
-    this.applyColor(root, COLOR_FIELD_TOKENS.accent, settings.colors.accent);
+    // Iterating the full field map keeps every semantic colour theme-able.
+    for (const { key } of APPEARANCE_COLOR_FIELDS) {
+      this.applyColor(root, COLOR_FIELD_TOKENS[key], settings.colors[key]);
+    }
   }
 
   private applyColor(
@@ -246,6 +289,24 @@ export class ChatTheme {
       root.style.setProperty(token, value);
     }
   }
+}
+
+/**
+ * Sanitize an arbitrary colour map: keep only known fields with non-empty
+ * string values (task #3691). Guards the import path against junk keys/values.
+ */
+function normalizeColors(
+  colors: Partial<AppearanceColors> | undefined,
+): AppearanceColors {
+  if (typeof colors !== 'object' || colors === null) return {};
+  const result: { -readonly [K in keyof AppearanceColors]?: string } = {};
+  for (const { key } of APPEARANCE_COLOR_FIELDS) {
+    const value = (colors as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value.trim() !== '') {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 /** Coerce an arbitrary text render mode into a valid value. */

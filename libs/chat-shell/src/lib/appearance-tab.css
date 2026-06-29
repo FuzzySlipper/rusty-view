@@ -124,3 +124,35 @@
   border-color: var(--rv-color-danger);
   color: var(--rv-color-danger);
 }
+
+/* Base-theme select + import/export controls (task #3691). */
+.rv-appearance__select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  font: inherit;
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+}
+
+.rv-appearance__hint {
+  margin: 0;
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-appearance__io {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-alt);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  resize: vertical;
+}

@@ -20,6 +20,9 @@ export { HelpPanelComponent } from './lib/help-panel';
 export { ProfilePanelComponent } from './lib/profile-panel';
 export { SessionsPanelComponent } from './lib/sessions-panel';
 export { AdminProfilesPanelComponent } from './lib/admin-profiles-panel';
+export { AdminProfileCreateComponent } from './lib/admin-profile-create';
+export { AdminProfileEditComponent } from './lib/admin-profile-edit';
+export { AdminToolProfileEditorComponent } from './lib/admin-tool-profile-editor';
 export { AdminProvidersPanelComponent } from './lib/admin-providers-panel';
 export { AdminServicePanelComponent } from './lib/admin-service-panel';
 export {

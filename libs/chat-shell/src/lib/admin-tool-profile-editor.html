@@ -1,0 +1,204 @@
+<div class="rv-admin-profiles">
+  <header class="rv-admin-profiles__header">
+    <span class="rv-admin-profiles__title">Local Tool Profiles</span>
+    <button
+      type="button"
+      class="rv-admin-profiles__close"
+      (click)="close()"
+      aria-label="Close tool profile editor"
+    >
+      x
+    </button>
+  </header>
+
+  @if (admin.toolProfileWriteError(); as writeError) {
+  <div class="rv-admin-profiles__error" role="alert">{{ writeError }}</div>
+  }
+
+  <div class="rv-admin-profiles__scroll">
+    <section class="rv-admin-profiles__section">
+      <h2>Tool Profiles</h2>
+      <p class="rv-admin-profiles__hint">
+        Reusable, named selections of Crew's built-in (non-MCP) tools. Profiles
+        reference one of these instead of picking low-level tools inline. MCP
+        servers are configured separately.
+      </p>
+      @if (profiles().length === 0) {
+      <div class="rv-admin-profiles__empty">
+        No local tool profiles configured. Backend may not expose the tool
+        profile API yet, or none have been created.
+      </div>
+      } @else {
+      <ul class="rv-admin-profiles__list">
+        @for (profile of profiles(); track profile.id) {
+        <li class="rv-admin-profiles__profile">
+          <div class="rv-admin-profiles__profile-header">
+            <span>{{ profile.displayName ?? profile.id }}</span>
+            <span class="rv-admin-profiles__muted">{{ profile.id }}</span>
+          </div>
+          <div class="rv-admin-profiles__meta">
+            <span>{{ localToolProfileSummary(profile) }}</span>
+            <span
+              >toolsets {{ profile.requestedToolsets.join(', ') || '-' }}</span
+            >
+            <span>tools {{ profile.requestedTools.join(', ') || '-' }}</span>
+          </div>
+          @if (profile.diagnostics && profile.diagnostics.length > 0) {
+          <div class="rv-admin-profiles__runtime-refs">
+            @for (diag of profile.diagnostics; track diag.code) {
+            <span
+              class="rv-admin-profiles__diag"
+              [class.rv-admin-profiles__diag--error]="diag.severity === 'error'"
+              [class.rv-admin-profiles__diag--warning]="
+                diag.severity === 'warning'
+              "
+            >
+              {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
+            </span>
+            }
+          </div>
+          }
+          <div class="rv-admin-profiles__profile-actions">
+            @if (isReadOnly(profile)) {
+            <span class="rv-admin-profiles__muted"
+              >read-only (backend-managed)</span
+            >
+            } @else {
+            <button
+              type="button"
+              class="rv-admin-profiles__button"
+              (click)="startEdit(profile)"
+              [disabled]="admin.saving()"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              class="rv-admin-profiles__button"
+              (click)="deleteProfile(profile)"
+              [disabled]="admin.saving()"
+            >
+              Delete
+            </button>
+            }
+          </div>
+        </li>
+        }
+      </ul>
+      }
+    </section>
+
+    <section class="rv-admin-profiles__section">
+      <h2>
+        {{ editingId() === null ? 'New Tool Profile' : 'Edit Tool Profile — ' +
+        editingId() }}
+      </h2>
+      <div class="rv-admin-profiles__form-grid">
+        @if (editingId() === null) {
+        <label>
+          <span>Profile ID</span>
+          <input
+            type="text"
+            [value]="form().id"
+            (input)="updateText('id', $event)"
+            autocomplete="off"
+            placeholder="stable id / alias"
+          />
+        </label>
+        }
+        <label>
+          <span>Display Name</span>
+          <input
+            type="text"
+            [value]="form().displayName"
+            (input)="updateText('displayName', $event)"
+            autocomplete="off"
+          />
+        </label>
+        <label>
+          <span>Description</span>
+          <input
+            type="text"
+            [value]="form().description"
+            (input)="updateText('description', $event)"
+            autocomplete="off"
+          />
+        </label>
+        <label class="rv-admin-profiles__tool-toggle">
+          <input
+            type="checkbox"
+            [checked]="form().enabled"
+            (change)="updateEnabled($event)"
+          />
+          <span>Enabled</span>
+        </label>
+      </div>
+
+      @if (toolsetCatalog().length === 0 && toolCatalogTools().length === 0) {
+      <div class="rv-admin-profiles__empty">
+        No built-in tool catalog reported. Backend may not expose the tool
+        catalog API.
+      </div>
+      } @else { @if (toolsetCatalog().length > 0) {
+      <span class="rv-admin-profiles__group-sublabel">Toolsets</span>
+      <ul class="rv-admin-profiles__tool-list">
+        @for (toolset of toolsetCatalog(); track toolset.id) {
+        <li class="rv-admin-profiles__tool-item">
+          <label class="rv-admin-profiles__tool-toggle">
+            <input
+              type="checkbox"
+              [checked]="isToolsetSelected(toolset.id)"
+              (change)="toggleToolset(toolset.id, $event)"
+            />
+            <span>{{ toolsetLabel(toolset) }}</span>
+          </label>
+          @if (toolset.description; as description) {
+          <span class="rv-admin-profiles__muted">{{ description }}</span>
+          }
+        </li>
+        }
+      </ul>
+      } @if (toolCatalogTools().length > 0) {
+      <span class="rv-admin-profiles__group-sublabel">Individual tools</span>
+      <ul class="rv-admin-profiles__tool-list">
+        @for (tool of toolCatalogTools(); track tool.name) {
+        <li class="rv-admin-profiles__tool-item">
+          <label class="rv-admin-profiles__tool-toggle">
+            <input
+              type="checkbox"
+              [checked]="isToolSelected(tool.name)"
+              (change)="toggleTool(tool.name, $event)"
+            />
+            <span>{{ toolLabel(tool) }}</span>
+          </label>
+          @if (tool.description; as description) {
+          <span class="rv-admin-profiles__muted">{{ description }}</span>
+          }
+        </li>
+        }
+      </ul>
+      } }
+
+      <div class="rv-admin-profiles__actions">
+        <button
+          type="button"
+          class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+          (click)="save()"
+          [disabled]="saveDisabled()"
+        >
+          {{ editingId() === null ? 'Create' : 'Save' }}
+        </button>
+        @if (editingId() !== null) {
+        <button
+          type="button"
+          class="rv-admin-profiles__button"
+          (click)="startNew()"
+          [disabled]="admin.saving()"
+        >
+          New
+        </button>
+        }
+      </div>
+    </section>
+  </div>
+</div>

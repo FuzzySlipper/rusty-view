@@ -298,10 +298,10 @@
   color: var(--rv-color-accent);
 }
 .rv-block__tool-status[data-status='completed'] {
-  color: var(--rv-color-success, #2a8f3c);
+  color: var(--rv-color-success);
 }
 .rv-block__tool-status[data-status='failed'] {
-  color: var(--rv-color-danger, #b00020);
+  color: var(--rv-color-danger);
 }
 
 .rv-block__tool-summary {

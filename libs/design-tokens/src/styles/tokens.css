@@ -16,6 +16,9 @@
   --rv-color-bg: #0b0d10;
   --rv-color-surface: #12161b;
   --rv-color-surface-raised: #1a1f26;
+  /* Alternate/inset surface (e.g. read-only previews) and disabled-control fill. */
+  --rv-color-surface-alt: #0f1318;
+  --rv-color-surface-disabled: #161a20;
   --rv-color-border: #262d36;
   --rv-color-border-strong: #38424e;
   --rv-color-text-primary: #e6e9ee;
@@ -28,6 +31,12 @@
   --rv-color-warning: #d29922;
   --rv-color-danger: #f85149;
   --rv-color-stream: #8a96a6;
+  /* Overlay backdrop / scrim behind modal windows. */
+  --rv-color-scrim: rgba(0, 0, 0, 0.5);
+
+  /* ---- elevation (shadows) ---- */
+  --rv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --rv-shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.5);
 
   /* ---- spacing (4px base scale) ---- */
   --rv-space-0: 0;
@@ -68,6 +77,10 @@
   --rv-motion-base: 160ms;
 }
 
+/*
+ * Light palette. Applied automatically under `prefers-color-scheme: light`
+ * (the `auto` named theme) and explicitly via `[data-rv-theme='light']`.
+ */
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
@@ -75,6 +88,8 @@
     --rv-color-bg: #f6f7f9;
     --rv-color-surface: #ffffff;
     --rv-color-surface-raised: #ffffff;
+    --rv-color-surface-alt: #fafafa;
+    --rv-color-surface-disabled: #f0f0f0;
     --rv-color-border: #d7dbe0;
     --rv-color-border-strong: #b6bdc6;
     --rv-color-text-primary: #1b1f24;
@@ -87,5 +102,90 @@
     --rv-color-warning: #9a6700;
     --rv-color-danger: #cf222e;
     --rv-color-stream: #57606a;
+    --rv-color-scrim: rgba(0, 0, 0, 0.35);
+    --rv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+    --rv-shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.25);
   }
+}
+
+/*
+ * Named base themes (task #3691). Selected by the appearance service via the
+ * `data-rv-theme` attribute on the document root, which overrides the
+ * `prefers-color-scheme` cascade. `auto` sets no attribute. Per-token user
+ * overrides (inline custom properties) still win over these blocks.
+ */
+:root[data-rv-theme='dark'] {
+  color-scheme: dark;
+
+  --rv-color-bg: #0b0d10;
+  --rv-color-surface: #12161b;
+  --rv-color-surface-raised: #1a1f26;
+  --rv-color-surface-alt: #0f1318;
+  --rv-color-surface-disabled: #161a20;
+  --rv-color-border: #262d36;
+  --rv-color-border-strong: #38424e;
+  --rv-color-text-primary: #e6e9ee;
+  --rv-color-text-secondary: #aab2bf;
+  --rv-color-text-muted: #6b7480;
+  --rv-color-accent: #4f9cf4;
+  --rv-color-accent-hover: #6cb0ff;
+  --rv-color-accent-text: #0b0d10;
+  --rv-color-success: #3fb950;
+  --rv-color-warning: #d29922;
+  --rv-color-danger: #f85149;
+  --rv-color-stream: #8a96a6;
+  --rv-color-scrim: rgba(0, 0, 0, 0.5);
+  --rv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --rv-shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-rv-theme='light'] {
+  color-scheme: light;
+
+  --rv-color-bg: #f6f7f9;
+  --rv-color-surface: #ffffff;
+  --rv-color-surface-raised: #ffffff;
+  --rv-color-surface-alt: #fafafa;
+  --rv-color-surface-disabled: #f0f0f0;
+  --rv-color-border: #d7dbe0;
+  --rv-color-border-strong: #b6bdc6;
+  --rv-color-text-primary: #1b1f24;
+  --rv-color-text-secondary: #48515d;
+  --rv-color-text-muted: #7a828d;
+  --rv-color-accent: #1f6feb;
+  --rv-color-accent-hover: #1858c4;
+  --rv-color-accent-text: #ffffff;
+  --rv-color-success: #1a7f37;
+  --rv-color-warning: #9a6700;
+  --rv-color-danger: #cf222e;
+  --rv-color-stream: #57606a;
+  --rv-color-scrim: rgba(0, 0, 0, 0.35);
+  --rv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --rv-shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+/* High-contrast theme: maximal separation for accessibility/low-vision use. */
+:root[data-rv-theme='high-contrast'] {
+  color-scheme: dark;
+
+  --rv-color-bg: #000000;
+  --rv-color-surface: #000000;
+  --rv-color-surface-raised: #0a0a0a;
+  --rv-color-surface-alt: #0a0a0a;
+  --rv-color-surface-disabled: #141414;
+  --rv-color-border: #ffffff;
+  --rv-color-border-strong: #ffffff;
+  --rv-color-text-primary: #ffffff;
+  --rv-color-text-secondary: #f0f0f0;
+  --rv-color-text-muted: #cfcfcf;
+  --rv-color-accent: #ffd400;
+  --rv-color-accent-hover: #ffe34d;
+  --rv-color-accent-text: #000000;
+  --rv-color-success: #3fff6a;
+  --rv-color-warning: #ffd400;
+  --rv-color-danger: #ff5b5b;
+  --rv-color-stream: #d0d0d0;
+  --rv-color-scrim: rgba(0, 0, 0, 0.75);
+  --rv-shadow-sm: 0 0 0 1px #ffffff;
+  --rv-shadow-overlay: 0 0 0 2px #ffffff;
 }

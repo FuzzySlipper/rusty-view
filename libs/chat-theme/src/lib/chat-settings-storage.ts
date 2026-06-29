@@ -87,7 +87,9 @@ export class IndexedDbChatSettingsStorage implements ChatSettingsStorage {
         const request = store.get(SETTINGS_KEY);
         request.onsuccess = () =>
           resolve(
-            request.result === undefined ? null : (request.result as AppearanceSettings),
+            request.result === undefined
+              ? null
+              : (request.result as AppearanceSettings),
           );
         request.onerror = () =>
           reject(request.error ?? new Error('Settings load failed'));

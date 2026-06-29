@@ -1,4 +1,18 @@
 <div class="rv-appearance">
+  <!-- Base theme -->
+  <fieldset class="rv-appearance__group">
+    <legend>Base theme</legend>
+    <select
+      class="rv-appearance__select"
+      [value]="theme.settings().themeId"
+      (change)="onSelectTheme($event)"
+    >
+      @for (option of themes; track option.id) {
+      <option [value]="option.id">{{ option.label }}</option>
+      }
+    </select>
+  </fieldset>
+
   <!-- Font family -->
   <fieldset class="rv-appearance__group">
     <legend>Chat font family</legend>
@@ -24,9 +38,7 @@
 
   <!-- Font scale -->
   <fieldset class="rv-appearance__group">
-    <legend>
-      Font scale · {{ theme.settings().fontScale.toFixed(2) }}×
-    </legend>
+    <legend>Font scale · {{ theme.settings().fontScale.toFixed(2) }}×</legend>
     <input
       type="range"
       class="rv-appearance__range"
@@ -105,25 +117,51 @@
     <legend>Colours</legend>
     <ul class="rv-appearance__colors">
       @for (field of colorFields; track field.key) {
-        <li class="rv-appearance__color">
-          <span class="rv-appearance__color-label">{{ field.label }}</span>
-          <input
-            type="color"
-            class="rv-appearance__color-input"
-            [value]="colorValue(field.key)"
-            (input)="onColor(field.key, $event)"
-          />
-          <button
-            type="button"
-            class="rv-appearance__color-default"
-            [class.rv-appearance__color-default--off]="!isColorOverridden(field.key)"
-            (click)="clearColor(field.key)"
-          >
-            default
-          </button>
-        </li>
+      <li class="rv-appearance__color">
+        <span class="rv-appearance__color-label">{{ field.label }}</span>
+        <input
+          type="color"
+          class="rv-appearance__color-input"
+          [value]="colorValue(field.key)"
+          (input)="onColor(field.key, $event)"
+        />
+        <button
+          type="button"
+          class="rv-appearance__color-default"
+          [class.rv-appearance__color-default--off]="!isColorOverridden(field.key)"
+          (click)="clearColor(field.key)"
+        >
+          default
+        </button>
+      </li>
       }
     </ul>
+  </fieldset>
+
+  <!-- Import / export full theme -->
+  <fieldset class="rv-appearance__group">
+    <legend>Share theme</legend>
+    <p class="rv-appearance__hint">
+      Export copies the full theme (base theme, fonts, density, and every colour
+      override) as JSON. Paste JSON below to import a complete theme.
+    </p>
+    <textarea
+      class="rv-appearance__io"
+      rows="4"
+      spellcheck="false"
+      readonly
+      [value]="exportTheme()"
+    ></textarea>
+    <textarea
+      class="rv-appearance__io"
+      rows="4"
+      spellcheck="false"
+      placeholder="Paste theme JSON to import…"
+      (change)="onImport($event)"
+    ></textarea>
+    @if (importStatus() !== '') {
+    <span class="rv-appearance__hint">{{ importStatus() }}</span>
+    }
   </fieldset>
 
   <div class="rv-appearance__actions">

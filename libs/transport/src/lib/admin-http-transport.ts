@@ -8,6 +8,9 @@ import type {
   AdminControlResponse,
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
+  AdminLocalToolProfile,
+  AdminLocalToolProfileList,
+  AdminLocalToolProfileWriteRequest,
   AdminMcpCatalog,
   AdminToolCatalog,
   AdminPage,
@@ -116,6 +119,43 @@ export class AdminHttpTransport {
    */
   toolCatalog(): Promise<AdminToolCatalog> {
     return this.request('GET', '/v1/admin/tools/catalog');
+  }
+
+  /**
+   * List DB-backed local tool profiles (task #3689 / Crew #3688). Reusable
+   * named built-in tool selections referenced by profiles.
+   */
+  localToolProfiles(): Promise<AdminLocalToolProfileList> {
+    return this.request('GET', '/v1/admin/tool-profiles');
+  }
+
+  /** Create a local tool profile (task #3689). */
+  createLocalToolProfile(
+    body: AdminLocalToolProfileWriteRequest,
+  ): Promise<AdminLocalToolProfile> {
+    return this.request('POST', '/v1/admin/tool-profiles', {
+      body: compactRecord(body as unknown as Record<string, unknown>),
+    });
+  }
+
+  /** Update a local tool profile by id (task #3689). */
+  updateLocalToolProfile(
+    id: string,
+    body: AdminLocalToolProfileWriteRequest,
+  ): Promise<AdminLocalToolProfile> {
+    return this.request(
+      'PATCH',
+      `/v1/admin/tool-profiles/${encodeURIComponent(id)}`,
+      { body: compactRecord(body as unknown as Record<string, unknown>) },
+    );
+  }
+
+  /** Delete or archive a local tool profile by id (task #3689). */
+  deleteLocalToolProfile(id: string): Promise<void> {
+    return this.request(
+      'DELETE',
+      `/v1/admin/tool-profiles/${encodeURIComponent(id)}`,
+    );
   }
 
   capabilities(): Promise<ApiCapabilityRegistry> {
@@ -391,7 +431,7 @@ export class AdminHttpTransport {
   }
 
   private async request<T>(
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     options: RequestOptions = {},
   ): Promise<T> {
