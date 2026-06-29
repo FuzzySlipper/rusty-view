@@ -32,6 +32,7 @@ import type {
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
+  ProfileRegistryRuntimeConfigRequest,
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWritePlan,
   RuntimePauseControlRequest,
@@ -319,6 +320,39 @@ export class AdminHttpTransport {
   }
 
   /**
+   * Plan a runtime-config change (provider / built-in tools / MCP bindings) for
+   * an existing profile (task #3742) without applying it. Returns the projected
+   * `next` record and diagnostics (e.g. revision mismatch, unknown alias).
+   */
+  planProfileRegistryRuntimeConfig(
+    profileId: string,
+    request: ProfileRegistryRuntimeConfigRequest,
+  ): Promise<ProfileRegistryWritePlan> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'runtime-config', 'plan'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
+   * Apply a runtime-config change (task #3742): persists provider/tool/MCP
+   * changes and rebuilds the profile runtime without creating a new session.
+   * Returns the applied record on success, or the non-applied plan with
+   * diagnostics on failure (e.g. revision mismatch).
+   */
+  applyProfileRegistryRuntimeConfig(
+    profileId: string,
+    request: ProfileRegistryRuntimeConfigRequest,
+  ): Promise<ProfileRegistryWriteApplyResult> {
+    return this.request(
+      'POST',
+      registryWritePath(profileId, 'runtime-config', 'apply'),
+      { body: request as unknown as Record<string, unknown> },
+    );
+  }
+
+  /**
    * List reusable model provider aliases (tasks #3534/#3537). Secrets are
    * redacted on read; `credential.hasSecret` indicates whether a key is set.
    */
@@ -547,7 +581,7 @@ function providerItemPath(alias: string): string {
 
 function registryWritePath(
   profileId: string,
-  kind: 'update' | 'lifecycle' | 'prompt',
+  kind: 'update' | 'lifecycle' | 'prompt' | 'runtime-config',
   mode: 'plan' | 'apply',
 ): string {
   return `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}/${kind}/${mode}`;

@@ -10,6 +10,7 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   ProfileBundleExportPlan,
+  ProfileRegistryRuntimeConfigRequest,
 } from '@rusty-view/transport';
 
 /** Recording stub: a callable that records its call arguments like a vi.fn(). */
@@ -205,10 +206,18 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
     applyAdminProfileRegistryPrompt: recordingFn(async () =>
       appliedRegistryPlan('prompt'),
     ),
+    planAdminProfileRegistryRuntimeConfig: recordingFn(async () =>
+      registryPlan('runtime-config'),
+    ),
+    applyAdminProfileRegistryRuntimeConfig: recordingFn(async () =>
+      appliedRegistryPlan('runtime-config'),
+    ),
   } as unknown as ChatTransport;
 }
 
-function registryPlan(kind: 'update' | 'lifecycle' | 'prompt') {
+type RegistryPlanKind = 'update' | 'lifecycle' | 'prompt' | 'runtime-config';
+
+function registryPlan(kind: RegistryPlanKind) {
   return {
     ok: true,
     profileId: 'field-prime',
@@ -231,7 +240,7 @@ function registryPlan(kind: 'update' | 'lifecycle' | 'prompt') {
   };
 }
 
-function appliedRegistryPlan(kind: 'update' | 'lifecycle' | 'prompt') {
+function appliedRegistryPlan(kind: RegistryPlanKind) {
   return {
     ...registryPlan(kind),
     mode: 'apply',
@@ -409,4 +418,19 @@ export function lastCreateRequest(spy: {
     throw new Error('createAdminProfile was never called');
   }
   return last[0];
+}
+
+/**
+ * Pull the most recent runtime-config plan/apply request (profileId, request)
+ * off a transport mock and return the request body (#3742).
+ */
+export function lastRuntimeConfigRequest(spy: {
+  mock: { calls: [string, ProfileRegistryRuntimeConfigRequest][] };
+}): ProfileRegistryRuntimeConfigRequest {
+  const calls = spy.mock.calls;
+  const last = calls[calls.length - 1];
+  if (last === undefined) {
+    throw new Error('runtime-config was never called');
+  }
+  return last[1];
 }

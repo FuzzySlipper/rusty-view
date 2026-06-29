@@ -642,6 +642,30 @@ export interface AdminProfileRegistryRecord {
   readonly diagnostics: readonly RuntimeConfigDiagnostic[];
   readonly fallbackStatus: 'registry_authoritative' | 'file_backed_fallback';
   /**
+   * Current model provider alias the profile references (task #3742), when it
+   * uses a configured provider alias rather than inline model config. Used to
+   * seed the Edit window's provider control.
+   */
+  readonly providerAlias?: string;
+  /**
+   * Current reusable local tool profile id the profile references (task #3742),
+   * when its built-in tool policy comes from a named local tool profile rather
+   * than inline toolsets/tools. Seeds the Edit window's tool control.
+   */
+  readonly localToolProfileId?: string;
+  /**
+   * Current effective built-in (non-MCP) tool policy (task #3742). When
+   * `localToolProfileId` is set this is the policy that profile supplies;
+   * otherwise it reflects inline toolset/tool selections.
+   */
+  readonly toolPolicy?: ProfileRuntimeToolPolicy;
+  /**
+   * Current configured MCP server bindings for the profile (task #3742). Seeds
+   * the Edit window's MCP binding control. Distinct from the resolution
+   * diagnostics in {@link AdminMcpBinding}.
+   */
+  readonly mcpBindings?: readonly AdminProfileRuntimeMcpBinding[];
+  /**
    * DB-backed static prompt text for the profile's soul (long-form
    * persona/instruction text). Only populated for registry-backed records;
    * file-backed fallback records omit this (prompt text lives in
@@ -717,6 +741,57 @@ export interface ProfileRegistryFieldUpdateRequest {
 }
 
 /**
+ * Effective built-in (non-MCP) tool policy reported on a registry record
+ * (task #3742). Mirrors Crew's read shape; `requestedToolsets`/`requestedTools`
+ * are the granted built-ins, `deniedTools` are explicit exclusions, and
+ * `includeDeprecated` toggles deprecated tools.
+ */
+export interface ProfileRuntimeToolPolicy {
+  readonly requestedToolsets?: readonly string[];
+  readonly requestedTools?: readonly string[];
+  readonly deniedTools?: readonly string[];
+  readonly includeDeprecated?: boolean;
+}
+
+/**
+ * A configured MCP server binding reported on a registry record (task #3742).
+ * Structurally matches {@link CreateProfileMcpBinding} but represents the
+ * profile's current bindings rather than a create request.
+ */
+export interface AdminProfileRuntimeMcpBinding {
+  readonly serverId: string;
+  readonly bindingId?: string;
+  readonly adapterId?: string;
+  readonly serverNames?: readonly string[];
+  readonly transport?: string;
+  readonly toolProfileKey?: string;
+}
+
+/**
+ * Body for the registry runtime-config plan/apply routes (task #3742): change a
+ * profile's provider and/or built-in tools and/or MCP bindings on an existing
+ * profile, rebuilding the runtime without creating a new session.
+ *
+ * Field semantics (per Crew contract):
+ * - `expectedRevision` is required (optimistic concurrency).
+ * - `providerAlias`: set to a configured alias; `null` clears; omit to keep.
+ * - `localToolProfileId`: when set it wins and supplies the effective tool
+ *   policy; `null` clears the reference so inline `toolPolicy` applies; omit to
+ *   keep current.
+ * - `toolPolicy`: inline built-in toolsets/tools, used when no
+ *   `localToolProfileId` is in effect.
+ * - `mcpBindings`: replaces the profile's current bindings on apply; omit to
+ *   preserve current bindings, send `[]` to clear them.
+ */
+export interface ProfileRegistryRuntimeConfigRequest {
+  readonly expectedRevision: number;
+  readonly providerAlias?: string | null;
+  readonly localToolProfileId?: string | null;
+  readonly toolPolicy?: CreateProfileToolPolicy;
+  readonly mcpBindings?: readonly CreateProfileMcpBinding[];
+}
+
+/**
  * Body for the registry lifecycle plan/apply routes (#3521). `lifecycleStatus`
  * is the target status. `expectedRevision` is required for optimistic concurrency.
  */
@@ -777,7 +852,7 @@ export interface ProfileRegistryWriteImplications {
 export interface ProfileRegistryWritePlan {
   readonly ok: boolean;
   readonly profileId: string;
-  readonly kind: 'update' | 'lifecycle' | 'prompt';
+  readonly kind: 'update' | 'lifecycle' | 'prompt' | 'runtime-config';
   readonly mode: 'plan' | 'apply';
   readonly expectedRevision: number;
   readonly current: AdminProfileRegistryRecord;

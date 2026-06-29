@@ -640,6 +640,89 @@ describe('AdminHttpTransport', () => {
     expect(req.body).toContain('"memoryMarkdown":""');
   });
 
+  it('plans a runtime-config change on the registry runtime-config route (#3742)', async () => {
+    const planResponse = {
+      ok: true,
+      profileId: 'rt-prime',
+      kind: 'runtime-config',
+      mode: 'plan',
+      expectedRevision: 5,
+      current: { profileId: 'rt-prime', revision: 5 },
+      next: { profileId: 'rt-prime', revision: 6 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: false,
+        serviceConfigUnchanged: false,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'none',
+      },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(planResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const plan = await transport.planProfileRegistryRuntimeConfig('rt-prime', {
+      expectedRevision: 5,
+      providerAlias: 'default',
+      localToolProfileId: 'planner-tools',
+      mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
+    });
+
+    expect(plan.kind).toBe('runtime-config');
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/profiles/registry/rt-prime/runtime-config/plan',
+    );
+    expect(req.body).toContain('"providerAlias":"default"');
+    expect(req.body).toContain('"localToolProfileId":"planner-tools"');
+    expect(req.body).toContain('"serverId":"den"');
+  });
+
+  it('applies a runtime-config change with inline tool policy and null local profile (#3742)', async () => {
+    const applyResponse = {
+      ok: true,
+      profileId: 'rt-prime',
+      kind: 'runtime-config',
+      mode: 'apply',
+      expectedRevision: 5,
+      current: { profileId: 'rt-prime', revision: 5 },
+      next: { profileId: 'rt-prime', revision: 6 },
+      applied: true,
+      record: { profileId: 'rt-prime', revision: 6 },
+      diagnostics: [],
+      implications: {
+        registryRevisionWillIncrement: true,
+        profileFilesUnchanged: false,
+        serviceConfigUnchanged: false,
+        runtimeRebuildRecommended: true,
+        lifecycleEffects: 'none',
+      },
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(applyResponse));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.applyProfileRegistryRuntimeConfig(
+      'rt-prime',
+      {
+        expectedRevision: 5,
+        localToolProfileId: null,
+        toolPolicy: { requestedToolsets: ['local_code_read'] },
+      },
+    );
+
+    if (!('applied' in result)) {
+      throw new Error('expected an applied result');
+    }
+    expect(result.applied).toBe(true);
+    const req = lastRequest();
+    expect(req.url).toContain(
+      '/v1/admin/profiles/registry/rt-prime/runtime-config/apply',
+    );
+    expect(req.body).toContain('"localToolProfileId":null');
+    expect(req.body).toContain('"requestedToolsets":["local_code_read"]');
+  });
+
   it('lists model providers through the provider registry route', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({ items: [], total: 0, limit: 100, offset: 0 }),

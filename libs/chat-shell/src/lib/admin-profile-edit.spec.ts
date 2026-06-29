@@ -5,13 +5,21 @@ import { AdminStore } from '@rusty-view/chat-store';
 import {
   ChatTransport,
   type AdminProfileRegistryRecord,
+  type ProfileRegistryRuntimeConfigRequest,
 } from '@rusty-view/transport';
+
+type RuntimeConfigSpy = {
+  mock: { calls: [string, ProfileRegistryRuntimeConfigRequest][] };
+};
 
 import { AdminProfileEditComponent } from './admin-profile-edit';
 import {
+  lastRuntimeConfigRequest,
   makeTransport,
   mcpCatalog,
   registryDiagnostics,
+  toolCatalog,
+  localToolProfiles,
   type TransportOptions,
 } from './admin-profiles.testing';
 
@@ -32,7 +40,22 @@ async function editWindow(profileId: string, options: TransportOptions = {}) {
 }
 
 interface EditComponentApi {
-  showSection(section: 'fields' | 'lifecycle' | 'prompts'): void;
+  showSection(section: 'fields' | 'lifecycle' | 'prompts' | 'runtime'): void;
+  updateRuntimeProviderAlias(event: { target: { value: string } }): void;
+  updateRuntimeLocalToolProfile(event: { target: { value: string } }): void;
+  toggleRuntimeCustomTools(): void;
+  toggleRuntimeToolset(
+    toolsetId: string,
+    event: { target: { checked: boolean } },
+  ): void;
+  toggleRuntimeMcpServer(
+    serverId: string,
+    event: { target: { checked: boolean } },
+  ): void;
+  runtimeLocalToolProfileId(): string;
+  runtimeToolsetSelections(): readonly string[];
+  planRuntimeConfig(record: AdminProfileRegistryRecord): void;
+  applyRuntimeConfig(record: AdminProfileRegistryRecord): void;
   updateRegistryEditText(
     field: 'displayName',
     event: { target: { value: string } },
@@ -401,5 +424,91 @@ describe('AdminProfileEditComponent', () => {
     expect(text).toContain('env-default');
     expect(text).toContain('compatibility fallback');
     expect(text).toContain('degraded server unreachable');
+  });
+
+  // ---- runtime-config edit: provider / tools / MCP (#3742) ----------------
+
+  async function runtimeWindow(profileId = 'rt-prime') {
+    const fixture = await editWindow(profileId, {
+      profileDiagnostics: registryDiagnostics({
+        profileId,
+        revision: 5,
+        providerAlias: 'default',
+        localToolProfileId: 'planner-tools',
+        toolPolicy: { requestedToolsets: ['local_code_read'] },
+        mcpBindings: [
+          { serverId: 'den', toolProfileKey: 'den-key', transport: 'streamable_http' },
+        ],
+      }),
+      mcpCatalog: mcpCatalog(),
+      toolCatalog: toolCatalog(),
+      localToolProfiles: localToolProfiles(),
+    });
+    const component =
+      fixture.componentInstance as unknown as EditComponentApi;
+    component.showSection('runtime');
+    fixture.detectChanges();
+    return { fixture, component };
+  }
+
+  it('seeds the runtime-config form from the record (#3742)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    // Provider and local tool profile are seeded as selected values.
+    expect(html).toContain('Provider &amp; Tools');
+    expect(component.runtimeLocalToolProfileId()).toBe('planner-tools');
+  });
+
+  it('prefers a selected local tool profile and omits inline toolPolicy (#3742)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as { planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy };
+    component.planRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.planAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.expectedRevision).toBe(5);
+    expect(request.providerAlias).toBe('default');
+    expect(request.localToolProfileId).toBe('planner-tools');
+    expect(request).not.toHaveProperty('toolPolicy');
+    // MCP untouched, so omitted to preserve current bindings.
+    expect(request).not.toHaveProperty('mcpBindings');
+  });
+
+  it('sends inline toolPolicy with localToolProfileId:null when the profile is cleared (#3742)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as { applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy };
+    // Clear the local tool profile, open custom tools, add a toolset.
+    component.updateRuntimeLocalToolProfile({ target: { value: '' } });
+    component.toggleRuntimeCustomTools();
+    component.toggleRuntimeToolset('memory_profile', {
+      target: { checked: true },
+    });
+    fixture.detectChanges();
+    component.applyRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.applyAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.localToolProfileId).toBeNull();
+    expect(request.toolPolicy?.requestedToolsets).toContain('local_code_read');
+    expect(request.toolPolicy?.requestedToolsets).toContain('memory_profile');
+  });
+
+  it('only sends mcpBindings after the bindings are edited (#3742)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as { planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy };
+    // Toggle the seeded server off; bindings become dirty and are sent.
+    component.toggleRuntimeMcpServer('den', { target: { checked: false } });
+    fixture.detectChanges();
+    component.planRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.planAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.mcpBindings).toEqual([]);
   });
 });

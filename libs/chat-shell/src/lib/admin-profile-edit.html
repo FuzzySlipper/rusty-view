@@ -45,6 +45,14 @@
         >
           Prompts
         </button>
+        <button
+          type="button"
+          class="rv-admin-profiles__button"
+          [class.rv-admin-profiles__button--primary]="section() === 'runtime'"
+          (click)="showSection('runtime')"
+        >
+          Provider &amp; tools
+        </button>
       </div>
     </div>
 
@@ -303,7 +311,7 @@
       </div>
       } }
     </section>
-    } @else {
+    } @else if (section() === 'prompts') {
     <section class="rv-admin-profiles__section">
       <h2>Edit Prompts</h2>
       <p class="rv-admin-profiles__hint">
@@ -403,6 +411,201 @@
           class="rv-admin-profiles__button rv-admin-profiles__button--primary"
           (click)="applyPromptEdit(record)"
           [disabled]="admin.saving() || !promptEditDirty()"
+        >
+          Apply
+        </button>
+      </div>
+      @if (registryWritePlan(); as plan) {
+      <div class="rv-admin-profiles__result" role="status">
+        <span>ok {{ plan.ok }}</span>
+        <span
+          >revision {{ plan.expectedRevision }} → {{ plan.next.revision }}</span
+        >
+        @for (diag of plan.diagnostics; track diag.code) {
+        <span
+          class="rv-admin-profiles__diag"
+          [class.rv-admin-profiles__diag--error]="diag.severity === 'error'"
+          [class.rv-admin-profiles__diag--warning]="diag.severity === 'warning'"
+        >
+          {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
+        </span>
+        }
+      </div>
+      }
+    </section>
+    } @else if (section() === 'runtime') {
+    <section class="rv-admin-profiles__section">
+      <h2>Provider &amp; Tools</h2>
+      <p class="rv-admin-profiles__hint">
+        Change the model provider, built-in tools, and MCP bindings for this
+        profile. Applying rebuilds the runtime without creating a new session.
+        Uses revision {{ record.revision ?? 0 }} for concurrency.
+      </p>
+
+      <label>
+        <span>Provider alias</span>
+        <select
+          [value]="runtimeProviderAlias()"
+          (change)="updateRuntimeProviderAlias($event)"
+        >
+          <option value="">keep current</option>
+          @for (alias of providerAliases(); track alias) {
+          <option [value]="alias">{{ alias }}</option>
+          }
+        </select>
+      </label>
+      <p class="rv-admin-profiles__hint">
+        Selecting a provider alias points the profile at that configured
+        provider (manage aliases in the Providers panel). "keep current" leaves
+        the existing provider/model untouched.
+      </p>
+
+      <div class="rv-admin-profiles__tool-policy">
+        <span class="rv-admin-profiles__group-label">Built-in tools</span>
+        @if (localToolProfiles().length === 0) {
+        <div class="rv-admin-profiles__empty">
+          No local tool profiles configured. Create one in the Tool Profiles
+          editor, or use custom built-in tools below.
+        </div>
+        } @else {
+        <label>
+          <span>Local tool profile</span>
+          <select
+            [value]="runtimeLocalToolProfileId()"
+            (change)="updateRuntimeLocalToolProfile($event)"
+          >
+            <option value="">none (inline tools)</option>
+            @for (profile of localToolProfiles(); track profile.id) {
+            <option [value]="profile.id">
+              {{ localToolProfileLabel(profile) }}
+            </option>
+            }
+          </select>
+        </label>
+        }
+
+        <div class="rv-admin-profiles__advanced">
+          <button
+            type="button"
+            class="rv-admin-profiles__button rv-admin-profiles__button--small"
+            (click)="toggleRuntimeCustomTools()"
+            [attr.aria-expanded]="runtimeCustomToolsOpen()"
+            [disabled]="runtimeLocalToolProfileId() !== ''"
+          >
+            {{ runtimeCustomToolsOpen() ? 'Hide custom built-in tools' : 'Custom
+            built-in tools' }}
+          </button>
+          @if (runtimeCustomToolsOpen() && runtimeLocalToolProfileId() === '') {
+          <p class="rv-admin-profiles__hint">
+            Inline built-in toolsets/tools from Crew's catalog, used when no
+            local tool profile is selected.
+          </p>
+          @if (toolsetCatalog().length === 0 && toolCatalogTools().length === 0)
+          {
+          <div class="rv-admin-profiles__empty">
+            No built-in tool catalog reported. Backend may not expose the tool
+            catalog API.
+          </div>
+          } @else { @if (toolsetCatalog().length > 0) {
+          <span class="rv-admin-profiles__group-sublabel">Toolsets</span>
+          <ul class="rv-admin-profiles__tool-list">
+            @for (toolset of toolsetCatalog(); track toolset.id) {
+            <li class="rv-admin-profiles__tool-item">
+              <label class="rv-admin-profiles__tool-toggle">
+                <input
+                  type="checkbox"
+                  [checked]="isRuntimeToolsetSelected(toolset.id)"
+                  (change)="toggleRuntimeToolset(toolset.id, $event)"
+                />
+                <span>{{ toolsetLabel(toolset) }}</span>
+              </label>
+              @if (toolset.description; as description) {
+              <span class="rv-admin-profiles__muted">{{ description }}</span>
+              }
+            </li>
+            }
+          </ul>
+          } @if (toolCatalogTools().length > 0) {
+          <span class="rv-admin-profiles__group-sublabel"
+            >Individual tools</span
+          >
+          <ul class="rv-admin-profiles__tool-list">
+            @for (tool of toolCatalogTools(); track tool.name) {
+            <li class="rv-admin-profiles__tool-item">
+              <label class="rv-admin-profiles__tool-toggle">
+                <input
+                  type="checkbox"
+                  [checked]="isRuntimeToolSelected(tool.name)"
+                  (change)="toggleRuntimeTool(tool.name, $event)"
+                />
+                <span>{{ toolLabel(tool) }}</span>
+              </label>
+              @if (tool.description; as description) {
+              <span class="rv-admin-profiles__muted">{{ description }}</span>
+              }
+            </li>
+            }
+          </ul>
+          } } }
+        </div>
+      </div>
+
+      <div class="rv-admin-profiles__mcp-select">
+        <span class="rv-admin-profiles__group-label">MCP servers</span>
+        <p class="rv-admin-profiles__hint">
+          Edit this profile's MCP server bindings. Untouched, the current
+          bindings are preserved; clearing all selections removes them.
+        </p>
+        @if (mcpServers().length === 0) {
+        <div class="rv-admin-profiles__empty">
+          No MCP servers configured.
+        </div>
+        } @else {
+        <ul class="rv-admin-profiles__mcp-server-list">
+          @for (server of mcpServers(); track server.id) {
+          <li class="rv-admin-profiles__mcp-server">
+            <label class="rv-admin-profiles__mcp-server-toggle">
+              <input
+                type="checkbox"
+                [checked]="isRuntimeMcpServerSelected(server.id)"
+                (change)="toggleRuntimeMcpServer(server.id, $event)"
+              />
+              <span class="rv-admin-profiles__mcp-server-label">
+                {{ mcpServerLabel(server) }}
+              </span>
+            </label>
+            @if (isRuntimeMcpServerSelected(server.id)) {
+            <label class="rv-admin-profiles__mcp-tool-profile">
+              <span>Tool profile key (optional)</span>
+              <input
+                type="text"
+                [value]="runtimeMcpToolProfileKeyFor(server.id)"
+                (input)="updateRuntimeMcpToolProfileKey(server.id, $event)"
+                autocomplete="off"
+                placeholder="backend default"
+              />
+            </label>
+            }
+          </li>
+          }
+        </ul>
+        }
+      </div>
+
+      <div class="rv-admin-profiles__actions">
+        <button
+          type="button"
+          class="rv-admin-profiles__button"
+          (click)="planRuntimeConfig(record)"
+          [disabled]="admin.saving()"
+        >
+          Plan
+        </button>
+        <button
+          type="button"
+          class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+          (click)="applyRuntimeConfig(record)"
+          [disabled]="admin.saving()"
         >
           Apply
         </button>

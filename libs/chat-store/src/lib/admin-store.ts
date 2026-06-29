@@ -30,6 +30,7 @@ import {
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryLifecycleRequest,
   type ProfileRegistryPromptRequest,
+  type ProfileRegistryRuntimeConfigRequest,
   type ProfileRegistryWriteApplyResult,
   type ProfileRegistryWritePlan,
   type RuntimeBrainModuleDiagnostics,
@@ -542,6 +543,64 @@ export class AdminStore {
         profileId,
         request,
       );
+      this.recordRegistryApplyResult(result);
+      if ('applied' in result) {
+        await this.refresh();
+      }
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Plan a runtime-config change (provider / built-in tools / MCP bindings) for
+   * an existing profile (task #3742) without applying it. The projected `next`
+   * record and any diagnostics are exposed via `registryWritePlan`.
+   */
+  async planRegistryRuntimeConfig(
+    profileId: string,
+    request: ProfileRegistryRuntimeConfigRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWritePlan.set(null);
+    this._registryWriteResult.set(null);
+    try {
+      const plan =
+        await this.transport.planAdminProfileRegistryRuntimeConfig(
+          profileId,
+          request,
+        );
+      this._registryWritePlan.set(plan);
+    } catch (error) {
+      this._error.set(errorMessage(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Apply a runtime-config change (task #3742): persists provider/tool/MCP
+   * changes and rebuilds the runtime. On success the bumped record is exposed
+   * via `registryWriteResult` and the registry diagnostics are refreshed; a
+   * non-ok plan (e.g. revision mismatch) surfaces through `registryWritePlan`.
+   */
+  async applyRegistryRuntimeConfig(
+    profileId: string,
+    request: ProfileRegistryRuntimeConfigRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._registryWriteResult.set(null);
+    this._registryWritePlan.set(null);
+    try {
+      const result =
+        await this.transport.applyAdminProfileRegistryRuntimeConfig(
+          profileId,
+          request,
+        );
       this.recordRegistryApplyResult(result);
       if ('applied' in result) {
         await this.refresh();

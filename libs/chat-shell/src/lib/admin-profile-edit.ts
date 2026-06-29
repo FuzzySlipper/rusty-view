@@ -10,13 +10,19 @@ import {
 } from '@angular/core';
 import { AdminStore } from '@rusty-view/chat-store';
 import type {
+  AdminLocalToolProfile,
   AdminMcpBinding,
+  AdminMcpServer,
   AdminProfileRegistryRecord,
+  AdminToolDescriptor,
+  AdminToolsetDescriptor,
+  CreateProfileMcpBinding,
   ProfileBundleExportEntry,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryLifecycleStatus,
   ProfileRegistryPromptRequest,
+  ProfileRegistryRuntimeConfigRequest,
   ProfileRegistryWritePlan,
 } from '@rusty-view/transport';
 
@@ -24,6 +30,13 @@ import {
   groupRuntimeRefs,
   type RuntimeRefGroup,
 } from './admin-profile-runtime-refs';
+import {
+  localToolProfileLabel,
+  mcpServerLabel,
+  toolLabel,
+  toolsetLabel,
+  type McpBindingDraft,
+} from './admin-profile-tool-selection';
 
 /** Editable registry-owned fields for an existing profile (#3519). */
 interface RegistryEditFormState {
@@ -106,9 +119,32 @@ export class AdminProfileEditComponent {
   protected readonly lifecycleTargetStatus =
     signal<ProfileRegistryLifecycleStatus>('paused');
   /** Which sub-form is active in the edit window: registry fields by default. */
-  protected readonly section = signal<'fields' | 'lifecycle' | 'prompts'>(
-    'fields',
+  protected readonly section = signal<
+    'fields' | 'lifecycle' | 'prompts' | 'runtime'
+  >('fields');
+
+  // ---- runtime-config edit (provider / tools / MCP, #3742) ----------------
+
+  /** Selected provider alias; '' keeps the profile's current provider/model. */
+  protected readonly runtimeProviderAlias = signal<string>('');
+  /** Selected reusable local tool profile id; '' = use inline toolsets/tools. */
+  protected readonly runtimeLocalToolProfileId = signal<string>('');
+  /** Whether the advanced inline "custom built-in tools" disclosure is open. */
+  protected readonly runtimeCustomToolsOpen = signal(false);
+  protected readonly runtimeToolsetSelections = signal<readonly string[]>([]);
+  protected readonly runtimeToolSelections = signal<readonly string[]>([]);
+  /** Draft MCP server bindings; serverId + optional toolProfileKey. */
+  protected readonly runtimeMcpSelections = signal<readonly McpBindingDraft[]>(
+    [],
   );
+  /**
+   * Whether the operator has touched the MCP bindings. MCP bindings are only
+   * sent when dirty so an untouched edit preserves the profile's current
+   * bindings (and any advanced fields the draft form does not model).
+   */
+  protected readonly runtimeMcpDirty = signal(false);
+  /** Current full bindings, kept to merge advanced fields back on build. */
+  private seededMcpBindings: readonly CreateProfileMcpBinding[] = [];
 
   /** The registry record being edited, resolved from the store by id. */
   protected readonly record = computed<AdminProfileRegistryRecord | undefined>(
@@ -150,7 +186,9 @@ export class AdminProfileEditComponent {
 
   // ---- section switching --------------------------------------------------
 
-  protected showSection(section: 'fields' | 'lifecycle' | 'prompts'): void {
+  protected showSection(
+    section: 'fields' | 'lifecycle' | 'prompts' | 'runtime',
+  ): void {
     this.admin.clearRegistryWrite();
     this.section.set(section);
     const record = this.record();
@@ -164,6 +202,8 @@ export class AdminProfileEditComponent {
           : ((record.lifecycleStatus as ProfileRegistryLifecycleStatus) ??
               'paused'),
       );
+    } else if (section === 'runtime') {
+      this.seedRuntimeConfig(record);
     } else {
       this.promptEditForm.set(INITIAL_PROMPT_EDIT);
     }
@@ -422,6 +462,222 @@ export class AdminProfileEditComponent {
 
   protected isActiveDbStateEntry(entry: ProfileBundleExportEntry): boolean {
     return entry.source === 'registry_active_state';
+  }
+
+  // ---- runtime-config edit: provider / tools / MCP (#3742) ---------------
+
+  /** Seed the runtime-config form from the record's current provider/tools/MCP. */
+  private seedRuntimeConfig(record: AdminProfileRegistryRecord): void {
+    this.runtimeProviderAlias.set(record.providerAlias ?? '');
+    this.runtimeLocalToolProfileId.set(record.localToolProfileId ?? '');
+    const toolsets = record.toolPolicy?.requestedToolsets ?? [];
+    const tools = record.toolPolicy?.requestedTools ?? [];
+    this.runtimeToolsetSelections.set([...toolsets]);
+    this.runtimeToolSelections.set([...tools]);
+    // Reveal the inline disclosure when the profile uses inline tools (no
+    // reusable local tool profile) and has any selected.
+    this.runtimeCustomToolsOpen.set(
+      (record.localToolProfileId ?? '') === '' &&
+        toolsets.length + tools.length > 0,
+    );
+    this.seededMcpBindings = (record.mcpBindings ?? []).map((binding) => ({
+      ...binding,
+    }));
+    this.runtimeMcpSelections.set(
+      this.seededMcpBindings.map((binding) => ({
+        serverId: binding.serverId,
+        toolProfileKey: binding.toolProfileKey ?? '',
+      })),
+    );
+    this.runtimeMcpDirty.set(false);
+  }
+
+  /** Configured model provider aliases for the provider dropdown (#3534). */
+  protected providerAliases(): readonly string[] {
+    return this.admin.providerAliases().map((provider) => provider.alias);
+  }
+
+  protected updateRuntimeProviderAlias(event: Event): void {
+    this.runtimeProviderAlias.set((event.target as HTMLSelectElement).value);
+  }
+
+  /** Reusable local tool profiles for the dropdown (#3689). */
+  protected localToolProfiles(): readonly AdminLocalToolProfile[] {
+    return this.admin.localToolProfiles();
+  }
+
+  protected localToolProfileLabel(profile: AdminLocalToolProfile): string {
+    return localToolProfileLabel(profile);
+  }
+
+  protected updateRuntimeLocalToolProfile(event: Event): void {
+    this.runtimeLocalToolProfileId.set(
+      (event.target as HTMLSelectElement).value,
+    );
+  }
+
+  protected toggleRuntimeCustomTools(): void {
+    this.runtimeCustomToolsOpen.update((open) => !open);
+  }
+
+  protected toolsetCatalog(): readonly AdminToolsetDescriptor[] {
+    return this.admin.toolsetCatalog();
+  }
+
+  protected toolCatalogTools(): readonly AdminToolDescriptor[] {
+    return this.admin.toolCatalogTools();
+  }
+
+  protected toolsetLabel(toolset: AdminToolsetDescriptor): string {
+    return toolsetLabel(toolset);
+  }
+
+  protected toolLabel(tool: AdminToolDescriptor): string {
+    return toolLabel(tool);
+  }
+
+  protected isRuntimeToolsetSelected(toolsetId: string): boolean {
+    return this.runtimeToolsetSelections().includes(toolsetId);
+  }
+
+  protected toggleRuntimeToolset(toolsetId: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.runtimeToolsetSelections.update((selections) => {
+      const without = selections.filter((id) => id !== toolsetId);
+      return checked ? [...without, toolsetId] : without;
+    });
+  }
+
+  protected isRuntimeToolSelected(toolName: string): boolean {
+    return this.runtimeToolSelections().includes(toolName);
+  }
+
+  protected toggleRuntimeTool(toolName: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.runtimeToolSelections.update((selections) => {
+      const without = selections.filter((name) => name !== toolName);
+      return checked ? [...without, toolName] : without;
+    });
+  }
+
+  /** Configured MCP servers from the backend catalog (#3647). */
+  protected mcpServers(): readonly AdminMcpServer[] {
+    return this.admin.mcpServers();
+  }
+
+  protected mcpServerLabel(server: AdminMcpServer): string {
+    return mcpServerLabel(server);
+  }
+
+  protected isRuntimeMcpServerSelected(serverId: string): boolean {
+    return this.runtimeMcpSelections().some(
+      (selection) => selection.serverId === serverId,
+    );
+  }
+
+  protected toggleRuntimeMcpServer(serverId: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.runtimeMcpDirty.set(true);
+    this.runtimeMcpSelections.update((selections) => {
+      const without = selections.filter(
+        (selection) => selection.serverId !== serverId,
+      );
+      return checked ? [...without, { serverId, toolProfileKey: '' }] : without;
+    });
+  }
+
+  protected runtimeMcpToolProfileKeyFor(serverId: string): string {
+    return (
+      this.runtimeMcpSelections().find(
+        (selection) => selection.serverId === serverId,
+      )?.toolProfileKey ?? ''
+    );
+  }
+
+  protected updateRuntimeMcpToolProfileKey(serverId: string, event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.runtimeMcpDirty.set(true);
+    this.runtimeMcpSelections.update((selections) =>
+      selections.map((selection) =>
+        selection.serverId === serverId
+          ? { ...selection, toolProfileKey: value }
+          : selection,
+      ),
+    );
+  }
+
+  /** Build the runtime-config request body for plan/apply (#3742). */
+  protected buildRuntimeConfigRequest(
+    record: AdminProfileRegistryRecord,
+  ): ProfileRegistryRuntimeConfigRequest {
+    const request: {
+      expectedRevision: number;
+      providerAlias?: string;
+      localToolProfileId?: string | null;
+      toolPolicy?: { requestedToolsets: readonly string[]; requestedTools: readonly string[] };
+      mcpBindings?: readonly CreateProfileMcpBinding[];
+    } = { expectedRevision: record.revision ?? 0 };
+
+    // Provider: only set an alias (never auto-clear to avoid wiping inline
+    // model config). Empty selection leaves the current provider untouched.
+    const alias = this.runtimeProviderAlias().trim();
+    if (alias !== '') request.providerAlias = alias;
+
+    // Tools: a selected local tool profile wins; otherwise send inline tool
+    // policy with localToolProfileId: null so Crew uses the inline selection.
+    const localToolProfileId = this.runtimeLocalToolProfileId().trim();
+    if (localToolProfileId !== '') {
+      request.localToolProfileId = localToolProfileId;
+    } else {
+      request.localToolProfileId = null;
+      request.toolPolicy = {
+        requestedToolsets: this.runtimeToolsetSelections().filter(
+          (id) => id.trim() !== '',
+        ),
+        requestedTools: this.runtimeToolSelections().filter(
+          (name) => name.trim() !== '',
+        ),
+      };
+    }
+
+    // MCP: only sent when touched; preserves advanced fields for retained
+    // servers by merging the draft over the seeded binding. An empty
+    // toolProfileKey clears it rather than keeping the seeded value.
+    if (this.runtimeMcpDirty()) {
+      request.mcpBindings = this.runtimeMcpSelections()
+        .filter((selection) => selection.serverId.trim() !== '')
+        .map((selection) => {
+          const seeded = this.seededMcpBindings.find(
+            (binding) => binding.serverId === selection.serverId,
+          );
+          const merged: {
+            -readonly [K in keyof CreateProfileMcpBinding]: CreateProfileMcpBinding[K];
+          } = seeded ? { ...seeded } : { serverId: selection.serverId };
+          const key = selection.toolProfileKey.trim();
+          if (key === '') {
+            delete merged.toolProfileKey;
+          } else {
+            merged.toolProfileKey = key;
+          }
+          return merged;
+        });
+    }
+
+    return request;
+  }
+
+  protected planRuntimeConfig(record: AdminProfileRegistryRecord): void {
+    void this.admin.planRegistryRuntimeConfig(
+      record.profileId,
+      this.buildRuntimeConfigRequest(record),
+    );
+  }
+
+  protected applyRuntimeConfig(record: AdminProfileRegistryRecord): void {
+    void this.admin.applyRegistryRuntimeConfig(
+      record.profileId,
+      this.buildRuntimeConfigRequest(record),
+    );
   }
 
   // ---- MCP binding resolution for this profile (#3649) -------------------
