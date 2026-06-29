@@ -25,7 +25,8 @@ interface ProviderFormState {
   readonly modelId: string;
   readonly contextWindowTokens: string;
   readonly maxOutputTokens: string;
-  readonly temperatureMilli: string;
+  /** Temperature as a human-friendly decimal (0–2); converted to milli on save. */
+  readonly temperature: string;
   readonly reasoningEffort: string;
   readonly reasoningFormat: string;
   readonly secret: string;
@@ -42,8 +43,9 @@ const INITIAL_FORM: ProviderFormState = {
   baseUrl: '',
   modelId: '',
   contextWindowTokens: '',
-  maxOutputTokens: '',
-  temperatureMilli: '',
+  // Sensible create-time defaults so operators don't start from blank fields.
+  maxOutputTokens: '4096',
+  temperature: '0.7',
   reasoningEffort: '',
   reasoningFormat: '',
   secret: '',
@@ -55,6 +57,20 @@ const REFRESH_MODES: readonly ModelProviderRefreshMode[] = [
   'none',
   'plan',
   'apply',
+];
+
+/**
+ * Reasoning effort levels offered in the dropdown. `''` leaves the field unset
+ * (omitted from the request, provider default applies). The named levels mirror
+ * the usual provider spread.
+ */
+const REASONING_EFFORT_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: '', label: '(default)' },
+  { value: 'none', label: 'none' },
+  { value: 'low', label: 'low' },
+  { value: 'medium', label: 'medium' },
+  { value: 'high', label: 'high' },
+  { value: 'xhigh', label: 'xhigh' },
 ];
 
 /**
@@ -77,6 +93,7 @@ export class AdminProvidersPanelComponent {
   readonly dismissed = output<void>();
 
   protected readonly refreshModes = REFRESH_MODES;
+  protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
   protected readonly form = signal<ProviderFormState>(INITIAL_FORM);
   protected readonly editingAlias = signal<string | null>(null);
   protected readonly refreshMode = signal<ModelProviderRefreshMode>('none');
@@ -156,10 +173,10 @@ export class AdminProvidersPanelComponent {
         provider.maxOutputTokens === undefined
           ? ''
           : String(provider.maxOutputTokens),
-      temperatureMilli:
+      temperature:
         provider.temperatureMilli === undefined
           ? ''
-          : String(provider.temperatureMilli),
+          : milliToDecimal(provider.temperatureMilli),
       reasoningEffort: provider.reasoningEffort ?? '',
       reasoningFormat: provider.reasoningFormat ?? '',
       secret: '',
@@ -208,7 +225,7 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
     ...optionalSecret(form.secret, form.clearSecret),
     ...optionalNumberField('contextWindowTokens', form.contextWindowTokens),
     ...optionalNumberField('maxOutputTokens', form.maxOutputTokens),
-    ...optionalNumberField('temperatureMilli', form.temperatureMilli),
+    ...optionalTemperatureMilli(form.temperature),
     ...(form.clearSecret ? { clearSecret: true } : {}),
   };
   // NOTE: `expectedRevision` is intentionally omitted (task #3722). Crew
@@ -244,4 +261,23 @@ function optionalSecret(
   if (clearSecret) return {};
   const trimmed = secret.trim();
   return trimmed === '' ? {} : { secret: trimmed };
+}
+
+/**
+ * Convert a human-friendly decimal temperature (e.g. "0.7") to the backend's
+ * integer milli units (700). Omitted when blank or non-numeric.
+ */
+function optionalTemperatureMilli(
+  value: string,
+): { temperatureMilli: number } | Record<string, never> {
+  const trimmed = value.trim();
+  if (trimmed === '') return {};
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return {};
+  return { temperatureMilli: Math.round(parsed * 1000) };
+}
+
+/** Convert backend milli temperature (700) to a decimal string ("0.7"). */
+function milliToDecimal(milli: number): string {
+  return String(milli / 1000);
 }

@@ -180,6 +180,64 @@ describe('AdminProvidersPanelComponent', () => {
     expect(transport.createAdminModelProvider.mock.calls).toHaveLength(1);
   });
 
+  it('applies create defaults and converts the decimal temperature to milli', async () => {
+    const fixture = await createPanel([]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mock: { calls: [ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'alias' | 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      saveProvider(): void;
+    };
+
+    component.updateText('alias', { target: { value: 'defaults-alias' } });
+    component.updateText('modelId', { target: { value: 'gpt-4o' } });
+    fixture.detectChanges();
+    component.saveProvider();
+    await fixture.whenStable();
+
+    const call = transport.createAdminModelProvider.mock.calls[0];
+    if (call === undefined) throw new Error('expected a create call');
+    const [request] = call;
+    // Sensible defaults populated, temperature sent in milli (0.7 -> 700).
+    expect(request.maxOutputTokens).toBe(4096);
+    expect(request.temperatureMilli).toBe(700);
+  });
+
+  it('round-trips an existing provider temperature from milli to the decimal field', async () => {
+    const fixture = await createPanel([
+      { ...makeProvider('warm'), temperatureMilli: 250 },
+    ]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      saveProvider(): void;
+    };
+
+    component.selectProviderForEdit({
+      ...makeProvider('warm'),
+      temperatureMilli: 250,
+    });
+    fixture.detectChanges();
+    component.saveProvider();
+    await fixture.whenStable();
+
+    const call = transport.updateAdminModelProvider.mock.calls[0];
+    if (call === undefined) throw new Error('expected an update call');
+    const [, request] = call;
+    // 250 milli seeded as 0.25 in the field, sent back as 250 milli.
+    expect(request.temperatureMilli).toBe(250);
+  });
+
   it('omits expectedRevision when saving an edited provider so the save overwrites (#3722)', async () => {
     // Provider record carries revision 1; after the record advances elsewhere
     // a stale revision would 409. The save must overwrite, so the request
