@@ -207,15 +207,59 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
       appliedRegistryPlan('prompt'),
     ),
     planAdminProfileRegistryRuntimeConfig: recordingFn(async () =>
-      registryPlan('runtime-config'),
+      runtimeConfigPlan(false),
     ),
     applyAdminProfileRegistryRuntimeConfig: recordingFn(async () =>
-      appliedRegistryPlan('runtime-config'),
+      runtimeConfigPlan(true),
     ),
   } as unknown as ChatTransport;
 }
 
-type RegistryPlanKind = 'update' | 'lifecycle' | 'prompt' | 'runtime-config';
+type RegistryPlanKind = 'update' | 'lifecycle' | 'prompt';
+
+/**
+ * A representative runtime-config plan/apply response (#3742). Distinct from
+ * {@link registryPlan}: no `kind`, runtime-config-specific implications, plus
+ * `runtimeConfig`/`nextWrite` and (on apply) `applied`/`record`/`effects`.
+ */
+function runtimeConfigPlan(applied: boolean) {
+  const base = {
+    ok: true,
+    profileId: 'rt-prime',
+    mode: applied ? ('apply' as const) : ('plan' as const),
+    expectedRevision: 5,
+    current: { profileId: 'rt-prime', revision: 5 },
+    next: { profileId: 'rt-prime', revision: 6 },
+    nextWrite: {},
+    runtimeConfig: {
+      providerAlias: 'default',
+      localToolProfileId: 'planner-tools',
+      mcpBindings: [],
+    },
+    diagnostics: [],
+    implications: {
+      registryRevisionWillIncrement: true as const,
+      profileFileWillChange: true,
+      serviceConfigWillChange: false,
+      configReloadRequired: true as const,
+      runtimeRebuildRecommended: true,
+      mcpRefreshRecommended: false,
+    },
+  };
+  return applied
+    ? {
+        ...base,
+        applied: true as const,
+        record: { profileId: 'rt-prime', revision: 6 },
+        effects: {
+          profilePath: '/profiles/rt-prime/profile.json',
+          runtimeConfigPath: '/service.json',
+          mcpBindings: { removed: 0, added: 0 },
+          applyResult: {},
+        },
+      }
+    : base;
+}
 
 function registryPlan(kind: RegistryPlanKind) {
   return {

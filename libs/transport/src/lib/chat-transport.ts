@@ -55,6 +55,8 @@ import type {
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
+  ProfileRegistryRuntimeConfigApplyResult,
+  ProfileRegistryRuntimeConfigPlan,
   ProfileRegistryRuntimeConfigRequest,
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWritePlan,
@@ -278,14 +280,14 @@ export class ChatTransport {
   planAdminProfileRegistryRuntimeConfig(
     profileId: string,
     request: ProfileRegistryRuntimeConfigRequest,
-  ): Promise<ProfileRegistryWritePlan> {
+  ): Promise<ProfileRegistryRuntimeConfigPlan> {
     return this.adminHttp.planProfileRegistryRuntimeConfig(profileId, request);
   }
 
   applyAdminProfileRegistryRuntimeConfig(
     profileId: string,
     request: ProfileRegistryRuntimeConfigRequest,
-  ): Promise<ProfileRegistryWriteApplyResult> {
+  ): Promise<ProfileRegistryRuntimeConfigApplyResult> {
     return this.adminHttp.applyProfileRegistryRuntimeConfig(profileId, request);
   }
 

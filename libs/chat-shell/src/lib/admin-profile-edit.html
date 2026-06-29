@@ -610,11 +610,18 @@
           Apply
         </button>
       </div>
-      @if (registryWritePlan(); as plan) {
+      @if (runtimeConfigPlan(); as plan) {
       <div class="rv-admin-profiles__result" role="status">
         <span>ok {{ plan.ok }}</span>
         <span
           >revision {{ plan.expectedRevision }} → {{ plan.next.revision }}</span
+        >
+        <span
+          >rebuild recommended {{ plan.implications.runtimeRebuildRecommended
+          }}</span
+        >
+        <span
+          >mcp refresh {{ plan.implications.mcpRefreshRecommended }}</span
         >
         @for (diag of plan.diagnostics; track diag.code) {
         <span
@@ -624,6 +631,16 @@
         >
           {{ diag.severity }} {{ diag.code }}: {{ diag.message }}
         </span>
+        }
+      </div>
+      } @else if (runtimeConfigResult(); as result) {
+      <div class="rv-admin-profiles__result" role="status">
+        <span>applied revision {{ result.record.revision }}</span>
+        @if (result.effects; as effects) {
+        <span
+          >mcp bindings +{{ effects.mcpBindings.added }} / -{{
+          effects.mcpBindings.removed }}</span
+        >
         }
       </div>
       }

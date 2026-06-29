@@ -22,6 +22,8 @@ import type {
   ProfileRegistryLifecycleRequest,
   ProfileRegistryLifecycleStatus,
   ProfileRegistryPromptRequest,
+  ProfileRegistryRuntimeConfigAppliedResult,
+  ProfileRegistryRuntimeConfigPlan,
   ProfileRegistryRuntimeConfigRequest,
   ProfileRegistryWritePlan,
 } from '@rusty-view/transport';
@@ -164,6 +166,24 @@ export class AdminProfileEditComponent {
     computed<ProfileRegistryWritePlan | null>(() => {
       const plan = this.admin.registryWritePlan();
       return plan?.profileId === this.profileId() ? plan : null;
+    });
+
+  /** The active runtime-config plan (#3742), scoped to this profile. */
+  protected readonly runtimeConfigPlan =
+    computed<ProfileRegistryRuntimeConfigPlan | null>(() => {
+      const plan = this.admin.runtimeConfigPlan();
+      return plan?.profileId === this.profileId() ? plan : null;
+    });
+
+  /** The applied runtime-config result (#3742), scoped to this profile. */
+  protected readonly runtimeConfigResult =
+    computed<ProfileRegistryRuntimeConfigAppliedResult | null>(() => {
+      const result = this.admin.runtimeConfigResult();
+      return result !== null &&
+        'applied' in result &&
+        result.profileId === this.profileId()
+        ? result
+        : null;
     });
 
   /** Seed the registry-fields form from the record once it resolves. */

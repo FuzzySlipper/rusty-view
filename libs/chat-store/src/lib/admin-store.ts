@@ -30,6 +30,8 @@ import {
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryLifecycleRequest,
   type ProfileRegistryPromptRequest,
+  type ProfileRegistryRuntimeConfigApplyResult,
+  type ProfileRegistryRuntimeConfigPlan,
   type ProfileRegistryRuntimeConfigRequest,
   type ProfileRegistryWriteApplyResult,
   type ProfileRegistryWritePlan,
@@ -88,6 +90,16 @@ export class AdminStore {
   );
   private readonly _registryWriteResult =
     signal<ProfileRegistryWriteApplyResult | null>(null);
+  /**
+   * Runtime-config (provider/tools/MCP, #3742) plan/result. Kept in dedicated
+   * signals because the runtime-config plan has a different shape than the
+   * field-update/lifecycle/prompt {@link ProfileRegistryWritePlan} (no `kind`,
+   * runtime-config-specific `implications`).
+   */
+  private readonly _runtimeConfigPlan =
+    signal<ProfileRegistryRuntimeConfigPlan | null>(null);
+  private readonly _runtimeConfigResult =
+    signal<ProfileRegistryRuntimeConfigApplyResult | null>(null);
   private readonly _modelProviders = signal<ModelProviderPage | null>(null);
   private readonly _providerWriteResult =
     signal<ModelProviderWriteResponse | null>(null);
@@ -122,6 +134,8 @@ export class AdminStore {
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly registryWritePlan = this._registryWritePlan.asReadonly();
   readonly registryWriteResult = this._registryWriteResult.asReadonly();
+  readonly runtimeConfigPlan = this._runtimeConfigPlan.asReadonly();
+  readonly runtimeConfigResult = this._runtimeConfigResult.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
   readonly providerLoadError = this._providerLoadError.asReadonly();
@@ -565,15 +579,15 @@ export class AdminStore {
   ): Promise<void> {
     this._saving.set(true);
     this._error.set(null);
-    this._registryWritePlan.set(null);
-    this._registryWriteResult.set(null);
+    this._runtimeConfigPlan.set(null);
+    this._runtimeConfigResult.set(null);
     try {
       const plan =
         await this.transport.planAdminProfileRegistryRuntimeConfig(
           profileId,
           request,
         );
-      this._registryWritePlan.set(plan);
+      this._runtimeConfigPlan.set(plan);
     } catch (error) {
       this._error.set(errorMessage(error));
     } finally {
@@ -584,8 +598,8 @@ export class AdminStore {
   /**
    * Apply a runtime-config change (task #3742): persists provider/tool/MCP
    * changes and rebuilds the runtime. On success the bumped record is exposed
-   * via `registryWriteResult` and the registry diagnostics are refreshed; a
-   * non-ok plan (e.g. revision mismatch) surfaces through `registryWritePlan`.
+   * via `runtimeConfigResult` and the registry diagnostics are refreshed; a
+   * non-ok plan (e.g. revision mismatch) surfaces through `runtimeConfigPlan`.
    */
   async applyRegistryRuntimeConfig(
     profileId: string,
@@ -593,17 +607,20 @@ export class AdminStore {
   ): Promise<void> {
     this._saving.set(true);
     this._error.set(null);
-    this._registryWriteResult.set(null);
-    this._registryWritePlan.set(null);
+    this._runtimeConfigResult.set(null);
+    this._runtimeConfigPlan.set(null);
     try {
       const result =
         await this.transport.applyAdminProfileRegistryRuntimeConfig(
           profileId,
           request,
         );
-      this.recordRegistryApplyResult(result);
       if ('applied' in result) {
+        this._runtimeConfigResult.set(result);
         await this.refresh();
+      } else {
+        // Non-ok plan (e.g. revision mismatch): surface its diagnostics.
+        this._runtimeConfigPlan.set(result);
       }
     } catch (error) {
       this._error.set(errorMessage(error));
@@ -616,6 +633,8 @@ export class AdminStore {
   clearRegistryWrite(): void {
     this._registryWritePlan.set(null);
     this._registryWriteResult.set(null);
+    this._runtimeConfigPlan.set(null);
+    this._runtimeConfigResult.set(null);
   }
 
   /**

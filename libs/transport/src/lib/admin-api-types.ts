@@ -792,6 +792,81 @@ export interface ProfileRegistryRuntimeConfigRequest {
 }
 
 /**
+ * The effective editable runtime config echoed back on a runtime-config plan
+ * (task #3742): the resolved provider/tool/MCP state after the requested
+ * change. Used for confirmation/preview.
+ */
+export interface EditableProfileRuntimeConfig {
+  readonly providerAlias: string;
+  readonly brain?: { readonly module?: string; readonly strategy?: string };
+  readonly localToolProfileId?: string;
+  readonly toolPolicy?: ProfileRuntimeToolPolicy;
+  readonly mcpBindings: readonly AdminProfileRuntimeMcpBinding[];
+}
+
+/**
+ * Implications block for a runtime-config write (task #3742). Distinct from the
+ * field-update/lifecycle implications: a runtime-config change may rewrite the
+ * profile file and service config and always requires a config reload.
+ */
+export interface ProfileRegistryRuntimeConfigImplications {
+  readonly registryRevisionWillIncrement: true;
+  readonly profileFileWillChange: boolean;
+  readonly serviceConfigWillChange: boolean;
+  readonly configReloadRequired: true;
+  readonly runtimeRebuildRecommended: boolean;
+  readonly mcpRefreshRecommended: boolean;
+}
+
+/**
+ * Plan for a runtime-config change (task #3742). Unlike the
+ * {@link ProfileRegistryWritePlan} family this has no `kind`, and carries the
+ * resolved `runtimeConfig` plus a runtime-config-specific `implications` block.
+ * `nextWrite` is the backend's persisted-write projection and is opaque to the
+ * UI.
+ */
+export interface ProfileRegistryRuntimeConfigPlan {
+  readonly ok: boolean;
+  readonly profileId: string;
+  readonly mode: 'plan' | 'apply';
+  readonly expectedRevision: number;
+  readonly current: AdminProfileRegistryRecord;
+  readonly next: AdminProfileRegistryRecord;
+  readonly nextWrite: unknown;
+  readonly runtimeConfig: EditableProfileRuntimeConfig;
+  readonly diagnostics: readonly ProfileRegistryWriteDiagnostic[];
+  readonly implications: ProfileRegistryRuntimeConfigImplications;
+}
+
+/** Runtime side effects of a runtime-config apply (task #3742). */
+export interface ProfileRegistryRuntimeConfigEffects {
+  readonly profilePath: string;
+  readonly runtimeConfigPath: string;
+  readonly mcpBindings: { readonly removed: number; readonly added: number };
+  readonly applyResult: unknown;
+}
+
+/**
+ * A successful runtime-config apply (task #3742): the plan plus `applied: true`,
+ * the persisted `record` (bumped revision), and runtime `effects`.
+ */
+export interface ProfileRegistryRuntimeConfigAppliedResult
+  extends ProfileRegistryRuntimeConfigPlan {
+  readonly applied: true;
+  readonly record: AdminProfileRegistryRecord;
+  readonly effects?: ProfileRegistryRuntimeConfigEffects;
+}
+
+/**
+ * Apply result for a runtime-config write (task #3742): either the applied
+ * result or, when the plan is not `ok` (e.g. revision mismatch), the
+ * non-applied plan (no `applied` field).
+ */
+export type ProfileRegistryRuntimeConfigApplyResult =
+  | ProfileRegistryRuntimeConfigAppliedResult
+  | ProfileRegistryRuntimeConfigPlan;
+
+/**
  * Body for the registry lifecycle plan/apply routes (#3521). `lifecycleStatus`
  * is the target status. `expectedRevision` is required for optimistic concurrency.
  */
@@ -852,7 +927,7 @@ export interface ProfileRegistryWriteImplications {
 export interface ProfileRegistryWritePlan {
   readonly ok: boolean;
   readonly profileId: string;
-  readonly kind: 'update' | 'lifecycle' | 'prompt' | 'runtime-config';
+  readonly kind: 'update' | 'lifecycle' | 'prompt';
   readonly mode: 'plan' | 'apply';
   readonly expectedRevision: number;
   readonly current: AdminProfileRegistryRecord;

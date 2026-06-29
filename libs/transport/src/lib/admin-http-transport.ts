@@ -32,6 +32,8 @@ import type {
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
+  ProfileRegistryRuntimeConfigApplyResult,
+  ProfileRegistryRuntimeConfigPlan,
   ProfileRegistryRuntimeConfigRequest,
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWritePlan,
@@ -327,7 +329,7 @@ export class AdminHttpTransport {
   planProfileRegistryRuntimeConfig(
     profileId: string,
     request: ProfileRegistryRuntimeConfigRequest,
-  ): Promise<ProfileRegistryWritePlan> {
+  ): Promise<ProfileRegistryRuntimeConfigPlan> {
     return this.request(
       'POST',
       registryWritePath(profileId, 'runtime-config', 'plan'),
@@ -344,7 +346,7 @@ export class AdminHttpTransport {
   applyProfileRegistryRuntimeConfig(
     profileId: string,
     request: ProfileRegistryRuntimeConfigRequest,
-  ): Promise<ProfileRegistryWriteApplyResult> {
+  ): Promise<ProfileRegistryRuntimeConfigApplyResult> {
     return this.request(
       'POST',
       registryWritePath(profileId, 'runtime-config', 'apply'),

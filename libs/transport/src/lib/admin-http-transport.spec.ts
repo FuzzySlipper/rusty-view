@@ -641,21 +641,29 @@ describe('AdminHttpTransport', () => {
   });
 
   it('plans a runtime-config change on the registry runtime-config route (#3742)', async () => {
+    // Crew's runtime-config plan has no `kind`, carries `runtimeConfig`, and a
+    // runtime-config-specific `implications` block.
     const planResponse = {
       ok: true,
       profileId: 'rt-prime',
-      kind: 'runtime-config',
       mode: 'plan',
       expectedRevision: 5,
       current: { profileId: 'rt-prime', revision: 5 },
       next: { profileId: 'rt-prime', revision: 6 },
+      nextWrite: {},
+      runtimeConfig: {
+        providerAlias: 'default',
+        localToolProfileId: 'planner-tools',
+        mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
+      },
       diagnostics: [],
       implications: {
         registryRevisionWillIncrement: true,
-        profileFilesUnchanged: false,
-        serviceConfigUnchanged: false,
+        profileFileWillChange: true,
+        serviceConfigWillChange: false,
+        configReloadRequired: true,
         runtimeRebuildRecommended: true,
-        lifecycleEffects: 'none',
+        mcpRefreshRecommended: false,
       },
     };
     const { fetch, lastRequest } = capturingFetch(jsonOk(planResponse));
@@ -668,7 +676,8 @@ describe('AdminHttpTransport', () => {
       mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
     });
 
-    expect(plan.kind).toBe('runtime-config');
+    expect(plan.implications.runtimeRebuildRecommended).toBe(true);
+    expect(plan.runtimeConfig.providerAlias).toBe('default');
     const req = lastRequest();
     expect(req.method).toBe('POST');
     expect(req.url).toContain(
@@ -683,20 +692,31 @@ describe('AdminHttpTransport', () => {
     const applyResponse = {
       ok: true,
       profileId: 'rt-prime',
-      kind: 'runtime-config',
       mode: 'apply',
       expectedRevision: 5,
       current: { profileId: 'rt-prime', revision: 5 },
       next: { profileId: 'rt-prime', revision: 6 },
+      nextWrite: {},
+      runtimeConfig: {
+        providerAlias: 'default',
+        mcpBindings: [],
+      },
       applied: true,
       record: { profileId: 'rt-prime', revision: 6 },
+      effects: {
+        profilePath: '/profiles/rt-prime/profile.json',
+        runtimeConfigPath: '/service.json',
+        mcpBindings: { removed: 0, added: 0 },
+        applyResult: {},
+      },
       diagnostics: [],
       implications: {
         registryRevisionWillIncrement: true,
-        profileFilesUnchanged: false,
-        serviceConfigUnchanged: false,
+        profileFileWillChange: true,
+        serviceConfigWillChange: false,
+        configReloadRequired: true,
         runtimeRebuildRecommended: true,
-        lifecycleEffects: 'none',
+        mcpRefreshRecommended: false,
       },
     };
     const { fetch, lastRequest } = capturingFetch(jsonOk(applyResponse));
@@ -715,6 +735,7 @@ describe('AdminHttpTransport', () => {
       throw new Error('expected an applied result');
     }
     expect(result.applied).toBe(true);
+    expect(result.record.revision).toBe(6);
     const req = lastRequest();
     expect(req.url).toContain(
       '/v1/admin/profiles/registry/rt-prime/runtime-config/apply',
