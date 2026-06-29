@@ -624,7 +624,19 @@ export class AdminStore {
       this._providerWriteResult.set(result);
       await this.refresh();
     } catch (error) {
-      this._error.set(errorMessage(error));
+      if (isProviderRevisionConflict(error)) {
+        // Recoverable conflict (task #3722): the record advanced elsewhere.
+        // Refresh so the panel shows current data, then surface a clear,
+        // non-generic message telling the operator to simply save again.
+        // Normal saves omit `expectedRevision` and never hit this; this guards
+        // the case Crew still reports a mismatch.
+        await this.refresh();
+        this._error.set(
+          'This provider was changed elsewhere; the list has been refreshed. Review the current values and save again to overwrite.',
+        );
+      } else {
+        this._error.set(errorMessage(error));
+      }
     } finally {
       this._saving.set(false);
     }
@@ -781,6 +793,19 @@ function errorMessage(error: unknown): string {
     return `${error.message} (${error.apiError.reason_code})`;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Whether an error is a model provider revision-mismatch conflict (task #3722).
+ * Crew returns a `409` with `reason_code: 'model_provider_revision_mismatch'`
+ * when a stale `expectedRevision` is supplied. Treated as a refreshable
+ * conflict rather than a generic service error.
+ */
+function isProviderRevisionConflict(error: unknown): boolean {
+  return (
+    error instanceof ChatTransportError &&
+    error.apiError?.reason_code === 'model_provider_revision_mismatch'
+  );
 }
 
 /**

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdminStore } from '@rusty-view/chat-store';
 import {
   ChatTransport,
+  ChatTransportError,
   type ModelProviderPage,
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
@@ -177,6 +178,78 @@ describe('AdminProvidersPanelComponent', () => {
     await fixture.whenStable();
 
     expect(transport.createAdminModelProvider.mock.calls).toHaveLength(1);
+  });
+
+  it('omits expectedRevision when saving an edited provider so the save overwrites (#3722)', async () => {
+    // Provider record carries revision 1; after the record advances elsewhere
+    // a stale revision would 409. The save must overwrite, so the request
+    // body must not carry expectedRevision at all.
+    const fixture = await createPanel([makeProvider('default')]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      updateText(
+        field: 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      saveProvider(): void;
+    };
+
+    component.selectProviderForEdit(makeProvider('default'));
+    component.updateText('modelId', { target: { value: 'gpt-4o-mini' } });
+    fixture.detectChanges();
+    component.saveProvider();
+    await fixture.whenStable();
+
+    const calls = transport.updateAdminModelProvider.mock.calls;
+    expect(calls).toHaveLength(1);
+    const call = calls[0];
+    if (call === undefined) throw new Error('expected an update call');
+    const [alias, request] = call;
+    expect(alias).toBe('default');
+    expect(request).not.toHaveProperty('expectedRevision');
+    expect(request.modelId).toBe('gpt-4o-mini');
+  });
+
+  it('treats a revision-mismatch 409 as a refreshable conflict, not a generic error (#3722)', async () => {
+    const fixture = await createPanel([makeProvider('default')]);
+    const store = TestBed.inject(AdminStore);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mockImplementationOnce(fn: () => Promise<never>): void;
+      };
+    };
+    // The next update raises Crew's revision-mismatch conflict envelope.
+    transport.updateAdminModelProvider.mockImplementationOnce(async () => {
+      throw new ChatTransportError({
+        code: 'http_error',
+        message: 'expected 2, found 3',
+        statusCode: 409,
+        apiError: {
+          code: 'conflict',
+          reason_code: 'model_provider_revision_mismatch',
+          message: 'expected 2, found 3',
+          retryable: false,
+        },
+      });
+    });
+
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      saveProvider(): void;
+    };
+    component.selectProviderForEdit(makeProvider('default'));
+    component.saveProvider();
+    await fixture.whenStable();
+
+    // Recoverable, actionable message — not a raw service error string.
+    expect(store.error()).toContain('changed elsewhere');
+    expect(store.error()).not.toContain('expected 2, found 3');
+    expect(store.saving()).toBe(false);
   });
 
   it('disables save when the alias or model id is blank on create', async () => {
