@@ -26,9 +26,12 @@ export type AppearanceFontFamily = 'system' | 'mono';
 export type AppearanceDensity = 'compact' | 'normal';
 
 /**
- * Colour overrides for the core surface/text/accent tokens. Every field is
- * optional — `undefined` means "use the token default" (the value is removed
- * from the document root so the `tokens.css` cascade wins).
+ * Per-token colour overrides for the full semantic colour palette (task #3691).
+ * Every field is optional — `undefined` means "use the selected base theme's
+ * token value" (the override is removed from the document root so the
+ * `tokens.css` cascade, including any `data-rv-theme` block, wins). Field keys
+ * mirror the `COLOR_TOKENS` map so the whole app can be reskinned from one
+ * place rather than each component inventing its own colours.
  */
 export interface AppearanceColors {
   /** Page/background (`--rv-color-bg`). */
@@ -37,15 +40,80 @@ export interface AppearanceColors {
   readonly surface?: string;
   /** Raised surfaces / buttons (`--rv-color-surface-raised`). */
   readonly surfaceRaised?: string;
+  /** Alternate/inset surface (`--rv-color-surface-alt`). */
+  readonly surfaceAlt?: string;
+  /** Disabled-control fill (`--rv-color-surface-disabled`). */
+  readonly surfaceDisabled?: string;
   /** Dividers (`--rv-color-border`). */
   readonly border?: string;
+  /** Strong dividers/outlines (`--rv-color-border-strong`). */
+  readonly borderStrong?: string;
   /** Primary text (`--rv-color-text-primary`). */
   readonly textPrimary?: string;
   /** Secondary text (`--rv-color-text-secondary`). */
   readonly textSecondary?: string;
+  /** Muted text (`--rv-color-text-muted`). */
+  readonly textMuted?: string;
   /** Accent / selection (`--rv-color-accent`). */
   readonly accent?: string;
+  /** Accent hover (`--rv-color-accent-hover`). */
+  readonly accentHover?: string;
+  /** Text on accent fills (`--rv-color-accent-text`). */
+  readonly accentText?: string;
+  /** Success (`--rv-color-success`). */
+  readonly success?: string;
+  /** Warning (`--rv-color-warning`). */
+  readonly warning?: string;
+  /** Danger (`--rv-color-danger`). */
+  readonly danger?: string;
+  /** Stream/secondary accent (`--rv-color-stream`). */
+  readonly stream?: string;
+  /** Modal backdrop / scrim (`--rv-color-scrim`). */
+  readonly scrim?: string;
 }
+
+/** Ordered list of every editable colour field plus a human label (task #3691). */
+export const APPEARANCE_COLOR_FIELDS: ReadonlyArray<{
+  readonly key: keyof AppearanceColors;
+  readonly label: string;
+}> = [
+  { key: 'bg', label: 'Background' },
+  { key: 'surface', label: 'Surface / panels' },
+  { key: 'surfaceRaised', label: 'Raised surface' },
+  { key: 'surfaceAlt', label: 'Alternate surface' },
+  { key: 'surfaceDisabled', label: 'Disabled fill' },
+  { key: 'border', label: 'Border' },
+  { key: 'borderStrong', label: 'Border (strong)' },
+  { key: 'textPrimary', label: 'Text (primary)' },
+  { key: 'textSecondary', label: 'Text (secondary)' },
+  { key: 'textMuted', label: 'Text (muted)' },
+  { key: 'accent', label: 'Accent / selection' },
+  { key: 'accentHover', label: 'Accent (hover)' },
+  { key: 'accentText', label: 'Text on accent' },
+  { key: 'success', label: 'Success' },
+  { key: 'warning', label: 'Warning' },
+  { key: 'danger', label: 'Danger' },
+  { key: 'stream', label: 'Stream' },
+  { key: 'scrim', label: 'Modal scrim' },
+];
+
+/**
+ * Selected named base theme (task #3691). `auto` follows the OS
+ * `prefers-color-scheme`; the others force a palette via the `data-rv-theme`
+ * attribute. Per-token {@link AppearanceColors} overrides layer on top.
+ */
+export type AppearanceThemeId = 'auto' | 'dark' | 'light' | 'high-contrast';
+
+/** Ordered named themes with labels for the appearance selector (task #3691). */
+export const APPEARANCE_THEMES: ReadonlyArray<{
+  readonly id: AppearanceThemeId;
+  readonly label: string;
+}> = [
+  { id: 'auto', label: 'Auto (system)' },
+  { id: 'dark', label: 'Dark' },
+  { id: 'light', label: 'Light' },
+  { id: 'high-contrast', label: 'High contrast' },
+];
 
 /**
  * How text blocks in the transcript are rendered. See {@link AppearanceSettings.textRenderMode}.
@@ -57,6 +125,8 @@ export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
  * adapter; never includes secrets or auth material.
  */
 export interface AppearanceSettings {
+  /** Selected named base theme (task #3691). Defaults to `auto`. */
+  readonly themeId: AppearanceThemeId;
   readonly fontFamily: AppearanceFontFamily;
   /**
    * Multiplier applied to the base font-size tokens. `1` is the token default;
@@ -111,12 +181,23 @@ const DENSITY_MULTIPLIERS: Readonly<Record<AppearanceDensity, number>> = {
 
 /** Default, debug-appropriate appearance. */
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
+  themeId: 'auto',
   fontFamily: 'system',
   fontScale: 1,
   density: 'normal',
   colors: {},
   textRenderMode: 'auto',
 };
+
+/** Coerce an arbitrary value into a valid named theme id (task #3691). */
+export function normalizeThemeId(value: unknown): AppearanceThemeId {
+  return value === 'dark' ||
+    value === 'light' ||
+    value === 'high-contrast' ||
+    value === 'auto'
+    ? value
+    : 'auto';
+}
 
 /** Clamp a font scale into the allowed range and round to a sane precision. */
 export function clampFontScale(value: number): number {

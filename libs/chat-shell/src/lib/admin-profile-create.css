@@ -1,0 +1,5 @@
+/*
+ * Create Profile window (#3690). Window frame, fields, MCP/tool selection, and
+ * preview styles are shared via admin-profile-shared.css; this file holds only
+ * create-window-specific overrides (currently none).
+ */

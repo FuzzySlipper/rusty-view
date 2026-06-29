@@ -31,7 +31,6 @@ interface ProviderFormState {
   readonly secret: string;
   readonly clearSecret: boolean;
   readonly status: ModelProviderStatus;
-  readonly expectedRevision: string;
 }
 
 const INITIAL_FORM: ProviderFormState = {
@@ -50,7 +49,6 @@ const INITIAL_FORM: ProviderFormState = {
   secret: '',
   clearSecret: false,
   status: 'active',
-  expectedRevision: '',
 };
 
 const REFRESH_MODES: readonly ModelProviderRefreshMode[] = [
@@ -167,7 +165,6 @@ export class AdminProvidersPanelComponent {
       secret: '',
       clearSecret: false,
       status: provider.status,
-      expectedRevision: String(provider.revision),
     });
   }
 
@@ -212,9 +209,12 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
     ...optionalNumberField('contextWindowTokens', form.contextWindowTokens),
     ...optionalNumberField('maxOutputTokens', form.maxOutputTokens),
     ...optionalNumberField('temperatureMilli', form.temperatureMilli),
-    ...optionalNumberField('expectedRevision', form.expectedRevision),
     ...(form.clearSecret ? { clearSecret: true } : {}),
   };
+  // NOTE: `expectedRevision` is intentionally omitted (task #3722). Crew
+  // overwrites the current record when it is absent, so normal edits succeed
+  // even after the record advanced elsewhere. Reintroduce it only behind an
+  // explicit compare-and-swap/advanced edit mode.
   return request;
 }
 

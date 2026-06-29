@@ -20,6 +20,7 @@ describe('ChatTheme', () => {
     });
     // Clean any token overrides left by previous tests on the real document.
     document.documentElement.style.cssText = '';
+    document.documentElement.removeAttribute('data-rv-theme');
   });
 
   it('applies default font sizes to the document root', () => {
@@ -122,5 +123,74 @@ describe('ChatTheme', () => {
     await theme.update({ textRenderMode: 'raw' });
     await theme.reset();
     expect(theme.settings().textRenderMode).toBe('auto');
+  });
+
+  it('selects a named base theme via the data-rv-theme attribute (#3691)', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    TestBed.flushEffects?.();
+    // auto sets no attribute.
+    expect(document.documentElement.hasAttribute('data-rv-theme')).toBe(false);
+
+    await theme.setTheme('high-contrast');
+    TestBed.flushEffects?.();
+    expect(document.documentElement.getAttribute('data-rv-theme')).toBe(
+      'high-contrast',
+    );
+
+    await theme.setTheme('auto');
+    TestBed.flushEffects?.();
+    expect(document.documentElement.hasAttribute('data-rv-theme')).toBe(false);
+  });
+
+  it('applies the full semantic colour set, not a subset (#3691)', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({
+      colors: {
+        warning: '#abcabc',
+        surfaceAlt: '#123123',
+        scrim: 'rgba(1, 2, 3, 0.4)',
+      },
+    });
+    TestBed.flushEffects?.();
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--rv-color-warning')).toBe('#abcabc');
+    expect(style.getPropertyValue('--rv-color-surface-alt')).toBe('#123123');
+    expect(style.getPropertyValue('--rv-color-scrim')).toBe(
+      'rgba(1, 2, 3, 0.4)',
+    );
+  });
+
+  it('round-trips settings through export/import (#3691)', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({
+      themeId: 'light',
+      fontScale: 1.2,
+      colors: { accent: '#0099ff' },
+    });
+    const json = theme.exportTheme();
+
+    await theme.reset();
+    expect(theme.settings().themeId).toBe('auto');
+
+    const ok = await theme.importTheme(json);
+    expect(ok).toBe(true);
+    expect(theme.settings().themeId).toBe('light');
+    expect(theme.settings().fontScale).toBe(1.2);
+    expect(theme.settings().colors.accent).toBe('#0099ff');
+  });
+
+  it('rejects invalid import JSON and junk colour values (#3691)', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    expect(await theme.importTheme('not json')).toBe(false);
+    expect(await theme.importTheme('42')).toBe(false);
+
+    // Junk colour keys/values are dropped on import.
+    const ok = await theme.importTheme(
+      JSON.stringify({ colors: { accent: '#fff', bogus: 5, danger: '' } }),
+    );
+    expect(ok).toBe(true);
+    expect(theme.settings().colors.accent).toBe('#fff');
+    expect('bogus' in theme.settings().colors).toBe(false);
+    expect('danger' in theme.settings().colors).toBe(false);
   });
 });

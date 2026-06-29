@@ -1,0 +1,5 @@
+/*
+ * Local tool profile editor (#3689). Window frame, fields, list, and tool
+ * selection styles are shared via admin-profile-shared.css; this file holds
+ * only editor-specific overrides (currently none).
+ */

@@ -734,4 +734,144 @@ describe('AdminHttpTransport', () => {
     expect(req.body).toContain('disabled');
     expect(req.body).toContain('"expectedRevision":3');
   });
+
+  it('lists local tool profiles from the live Crew route and normalizes the wire shape', async () => {
+    // Crew returns `{ items: [...] }` with `toolsets`/`tools` fields; the
+    // transport normalizes to `{ profiles: [...] }` with
+    // `requestedToolsets`/`requestedTools` for the UI.
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        items: [
+          {
+            id: 'research',
+            displayName: 'Research',
+            enabled: true,
+            system: false,
+            readOnly: false,
+            toolsets: ['web'],
+            tools: ['web.search'],
+            revision: 2,
+          },
+        ],
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.localToolProfiles();
+
+    const req = lastRequest();
+    expect(req.method).toBe('GET');
+    expect(req.url).toContain('/v1/admin/local-tool-profiles');
+    expect(req.url).not.toContain('/v1/admin/tool-profiles/');
+    expect(result.profiles).toHaveLength(1);
+    const profile = result.profiles[0];
+    if (profile === undefined) throw new Error('expected one profile');
+    expect(profile.id).toBe('research');
+    expect(profile.requestedToolsets).toEqual(['web']);
+    expect(profile.requestedTools).toEqual(['web.search']);
+    expect(profile.revision).toBe(2);
+  });
+
+  it('defaults missing selection arrays to empty when listing local tool profiles', async () => {
+    const { fetch } = capturingFetch(
+      jsonOk({
+        items: [
+          { id: 'bare', enabled: true, system: true, readOnly: true },
+        ],
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.localToolProfiles();
+
+    const profile = result.profiles[0];
+    if (profile === undefined) throw new Error('expected one profile');
+    expect(profile.requestedToolsets).toEqual([]);
+    expect(profile.requestedTools).toEqual([]);
+  });
+
+  it('creates a local tool profile, mapping selection fields to the Crew wire spelling', async () => {
+    // Crew write routes wrap the persisted record under data.profile.
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        profile: {
+          id: 'research',
+          enabled: true,
+          system: false,
+          readOnly: false,
+          toolsets: ['web'],
+          tools: ['web.search'],
+        },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const created = await transport.createLocalToolProfile({
+      id: 'research',
+      displayName: 'Research',
+      enabled: true,
+      requestedToolsets: ['web'],
+      requestedTools: ['web.search'],
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain('/v1/admin/local-tool-profiles');
+    const body = JSON.parse(req.body ?? '{}');
+    // Wire spelling, not the UI-facing field names.
+    expect(body.toolsets).toEqual(['web']);
+    expect(body.tools).toEqual(['web.search']);
+    expect('requestedToolsets' in body).toBe(false);
+    expect('requestedTools' in body).toBe(false);
+    // Response is unwrapped from data.profile and normalized to UI names.
+    expect(created.id).toBe('research');
+    expect(created.requestedToolsets).toEqual(['web']);
+  });
+
+  it('updates a local tool profile via PATCH on the live Crew route', async () => {
+    // Crew write routes wrap the persisted record under data.profile.
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        profile: {
+          id: 'research',
+          enabled: false,
+          system: false,
+          readOnly: false,
+          toolsets: ['web'],
+          tools: [],
+          revision: 5,
+        },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const updated = await transport.updateLocalToolProfile('research', {
+      enabled: false,
+      requestedToolsets: ['web'],
+      expectedRevision: 4,
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('PATCH');
+    expect(req.url).toContain('/v1/admin/local-tool-profiles/research');
+    const body = JSON.parse(req.body ?? '{}');
+    expect(body.toolsets).toEqual(['web']);
+    expect(body.enabled).toBe(false);
+    expect(body.expectedRevision).toBe(4);
+    // Response is unwrapped from data.profile and normalized.
+    expect(updated.id).toBe('research');
+    expect(updated.revision).toBe(5);
+    expect(updated.requestedToolsets).toEqual(['web']);
+  });
+
+  it('deletes a local tool profile via DELETE on the live Crew route', async () => {
+    const { fetch, lastRequest } = capturingFetch(jsonOk({}));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.deleteLocalToolProfile('research');
+
+    const req = lastRequest();
+    expect(req.method).toBe('DELETE');
+    expect(req.url).toContain('/v1/admin/local-tool-profiles/research');
+  });
 });

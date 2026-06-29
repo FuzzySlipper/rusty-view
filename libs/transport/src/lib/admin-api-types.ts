@@ -339,15 +339,65 @@ export interface AdminToolCatalog {
 }
 
 /**
- * Built-in (non-MCP) tool policy for the create-profile request (task #3686).
- * `requestedToolsets` opts into whole toolsets; `requestedTools` opts into
- * individual tool names. Omit (or send empty) for a profile with no built-in
- * tools. This is independent of `mcpBindings` — MCP tools are never expressed
- * here.
+ * Inline built-in (non-MCP) tool policy for the create-profile request (task
+ * #3686). `requestedToolsets`/`requestedTools` opt into raw toolsets/tools from
+ * Crew's catalog. This is the advanced/custom path; the preferred path is to
+ * reference a reusable local tool profile via the top-level `localToolProfileId`
+ * on {@link CreateAdminProfileRequest} (task #3689) instead.
+ *
+ * Omit entirely for a profile with no inline built-in tools. Independent of
+ * `mcpBindings` — MCP tools are never expressed here.
  */
 export interface CreateProfileToolPolicy {
   readonly requestedToolsets?: readonly string[];
   readonly requestedTools?: readonly string[];
+}
+
+/**
+ * A DB-backed local tool profile (task #3689 / Crew #3688): a reusable, named
+ * selection of built-in (non-MCP) toolsets/tools that profiles can reference by
+ * `id`. `system`/`readOnly` reflect backend-managed or immutable profiles;
+ * `diagnostics` surface stale/invalid toolset/tool references reported by
+ * backend validation. MCP servers are never part of a local tool profile.
+ */
+export interface AdminLocalToolProfile {
+  readonly id: string;
+  readonly displayName?: string;
+  readonly description?: string;
+  readonly enabled: boolean;
+  readonly system: boolean;
+  readonly readOnly: boolean;
+  readonly requestedToolsets: readonly string[];
+  readonly requestedTools: readonly string[];
+  readonly revision?: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly diagnostics?: readonly RuntimeConfigDiagnostic[];
+}
+
+/**
+ * List response for local tool profiles (task #3689). `profiles` are the
+ * configured local tool profiles; backends that have not shipped the route
+ * yield `null` at the transport layer so the UI degrades to an empty state.
+ */
+export interface AdminLocalToolProfileList {
+  readonly profiles: readonly AdminLocalToolProfile[];
+}
+
+/**
+ * Create/update body for a local tool profile (task #3689). `id` is accepted on
+ * create when the backend allows caller-supplied ids; omitted/ignored on
+ * update. `expectedRevision` guards concurrent updates. Omitted fields keep
+ * their current value on update.
+ */
+export interface AdminLocalToolProfileWriteRequest {
+  readonly id?: string;
+  readonly displayName?: string;
+  readonly description?: string;
+  readonly enabled?: boolean;
+  readonly requestedToolsets?: readonly string[];
+  readonly requestedTools?: readonly string[];
+  readonly expectedRevision?: number;
 }
 
 export interface CreateAdminProfileRequest {
@@ -365,9 +415,18 @@ export interface CreateAdminProfileRequest {
    */
   readonly mcpBindings?: readonly CreateProfileMcpBinding[];
   /**
-   * Built-in (non-MCP) tool policy (task #3686). Selected from Crew's tool
-   * catalog. Omit for a profile with no built-in tools. Kept separate from
-   * `mcpBindings`; MCP tools are never expressed here.
+   * Reference to a reusable DB-backed local tool profile (task #3689). This is
+   * the preferred create-flow shape: operators pick a named local tool profile
+   * instead of low-level toolset/tool arrays. Crew expects this at the top
+   * level (sibling of `toolPolicy`), not nested inside it. Mutually exclusive
+   * with an inline `toolPolicy` in the create UI.
+   */
+  readonly localToolProfileId?: string;
+  /**
+   * Inline built-in (non-MCP) tool policy (task #3686). Selected from Crew's
+   * tool catalog as an advanced/custom path. Omit when referencing a
+   * `localToolProfileId` or for a profile with no built-in tools. Kept separate
+   * from `mcpBindings`; MCP tools are never expressed here.
    */
   readonly toolPolicy?: CreateProfileToolPolicy;
   /**

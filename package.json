@@ -9,6 +9,7 @@
     "build:rusty-view": "nx build rusty-view",
     "lint": "nx run-many -t lint --all",
     "lint:affected": "nx affected -t lint",
+    "lint:tokens": "node tools/check-design-tokens.mjs",
     "typecheck": "nx run-many -t typecheck --all",
     "test": "nx run-many -t test --all",
     "test:affected": "nx affected -t test",
@@ -19,7 +20,7 @@
     "protocol:generate": "nx run protocol:generate",
     "protocol:check": "nx run protocol:check",
     "publish:libs": "node tools/publish-libs.mjs",
-    "ci": "prettier --check . && nx run-many -t lint typecheck test --all && nx run protocol:check && nx run-many -t build --all"
+    "ci": "prettier --check . && npm run lint:tokens && nx run-many -t lint typecheck test --all && nx run protocol:check && nx run-many -t build --all"
   },
   "devDependencies": {
     "@angular-devkit/core": "~21.2.0",

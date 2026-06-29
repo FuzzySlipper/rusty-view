@@ -1,0 +1,5 @@
+/*
+ * Edit Profile window (#3690). Window frame, fields, list, prompt, export, and
+ * MCP binding styles are shared via admin-profile-shared.css; this file holds
+ * only edit-window-specific overrides (currently none).
+ */

@@ -30,6 +30,9 @@ import type {
   AdminControlResponse,
   AdminDiagnosticsBundle,
   AdminDiagnosticsOverview,
+  AdminLocalToolProfile,
+  AdminLocalToolProfileList,
+  AdminLocalToolProfileWriteRequest,
   AdminMcpCatalog,
   AdminToolCatalog,
   AdminPage,
@@ -182,6 +185,27 @@ export class ChatTransport {
 
   adminToolCatalog(): Promise<AdminToolCatalog> {
     return this.adminHttp.toolCatalog();
+  }
+
+  adminLocalToolProfiles(): Promise<AdminLocalToolProfileList> {
+    return this.adminHttp.localToolProfiles();
+  }
+
+  adminCreateLocalToolProfile(
+    body: AdminLocalToolProfileWriteRequest,
+  ): Promise<AdminLocalToolProfile> {
+    return this.adminHttp.createLocalToolProfile(body);
+  }
+
+  adminUpdateLocalToolProfile(
+    id: string,
+    body: AdminLocalToolProfileWriteRequest,
+  ): Promise<AdminLocalToolProfile> {
+    return this.adminHttp.updateLocalToolProfile(id, body);
+  }
+
+  adminDeleteLocalToolProfile(id: string): Promise<void> {
+    return this.adminHttp.deleteLocalToolProfile(id);
   }
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {
