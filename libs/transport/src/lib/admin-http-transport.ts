@@ -143,12 +143,12 @@ export class AdminHttpTransport {
   async createLocalToolProfile(
     body: AdminLocalToolProfileWriteRequest,
   ): Promise<AdminLocalToolProfile> {
-    const wire = await this.request<LocalToolProfileWire>(
+    const wire = await this.request<LocalToolProfileWriteWire>(
       'POST',
       '/v1/admin/local-tool-profiles',
       { body: localToolProfileWriteBody(body) },
     );
-    return normalizeLocalToolProfile(wire);
+    return normalizeLocalToolProfile(wire.profile);
   }
 
   /** Update a local tool profile by id (task #3689). */
@@ -156,12 +156,12 @@ export class AdminHttpTransport {
     id: string,
     body: AdminLocalToolProfileWriteRequest,
   ): Promise<AdminLocalToolProfile> {
-    const wire = await this.request<LocalToolProfileWire>(
+    const wire = await this.request<LocalToolProfileWriteWire>(
       'PATCH',
       `/v1/admin/local-tool-profiles/${encodeURIComponent(id)}`,
       { body: localToolProfileWriteBody(body) },
     );
-    return normalizeLocalToolProfile(wire);
+    return normalizeLocalToolProfile(wire.profile);
   }
 
   /** Delete or archive a local tool profile by id (task #3689). */
@@ -631,6 +631,15 @@ interface LocalToolProfileWire
 interface LocalToolProfileListWire {
   readonly items?: readonly LocalToolProfileWire[];
   readonly profiles?: readonly LocalToolProfileWire[];
+}
+
+/**
+ * Wire shape of a create/update write response. Crew's write routes wrap the
+ * persisted record under `data.profile` (alongside other fields like
+ * `deleted`), unlike the list route which returns `items` directly.
+ */
+interface LocalToolProfileWriteWire {
+  readonly profile: LocalToolProfileWire;
 }
 
 /** Map a wire local tool profile into the UI-facing shape (task #3689). */

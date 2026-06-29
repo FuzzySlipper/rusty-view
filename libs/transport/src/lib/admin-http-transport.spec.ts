@@ -791,14 +791,17 @@ describe('AdminHttpTransport', () => {
   });
 
   it('creates a local tool profile, mapping selection fields to the Crew wire spelling', async () => {
+    // Crew write routes wrap the persisted record under data.profile.
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({
-        id: 'research',
-        enabled: true,
-        system: false,
-        readOnly: false,
-        toolsets: ['web'],
-        tools: ['web.search'],
+        profile: {
+          id: 'research',
+          enabled: true,
+          system: false,
+          readOnly: false,
+          toolsets: ['web'],
+          tools: ['web.search'],
+        },
       }),
     );
     const transport = new AdminHttpTransport(makeConfig(fetch));
@@ -820,24 +823,29 @@ describe('AdminHttpTransport', () => {
     expect(body.tools).toEqual(['web.search']);
     expect('requestedToolsets' in body).toBe(false);
     expect('requestedTools' in body).toBe(false);
-    // Response is normalized back to UI-facing names.
+    // Response is unwrapped from data.profile and normalized to UI names.
+    expect(created.id).toBe('research');
     expect(created.requestedToolsets).toEqual(['web']);
   });
 
   it('updates a local tool profile via PATCH on the live Crew route', async () => {
+    // Crew write routes wrap the persisted record under data.profile.
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({
-        id: 'research',
-        enabled: false,
-        system: false,
-        readOnly: false,
-        toolsets: [],
-        tools: [],
+        profile: {
+          id: 'research',
+          enabled: false,
+          system: false,
+          readOnly: false,
+          toolsets: ['web'],
+          tools: [],
+          revision: 5,
+        },
       }),
     );
     const transport = new AdminHttpTransport(makeConfig(fetch));
 
-    await transport.updateLocalToolProfile('research', {
+    const updated = await transport.updateLocalToolProfile('research', {
       enabled: false,
       requestedToolsets: ['web'],
       expectedRevision: 4,
@@ -850,6 +858,10 @@ describe('AdminHttpTransport', () => {
     expect(body.toolsets).toEqual(['web']);
     expect(body.enabled).toBe(false);
     expect(body.expectedRevision).toBe(4);
+    // Response is unwrapped from data.profile and normalized.
+    expect(updated.id).toBe('research');
+    expect(updated.revision).toBe(5);
+    expect(updated.requestedToolsets).toEqual(['web']);
   });
 
   it('deletes a local tool profile via DELETE on the live Crew route', async () => {
