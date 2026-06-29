@@ -8,8 +8,16 @@
   position: relative;
 }
 
+/*
+ * Nested create/edit/tool-profile window. Fixed to the viewport (not absolute
+ * to the list panel) so the window is sized by its own max-height and scrolls
+ * internally — an absolute overlay was clipped to the (often short) list
+ * height, cutting off the header/close button and the bottom Create button
+ * (the list panel host is `overflow: hidden`). Safe because no ancestor
+ * establishes a containing block, and the parent menu overlay is itself fixed.
+ */
 .rv-admin-profiles__window-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: var(--rv-z-overlay);
   display: flex;
