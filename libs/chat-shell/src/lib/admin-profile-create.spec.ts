@@ -299,9 +299,11 @@ describe('AdminProfileCreateComponent', () => {
     component.createProfile();
     await fixture.whenStable();
 
-    expect(lastCreateRequest(transport.createAdminProfile).toolPolicy).toEqual({
-      localToolProfileId: 'planner-tools',
-    });
+    // Crew expects the reusable profile as a top-level field, not nested in
+    // toolPolicy (which is reserved for inline toolset/tool requests).
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.localToolProfileId).toBe('planner-tools');
+    expect(request).not.toHaveProperty('toolPolicy');
   });
 
   it('falls back to a non-blocking empty state when no local tool profiles exist', async () => {
@@ -330,10 +332,11 @@ describe('AdminProfileCreateComponent', () => {
     component.createProfile();
     await fixture.whenStable();
 
-    // Local tool profile wins; raw toolsets are not sent.
-    expect(lastCreateRequest(transport.createAdminProfile).toolPolicy).toEqual({
-      localToolProfileId: 'planner-tools',
-    });
+    // Local tool profile wins; raw toolsets are not sent, and the reference is
+    // sent as a top-level field rather than nested in toolPolicy.
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.localToolProfileId).toBe('planner-tools');
+    expect(request).not.toHaveProperty('toolPolicy');
   });
 
   it('surfaces the planned runtime graph from the create flow', async () => {

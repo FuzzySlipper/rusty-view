@@ -339,19 +339,16 @@ export interface AdminToolCatalog {
 }
 
 /**
- * Built-in (non-MCP) tool policy for the create-profile request (task #3686,
- * extended #3689). Two mutually-preferred shapes:
- * - `localToolProfileId` references a reusable DB-backed local tool profile
- *   (task #3689). This is the preferred/default create-flow shape so operators
- *   pick a named profile instead of low-level toolset/tool arrays.
- * - `requestedToolsets`/`requestedTools` opt into raw toolsets/tools inline
- *   (task #3686), retained as an advanced/custom path.
+ * Inline built-in (non-MCP) tool policy for the create-profile request (task
+ * #3686). `requestedToolsets`/`requestedTools` opt into raw toolsets/tools from
+ * Crew's catalog. This is the advanced/custom path; the preferred path is to
+ * reference a reusable local tool profile via the top-level `localToolProfileId`
+ * on {@link CreateAdminProfileRequest} (task #3689) instead.
  *
- * Omit entirely for a profile with no built-in tools. Independent of
+ * Omit entirely for a profile with no inline built-in tools. Independent of
  * `mcpBindings` — MCP tools are never expressed here.
  */
 export interface CreateProfileToolPolicy {
-  readonly localToolProfileId?: string;
   readonly requestedToolsets?: readonly string[];
   readonly requestedTools?: readonly string[];
 }
@@ -418,9 +415,18 @@ export interface CreateAdminProfileRequest {
    */
   readonly mcpBindings?: readonly CreateProfileMcpBinding[];
   /**
-   * Built-in (non-MCP) tool policy (task #3686). Selected from Crew's tool
-   * catalog. Omit for a profile with no built-in tools. Kept separate from
-   * `mcpBindings`; MCP tools are never expressed here.
+   * Reference to a reusable DB-backed local tool profile (task #3689). This is
+   * the preferred create-flow shape: operators pick a named local tool profile
+   * instead of low-level toolset/tool arrays. Crew expects this at the top
+   * level (sibling of `toolPolicy`), not nested inside it. Mutually exclusive
+   * with an inline `toolPolicy` in the create UI.
+   */
+  readonly localToolProfileId?: string;
+  /**
+   * Inline built-in (non-MCP) tool policy (task #3686). Selected from Crew's
+   * tool catalog as an advanced/custom path. Omit when referencing a
+   * `localToolProfileId` or for a profile with no built-in tools. Kept separate
+   * from `mcpBindings`; MCP tools are never expressed here.
    */
   readonly toolPolicy?: CreateProfileToolPolicy;
   /**

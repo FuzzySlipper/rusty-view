@@ -124,37 +124,51 @@ export class AdminHttpTransport {
   /**
    * List DB-backed local tool profiles (task #3689 / Crew #3688). Reusable
    * named built-in tool selections referenced by profiles.
+   *
+   * Crew's live contract returns `{ items: [...] }` with `toolsets`/`tools`
+   * fields on each item; we normalize at this boundary to the UI-facing
+   * `{ profiles: [...] }` / `requestedToolsets`/`requestedTools` shape so the
+   * store and components stay decoupled from the wire spelling.
    */
-  localToolProfiles(): Promise<AdminLocalToolProfileList> {
-    return this.request('GET', '/v1/admin/tool-profiles');
+  async localToolProfiles(): Promise<AdminLocalToolProfileList> {
+    const wire = await this.request<LocalToolProfileListWire>(
+      'GET',
+      '/v1/admin/local-tool-profiles',
+    );
+    const items = wire.items ?? wire.profiles ?? [];
+    return { profiles: items.map(normalizeLocalToolProfile) };
   }
 
   /** Create a local tool profile (task #3689). */
-  createLocalToolProfile(
+  async createLocalToolProfile(
     body: AdminLocalToolProfileWriteRequest,
   ): Promise<AdminLocalToolProfile> {
-    return this.request('POST', '/v1/admin/tool-profiles', {
-      body: compactRecord(body as unknown as Record<string, unknown>),
-    });
+    const wire = await this.request<LocalToolProfileWire>(
+      'POST',
+      '/v1/admin/local-tool-profiles',
+      { body: localToolProfileWriteBody(body) },
+    );
+    return normalizeLocalToolProfile(wire);
   }
 
   /** Update a local tool profile by id (task #3689). */
-  updateLocalToolProfile(
+  async updateLocalToolProfile(
     id: string,
     body: AdminLocalToolProfileWriteRequest,
   ): Promise<AdminLocalToolProfile> {
-    return this.request(
+    const wire = await this.request<LocalToolProfileWire>(
       'PATCH',
-      `/v1/admin/tool-profiles/${encodeURIComponent(id)}`,
-      { body: compactRecord(body as unknown as Record<string, unknown>) },
+      `/v1/admin/local-tool-profiles/${encodeURIComponent(id)}`,
+      { body: localToolProfileWriteBody(body) },
     );
+    return normalizeLocalToolProfile(wire);
   }
 
   /** Delete or archive a local tool profile by id (task #3689). */
   deleteLocalToolProfile(id: string): Promise<void> {
     return this.request(
       'DELETE',
-      `/v1/admin/tool-profiles/${encodeURIComponent(id)}`,
+      `/v1/admin/local-tool-profiles/${encodeURIComponent(id)}`,
     );
   }
 
@@ -594,6 +608,56 @@ function providerWriteBody(
     body['apiKey'] = request.apiKey;
   }
   return body;
+}
+
+/**
+ * Wire shape of a single local tool profile as returned by Crew (task #3689).
+ * Differs from the UI-facing {@link AdminLocalToolProfile} only in the spelling
+ * of the selection arrays: Crew uses `toolsets`/`tools`.
+ */
+interface LocalToolProfileWire
+  extends Omit<
+    AdminLocalToolProfile,
+    'requestedToolsets' | 'requestedTools'
+  > {
+  readonly toolsets?: readonly string[];
+  readonly tools?: readonly string[];
+}
+
+/**
+ * Wire shape of the list response. Crew returns `{ items: [...] }`; we also
+ * tolerate a `{ profiles: [...] }` spelling defensively.
+ */
+interface LocalToolProfileListWire {
+  readonly items?: readonly LocalToolProfileWire[];
+  readonly profiles?: readonly LocalToolProfileWire[];
+}
+
+/** Map a wire local tool profile into the UI-facing shape (task #3689). */
+function normalizeLocalToolProfile(
+  wire: LocalToolProfileWire,
+): AdminLocalToolProfile {
+  const { toolsets, tools, ...rest } = wire;
+  return {
+    ...rest,
+    requestedToolsets: toolsets ?? [],
+    requestedTools: tools ?? [],
+  };
+}
+
+/**
+ * Map a UI-facing write request into Crew's wire body (task #3689): rename
+ * `requestedToolsets`/`requestedTools` to `toolsets`/`tools` and drop
+ * empty/undefined fields.
+ */
+function localToolProfileWriteBody(
+  body: AdminLocalToolProfileWriteRequest,
+): Record<string, unknown> {
+  const { requestedToolsets, requestedTools, ...rest } = body;
+  const wire: Record<string, unknown> = { ...rest };
+  if (requestedToolsets !== undefined) wire['toolsets'] = requestedToolsets;
+  if (requestedTools !== undefined) wire['tools'] = requestedTools;
+  return compactRecord(wire);
 }
 
 function compactRecord(value: object): Record<string, unknown> {

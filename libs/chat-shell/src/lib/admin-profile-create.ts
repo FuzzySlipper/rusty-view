@@ -101,7 +101,7 @@ export class AdminProfileCreateComponent {
   protected readonly mcpSelections = signal<readonly McpBindingDraft[]>([]);
   /**
    * Selected reusable local tool profile id (#3689). Preferred default path:
-   * sent as `toolPolicy.localToolProfileId`. '' means none selected.
+   * sent as the top-level `localToolProfileId`. '' means none selected.
    */
   protected readonly selectedToolProfileId = signal<string>('');
   /**
@@ -369,7 +369,7 @@ function buildCreateProfileRequest(
     ...optionalString('providerAlias', form.providerAlias),
     ...optionalKind(form.kind),
     ...optionalMcpBindings(selection.mcpSelections),
-    ...optionalToolPolicy(selection),
+    ...optionalToolSelection(selection),
   };
   return request;
 }
@@ -396,18 +396,23 @@ function optionalMcpBindings(
 }
 
 /**
- * Build the `toolPolicy` entry (#3686/#3689). A selected reusable local tool
- * profile is preferred and wins: `toolPolicy.localToolProfileId`. Otherwise the
- * advanced inline toolset/tool selections are sent as `requestedToolsets`/
- * `requestedTools`. Omitted entirely when nothing is selected so a profile is
- * created with no built-in tools. Kept separate from `mcpBindings`.
+ * Build the built-in tool selection for the create request (#3686/#3689). A
+ * selected reusable local tool profile is preferred and wins, sent as the
+ * top-level `localToolProfileId` (Crew expects it as a sibling of `toolPolicy`,
+ * not nested inside it). Otherwise the advanced inline toolset/tool selections
+ * are sent as `toolPolicy.requestedToolsets`/`requestedTools`. Omitted entirely
+ * when nothing is selected so a profile is created with no built-in tools. Kept
+ * separate from `mcpBindings`.
  */
-function optionalToolPolicy(
+function optionalToolSelection(
   selection: ToolSelectionState,
-): { toolPolicy: CreateProfileToolPolicy } | Record<string, never> {
+):
+  | { localToolProfileId: string }
+  | { toolPolicy: CreateProfileToolPolicy }
+  | Record<string, never> {
   const localToolProfileId = selection.localToolProfileId.trim();
   if (localToolProfileId !== '') {
-    return { toolPolicy: { localToolProfileId } };
+    return { localToolProfileId };
   }
   const requestedToolsets = selection.toolsetSelections.filter(
     (id) => id.trim() !== '',
