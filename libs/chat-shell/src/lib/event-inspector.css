@@ -25,11 +25,23 @@
   display: flex;
   align-items: baseline;
   gap: var(--rv-space-xs);
+  /* Button resets — these rows are <button> for click + keyboard a11y. */
+  width: 100%;
+  appearance: none;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: none;
   padding: var(--rv-space-xs) var(--rv-space-sm);
   border-bottom: 1px solid var(--rv-color-border);
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
   cursor: pointer;
+}
+
+.rv-event:focus-visible {
+  outline: 2px solid var(--rv-color-accent);
+  outline-offset: -2px;
 }
 
 .rv-event:hover {

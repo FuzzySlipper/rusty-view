@@ -93,7 +93,14 @@
 }
 
 .rv-debug__inspector {
-  width: 360px;
+  /* Scales with the viewport instead of staying pinned at 360px, so widening
+   * the window gives the inspector real room (not just the transcript). */
+  width: clamp(360px, 32vw, 760px);
+  flex: 0 0 auto;
+  /* Drag the bottom-right grip to resize; the transcript (flex:1) reflows. */
+  resize: horizontal;
+  min-width: 320px;
+  max-width: 70vw;
   border-left: 1px solid var(--rv-color-border);
   overflow: hidden;
   display: flex;

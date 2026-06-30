@@ -1,9 +1,11 @@
 <div class="rv-event-inspector">
   <div class="rv-event-inspector__list">
     @for (event of events(); track event.event_id) {
-    <div
+    <button
+      type="button"
       class="rv-event"
       [class.rv-event--selected]="selectedEventId() === event.event_id"
+      (click)="selectEvent.emit(event.event_id)"
     >
       <span class="rv-event__seq">{{ event.sequence_id }}</span>
       <span
@@ -13,7 +15,7 @@
         {{ event.kind }}
       </span>
       <span class="rv-event__id">{{ event.event_id }}</span>
-    </div>
+    </button>
     } @empty {
     <div class="rv-event-inspector__empty">No events yet.</div>
     }

@@ -83,6 +83,7 @@
       <rv-event-inspector
         [events]="store.rawEvents()"
         [selectedEventId]="selectedEventId()"
+        (selectEvent)="selectEvent($event)"
       />
       } @else {
       <rv-context-diagnostics

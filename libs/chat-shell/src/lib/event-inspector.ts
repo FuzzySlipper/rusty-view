@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  input,
+  output,
+} from '@angular/core';
 import type { ChatEvent } from '@rusty-view/protocol';
 import { JsonInspectorComponent } from '@rusty-view/chat-components';
 
@@ -17,6 +22,8 @@ import { JsonInspectorComponent } from '@rusty-view/chat-components';
 export class EventInspectorComponent {
   readonly events = input<readonly ChatEvent[]>([]);
   readonly selectedEventId = input<string | undefined>(undefined);
+  /** Emits the clicked event's id so the shell can drive the JSON detail. */
+  readonly selectEvent = output<string>();
 
   protected readonly kindColor: Record<string, string> = {
     session_snapshot: 'rv-event-kind--snapshot',
