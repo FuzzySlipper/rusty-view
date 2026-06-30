@@ -544,7 +544,15 @@ export class ChatStore implements OnDestroy {
 
     try {
       for await (const event of stream.events()) {
-        this.ingestEvents([event]);
+        // Per-event isolation: a reducer/storage failure on one event must not
+        // tear down the live consumer loop (that would freeze the transcript
+        // while the connection still shows green — task #3848). Ingest each
+        // event independently so the stream keeps flowing.
+        try {
+          this.ingestEvents([event]);
+        } catch {
+          // Swallow: one bad event is dropped, the live stream continues.
+        }
       }
     } catch {
       // Stream errors are surfaced via onStateChange; nothing more to do.

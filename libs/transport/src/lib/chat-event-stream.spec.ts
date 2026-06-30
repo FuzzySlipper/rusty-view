@@ -354,6 +354,136 @@ describe('ChatEventStream', () => {
     expect(stream.getState().status).toBe('closed');
   });
 
+  it('keeps the stream alive when a frame body is not valid JSON (#3848)', async () => {
+    // A single malformed frame between two good events must NOT abort the read
+    // loop — otherwise live updates freeze while HTTP readback still works.
+    const { fetch, calls } = sequentialFetch([
+      sseResponse([
+        sseEvent('evt_1', 1, 'message_created', {
+          message_id: 'm1',
+          role: 'user',
+          body: 'first',
+        }),
+        'id: evt_bad\ndata: {not valid json\n\n',
+        sseEvent('evt_2', 2, 'message_created', {
+          message_id: 'm2',
+          role: 'assistant',
+          body: 'second',
+        }),
+      ]),
+    ]);
+
+    const stream = new ChatEventStream({
+      config: makeConfig({ reconnectMaxAttempts: 1 }),
+      sessionId: 'sess_1',
+      fetchImpl: fetch,
+      sleep: instantSleep,
+    });
+
+    const events: ChatEvent[] = [];
+    for await (const event of stream.events()) {
+      events.push(event);
+      if (events.length >= 3) {
+        stream.close();
+        break;
+      }
+    }
+
+    // All three frames are delivered; the bad one is coerced to `unknown` and
+    // keeps the backend's SSE id as its event id and cursor.
+    expect(events.map((e) => e.event_id)).toEqual([
+      'evt_1',
+      'evt_bad',
+      'evt_2',
+    ]);
+    expect(events[1]?.kind).toBe('unknown');
+    expect(stream.getLastCursor()).toBe('evt_2');
+    // No reconnect was needed — the single connection delivered everything.
+    expect(calls.length).toBe(1);
+  });
+
+  it('keeps the stream alive when a known kind has a malformed envelope (#3848)', async () => {
+    // A known kind missing required envelope fields would make the strict
+    // parser throw; the stream must coerce-and-continue, not die.
+    const badEnvelope =
+      'id: evt_bad\ndata: {"event_id":"evt_bad","kind":"message_created"}\n\n';
+    const { fetch } = sequentialFetch([
+      sseResponse([
+        badEnvelope,
+        sseEvent('evt_2', 2, 'message_created', {
+          message_id: 'm2',
+          role: 'assistant',
+          body: 'after',
+        }),
+      ]),
+    ]);
+
+    const stream = new ChatEventStream({
+      config: makeConfig({ reconnectMaxAttempts: 1 }),
+      sessionId: 'sess_1',
+      fetchImpl: fetch,
+      sleep: instantSleep,
+    });
+
+    const events: ChatEvent[] = [];
+    for await (const event of stream.events()) {
+      events.push(event);
+      if (events.length >= 2) {
+        stream.close();
+        break;
+      }
+    }
+
+    expect(events[0]?.kind).toBe('unknown');
+    expect(events[1]?.event_id).toBe('evt_2');
+  });
+
+  it('advances the cursor past a malformed frame so reconnect does not replay it (#3848)', async () => {
+    const { fetch, calls } = sequentialFetch([
+      // First connection: a good event then a malformed frame, then it ends.
+      sseResponse([
+        sseEvent('evt_1', 1, 'message_created', {
+          message_id: 'm1',
+          role: 'user',
+          body: 'first',
+        }),
+        'id: evt_bad\ndata: {broken\n\n',
+      ]),
+      // Reconnect: must resume from the malformed frame's id, not replay it.
+      sseResponse([
+        sseEvent('evt_3', 3, 'message_created', {
+          message_id: 'm3',
+          role: 'user',
+          body: 'third',
+        }),
+      ]),
+    ]);
+
+    const stream = new ChatEventStream({
+      config: makeConfig(),
+      sessionId: 'sess_1',
+      fetchImpl: fetch,
+      sleep: instantSleep,
+    });
+
+    const events: ChatEvent[] = [];
+    for await (const event of stream.events()) {
+      events.push(event);
+      if (event.event_id === 'evt_3') {
+        stream.close();
+        break;
+      }
+    }
+
+    expect(events.map((e) => e.event_id)).toEqual([
+      'evt_1',
+      'evt_bad',
+      'evt_3',
+    ]);
+    expect(calls[1]?.url).toContain('cursor=evt_bad');
+    expect(calls[1]?.headers.get('Last-Event-ID')).toBe('evt_bad');
+  });
+
   it('coerces unrecognized event kinds without crashing', async () => {
     const futureData = JSON.stringify({
       event_id: 'e_future',

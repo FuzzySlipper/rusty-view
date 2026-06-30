@@ -1116,6 +1116,37 @@ describe('ChatStore context diagnostics', () => {
     expect(store.messages()).toHaveLength(0);
   });
 
+  it('keeps consuming the live stream after an unknown/debug event (#3848)', async () => {
+    // An unknown (or coerced-unparseable) event in the live stream must not
+    // block the events that follow it from rendering.
+    const unknownEvent: ChatEvent = {
+      event_id: 'u1',
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-06-30T10:00:00Z',
+      kind: 'unknown',
+      payload: { summary: 'Unparseable SSE frame', raw: {} },
+    };
+    const messageEvent: ChatEvent = {
+      event_id: 'm-after',
+      session_id: 'sess_test',
+      sequence_id: 2,
+      created_at: '2026-06-30T10:00:01Z',
+      kind: 'message_created',
+      payload: { message_id: 'm-after', role: 'assistant', body: 'after' },
+    };
+    const transport = createMockTransport({
+      streamEvents: [unknownEvent, messageEvent],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((r) => setTimeout(r, 30)); // let the background stream deliver
+
+    // The message after the unknown event still rendered.
+    expect(store.messages().map((m) => m.id)).toContain('m-after');
+  });
+
   it('clears context usage when switching sessions', async () => {
     const transport = createMockTransport({});
     const store = setupStore(transport, new InMemoryChatStorage());

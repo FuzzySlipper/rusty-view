@@ -10,7 +10,7 @@ import {
   type ConnectionStateListener,
   type Unsubscribe,
 } from './connection-state';
-import { SseFrameParser } from './sse-frame-parser';
+import { SseFrameParser, type SseFrame } from './sse-frame-parser';
 
 /** Sleep function (injectable for testing). */
 export type SleepFunction = (ms: number) => Promise<void>;
@@ -196,6 +196,30 @@ export class ChatEventStream {
     return headers;
   }
 
+  /**
+   * Turn one SSE frame into a {@link ChatEvent} and advance the cursor.
+   *
+   * Resilience is load-bearing: a single malformed frame must NOT abort the
+   * read loop. If it did, the failure would propagate out of
+   * {@link connectAndRead}, the stream would reconnect from the last good
+   * cursor, replay the same bad frame, and loop — freezing live updates while
+   * the HTTP readback path (which does not run this parser) still returns the
+   * data on manual refresh. Instead we coerce an unparseable frame into an
+   * `unknown` event so it stays visible in the debug UI, and we ALWAYS advance
+   * the cursor (from the SSE `id`, which the backend sets to the event id and
+   * which survives a malformed JSON body) so reconnect never replays it.
+   */
+  private eventForFrame(frame: SseFrame): ChatEvent {
+    let event: ChatEvent;
+    try {
+      event = parseChatEvent(frame.data);
+    } catch (error) {
+      event = coerceUnparseableFrame(frame, error);
+    }
+    this.lastCursor = frame.id ?? event.event_id;
+    return event;
+  }
+
   private async *connectAndRead(): AsyncGenerator<ChatEvent> {
     const url = this.buildStreamUrl();
     const headers = this.buildStreamHeaders();
@@ -253,9 +277,7 @@ export class ChatEventStream {
         const frames = parser.feed(text);
 
         for (const frame of frames) {
-          const event = parseChatEvent(frame.data);
-          this.lastCursor = event.event_id;
-          yield event;
+          yield this.eventForFrame(frame);
         }
       }
 
@@ -264,9 +286,7 @@ export class ChatEventStream {
       if (remaining.length > 0 && !this.closed) {
         const finalFrames = parser.feed(remaining);
         for (const frame of finalFrames) {
-          const event = parseChatEvent(frame.data);
-          this.lastCursor = event.event_id;
-          yield event;
+          yield this.eventForFrame(frame);
         }
       }
     } catch (error) {
@@ -279,4 +299,30 @@ export class ChatEventStream {
       reader.releaseLock();
     }
   }
+}
+
+/**
+ * Coerce a frame whose `data` failed to parse into an `unknown` event so the
+ * live stream survives it (see {@link ChatEventStream.eventForFrame}). The
+ * original frame text and the parse error are preserved under `payload.raw` for
+ * the debug inspector. The SSE `id` (when present) is used as the event id so
+ * the cursor advances deterministically past the bad frame.
+ */
+function coerceUnparseableFrame(frame: SseFrame, error: unknown): ChatEvent {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    event_id:
+      frame.id ?? `sse-parse-error-${Math.random().toString(36).slice(2, 10)}`,
+    session_id: '',
+    sequence_id: 0,
+    created_at: new Date(0).toISOString(),
+    kind: 'unknown',
+    payload: {
+      summary: `Unparseable SSE frame: ${message}`,
+      raw: {
+        data: frame.data,
+        ...(frame.id !== undefined ? { id: frame.id } : {}),
+      },
+    },
+  };
 }
