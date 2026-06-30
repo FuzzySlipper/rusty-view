@@ -25,6 +25,29 @@ describe('resolveChatTransportConfig', () => {
     expect(config.fetchImpl).toBeUndefined();
   });
 
+  it('defaults writeTimeoutMs well above the read timeout', () => {
+    const config = resolveChatTransportConfig({
+      baseUrl: 'http://localhost:9347',
+    });
+    // Agent-waking writes must not inherit the short read timeout.
+    expect(config.writeTimeoutMs).toBeGreaterThan(config.timeoutMs);
+  });
+
+  it('allows writeTimeoutMs: 0 (disabled) and rejects negatives', () => {
+    expect(
+      resolveChatTransportConfig({
+        baseUrl: 'http://localhost:9347',
+        writeTimeoutMs: 0,
+      }).writeTimeoutMs,
+    ).toBe(0);
+    expect(() =>
+      resolveChatTransportConfig({
+        baseUrl: 'http://localhost:9347',
+        writeTimeoutMs: -1,
+      }),
+    ).toThrow();
+  });
+
   it('accepts a bearer token', () => {
     const config = resolveChatTransportConfig({
       baseUrl: 'http://localhost:9347',

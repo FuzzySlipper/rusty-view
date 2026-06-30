@@ -61,6 +61,12 @@ interface RequestOptions {
   query?: Record<string, unknown>;
   extraHeaders?: Record<string, string>;
   body?: unknown;
+  /**
+   * Per-request timeout override (ms). Falls back to the config read timeout
+   * when omitted. `0` disables the timeout (no abort signal) — used for
+   * agent-waking writes that legitimately outlast the read timeout.
+   */
+  timeoutMs?: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,6 +147,9 @@ export class ChatHttpTransport {
     const options: RequestOptions = {
       pathParams: { session_id: sessionId },
       body: request,
+      // Waking the agent blocks until the turn completes — outlasts the read
+      // timeout, so use the generous write timeout (see writeTimeoutMs).
+      timeoutMs: this.config.writeTimeoutMs,
     };
     if (idempotencyKey !== undefined) {
       options.extraHeaders = { [HEADER_NAMES.idempotencyKey]: idempotencyKey };
@@ -187,6 +196,8 @@ export class ChatHttpTransport {
     const options: RequestOptions = {
       pathParams: { session_id: sessionId },
       body: request,
+      // Commands can run an agent turn too — use the generous write timeout.
+      timeoutMs: this.config.writeTimeoutMs,
     };
     if (idempotencyKey !== undefined) {
       options.extraHeaders = { [HEADER_NAMES.idempotencyKey]: idempotencyKey };
@@ -251,10 +262,13 @@ export class ChatHttpTransport {
     options: RequestOptions,
   ): RequestInit {
     const headers = this.buildHeaders(options);
+    const timeoutMs = options.timeoutMs ?? this.config.timeoutMs;
     const init: RequestInit = {
       method,
       headers,
-      signal: AbortSignal.timeout(this.config.timeoutMs),
+      // A timeout of 0 disables the abort signal (unbounded write); any positive
+      // value caps the request as before.
+      ...(timeoutMs > 0 ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     };
     if (options.body !== undefined) {
       init.body = JSON.stringify(options.body);

@@ -14,6 +14,17 @@ export interface ChatTransportConfig {
   readonly baseUrl: string;
   readonly bearerToken?: string;
   readonly timeoutMs: number;
+  /**
+   * Timeout for agent-waking write requests (send-message, send-command), in ms.
+   *
+   * These POSTs block until the backend finishes the turn (model + tool calls),
+   * which routinely outlasts the read {@link timeoutMs}. Applying the 15s read
+   * timeout to them aborts the request mid-turn ("canceled" in devtools), which
+   * skips the post-write transcript catch-up and freezes the UI until a manual
+   * refresh. A generous cap avoids false cancellation while still releasing a
+   * genuinely hung socket. `0` disables the write timeout entirely.
+   */
+  readonly writeTimeoutMs: number;
   readonly reconnectInitialMs: number;
   readonly reconnectMaxMs: number;
   readonly reconnectMaxAttempts: number;
@@ -29,6 +40,10 @@ export type ChatTransportConfigInput = Pick<ChatTransportConfig, 'baseUrl'> &
   Partial<Omit<ChatTransportConfig, 'baseUrl'>>;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+// Ten minutes: long enough that a normal agent turn (model + tools) never gets
+// falsely aborted, short enough that a dead socket eventually releases the
+// pending-send UI state instead of hanging forever.
+const DEFAULT_WRITE_TIMEOUT_MS = 600_000;
 const DEFAULT_RECONNECT_INITIAL_MS = 500;
 const DEFAULT_RECONNECT_MAX_MS = 30_000;
 const DEFAULT_RECONNECT_MAX_ATTEMPTS = 10;
@@ -53,6 +68,7 @@ export function resolveChatTransportConfig(
   const config: ChatTransportConfig = {
     baseUrl,
     timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    writeTimeoutMs: input.writeTimeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS,
     reconnectInitialMs:
       input.reconnectInitialMs ?? DEFAULT_RECONNECT_INITIAL_MS,
     reconnectMaxMs: input.reconnectMaxMs ?? DEFAULT_RECONNECT_MAX_MS,
@@ -86,6 +102,9 @@ function validateBearerToken(raw: string): string {
 function validateConfig(config: ChatTransportConfig): void {
   if (config.timeoutMs < 1) {
     throw new ChatTransportConfigError('timeoutMs must be >= 1');
+  }
+  if (config.writeTimeoutMs < 0) {
+    throw new ChatTransportConfigError('writeTimeoutMs must be >= 0');
   }
   if (config.reconnectInitialMs < 0) {
     throw new ChatTransportConfigError('reconnectInitialMs must be >= 0');

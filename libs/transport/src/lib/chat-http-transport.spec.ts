@@ -90,6 +90,48 @@ function capturingFetch(response: Response): {
   };
 }
 
+/**
+ * A fetch that resolves with `response` after `delayMs`, but honors the request's
+ * abort signal: if the signal aborts first (e.g. AbortSignal.timeout fires), it
+ * rejects with the signal's reason — mirroring how a real fetch behaves when the
+ * configured timeout elapses before the response arrives.
+ */
+function signalHonoringFetch(
+  delayMs: number,
+  response: Response,
+): { fetch: FetchImpl; lastSignal: () => AbortSignal | undefined } {
+  let seen: AbortSignal | undefined;
+  let called = false;
+  const fetch = ((_input: RequestInfo | URL, init?: RequestInit) => {
+    seen = init?.signal ?? undefined;
+    called = true;
+    return new Promise<Response>((resolve, reject) => {
+      const signal = init?.signal;
+      const timer = setTimeout(() => resolve(response), delayMs);
+      if (signal !== undefined && signal !== null) {
+        if (signal.aborted) {
+          clearTimeout(timer);
+          reject(signal.reason);
+          return;
+        }
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        });
+      }
+    });
+  }) as FetchImpl;
+  return {
+    fetch,
+    lastSignal: () => {
+      if (!called) {
+        throw new Error('fetch was not called');
+      }
+      return seen;
+    },
+  };
+}
+
 describe('ChatHttpTransport', () => {
   describe('listSessions', () => {
     it('sends GET to /v1/chat/sessions', async () => {
@@ -218,6 +260,66 @@ describe('ChatHttpTransport', () => {
       });
 
       expect(lastRequest().headers.get('Idempotency-Key')).toBeNull();
+    });
+  });
+
+  describe('write timeout (#3848)', () => {
+    const acceptedResult = (): Response =>
+      jsonOk({ status: 'accepted', message_id: 'm', latest_cursor: 'c' });
+
+    function configWith(
+      overrides: Partial<{
+        timeoutMs: number;
+        writeTimeoutMs: number;
+        fetchImpl: FetchImpl;
+      }>,
+    ): ChatTransportConfig {
+      return resolveChatTransportConfig({
+        baseUrl: 'http://localhost:9347',
+        ...overrides,
+      });
+    }
+
+    it('does not apply the short read timeout to send-message', async () => {
+      // Response arrives after the read timeout but well within the write one:
+      // the old behavior aborted this POST at timeoutMs ("canceled" in devtools).
+      const { fetch } = signalHonoringFetch(60, acceptedResult());
+      const transport = new ChatHttpTransport(
+        configWith({ timeoutMs: 15, writeTimeoutMs: 5_000, fetchImpl: fetch }),
+      );
+
+      const result = await transport.sendMessage('sess_1', {
+        actor: { id: 'u1', kind: 'human' },
+        body: 'Hello',
+      });
+      expect(result.status).toBe('accepted');
+    });
+
+    it('still applies the read timeout to GET requests', async () => {
+      const { fetch } = signalHonoringFetch(
+        60,
+        jsonOk({ items: [], total: 0, limit: 100, offset: 0 }),
+      );
+      const transport = new ChatHttpTransport(
+        configWith({ timeoutMs: 15, writeTimeoutMs: 5_000, fetchImpl: fetch }),
+      );
+
+      await expect(transport.listSessions()).rejects.toBeInstanceOf(
+        ChatTransportError,
+      );
+    });
+
+    it('omits the abort signal entirely when writeTimeoutMs is 0', async () => {
+      const { fetch, lastSignal } = signalHonoringFetch(0, acceptedResult());
+      const transport = new ChatHttpTransport(
+        configWith({ writeTimeoutMs: 0, fetchImpl: fetch }),
+      );
+
+      await transport.sendMessage('sess_1', {
+        actor: { id: 'u1', kind: 'human' },
+        body: 'Hello',
+      });
+      expect(lastSignal()).toBeUndefined();
     });
   });
 
