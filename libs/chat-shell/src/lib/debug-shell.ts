@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { ChatStore } from '@rusty-view/chat-store';
 import {
+  ContextDiagnosticsComponent,
   MessageInputComponent,
   StreamStatusComponent,
 } from '@rusty-view/chat-components';
@@ -44,6 +45,7 @@ import {
     MessageInputComponent,
     StreamStatusComponent,
     EventInspectorComponent,
+    ContextDiagnosticsComponent,
     TopMenuComponent,
   ],
   templateUrl: './debug-shell.html',
@@ -56,7 +58,10 @@ export class DebugShellComponent {
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
 
   protected readonly showInspector = signal(true);
+  /** Which inspector tab is shown: the raw event log or context diagnostics. */
+  protected readonly inspectorTab = signal<'events' | 'context'>('events');
   protected readonly selectedEventId = signal<string | undefined>(undefined);
+  protected readonly contextLoading = signal(false);
   protected readonly pluginCommandPending = signal(false);
   protected readonly pluginCommandError = signal<string | undefined>(undefined);
 
@@ -116,6 +121,19 @@ export class DebugShellComponent {
 
   protected selectEvent(eventId: string): void {
     this.selectedEventId.set(eventId);
+  }
+
+  protected showInspectorTab(tab: 'events' | 'context'): void {
+    this.inspectorTab.set(tab);
+  }
+
+  protected async onRefreshContext(): Promise<void> {
+    this.contextLoading.set(true);
+    try {
+      await this.store.loadContextUsage();
+    } finally {
+      this.contextLoading.set(false);
+    }
   }
 
   protected onReturnToActive(): void {

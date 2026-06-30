@@ -13,6 +13,7 @@ import {
   projectProfiles,
   type BrainProfile,
   type ChatStorageAdapter,
+  type ContextTimelineEntry,
   type ConversationProjection,
 } from '@rusty-view/chat-domain';
 import type {
@@ -20,6 +21,7 @@ import type {
   ChatEvent,
   ChatSessionStatus,
   ChatSessionSummary,
+  SessionContextUsageResult,
 } from '@rusty-view/protocol';
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
@@ -67,6 +69,14 @@ export class ChatStore implements OnDestroy {
     status: 'idle',
   });
   private readonly _commandRegistry = signal<ChatCommandDescriptor[]>([]);
+  /**
+   * Latest model/provider/brain + context-usage diagnostics for the active
+   * session (`GET /v1/chat/sessions/{id}/context`). Null until loaded or when
+   * the backend does not expose the route.
+   */
+  private readonly _contextUsage = signal<SessionContextUsageResult | null>(
+    null,
+  );
   private readonly _pendingSends = signal<PendingSend[]>([]);
   private readonly _pendingCommands = signal<PendingSend[]>([]);
   /** Status of the open session, from openSession (authoritative current state). */
@@ -95,6 +105,8 @@ export class ChatStore implements OnDestroy {
   readonly rawEvents = this._rawEvents.asReadonly();
   readonly connectionState = this._connectionState.asReadonly();
   readonly commands = this._commandRegistry.asReadonly();
+  /** Model/provider/brain + context-usage diagnostics for the active session. */
+  readonly contextUsage = this._contextUsage.asReadonly();
   readonly pendingSends = this._pendingSends.asReadonly();
   readonly pendingCommands = this._pendingCommands.asReadonly();
   /** True when a message or command is currently in flight. */
@@ -125,6 +137,19 @@ export class ChatStore implements OnDestroy {
     () => this.isStreaming() && this._activeSessionStatus() === 'active',
   );
   readonly lastCursor = computed(() => this._projection().latestCursor ?? null);
+
+  /**
+   * Context strategy / compaction status rows projected from the four `context_*`
+   * events (oldest first). Rendered as UI/debug status rows, not assistant
+   * messages.
+   */
+  readonly contextTimeline = computed<readonly ContextTimelineEntry[]>(
+    () => this._projection().contextTimeline,
+  );
+  /** Most recent context status/compaction row, for at-a-glance display. */
+  readonly contextStatus = computed<ContextTimelineEntry | null>(
+    () => this._projection().contextStatus ?? null,
+  );
 
   // ---- profile / historical-session view state ----
   /** Brain profiles derived from the session list, ordered by recent activity. */
@@ -283,6 +308,7 @@ export class ChatStore implements OnDestroy {
     this._projection.set(emptyProjection());
     this._rawEvents.set([]);
     this._activeSessionStatus.set(null);
+    this._contextUsage.set(null);
 
     // 1. Load cached events from IndexedDB (survives refresh).
     const cachedEvents = await this.storage
@@ -312,6 +338,29 @@ export class ChatStore implements OnDestroy {
 
     // 3. Start the live SSE stream.
     await this.startStream(sessionId);
+
+    // 4. Best-effort context-usage diagnostics. Non-fatal: older backends may
+    // not expose the route, and the transcript must not depend on it.
+    void this.loadContextUsage();
+  }
+
+  /**
+   * Fetch model/provider/brain + context-usage diagnostics for the active
+   * session and store them. Best-effort: failures (e.g. a backend without the
+   * route) leave {@link contextUsage} null rather than throwing.
+   */
+  async loadContextUsage(): Promise<void> {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) return;
+    try {
+      const usage = await this.transport.sessionContext(sessionId);
+      // Guard against a late response after the user switched sessions.
+      if (this._activeSessionId() === sessionId) {
+        this._contextUsage.set(usage);
+      }
+    } catch {
+      // Diagnostics are optional; keep the current (or null) value.
+    }
   }
 
   /** Drop a stale `activeTurn` left by an incomplete (terminal-less) turn record. */
@@ -338,10 +387,16 @@ export class ChatStore implements OnDestroy {
     this._pendingSends.update((sends) => [...sends, pending]);
 
     try {
-      await this.transport.sendMessage(sessionId, {
+      const cursorBeforeSend = this.lastCursor();
+      const result = await this.transport.sendMessage(sessionId, {
         actor: DEBUG_ACTOR,
         body: text,
       });
+      await this.catchUpAfterWrite(
+        sessionId,
+        cursorBeforeSend,
+        result.latest_cursor,
+      );
       this._pendingSends.update((sends) =>
         sends.filter((s) => s.id !== pendingId),
       );
@@ -354,6 +409,23 @@ export class ChatStore implements OnDestroy {
         ),
       );
     }
+  }
+
+  /**
+   * Request/response writes can commit events before the live SSE consumer sees
+   * them. Replay from the pre-write cursor so the transcript updates even if the
+   * stream callback is delayed or misses the small write/subscribe window.
+   */
+  private async catchUpAfterWrite(
+    sessionId: string,
+    cursorBeforeWrite: string | null,
+    latestCursor: string,
+  ): Promise<void> {
+    if (cursorBeforeWrite === latestCursor) return;
+    const events = await this.transport.replayEvents(sessionId, {
+      ...(cursorBeforeWrite !== null ? { cursor: cursorBeforeWrite } : {}),
+    });
+    this.ingestEvents(events);
   }
 
   /**

@@ -1,0 +1,136 @@
+<div class="rv-context">
+  <header class="rv-context__header">
+    <span class="rv-context__title">Context diagnostics</span>
+    @if (degraded()) {
+    <span class="rv-context__degraded" role="status">degraded</span>
+    }
+    <button
+      type="button"
+      class="rv-context__refresh"
+      [disabled]="loading()"
+      (click)="onRefresh()"
+    >
+      {{ loading() ? 'Refreshing…' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (usage() === null) {
+  <div class="rv-context__empty">
+    {{ loading() ? 'Loading context diagnostics…' : 'No context diagnostics
+    available for this session.' }}
+  </div>
+  } @else {
+  <div class="rv-context__body">
+    @if (fillPercent() !== null) {
+    <div
+      class="rv-context__fill"
+      role="img"
+      [attr.aria-label]="'Context ' + fillPercent() + '% full'"
+    >
+      <div class="rv-context__fill-bar" [style.width.%]="fillPercent()"></div>
+      <span class="rv-context__fill-label">{{ fillPercent() }}% full</span>
+    </div>
+    }
+
+    <!-- Each section is omitted when the backend returns no fields for it. -->
+    @if (providerRows().length > 0) {
+    <section class="rv-context__section">
+      <h3 class="rv-context__section-title">Provider / model</h3>
+      <dl class="rv-context__rows">
+        @for (entry of providerRows(); track entry.label) {
+        <div class="rv-context__row">
+          <dt class="rv-context__row-label">{{ entry.label }}</dt>
+          <dd class="rv-context__row-value">{{ entry.value }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (brainRows().length > 0) {
+    <section class="rv-context__section">
+      <h3 class="rv-context__section-title">Brain</h3>
+      <dl class="rv-context__rows">
+        @for (entry of brainRows(); track entry.label) {
+        <div class="rv-context__row">
+          <dt class="rv-context__row-label">{{ entry.label }}</dt>
+          <dd class="rv-context__row-value">{{ entry.value }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (estimateRows().length > 0) {
+    <section class="rv-context__section">
+      <h3 class="rv-context__section-title">Context estimate</h3>
+      <dl class="rv-context__rows">
+        @for (entry of estimateRows(); track entry.label) {
+        <div class="rv-context__row">
+          <dt class="rv-context__row-label">{{ entry.label }}</dt>
+          <dd class="rv-context__row-value">{{ entry.value }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (strategyRows().length > 0) {
+    <section class="rv-context__section">
+      <h3 class="rv-context__section-title">Context strategy</h3>
+      <dl class="rv-context__rows">
+        @for (entry of strategyRows(); track entry.label) {
+        <div class="rv-context__row">
+          <dt class="rv-context__row-label">{{ entry.label }}</dt>
+          <dd class="rv-context__row-value">{{ entry.value }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (artifactRows().length > 0) {
+    <section class="rv-context__section">
+      <h3 class="rv-context__section-title">Latest compaction</h3>
+      <dl class="rv-context__rows">
+        @for (entry of artifactRows(); track entry.label) {
+        <div class="rv-context__row">
+          <dt class="rv-context__row-label">{{ entry.label }}</dt>
+          <dd class="rv-context__row-value">{{ entry.value }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (diagnostics().length > 0) {
+    <section class="rv-context__section">
+      <h3 class="rv-context__section-title">Diagnostics</h3>
+      <ul class="rv-context__diagnostics">
+        @for (entry of diagnostics(); track entry.code) {
+        <li
+          class="rv-context__diagnostic"
+          [class.rv-context__diagnostic--warning]="entry.severity === 'warning'"
+          [class.rv-context__diagnostic--error]="entry.severity === 'error'"
+        >
+          <span class="rv-context__diagnostic-code">{{ entry.code }}</span>
+          <span class="rv-context__diagnostic-message"
+            >{{ entry.message }}</span
+          >
+        </li>
+        }
+      </ul>
+    </section>
+    }
+  </div>
+  }
+
+  <!-- Context status / compaction event timeline: UI/debug rows, never model-facing. -->
+  <section class="rv-context__section rv-context__section--timeline">
+    <h3 class="rv-context__section-title">Status events</h3>
+    @if (timelineRows().length === 0) {
+    <div class="rv-context__empty">No context status events yet.</div>
+    } @else {
+    <ul class="rv-context-timeline">
+      @for (entry of timelineRows(); track entry.id) {
+      <li class="rv-context-timeline__row">
+        <span class="rv-context-timeline__kind" [class]="entry.kindClass">
+          {{ entry.kindLabel }}
+        </span>
+        <span class="rv-context-timeline__detail">{{ entry.detail }}</span>
+      </li>
+      }
+    </ul>
+    }
+  </section>
+</div>

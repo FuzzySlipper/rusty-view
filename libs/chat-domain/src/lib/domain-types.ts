@@ -230,6 +230,45 @@ export interface SummaryCheckpoint extends ConversationSnapshot {
   readonly summary: string;
 }
 
+// ---- context strategy / compaction status (tasks #3788/#3846/#3847) ----
+
+/** Quality of a context-usage token estimate, mirroring the wire enum. */
+export type ContextEstimateQuality = 'exact' | 'approximate' | 'unavailable';
+
+/**
+ * Which `context_*` event produced a {@link ContextTimelineEntry}. Mirrors the
+ * four browser-safe context event kinds the backend emits.
+ */
+export type ContextTimelineKind =
+  | 'status'
+  | 'compaction_started'
+  | 'compaction_completed'
+  | 'compaction_failed';
+
+/**
+ * A projected context strategy / compaction status row.
+ *
+ * These are produced from the four `context_*` events (which the backend marks
+ * `ui_debug: true` / `model_facing: false`). They render as UI/debug status
+ * rows, visually distinct from assistant transcript content, and are NEVER
+ * folded into messages — the backend never sends summary text here, only
+ * browser-safe metadata.
+ */
+export interface ContextTimelineEntry {
+  readonly id: string;
+  readonly kind: ContextTimelineKind;
+  readonly sessionId: string;
+  readonly wakeId: string | undefined;
+  readonly strategyId: string;
+  readonly estimateQuality: ContextEstimateQuality | undefined;
+  readonly fillPercent: number | undefined;
+  readonly compactAtPercent: number | undefined;
+  readonly targetPercentAfterCompaction: number | undefined;
+  readonly artifactId: string | undefined;
+  readonly reasonCode: string | undefined;
+  readonly createdAt: string;
+}
+
 // ---- the projection ----
 
 export interface StreamErrorState {
@@ -257,6 +296,14 @@ export interface ConversationProjection {
   readonly unknownEvents: readonly ChatEvent[];
   readonly sessionMetadata: ChatSessionSummary | undefined;
   readonly streamError: StreamErrorState | undefined;
+  /**
+   * Context strategy / compaction status rows in event order (oldest first),
+   * projected from the four `context_*` events. Rendered as UI/debug status
+   * rows, not assistant messages.
+   */
+  readonly contextTimeline: readonly ContextTimelineEntry[];
+  /** The most recent context status/compaction row, for at-a-glance display. */
+  readonly contextStatus: ContextTimelineEntry | undefined;
 }
 
 /** An empty projection — the starting point before any events are applied. */
@@ -273,5 +320,7 @@ export function emptyProjection(): ConversationProjection {
     unknownEvents: [],
     sessionMetadata: undefined,
     streamError: undefined,
+    contextTimeline: [],
+    contextStatus: undefined,
   };
 }

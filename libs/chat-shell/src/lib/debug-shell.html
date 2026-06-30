@@ -58,13 +58,40 @@
       }
     </main>
 
-    <!-- Inspector: raw events + JSON -->
+    <!-- Inspector: raw events + JSON, or context diagnostics -->
     @if (showInspector()) {
     <aside class="rv-debug__inspector">
+      <nav class="rv-debug__inspector-tabs">
+        <button
+          type="button"
+          class="rv-debug__inspector-tab"
+          [class.rv-debug__inspector-tab--active]="inspectorTab() === 'events'"
+          (click)="showInspectorTab('events')"
+        >
+          Events
+        </button>
+        <button
+          type="button"
+          class="rv-debug__inspector-tab"
+          [class.rv-debug__inspector-tab--active]="inspectorTab() === 'context'"
+          (click)="showInspectorTab('context')"
+        >
+          Context
+        </button>
+      </nav>
+      @if (inspectorTab() === 'events') {
       <rv-event-inspector
         [events]="store.rawEvents()"
         [selectedEventId]="selectedEventId()"
       />
+      } @else {
+      <rv-context-diagnostics
+        [usage]="store.contextUsage()"
+        [timeline]="store.contextTimeline()"
+        [loading]="contextLoading()"
+        (refresh)="onRefreshContext()"
+      />
+      }
     </aside>
     }
   </div>

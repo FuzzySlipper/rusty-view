@@ -46,6 +46,27 @@ describe('parseChatEvent', () => {
     }
   });
 
+  it('recognizes the context_* event kinds (not coerced to unknown)', () => {
+    const kinds = [
+      'context_status',
+      'context_compaction_started',
+      'context_compaction_completed',
+      'context_compaction_failed',
+    ] as const;
+    for (const kind of kinds) {
+      const event = parseChatEvent(
+        chatEventJson(kind, {
+          session_id: 'sess_1',
+          strategy_id: 'sliding-window',
+          fill_percent: 50,
+          ui_debug: true,
+          model_facing: false,
+        }),
+      );
+      expect(event.kind).toBe(kind);
+    }
+  });
+
   it('passes through an explicit unknown kind event without double-coercing', () => {
     const event = parseChatEvent(
       chatEventJson('unknown', {

@@ -132,6 +132,11 @@ export function pluginCommandDescriptor(
     description: command.description,
     scope: 'session',
     args_schema: pluginCommandArgsSchema(command),
+    // These commands are frontend-local plugins surfaced in the chat input.
+    positional_args: [],
+    named_args: [],
+    surfaces: ['chat-input'],
+    source: 'plugin',
     read_only: !mutating,
     mutating,
     requires_control_auth:

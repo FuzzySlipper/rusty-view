@@ -1,10 +1,13 @@
-import type { ChatEvent } from '@rusty-view/protocol';
+import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 
 import {
   emptyProjection,
   type ActiveAssistantTurn,
   type ChatMessage,
   type CommandProjection,
+  type ContextEstimateQuality,
+  type ContextTimelineEntry,
+  type ContextTimelineKind,
   type ConversationProjection,
   type MessageAuthor,
   type MessageBlock,
@@ -80,6 +83,34 @@ function applyEvent(
       return applyCommand(withCursor, event, 'completed');
     case 'command_failed':
       return applyCommand(withCursor, event, 'failed');
+    case 'context_status':
+      return applyContextEvent(withCursor, event, 'status');
+    case 'context_compaction_started':
+      return applyContextEvent(withCursor, event, 'compaction_started');
+    case 'context_compaction_completed':
+      return applyContextEvent(withCursor, event, 'compaction_completed');
+    case 'context_compaction_failed':
+      return applyContextEvent(withCursor, event, 'compaction_failed');
+    // Known kinds the conversation model does not yet project (message slots /
+    // variants, branches, snapshots, attachments, data-bank scopes). They are
+    // tracked by their own tasks; here they only advance the cursor so replay
+    // stays consistent. They are NOT coerced to `unknown` (they are recognized).
+    case 'message_slot_created':
+    case 'message_variant_created':
+    case 'message_variant_deleted':
+    case 'message_variants_reordered':
+    case 'message_active_variant_selected':
+    case 'conversation_branch_created':
+    case 'conversation_active_branch_selected':
+    case 'conversation_branch_head_updated':
+    case 'conversation_snapshot_created':
+    case 'attachment_uploaded':
+    case 'attachment_linked':
+    case 'attachment_removed':
+    case 'attachment_updated':
+    case 'data_bank_scope_created':
+    case 'data_bank_scope_removed':
+      return withCursor;
     case 'stream_error':
       return applyStreamError(withCursor, event);
     case 'unknown':
@@ -95,11 +126,14 @@ function applySessionSnapshot(
   projection: ConversationProjection,
   event: ChatEvent,
 ): ConversationProjection {
-  const payload = event.payload;
-  if ('session' in payload) {
-    return { ...projection, sessionMetadata: payload.session };
+  const payload = payloadRecord(event.payload);
+  const session = payload['session'];
+  if (!isPayloadObject(session)) {
+    return projection;
   }
-  return projection;
+  // A session_snapshot always carries a ChatSessionSummary; transport validated
+  // the envelope, so reading it as that shape is safe at the domain boundary.
+  return { ...projection, sessionMetadata: session as ChatSessionSummary };
 }
 
 // ---- message created ----
@@ -108,16 +142,14 @@ function applyMessageCreated(
   projection: ConversationProjection,
   event: ChatEvent,
 ): ConversationProjection {
-  const payload = event.payload;
-  if (
-    !('message_id' in payload) ||
-    !('role' in payload) ||
-    !('body' in payload)
-  ) {
+  const payload = payloadRecord(event.payload);
+  const messageId = readOptionalString(payload, 'message_id');
+  const role = readOptionalString(payload, 'role');
+  const body = readOptionalString(payload, 'body');
+  if (messageId === undefined || role === undefined || body === undefined) {
     return projection;
   }
 
-  const messageId = payload.message_id;
   if (messageExists(projection, messageId)) {
     return projection; // dedup: already have this message
   }
@@ -125,10 +157,10 @@ function applyMessageCreated(
   const message = buildMessage(
     messageId,
     event.session_id,
-    payload.role,
+    role as MessageRole,
     event.created_at,
     'completed',
-    [{ kind: 'text', content: payload.body }],
+    [{ kind: 'text', content: body }],
   );
 
   return { ...projection, messages: [...projection.messages, message] };
@@ -161,24 +193,18 @@ function applyAssistantTextDelta(
   projection: ConversationProjection,
   event: ChatEvent,
 ): ConversationProjection {
-  const payload = event.payload;
+  const payload = payloadRecord(event.payload);
 
   // The OpenAPI contract specifies `message_id` and `delta` fields, but the
   // live backend currently emits `wake_id` (or sometimes `message_id`) and
   // `text` for the delta content. Accept both shapes to handle contract drift.
+  const directMessageId = readOptionalString(payload, 'message_id');
+  const wakeId = readOptionalString(payload, 'wake_id');
   const messageId =
-    'message_id' in payload && typeof payload.message_id === 'string'
-      ? payload.message_id
-      : 'wake_id' in payload && typeof payload.wake_id === 'string'
-        ? `asst:${payload.wake_id}`
-        : undefined;
+    directMessageId ?? (wakeId !== undefined ? `asst:${wakeId}` : undefined);
 
   const delta =
-    'delta' in payload && typeof payload.delta === 'string'
-      ? payload.delta
-      : 'text' in payload && typeof payload.text === 'string'
-        ? payload.text
-        : undefined;
+    readOptionalString(payload, 'delta') ?? readOptionalString(payload, 'text');
 
   if (messageId === undefined || delta === undefined) {
     return projection;
@@ -255,49 +281,38 @@ function applyToolCall(
   event: ChatEvent,
   status: ToolCallProjection['status'],
 ): ConversationProjection {
-  const payload = event.payload;
+  const payload = payloadRecord(event.payload);
 
   // The OpenAPI contract specifies `tool_call_id`, `tool_name`, `summary` (and
   // `result_ref`/`reason_code`). The live backend instead keys tool calls by
   // `wake_id`, omits `summary`, and signals failure via `is_error` on the
   // completed event (no separate tool_call_failed/result_ref). Accept both.
   const toolCallId =
-    'tool_call_id' in payload && typeof payload.tool_call_id === 'string'
-      ? payload.tool_call_id
-      : 'wake_id' in payload && typeof payload.wake_id === 'string'
-        ? payload.wake_id
-        : undefined;
-  const toolName =
-    'tool_name' in payload && typeof payload.tool_name === 'string'
-      ? payload.tool_name
-      : undefined;
+    readOptionalString(payload, 'tool_call_id') ??
+    readOptionalString(payload, 'wake_id');
+  const toolName = readOptionalString(payload, 'tool_name');
   if (toolCallId === undefined || toolName === undefined) {
     return projection;
   }
 
-  const summary =
-    'summary' in payload && typeof payload.summary === 'string'
-      ? payload.summary
-      : toolName;
+  const summary = readOptionalString(payload, 'summary') ?? toolName;
 
   // A completed event carrying is_error is really a failure.
-  const isError = 'is_error' in payload && payload.is_error === true;
+  const isError = readPayloadBoolean(payload, 'is_error');
   const effectiveStatus: ToolCallProjection['status'] =
     status === 'completed' && isError ? 'failed' : status;
 
   const reasonCode =
-    'reason_code' in payload && typeof payload.reason_code === 'string'
-      ? payload.reason_code
-      : effectiveStatus === 'failed'
-        ? 'error'
-        : undefined;
+    readOptionalString(payload, 'reason_code') ??
+    (effectiveStatus === 'failed' ? 'error' : undefined);
 
+  const resultRef = payload['result_ref'];
   const entry: ToolCallProjection = {
     toolCallId,
     toolName,
     summary,
     status: effectiveStatus,
-    resultRef: 'result_ref' in payload ? payload.result_ref : undefined,
+    resultRef: isPayloadObject(resultRef) ? resultRef : undefined,
     reasonCode,
     eventId: event.event_id,
     createdAt: event.created_at,
@@ -340,24 +355,24 @@ function applyCommand(
   event: ChatEvent,
   status: CommandProjection['status'],
 ): ConversationProjection {
-  const payload = event.payload;
+  const payload = payloadRecord(event.payload);
+  const commandName = readOptionalString(payload, 'command_name');
+  const summary = readOptionalString(payload, 'summary');
   if (
-    !('command_name' in payload) ||
-    !('summary' in payload) ||
+    commandName === undefined ||
+    summary === undefined ||
     !('status' in payload)
   ) {
     return projection;
   }
 
   const entry: CommandProjection = {
-    commandName: payload.command_name,
-    summary: payload.summary,
+    commandName,
+    summary,
     status,
-    oldSessionId:
-      'old_session_id' in payload ? payload.old_session_id : undefined,
-    newSessionId:
-      'new_session_id' in payload ? payload.new_session_id : undefined,
-    reasonCode: 'reason_code' in payload ? payload.reason_code : undefined,
+    oldSessionId: readOptionalString(payload, 'old_session_id'),
+    newSessionId: readOptionalString(payload, 'new_session_id'),
+    reasonCode: readOptionalString(payload, 'reason_code'),
     eventId: event.event_id,
     createdAt: event.created_at,
   };
@@ -390,19 +405,117 @@ function applyStreamError(
   projection: ConversationProjection,
   event: ChatEvent,
 ): ConversationProjection {
-  const payload = event.payload;
-  if (!('message' in payload) || !('retryable' in payload)) {
+  const payload = payloadRecord(event.payload);
+  const message = readOptionalString(payload, 'message');
+  if (message === undefined || !('retryable' in payload)) {
     return projection;
   }
 
   const errorState: StreamErrorState = {
-    message: payload.message,
-    reasonCode: 'reason_code' in payload ? payload.reason_code : undefined,
-    retryable: payload.retryable,
+    message,
+    reasonCode: readOptionalString(payload, 'reason_code'),
+    retryable: readPayloadBoolean(payload, 'retryable'),
     eventId: event.event_id,
   };
 
   return { ...projection, streamError: errorState };
+}
+
+// ---- context strategy / compaction status ----
+
+const CONTEXT_ESTIMATE_QUALITIES: readonly ContextEstimateQuality[] = [
+  'exact',
+  'approximate',
+  'unavailable',
+];
+
+function readContextEstimateQuality(
+  value: unknown,
+): ContextEstimateQuality | undefined {
+  return typeof value === 'string' &&
+    (CONTEXT_ESTIMATE_QUALITIES as readonly string[]).includes(value)
+    ? (value as ContextEstimateQuality)
+    : undefined;
+}
+
+function readOptionalString(
+  payload: Record<string, unknown>,
+  field: string,
+): string | undefined {
+  const value = payload[field];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readOptionalInteger(
+  payload: Record<string, unknown>,
+  field: string,
+): number | undefined {
+  const value = payload[field];
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function readPayloadBoolean(
+  payload: Record<string, unknown>,
+  field: string,
+): boolean {
+  return payload[field] === true;
+}
+
+function isPayloadObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * View an event payload as a plain record. `ChatEventPayload` is a wide oneOf
+ * whose newer members (message slots/variants, conversation tree, attachments,
+ * data-bank scopes) carry `[key: string]: unknown` index signatures. Reading
+ * documented fields through a record view keeps field narrowing robust and
+ * tolerates the live backend's contract drift, instead of fighting the union's
+ * polluted `in`-narrowing. Transport guarantees the payload is a JSON object, so
+ * this widening cast is safe at the domain boundary.
+ */
+function payloadRecord(payload: ChatEvent['payload']): Record<string, unknown> {
+  return payload as Record<string, unknown>;
+}
+
+/**
+ * Project a `context_*` event into a {@link ContextTimelineEntry} and append it
+ * to the context timeline. The payload is the browser-safe `ContextDebugPayload`
+ * (metadata only — no summary text, no secrets). Entries render as UI/debug
+ * status rows and are never folded into assistant messages.
+ */
+function applyContextEvent(
+  projection: ConversationProjection,
+  event: ChatEvent,
+  kind: ContextTimelineKind,
+): ConversationProjection {
+  const payload = payloadRecord(event.payload);
+
+  const entry: ContextTimelineEntry = {
+    id: event.event_id,
+    kind,
+    sessionId: readOptionalString(payload, 'session_id') ?? event.session_id,
+    wakeId: readOptionalString(payload, 'wake_id'),
+    strategyId: readOptionalString(payload, 'strategy_id') ?? '',
+    estimateQuality: readContextEstimateQuality(payload['estimate_quality']),
+    fillPercent: readOptionalInteger(payload, 'fill_percent'),
+    compactAtPercent: readOptionalInteger(payload, 'compact_at_percent'),
+    targetPercentAfterCompaction: readOptionalInteger(
+      payload,
+      'target_percent_after_compaction',
+    ),
+    artifactId: readOptionalString(payload, 'artifact_id'),
+    reasonCode: readOptionalString(payload, 'reason_code'),
+    createdAt: event.created_at,
+  };
+
+  return {
+    ...projection,
+    contextTimeline: [...projection.contextTimeline, entry],
+    contextStatus: entry,
+  };
 }
 
 // ---- unknown ----
@@ -513,17 +626,16 @@ function replaceBlock(
 
 /** Serialize the detail/result content shown (collapsed) in a tool block. */
 function toolResultDetail(
-  payload: ChatEvent['payload'],
+  payload: Record<string, unknown>,
   status: ToolCallProjection['status'],
 ): string {
   if (status === 'failed') {
-    return 'reason_code' in payload && typeof payload.reason_code === 'string'
-      ? payload.reason_code
-      : '';
+    return readOptionalString(payload, 'reason_code') ?? '';
   }
-  if ('result_ref' in payload && payload.result_ref) {
+  const resultRef = payload['result_ref'];
+  if (isPayloadObject(resultRef)) {
     try {
-      return JSON.stringify(payload.result_ref, null, 2);
+      return JSON.stringify(resultRef, null, 2);
     } catch {
       return '';
     }

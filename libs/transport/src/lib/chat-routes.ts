@@ -25,6 +25,9 @@ export const SESSION_EVENTS_PATH =
 export const SESSION_STREAM_PATH =
   '/v1/chat/sessions/{session_id}/stream' as const satisfies ChatPath;
 
+export const SESSION_CONTEXT_PATH =
+  '/v1/chat/sessions/{session_id}/context' as const satisfies ChatPath;
+
 export const SESSION_MESSAGES_PATH =
   '/v1/chat/sessions/{session_id}/messages' as const satisfies ChatPath;
 

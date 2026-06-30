@@ -31,6 +31,10 @@ export class EventInspectorComponent {
     command_started: 'rv-event-kind--command',
     command_completed: 'rv-event-kind--command',
     command_failed: 'rv-event-kind--command',
+    context_status: 'rv-event-kind--context',
+    context_compaction_started: 'rv-event-kind--context',
+    context_compaction_completed: 'rv-event-kind--context',
+    context_compaction_failed: 'rv-event-kind--context',
     stream_error: 'rv-event-kind--error',
     unknown: 'rv-event-kind--unknown',
   };

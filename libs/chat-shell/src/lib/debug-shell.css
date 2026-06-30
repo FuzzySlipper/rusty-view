@@ -96,6 +96,37 @@
   width: 360px;
   border-left: 1px solid var(--rv-color-border);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rv-debug__inspector-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--rv-color-border);
+  flex: 0 0 auto;
+}
+
+.rv-debug__inspector-tab {
+  flex: 1;
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  background: var(--rv-color-surface);
+  border: none;
+  border-right: 1px solid var(--rv-color-border);
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-xs);
+  cursor: pointer;
+}
+
+.rv-debug__inspector-tab--active {
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text);
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-debug__inspector > rv-event-inspector,
+.rv-debug__inspector > rv-context-diagnostics {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Historical session banner — shown above the transcript when viewing an

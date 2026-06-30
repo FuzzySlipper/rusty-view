@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read model/provider/brain and approximate context usage diagnostics */
+        get: operations["getChatSessionContextUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/stream": {
         parameters: {
             query?: never;
@@ -89,6 +106,316 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List primary message slots for a chat session */
+        get: operations["listMessageSlots"];
+        put?: never;
+        /** Create a primary message slot and primary variant */
+        post: operations["createMessageSlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/slots/{slot_id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lazy-load non-deleted variants for one message slot */
+        get: operations["listMessageVariants"];
+        put?: never;
+        /** Create an alternate variant for one message slot */
+        post: operations["createMessageVariant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/slots/{slot_id}/variants/{variant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an alternate message variant */
+        delete: operations["deleteMessageVariant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/slots/{slot_id}/variants/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reorder alternate variants for one message slot */
+        post: operations["reorderMessageVariants"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/slots/{slot_id}/active-variant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select the active variant for one message slot with CAS conflict reporting */
+        post: operations["selectActiveMessageVariant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read generic conversation branch/snapshot projection for a session */
+        get: operations["getConversationTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/jump": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve a message, branch, snapshot, or cursor jump target */
+        get: operations["resolveConversationJump"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search persisted transcript messages for one chat session */
+        get: operations["searchCurrentSessionTranscript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search persisted transcript messages across chat sessions */
+        get: operations["searchCrossConversationTranscript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/branches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create or update a generic conversation branch */
+        post: operations["createConversationBranch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/branches/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select the active conversation branch with CAS conflict reporting */
+        post: operations["selectActiveConversationBranch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/branches/{branch_id}/head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update a branch head message with CAS conflict reporting */
+        post: operations["updateConversationBranchHead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create or update a generic conversation snapshot */
+        post: operations["createConversationSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List generic attachments for a chat session */
+        get: operations["listAttachments"];
+        put?: never;
+        /** Register uploaded attachment metadata and optional links */
+        post: operations["createAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Mark a generic attachment removed */
+        delete: operations["removeAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/data-bank/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reusable file scopes for a chat session */
+        get: operations["listDataBankScopes"];
+        put?: never;
+        /** Create or update a reusable file scope */
+        post: operations["createDataBankScope"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/data-bank/scopes/{scope_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Mark a reusable file scope removed */
+        delete: operations["removeDataBankScope"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/data-bank/scopes/{scope_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List attachments linked to one reusable file scope */
+        get: operations["listDataBankScopeAttachments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/commands": {
         parameters: {
             query?: never;
@@ -98,6 +425,23 @@ export interface paths {
         };
         /** List chat command registry entries */
         get: operations["listChatCommands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/commands/{command_name}/autocomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve backend-provided autocomplete values for a slash command argument */
+        get: operations["autocompleteChatCommandArgument"];
         put?: never;
         post?: never;
         delete?: never;
@@ -175,6 +519,7 @@ export interface components {
         ChatSessionOpenResult: {
             session: components["schemas"]["ChatSessionSummary"];
             events: components["schemas"]["ChatEvent"][];
+            message_slots?: components["schemas"]["MessageSlotRecord"][];
             latest_cursor: string;
             has_more_before: boolean;
         };
@@ -182,6 +527,88 @@ export interface components {
             items: components["schemas"]["ChatEvent"][];
             latest_cursor: string;
             has_more: boolean;
+        };
+        SessionContextUsageResult: {
+            session_id: string;
+            agent_id: string;
+            profile_id: string;
+            provider: {
+                alias: string;
+                /** @enum {string} */
+                status: "active" | "disabled" | "archived" | "missing" | "unknown";
+                /** @enum {string} */
+                protocol?: "responses" | "chat_completions";
+                provider_kind?: string;
+                display_name?: string;
+                base_url_host?: string;
+                base_url_redacted?: string;
+                model_id?: string;
+                context_window_tokens?: number;
+                max_output_tokens?: number;
+                temperature?: number;
+                reasoning_effort?: string;
+                reasoning_format?: string;
+                revision?: number;
+            };
+            brain: {
+                module?: string;
+                strategy?: string;
+                backend: string;
+            };
+            context_strategy: {
+                strategy_id: string;
+                enabled: boolean;
+                auto_compaction_enabled: boolean;
+                compact_at_percent: number;
+                target_percent_after_compaction: number;
+                max_context_percent_for_wake: number;
+                /** @enum {string} */
+                debug_visibility: "off" | "status" | "verbose";
+                include_debug_events_in_model_context: boolean;
+            };
+            tools: {
+                local_tool_profile_id?: string;
+                tool_count: number;
+                requested_toolsets?: string[];
+                requested_tools?: string[];
+                mcp_binding_count: number;
+                mcp_active_count: number;
+            };
+            context: {
+                /** @enum {string} */
+                estimate_quality: "exact" | "approximate" | "unavailable";
+                estimate_method: string;
+                estimator_id: string;
+                context_window_tokens?: number;
+                estimated_prompt_tokens?: number;
+                estimated_remaining_tokens?: number;
+                max_output_tokens?: number;
+                reserved_response_tokens?: number;
+                safety_margin_tokens?: number;
+                usable_input_tokens?: number;
+                sampled_event_count: number;
+                sampled_message_count: number;
+            };
+            latest_compaction_artifact?: {
+                artifact_id: string;
+                strategy_id: string;
+                branch_id?: string;
+                enters_future_context: boolean;
+                context_policy: string;
+                /** Format: date-time */
+                created_at: string;
+                /** Format: date-time */
+                updated_at: string;
+                estimate_before_json?: unknown;
+                estimate_after_json?: unknown;
+            };
+            degraded: boolean;
+            diagnostics: {
+                /** @enum {string} */
+                severity: "info" | "warning" | "error";
+                code: string;
+                message: string;
+            }[];
         };
         ChatEvent: {
             event_id: string;
@@ -193,18 +620,22 @@ export interface components {
             payload: components["schemas"]["ChatEventPayload"];
         };
         /** @enum {string} */
-        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "stream_error" | "unknown";
-        ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
+        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
+        ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
         SessionSnapshotPayload: {
             session: components["schemas"]["ChatSessionSummary"];
         };
         MessageCreatedPayload: {
             message_id: string;
+            slot_id?: string;
+            primary_variant_id?: string;
             client_message_id?: string;
             /** @enum {string} */
             role: "user" | "assistant" | "system" | "tool";
+            actor?: components["schemas"]["ChatActor"];
             body: string;
             correlation_id?: string;
+            reason?: string;
         };
         AssistantTextDeltaPayload: {
             message_id: string;
@@ -237,6 +668,22 @@ export interface components {
             new_session_id?: string;
             reason_code?: string;
         };
+        ContextDebugPayload: {
+            session_id: string;
+            wake_id?: string;
+            strategy_id: string;
+            /** @enum {string} */
+            estimate_quality?: "exact" | "approximate" | "unavailable";
+            fill_percent?: number;
+            compact_at_percent?: number;
+            target_percent_after_compaction?: number;
+            artifact_id?: string;
+            reason_code?: string;
+            /** @constant */
+            ui_debug: true;
+            /** @constant */
+            model_facing: false;
+        };
         StreamErrorPayload: {
             message: string;
             reason_code?: string;
@@ -264,10 +711,470 @@ export interface components {
             /** @enum {string} */
             status: "accepted" | "duplicate" | "rejected";
             message_id: string;
+            slot_id?: string;
+            primary_variant_id?: string;
             wake_id?: string;
             correlation_id?: string;
             latest_cursor: string;
             reason_code?: string;
+        };
+        MessageBlockRecord: {
+            block_id: string;
+            message_id: string;
+            ordinal: number;
+            kind: string;
+            content_json: unknown;
+            render_policy_json?: unknown;
+            metadata_json: unknown;
+        };
+        DurableMessageRecord: {
+            message_id: string;
+            session_id: string;
+            branch_id?: string | null;
+            parent_message_id?: string | null;
+            previous_message_id?: string | null;
+            author_id: string;
+            /** @enum {string} */
+            author_role: "user" | "assistant" | "system" | "tool";
+            /** @enum {string} */
+            status: "created" | "streaming" | "completed" | "failed" | "deleted";
+            body: string;
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            blocks: components["schemas"]["MessageBlockRecord"][];
+        };
+        MessageVariantRecord: {
+            variant_id: string;
+            slot_id: string;
+            /** @enum {string} */
+            source: "primary" | "alternate";
+            ordinal: number;
+            /** @enum {string} */
+            status: "active" | "deleted";
+            message: components["schemas"]["DurableMessageRecord"];
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MessageSlotRecord: {
+            slot_id: string;
+            session_id: string;
+            primary_variant_id: string;
+            active_variant_id?: string | null;
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+            primary: components["schemas"]["MessageVariantRecord"];
+            alternates: components["schemas"]["MessageVariantRecord"][];
+        };
+        MessageSlotPage: {
+            items: components["schemas"]["MessageSlotRecord"][];
+            total: number;
+            limit: number;
+            offset: number;
+            nextOffset?: number;
+        };
+        MessageVariantPage: {
+            items: components["schemas"]["MessageVariantRecord"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        AttachmentLinkRecord: {
+            link_id: string;
+            attachment_id: string;
+            session_id: string;
+            message_id?: string | null;
+            block_id?: string | null;
+            scope_id?: string | null;
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AttachmentRecord: {
+            attachment_id: string;
+            session_id: string;
+            /** @enum {string} */
+            status: "active" | "removed";
+            filename: string;
+            mime_type: string;
+            byte_size: number;
+            storage_url?: string | null;
+            download_url?: string | null;
+            thumbnail_url?: string | null;
+            extracted_text?: string | null;
+            extracted_text_truncated: boolean;
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            links: components["schemas"]["AttachmentLinkRecord"][];
+        };
+        AttachmentPage: {
+            items: components["schemas"]["AttachmentRecord"][];
+            total: number;
+            limit: number;
+            offset: number;
+            nextOffset?: number;
+        };
+        CreateAttachmentRequest: {
+            attachment_id?: string;
+            filename: string;
+            mime_type: string;
+            byte_size: number;
+            storage_url?: string | null;
+            download_url?: string | null;
+            thumbnail_url?: string | null;
+            extracted_text?: string | null;
+            /** @default false */
+            extracted_text_truncated: boolean;
+            message_id?: string | null;
+            block_id?: string | null;
+            scope_id?: string | null;
+            metadata_json?: unknown;
+            link_metadata_json?: unknown;
+            /** Format: date-time */
+            expires_at?: string | null;
+        };
+        AttachmentMutationResult: {
+            /** @enum {string} */
+            status: "created" | "linked" | "removed" | "updated";
+            attachment: components["schemas"]["AttachmentRecord"];
+            latest_cursor: string;
+        };
+        DataBankScopeRecord: {
+            scope_id: string;
+            session_id: string;
+            /** @enum {string} */
+            status: "active" | "removed";
+            label?: string | null;
+            description?: string | null;
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        DataBankScopePage: {
+            items: components["schemas"]["DataBankScopeRecord"][];
+            total: number;
+            limit: number;
+            offset: number;
+            nextOffset?: number;
+        };
+        CreateDataBankScopeRequest: {
+            scope_id?: string;
+            label?: string | null;
+            description?: string | null;
+            metadata_json?: unknown;
+        };
+        DataBankScopeMutationResult: {
+            /** @enum {string} */
+            status: "created" | "removed" | "updated";
+            scope: components["schemas"]["DataBankScopeRecord"];
+            latest_cursor: string;
+        };
+        MessageBlockDraft: {
+            block_id?: string;
+            kind: string;
+            content_json: unknown;
+            render_policy_json?: unknown;
+            metadata_json?: unknown;
+        };
+        CreateMessageSlotRequest: {
+            slot_id?: string;
+            primary_variant_id?: string;
+            message_id?: string;
+            actor: components["schemas"]["ChatActor"];
+            body: string;
+            metadata_json?: unknown;
+            variant_metadata_json?: unknown;
+            blocks?: components["schemas"]["MessageBlockDraft"][];
+        };
+        CreateMessageVariantRequest: {
+            variant_id?: string;
+            message_id?: string;
+            actor: components["schemas"]["ChatActor"];
+            body: string;
+            metadata_json?: unknown;
+            blocks?: components["schemas"]["MessageBlockDraft"][];
+        };
+        MessageSlotMutationResult: {
+            /** @enum {string} */
+            status: "created" | "deleted";
+            slot: components["schemas"]["MessageSlotRecord"];
+            latest_cursor: string;
+        };
+        MessageVariantMutationResult: {
+            /** @enum {string} */
+            status: "created";
+            variant: components["schemas"]["MessageVariantRecord"];
+            latest_cursor: string;
+        };
+        ReorderMessageVariantsRequest: {
+            ordered_variant_ids: string[];
+        };
+        MessageVariantsReorderResult: {
+            /** @enum {string} */
+            status: "reordered";
+            variants: components["schemas"]["MessageVariantRecord"][];
+            latest_cursor: string;
+        };
+        ActiveVariantExpectation: {
+            /** @constant */
+            type: "any";
+        } | {
+            /** @constant */
+            type: "primary";
+        } | {
+            /** @constant */
+            type: "variant";
+            variant_id: string;
+        };
+        SelectActiveMessageVariantRequest: {
+            active_variant_id?: string | null;
+            expected: components["schemas"]["ActiveVariantExpectation"];
+        };
+        ActiveVariantConflict: {
+            expected?: string | null;
+            actual?: string | null;
+        };
+        SelectActiveMessageVariantResult: {
+            /** @enum {string} */
+            status: "selected" | "conflict";
+            slot: components["schemas"]["MessageSlotRecord"];
+            conflict?: components["schemas"]["ActiveVariantConflict"];
+            latest_cursor: string;
+        };
+        MessageSlotPayload: {
+            slot?: components["schemas"]["MessageSlotRecord"];
+            slot_id?: string;
+            active_variant_id?: string | null;
+            conflict?: components["schemas"]["ActiveVariantConflict"];
+        } & {
+            [key: string]: unknown;
+        };
+        MessageVariantPayload: {
+            slot_id?: string;
+            variant_id?: string;
+            variant?: components["schemas"]["MessageVariantRecord"];
+            variants?: components["schemas"]["MessageVariantRecord"][];
+            ordered_variant_ids?: string[];
+            slot?: components["schemas"]["MessageSlotRecord"];
+        } & {
+            [key: string]: unknown;
+        };
+        ConversationBranchRecord: {
+            branch_id: string;
+            session_id: string;
+            parent_branch_id?: string | null;
+            parent_message_id?: string | null;
+            origin_message_id?: string | null;
+            head_message_id?: string | null;
+            label?: string | null;
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        ConversationBranchStateRecord: {
+            session_id: string;
+            active_branch_id?: string | null;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        ConversationSnapshotRecord: {
+            snapshot_id: string;
+            session_id: string;
+            branch_id?: string | null;
+            message_id?: string | null;
+            cursor?: string | null;
+            label?: string | null;
+            summary?: string | null;
+            /** @enum {string} */
+            source: "user" | "system" | "import";
+            metadata_json: unknown;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ConversationTreeProjection: {
+            branches: components["schemas"]["ConversationBranchRecord"][];
+            snapshots: components["schemas"]["ConversationSnapshotRecord"][];
+            branch_state: components["schemas"]["ConversationBranchStateRecord"];
+            active_branch_id?: string | null;
+        };
+        CreateConversationBranchRequest: {
+            branch_id?: string;
+            parent_branch_id?: string | null;
+            parent_message_id?: string | null;
+            origin_message_id?: string | null;
+            head_message_id?: string | null;
+            label?: string | null;
+            metadata_json?: unknown;
+        };
+        ConversationBranchMutationResult: {
+            /** @enum {string} */
+            status: "created";
+            branch: components["schemas"]["ConversationBranchRecord"];
+            latest_cursor: string;
+        };
+        ActiveBranchExpectation: {
+            /** @constant */
+            type: "any";
+        } | {
+            /** @constant */
+            type: "none";
+        } | {
+            /** @constant */
+            type: "branch";
+            branch_id: string;
+        };
+        SelectActiveConversationBranchRequest: {
+            active_branch_id?: string | null;
+            expected: components["schemas"]["ActiveBranchExpectation"];
+        };
+        SelectActiveConversationBranchResult: {
+            /** @enum {string} */
+            status: "selected" | "conflict";
+            state: components["schemas"]["ConversationBranchStateRecord"];
+            conflict?: components["schemas"]["ActiveVariantConflict"];
+            latest_cursor: string;
+        };
+        BranchHeadExpectation: {
+            /** @constant */
+            type: "any";
+        } | {
+            /** @constant */
+            type: "none";
+        } | {
+            /** @constant */
+            type: "message";
+            message_id: string;
+        };
+        UpdateConversationBranchHeadRequest: {
+            head_message_id?: string | null;
+            expected: components["schemas"]["BranchHeadExpectation"];
+        };
+        UpdateConversationBranchHeadResult: {
+            /** @enum {string} */
+            status: "updated" | "conflict";
+            branch: components["schemas"]["ConversationBranchRecord"];
+            conflict?: components["schemas"]["ActiveVariantConflict"];
+            latest_cursor: string;
+        };
+        CreateConversationSnapshotRequest: {
+            snapshot_id?: string;
+            branch_id?: string | null;
+            message_id?: string | null;
+            cursor?: string | null;
+            label?: string | null;
+            summary?: string | null;
+            /** @enum {string} */
+            source?: "user" | "system" | "import";
+            metadata_json?: unknown;
+        };
+        ConversationSnapshotMutationResult: {
+            /** @enum {string} */
+            status: "created";
+            snapshot: components["schemas"]["ConversationSnapshotRecord"];
+            latest_cursor: string;
+        };
+        ConversationJumpTarget: {
+            /** @constant */
+            type: "message";
+            message_id: string;
+        } | {
+            /** @constant */
+            type: "branch";
+            branch_id: string;
+        } | {
+            /** @constant */
+            type: "snapshot";
+            snapshot_id: string;
+        } | {
+            /** @constant */
+            type: "cursor";
+            cursor: string;
+        };
+        ConversationJumpResult: {
+            session_id: string;
+            target: components["schemas"]["ConversationJumpTarget"];
+            branch_id?: string | null;
+            message_id?: string | null;
+            cursor?: string | null;
+            snapshot_id?: string | null;
+        };
+        /** @enum {string} */
+        TranscriptSearchScope: "current_session" | "cross_conversation";
+        TranscriptSearchHighlight: {
+            start: number;
+            end: number;
+        };
+        TranscriptSearchResult: {
+            result_id: string;
+            scope: components["schemas"]["TranscriptSearchScope"];
+            session_id: string;
+            slot_id: string;
+            variant_id: string;
+            message_id: string;
+            branch_id?: string | null;
+            author_role: string;
+            /** Format: date-time */
+            created_at: string;
+            snippet: string;
+            highlights: components["schemas"]["TranscriptSearchHighlight"][];
+            jump: components["schemas"]["ConversationJumpResult"];
+            /** @enum {string} */
+            source: "rust_coordination";
+        };
+        TranscriptSearchResultPage: {
+            items: components["schemas"]["TranscriptSearchResult"][];
+            total: number;
+            limit: number;
+            offset: number;
+            nextOffset?: number;
+            query: string;
+            scope: components["schemas"]["TranscriptSearchScope"];
+            /** @enum {string} */
+            source: "rust_coordination";
+        };
+        ConversationTreePayload: {
+            branch?: components["schemas"]["ConversationBranchRecord"];
+            branch_id?: string;
+            head_message_id?: string | null;
+            active_branch_id?: string | null;
+            snapshot?: components["schemas"]["ConversationSnapshotRecord"];
+            state?: components["schemas"]["ConversationBranchStateRecord"];
+            conflict?: components["schemas"]["ActiveVariantConflict"];
+        } & {
+            [key: string]: unknown;
+        };
+        AttachmentPayload: {
+            attachment_id?: string;
+            link?: components["schemas"]["AttachmentLinkRecord"];
+            attachment?: components["schemas"]["AttachmentRecord"];
+        } & {
+            [key: string]: unknown;
+        };
+        DataBankScopePayload: {
+            scope_id?: string;
+            scope?: components["schemas"]["DataBankScopeRecord"];
+        } & {
+            [key: string]: unknown;
         };
         ChatCommandRegistry: {
             commands: components["schemas"]["ChatCommandDescriptor"][];
@@ -276,9 +1183,13 @@ export interface components {
             name: string;
             aliases?: string[];
             description: string;
-            args_schema?: {
+            args_schema: {
                 [key: string]: unknown;
             };
+            positional_args: components["schemas"]["ChatCommandArgumentDescriptor"][];
+            named_args: components["schemas"]["ChatCommandArgumentDescriptor"][];
+            surfaces: components["schemas"]["ChatCommandSurface"][];
+            source: components["schemas"]["ChatCommandSource"];
             read_only: boolean;
             mutating: boolean;
             /** @enum {string} */
@@ -287,6 +1198,35 @@ export interface components {
             /** @default false */
             requires_control_auth: boolean;
             backing_control_command?: string;
+        };
+        ChatCommandArgumentDescriptor: {
+            name: string;
+            description?: string;
+            type: components["schemas"]["ChatCommandArgumentType"];
+            required: boolean;
+            default_value?: unknown;
+            enum_values?: components["schemas"]["ChatCommandEnumValue"][];
+            enum_provider?: string;
+            repeated?: boolean;
+            placeholder?: string;
+        };
+        /** @enum {string} */
+        ChatCommandArgumentType: "string" | "number" | "boolean" | "enum" | "json" | "file";
+        ChatCommandEnumValue: {
+            value: string;
+            label?: string;
+            description?: string;
+        };
+        /** @enum {string} */
+        ChatCommandSurface: "chat-input" | "global" | "message-context";
+        /** @enum {string} */
+        ChatCommandSource: "backend" | "backend-control" | "frontend-local" | "plugin";
+        ChatCommandAutocompleteResult: {
+            command_name: string;
+            argument_name: string;
+            provider?: string;
+            items: components["schemas"]["ChatCommandEnumValue"][];
+            has_more: boolean;
         };
         ExecuteChatCommandRequest: {
             /** @description Raw slash command text such as /status or /new fresh start. */
@@ -310,6 +1250,9 @@ export interface components {
     responses: never;
     parameters: {
         SessionId: string;
+        SlotId: string;
+        VariantId: string;
+        BranchId: string;
         /** @description Opaque chat event cursor. Implementations may encode the latest sequence id. */
         Cursor: string;
         Limit: number;
@@ -357,6 +1300,8 @@ export interface operations {
                 before?: string;
                 /** @description Debug-only hint. Implementations may ignore or deny this in chat-safe mode. */
                 include_tool_payloads?: boolean;
+                /** @description Include alternate message variants in the message_slots projection. Defaults to false so chat clients can lazy-load alternates. */
+                include_alternates?: boolean;
             };
             header?: never;
             path: {
@@ -402,6 +1347,30 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope"] & {
                         data?: components["schemas"]["ChatEventPage"];
+                    };
+                };
+            };
+        };
+    };
+    getChatSessionContextUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser-safe session context usage diagnostics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["SessionContextUsageResult"];
                     };
                 };
             };
@@ -465,6 +1434,654 @@ export interface operations {
             };
         };
     };
+    listMessageSlots: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+                /** @description When true, include non-deleted alternate variants for each slot. */
+                include_alternates?: boolean;
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Message slot page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MessageSlotPage"];
+                    };
+                };
+            };
+        };
+    };
+    createMessageSlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMessageSlotRequest"];
+            };
+        };
+        responses: {
+            /** @description Message slot created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MessageSlotMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    listMessageVariants: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                slot_id: components["parameters"]["SlotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Message variant page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MessageVariantPage"];
+                    };
+                };
+            };
+        };
+    };
+    createMessageVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                slot_id: components["parameters"]["SlotId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMessageVariantRequest"];
+            };
+        };
+        responses: {
+            /** @description Message variant created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MessageVariantMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    deleteMessageVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                slot_id: components["parameters"]["SlotId"];
+                variant_id: components["parameters"]["VariantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Variant deleted and containing slot returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MessageSlotMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    reorderMessageVariants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                slot_id: components["parameters"]["SlotId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderMessageVariantsRequest"];
+            };
+        };
+        responses: {
+            /** @description Variants reordered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MessageVariantsReorderResult"];
+                    };
+                };
+            };
+        };
+    };
+    selectActiveMessageVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                slot_id: components["parameters"]["SlotId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectActiveMessageVariantRequest"];
+            };
+        };
+        responses: {
+            /** @description Active variant selected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["SelectActiveMessageVariantResult"];
+                    };
+                };
+            };
+            /** @description CAS expectation did not match the current active variant */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["SelectActiveMessageVariantResult"];
+                    };
+                };
+            };
+        };
+    };
+    getConversationTree: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+                exclude_snapshots?: boolean;
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation tree projection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ConversationTreeProjection"];
+                    };
+                };
+            };
+        };
+    };
+    resolveConversationJump: {
+        parameters: {
+            query: {
+                target_type: "message" | "branch" | "snapshot" | "cursor";
+                message_id?: string;
+                branch_id?: string;
+                snapshot_id?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resolved jump target */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ConversationJumpResult"];
+                    };
+                };
+            };
+        };
+    };
+    searchCurrentSessionTranscript: {
+        parameters: {
+            query: {
+                q: string;
+                role?: string;
+                created_after?: string;
+                created_before?: string;
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transcript search result page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["TranscriptSearchResultPage"];
+                    };
+                };
+            };
+        };
+    };
+    searchCrossConversationTranscript: {
+        parameters: {
+            query: {
+                q: string;
+                session_id?: string;
+                profile_id?: string;
+                role?: string;
+                created_after?: string;
+                created_before?: string;
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cross-conversation transcript search result page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["TranscriptSearchResultPage"];
+                    };
+                };
+            };
+        };
+    };
+    createConversationBranch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConversationBranchRequest"];
+            };
+        };
+        responses: {
+            /** @description Branch created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ConversationBranchMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    selectActiveConversationBranch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectActiveConversationBranchRequest"];
+            };
+        };
+        responses: {
+            /** @description Active branch selected */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["SelectActiveConversationBranchResult"];
+                    };
+                };
+            };
+            /** @description CAS expectation did not match current active branch */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateConversationBranchHead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                branch_id: components["parameters"]["BranchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConversationBranchHeadRequest"];
+            };
+        };
+        responses: {
+            /** @description Branch head updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["UpdateConversationBranchHeadResult"];
+                    };
+                };
+            };
+            /** @description CAS expectation did not match current branch head */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createConversationSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConversationSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Snapshot created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ConversationSnapshotMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    listAttachments: {
+        parameters: {
+            query?: {
+                scope_id?: string;
+                message_id?: string;
+                include_removed?: boolean;
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["AttachmentPage"];
+                    };
+                };
+            };
+        };
+    };
+    createAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAttachmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Attachment created or updated */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["AttachmentMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    removeAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["AttachmentMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    listDataBankScopes: {
+        parameters: {
+            query?: {
+                include_removed?: boolean;
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reusable file scopes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["DataBankScopePage"];
+                    };
+                };
+            };
+        };
+    };
+    createDataBankScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDataBankScopeRequest"];
+            };
+        };
+        responses: {
+            /** @description Reusable file scope created or updated */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["DataBankScopeMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    removeDataBankScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reusable file scope removed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["DataBankScopeMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    listDataBankScopeAttachments: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                scope_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scope attachment page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["AttachmentPage"];
+                    };
+                };
+            };
+        };
+    };
     listChatCommands: {
         parameters: {
             query?: never;
@@ -482,6 +2099,34 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope"] & {
                         data?: components["schemas"]["ChatCommandRegistry"];
+                    };
+                };
+            };
+        };
+    };
+    autocompleteChatCommandArgument: {
+        parameters: {
+            query: {
+                argument: string;
+                query?: string;
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                command_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Autocomplete values */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ChatCommandAutocompleteResult"];
                     };
                 };
             };

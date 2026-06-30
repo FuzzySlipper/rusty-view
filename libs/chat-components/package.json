@@ -4,6 +4,7 @@
   "peerDependencies": {
     "@angular/core": "^21.2.0",
     "@rusty-view/chat-domain": "workspace:*",
+    "@rusty-view/protocol": "workspace:*",
     "@rusty-view/transcript-renderer": "workspace:*"
   },
   "sideEffects": false

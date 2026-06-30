@@ -72,6 +72,10 @@
   color: var(--rv-color-danger);
 }
 
+.rv-event-kind--context {
+  color: var(--rv-color-stream);
+}
+
 .rv-event-kind--unknown,
 .rv-event-kind--snapshot,
 .rv-event-kind--turn {

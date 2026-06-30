@@ -7,6 +7,7 @@ import type {
   ExecuteChatCommandResult,
   SendChatMessageRequest,
   SendChatMessageResult,
+  SessionContextUsageResult,
 } from '@rusty-view/protocol';
 
 import { ChatHttpTransport } from './chat-http-transport';
@@ -136,6 +137,10 @@ export class ChatTransport {
     idempotencyKey?: string,
   ): Promise<SendChatMessageResult> {
     return this.http.sendMessage(sessionId, request, idempotencyKey);
+  }
+
+  sessionContext(sessionId: string): Promise<SessionContextUsageResult> {
+    return this.http.sessionContext(sessionId);
   }
 
   listCommands(): Promise<ChatCommandRegistry> {

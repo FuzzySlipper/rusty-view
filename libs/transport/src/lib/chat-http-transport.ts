@@ -10,12 +10,14 @@ import type {
   ExecuteChatCommandResult,
   ExecuteChatCommandResponse,
   ListChatCommandsResponse,
+  GetChatSessionContextUsageResponse,
   ListChatSessionsResponse,
   OpenChatSessionResponse,
   ReplayChatSessionEventsResponse,
   SendChatMessageRequest,
   SendChatMessageResponse,
   SendChatMessageResult,
+  SessionContextUsageResult,
 } from '@rusty-view/protocol';
 
 import {
@@ -23,6 +25,7 @@ import {
   SESSIONS_PATH,
   SESSION_PATH,
   SESSION_EVENTS_PATH,
+  SESSION_CONTEXT_PATH,
   SESSION_MESSAGES_PATH,
   COMMANDS_PATH,
   SESSION_COMMANDS_PATH,
@@ -146,6 +149,21 @@ export class ChatHttpTransport {
       'POST',
       SESSION_MESSAGES_PATH,
       options,
+    );
+    return unwrapEnvelope(body);
+  }
+
+  /**
+   * Read model/provider/brain and approximate context-usage diagnostics for a
+   * session (tasks #3788/#3847). Browser-safe: the backend redacts provider
+   * secrets and returns only host/redacted base URLs. Includes the session's
+   * current context-strategy policy and the latest compaction artifact metadata.
+   */
+  async sessionContext(sessionId: string): Promise<SessionContextUsageResult> {
+    const body = await this.requestJson<GetChatSessionContextUsageResponse>(
+      'GET',
+      SESSION_CONTEXT_PATH,
+      { pathParams: { session_id: sessionId } },
     );
     return unwrapEnvelope(body);
   }

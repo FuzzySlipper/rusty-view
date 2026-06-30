@@ -233,6 +233,46 @@ describe('ChatHttpTransport', () => {
     });
   });
 
+  describe('sessionContext', () => {
+    it('sends GET to /v1/chat/sessions/{id}/context and unwraps the result', async () => {
+      const usage = {
+        session_id: 'sess_1',
+        agent_id: 'agent_1',
+        profile_id: 'prof_1',
+        provider: { alias: 'main', status: 'active', model_id: 'm1' },
+        brain: { backend: 'openai' },
+        context_strategy: {
+          strategy_id: 'sliding-window',
+          enabled: true,
+          auto_compaction_enabled: true,
+          compact_at_percent: 80,
+          target_percent_after_compaction: 40,
+          max_context_percent_for_wake: 90,
+          debug_visibility: 'status',
+          include_debug_events_in_model_context: false,
+        },
+        tools: { tool_count: 3, mcp_binding_count: 1, mcp_active_count: 1 },
+        context: {
+          estimate_quality: 'approximate',
+          estimate_method: 'sampled',
+          estimator_id: 'tok-1',
+          sampled_event_count: 12,
+          sampled_message_count: 8,
+        },
+        degraded: false,
+        diagnostics: [],
+      };
+      const { fetch, lastRequest } = capturingFetch(jsonOk(usage));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const result = await transport.sessionContext('sess_1');
+      expect(result.provider.alias).toBe('main');
+      expect(result.context_strategy.strategy_id).toBe('sliding-window');
+      expect(lastRequest().url).toContain('/v1/chat/sessions/sess_1/context');
+      expect(lastRequest().method).toBe('GET');
+    });
+  });
+
   describe('error handling', () => {
     it('throws auth_error on 401', async () => {
       const { fetch } = capturingFetch(

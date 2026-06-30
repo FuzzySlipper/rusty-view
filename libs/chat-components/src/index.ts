@@ -18,6 +18,12 @@ export type {
 } from './lib/message-input';
 export { StreamStatusComponent } from './lib/stream-status';
 export type { StreamStatusKind } from './lib/stream-status';
+export { ContextDiagnosticsComponent } from './lib/context-diagnostics';
+export type {
+  ContextDiagnosticsRow,
+  ContextDiagnosticRow,
+  ContextTimelineRow,
+} from './lib/context-diagnostics';
 export { JsonInspectorComponent } from './lib/json-inspector';
 export { TopMenuBarComponent } from './lib/top-menu-bar';
 export type { TopMenuEntry } from './lib/top-menu-bar';

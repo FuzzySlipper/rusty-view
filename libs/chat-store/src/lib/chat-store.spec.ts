@@ -6,6 +6,7 @@ import type {
   ChatSessionSummary,
   ExecuteChatCommandResult,
   SendChatMessageResult,
+  SessionContextUsageResult,
 } from '@rusty-view/protocol';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
@@ -58,16 +59,25 @@ class InMemoryChatStorage implements ChatStorageAdapter {
 function createMockTransport(opts: {
   sessions?: ChatSessionPage;
   openResult?: ChatSessionOpenResult;
+  replayEvents?: ChatEvent[];
   streamEvents?: ChatEvent[];
   sendResult?: SendChatMessageResult;
   commandResult?: ExecuteChatCommandResult;
+  contextUsage?: SessionContextUsageResult;
+  contextUsageError?: boolean;
 }): ChatTransport {
   const mock = {
     getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
     listSessions: vi.fn(async () => opts.sessions ?? emptySessionPage()),
     openSession: vi.fn(async () => opts.openResult ?? emptyOpenResult()),
-    replayEvents: vi.fn(async () => []),
+    replayEvents: vi.fn(async () => opts.replayEvents ?? []),
     sendMessage: vi.fn(async () => opts.sendResult ?? acceptedResult()),
+    sessionContext: vi.fn(async () => {
+      if (opts.contextUsageError === true) {
+        throw new Error('context route unavailable');
+      }
+      return opts.contextUsage ?? defaultContextUsage();
+    }),
     listCommands: vi.fn(
       async () => ({ commands: [] }) satisfies ChatCommandRegistry,
     ),
@@ -135,6 +145,36 @@ function emptyOpenResult(): ChatSessionOpenResult {
     events: [],
     latest_cursor: 'cur_0',
     has_more_before: false,
+  };
+}
+
+function defaultContextUsage(): SessionContextUsageResult {
+  return {
+    session_id: 'sess_test',
+    agent_id: 'agent_1',
+    profile_id: 'prof_1',
+    provider: { alias: 'main', status: 'active', model_id: 'm1' },
+    brain: { backend: 'openai' },
+    context_strategy: {
+      strategy_id: 'sliding-window',
+      enabled: true,
+      auto_compaction_enabled: true,
+      compact_at_percent: 80,
+      target_percent_after_compaction: 40,
+      max_context_percent_for_wake: 90,
+      debug_visibility: 'status',
+      include_debug_events_in_model_context: false,
+    },
+    tools: { tool_count: 0, mcp_binding_count: 0, mcp_active_count: 0 },
+    context: {
+      estimate_quality: 'approximate',
+      estimate_method: 'sampled',
+      estimator_id: 'tok-1',
+      sampled_event_count: 0,
+      sampled_message_count: 0,
+    },
+    degraded: false,
+    diagnostics: [],
   };
 }
 
@@ -399,6 +439,55 @@ describe('ChatStore', () => {
     expect(store.pendingSends()).toHaveLength(0);
   });
 
+  it('sendMessage replays missed events from the pre-send cursor', async () => {
+    const replayed: ChatEvent = {
+      event_id: 'cur_1',
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-06-22T10:00:01Z',
+      kind: 'message_created',
+      payload: {
+        message_id: 'msg_1',
+        role: 'user',
+        body: 'caught up after POST',
+      },
+    };
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        events: [
+          {
+            event_id: 'cur_0',
+            session_id: 'sess_test',
+            sequence_id: 0,
+            created_at: '2026-06-22T10:00:00Z',
+            kind: 'session_snapshot',
+            payload: { session: emptyOpenResult().session },
+          },
+        ],
+      },
+      sendResult: {
+        status: 'accepted',
+        message_id: 'msg_1',
+        latest_cursor: 'cur_1',
+      },
+      replayEvents: [replayed],
+      streamEvents: [],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('caught up after POST');
+
+    expect(transport.replayEvents).toHaveBeenCalledWith('sess_test', {
+      cursor: 'cur_0',
+    });
+    expect(store.rawEvents().map((event) => event.event_id)).toContain('cur_1');
+    expect(store.messages().at(-1)?.blocks[0]?.content).toBe(
+      'caught up after POST',
+    );
+  });
+
   it('runCommand switches session when result has new_session_id', async () => {
     const transport = createMockTransport({
       commandResult: {
@@ -542,7 +631,9 @@ describe('ChatStore', () => {
 
 // ---- profile / historical session tests ----
 
-function makeSession(overrides: Partial<ChatSessionSummary>): ChatSessionSummary {
+function makeSession(
+  overrides: Partial<ChatSessionSummary>,
+): ChatSessionSummary {
   return {
     session_id: 's1',
     agent_id: 'a1',
@@ -560,9 +651,24 @@ describe('ChatStore profiles', () => {
     const transport = createMockTransport({
       sessions: {
         items: [
-          makeSession({ session_id: 's1', profile_id: 'p1', status: 'idle', updated_at: '2026-06-01T00:00:00Z' }),
-          makeSession({ session_id: 's2', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
-          makeSession({ session_id: 's3', profile_id: 'p2', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+          makeSession({
+            session_id: 's1',
+            profile_id: 'p1',
+            status: 'idle',
+            updated_at: '2026-06-01T00:00:00Z',
+          }),
+          makeSession({
+            session_id: 's2',
+            profile_id: 'p1',
+            status: 'archived',
+            updated_at: '2026-05-01T00:00:00Z',
+          }),
+          makeSession({
+            session_id: 's3',
+            profile_id: 'p2',
+            status: 'active',
+            updated_at: '2026-06-10T00:00:00Z',
+          }),
         ],
         total: 3,
         limit: 100,
@@ -583,8 +689,18 @@ describe('ChatStore profiles', () => {
     const transport = createMockTransport({
       sessions: {
         items: [
-          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
-          makeSession({ session_id: 'old', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+          makeSession({
+            session_id: 'live',
+            profile_id: 'p1',
+            status: 'active',
+            updated_at: '2026-06-10T00:00:00Z',
+          }),
+          makeSession({
+            session_id: 'old',
+            profile_id: 'p1',
+            status: 'archived',
+            updated_at: '2026-05-01T00:00:00Z',
+          }),
         ],
         total: 2,
         limit: 100,
@@ -604,8 +720,18 @@ describe('ChatStore profiles', () => {
     const transport = createMockTransport({
       sessions: {
         items: [
-          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
-          makeSession({ session_id: 'archived-1', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+          makeSession({
+            session_id: 'live',
+            profile_id: 'p1',
+            status: 'active',
+            updated_at: '2026-06-10T00:00:00Z',
+          }),
+          makeSession({
+            session_id: 'archived-1',
+            profile_id: 'p1',
+            status: 'archived',
+            updated_at: '2026-05-01T00:00:00Z',
+          }),
         ],
         total: 2,
         limit: 100,
@@ -627,8 +753,18 @@ describe('ChatStore profiles', () => {
     const transport = createMockTransport({
       sessions: {
         items: [
-          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
-          makeSession({ session_id: 'archived-1', profile_id: 'p1', status: 'archived', updated_at: '2026-05-01T00:00:00Z' }),
+          makeSession({
+            session_id: 'live',
+            profile_id: 'p1',
+            status: 'active',
+            updated_at: '2026-06-10T00:00:00Z',
+          }),
+          makeSession({
+            session_id: 'archived-1',
+            profile_id: 'p1',
+            status: 'archived',
+            updated_at: '2026-05-01T00:00:00Z',
+          }),
         ],
         total: 2,
         limit: 100,
@@ -651,7 +787,12 @@ describe('ChatStore profiles', () => {
     const transport = createMockTransport({
       sessions: {
         items: [
-          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+          makeSession({
+            session_id: 'live',
+            profile_id: 'p1',
+            status: 'active',
+            updated_at: '2026-06-10T00:00:00Z',
+          }),
         ],
         total: 1,
         limit: 100,
@@ -675,7 +816,12 @@ describe('ChatStore profiles', () => {
     const transport = createMockTransport({
       sessions: {
         items: [
-          makeSession({ session_id: 'live', profile_id: 'p1', status: 'active', updated_at: '2026-06-10T00:00:00Z' }),
+          makeSession({
+            session_id: 'live',
+            profile_id: 'p1',
+            status: 'active',
+            updated_at: '2026-06-10T00:00:00Z',
+          }),
         ],
         total: 1,
         limit: 100,
@@ -814,8 +960,9 @@ describe('ChatStore command history', () => {
   }
 
   async function setupStoreWithSession(storage?: ChatStorageAdapter) {
-    const commandMock = vi.fn(async (sessionId: string, _req: { command: string }) =>
-      commandResult(_req.command.replace(/^\//, '').split(/\s/)[0] ?? 'x'),
+    const commandMock = vi.fn(
+      async (sessionId: string, _req: { command: string }) =>
+        commandResult(_req.command.replace(/^\//, '').split(/\s/)[0] ?? 'x'),
     );
     const transport = createMockTransport({});
     (transport as unknown as { sendCommand: typeof commandMock }).sendCommand =
@@ -828,7 +975,10 @@ describe('ChatStore command history', () => {
   }
 
   it('starts with empty command history', () => {
-    const store = setupStore(createMockTransport({}), new InMemoryChatStorage());
+    const store = setupStore(
+      createMockTransport({}),
+      new InMemoryChatStorage(),
+    );
     expect(store.commandHistory()).toEqual([]);
   });
 
@@ -908,5 +1058,74 @@ describe('ChatStore command history', () => {
     TestBed.resetTestingModule();
     const { store: store2 } = await setupStoreWithSession(storage);
     expect(store2.commandHistory()).toEqual(['/help', '/status']);
+  });
+});
+
+describe('ChatStore context diagnostics', () => {
+  function contextEvent(id: string, fillPercent: number): ChatEvent {
+    return {
+      event_id: id,
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-06-30T10:00:00Z',
+      kind: 'context_status',
+      payload: {
+        session_id: 'sess_test',
+        strategy_id: 'sliding-window',
+        fill_percent: fillPercent,
+        ui_debug: true,
+        model_facing: false,
+      },
+    };
+  }
+
+  it('loads context usage on selectSession', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+
+    expect(store.contextUsage()?.context_strategy.strategy_id).toBe(
+      'sliding-window',
+    );
+  });
+
+  it('leaves context usage null when the route is unavailable', async () => {
+    const transport = createMockTransport({ contextUsageError: true });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+
+    expect(store.contextUsage()).toBeNull();
+  });
+
+  it('projects context_status events into the context timeline', async () => {
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        events: [contextEvent('c1', 30), contextEvent('c2', 70)],
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+
+    expect(store.contextTimeline().map((e) => e.id)).toEqual(['c1', 'c2']);
+    expect(store.contextStatus()?.fillPercent).toBe(70);
+    // Context events never become assistant transcript messages.
+    expect(store.messages()).toHaveLength(0);
+  });
+
+  it('clears context usage when switching sessions', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    expect(store.contextUsage()).not.toBeNull();
+
+    // The reset happens synchronously at the start of the next selectSession.
+    const pending = store.selectSession('sess_other');
+    expect(store.contextUsage()).toBeNull();
+    await pending;
   });
 });

@@ -68,6 +68,15 @@ export type CommandPayload = Schemas['CommandPayload'];
 export type StreamErrorPayload = Schemas['StreamErrorPayload'];
 export type UnknownEventPayload = Schemas['UnknownEventPayload'];
 
+// ---- context strategy / compaction diagnostics (tasks #3788/#3846/#3847) ----
+//
+// Browser-safe metadata payload carried by the four `context_*` event kinds
+// (`context_status`, `context_compaction_started`, `context_compaction_completed`,
+// `context_compaction_failed`). It is explicitly marked `ui_debug: true` /
+// `model_facing: false` by the backend and never carries summary text or
+// provider secrets.
+export type ContextDebugPayload = Schemas['ContextDebugPayload'];
+
 // ---- send-message ----
 export type SendChatMessageRequest = Schemas['SendChatMessageRequest'];
 export type ChatActor = Schemas['ChatActor'];
@@ -94,6 +103,17 @@ export type ListChatCommandsResponse =
   operations['listChatCommands']['responses'][200]['content']['application/json'];
 export type ExecuteChatCommandResponse =
   operations['executeChatCommand']['responses'][200]['content']['application/json'];
+
+// ---- context usage diagnostics (tasks #3788/#3847) ----
+//
+// Read model/provider/brain and approximate context-usage diagnostics for one
+// session (`GET /v1/chat/sessions/{session_id}/context`). Browser-safe: hosts
+// only redacted base URLs, never raw credentials. Includes the session's current
+// context-strategy policy and the latest compaction artifact metadata (without
+// summary text).
+export type SessionContextUsageResult = Schemas['SessionContextUsageResult'];
+export type GetChatSessionContextUsageResponse =
+  operations['getChatSessionContextUsage']['responses'][200]['content']['application/json'];
 
 // ---- id / cursor aliases ----
 //
