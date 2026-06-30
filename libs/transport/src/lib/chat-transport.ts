@@ -37,6 +37,7 @@ import type {
   AdminMcpCatalog,
   AdminToolCatalog,
   AdminPage,
+  ContextStrategyCatalog,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
   AdminProfileRegistryRecord,
@@ -218,6 +219,10 @@ export class ChatTransport {
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {
     return this.adminHttp.capabilities();
+  }
+
+  adminContextStrategies(): Promise<ContextStrategyCatalog> {
+    return this.adminHttp.contextStrategies();
   }
 
   adminProfileRegistry(

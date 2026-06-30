@@ -56,6 +56,22 @@ interface EditComponentApi {
   runtimeToolsetSelections(): readonly string[];
   planRuntimeConfig(record: AdminProfileRegistryRecord): void;
   applyRuntimeConfig(record: AdminProfileRegistryRecord): void;
+  updateContextStrategy(event: { target: { value: string } }): void;
+  updateContextDebugVisibility(event: { target: { value: string } }): void;
+  toggleContextField(
+    field:
+      | 'enabled'
+      | 'autoCompactionEnabled'
+      | 'includeDebugEventsInModelContext',
+    event: { target: { checked: boolean } },
+  ): void;
+  updateContextPercent(
+    field:
+      | 'compactAtPercent'
+      | 'targetPercentAfterCompaction'
+      | 'maxContextPercentForWake',
+    event: { target: { value: string } },
+  ): void;
   updateRegistryEditText(
     field: 'displayName',
     event: { target: { value: string } },
@@ -510,5 +526,108 @@ describe('AdminProfileEditComponent', () => {
       transport.planAdminProfileRegistryRuntimeConfig,
     );
     expect(request.mcpBindings).toEqual([]);
+  });
+
+  // ---- context strategy policy edit (#3849) -------------------------------
+
+  it('renders strategy options from the catalog, not hardcoded ids (#3849)', async () => {
+    const { fixture } = await runtimeWindow();
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('Context strategy');
+    // Options come from the backend catalog fixture.
+    expect(html).toContain('Recent Window');
+    expect(html).toContain('Rolling Summary Compaction');
+  });
+
+  it('shows an empty state when the strategy catalog is unavailable (#3849)', async () => {
+    const fixture = await editWindow('rt-prime', {
+      profileDiagnostics: registryDiagnostics({ profileId: 'rt-prime', revision: 5 }),
+      contextStrategyCatalog: null,
+    });
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+    component.showSection('runtime');
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).innerHTML).toContain(
+      'No context strategy catalog available',
+    );
+  });
+
+  it('omits contextPolicy when the policy is untouched (#3849)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
+    component.planRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.planAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request).not.toHaveProperty('contextPolicy');
+  });
+
+  it('sends contextPolicy with camelCase fields once edited (#3849)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
+    component.updateContextStrategy({
+      target: { value: 'rolling_summary_compaction' },
+    });
+    component.toggleContextField('autoCompactionEnabled', {
+      target: { checked: true },
+    });
+    component.updateContextPercent('compactAtPercent', {
+      target: { value: '82' },
+    });
+    component.updateContextDebugVisibility({ target: { value: 'verbose' } });
+    fixture.detectChanges();
+    component.applyRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.applyAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.contextPolicy).toMatchObject({
+      strategyId: 'rolling_summary_compaction',
+      autoCompactionEnabled: true,
+      compactAtPercent: 82,
+      debugVisibility: 'verbose',
+    });
+    // camelCase + preserved opaque config round-trips.
+    expect(request.contextPolicy).toHaveProperty('targetPercentAfterCompaction');
+    expect(request.contextPolicy).toHaveProperty('maxContextPercentForWake');
+    expect(request.contextPolicy).toHaveProperty('strategyConfig');
+  });
+
+  it('clamps percent controls to the catalog range (#3849)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
+    component.updateContextPercent('compactAtPercent', {
+      target: { value: '999' },
+    });
+    fixture.detectChanges();
+    component.planRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.planAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.contextPolicy?.compactAtPercent).toBe(100);
+  });
+
+  it('surfaces invalid-strategy diagnostics in the plan panel (#3849)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    // An unknown strategy id comes back as a contextPolicy.strategyId diagnostic.
+    component.updateContextStrategy({ target: { value: 'missing_strategy' } });
+    fixture.detectChanges();
+    component.planRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('context_strategy_unknown');
   });
 });

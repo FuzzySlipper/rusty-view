@@ -18,6 +18,9 @@ import {
   type AdminToolDescriptor,
   type AdminToolsetDescriptor,
   type ApiCapabilityRegistry,
+  type ContextStrategyCatalog,
+  type ContextStrategyDescriptor,
+  type ContextStrategyPolicy,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
@@ -79,6 +82,8 @@ export class AdminStore {
   private readonly _toolCatalog = signal<AdminToolCatalog | null>(null);
   private readonly _localToolProfiles =
     signal<AdminLocalToolProfileList | null>(null);
+  private readonly _contextStrategyCatalog =
+    signal<ContextStrategyCatalog | null>(null);
   /**
    * Error from the most recent local-tool-profile write (#3689). First-class
    * (unlike the read which degrades to empty) so the editor surfaces failures.
@@ -131,6 +136,7 @@ export class AdminStore {
   readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
   readonly mcpCatalog = this._mcpCatalog.asReadonly();
   readonly toolCatalog = this._toolCatalog.asReadonly();
+  readonly contextStrategyCatalog = this._contextStrategyCatalog.asReadonly();
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly registryWritePlan = this._registryWritePlan.asReadonly();
   readonly registryWriteResult = this._registryWriteResult.asReadonly();
@@ -244,6 +250,31 @@ export class AdminStore {
   /** Error from the latest local-tool-profile write, or null (#3689). */
   readonly toolProfileWriteError = this._toolProfileWriteError.asReadonly();
 
+  /**
+   * Selectable context strategies from Crew's catalog (task #3849). Empty when
+   * the backend has not exposed the route; the context-policy controls then
+   * fall back to a non-blocking empty state (strategy ids are never hardcoded).
+   */
+  readonly contextStrategies = computed<readonly ContextStrategyDescriptor[]>(
+    () => this._contextStrategyCatalog()?.strategies ?? [],
+  );
+
+  /** Default strategy id from the catalog, or null when unavailable (#3849). */
+  readonly defaultContextStrategyId = computed<string | null>(
+    () => this._contextStrategyCatalog()?.defaultStrategyId ?? null,
+  );
+
+  /** Catalog policy defaults used to seed a fresh context policy (#3849). */
+  readonly contextPolicyDefaults = computed<ContextStrategyPolicy | null>(
+    () => this._contextStrategyCatalog()?.policyDefaults ?? null,
+  );
+
+  /** Percent control bounds from the catalog (defaults to 1–100) (#3849). */
+  readonly contextPercentRange = computed<{ min: number; max: number }>(() => {
+    const range = this._contextStrategyCatalog()?.percentRange;
+    return { min: range?.min ?? 1, max: range?.max ?? 100 };
+  });
+
   async refresh(): Promise<void> {
     this._loading.set(true);
     this._error.set(null);
@@ -259,6 +290,7 @@ export class AdminStore {
         mcpCatalog,
         toolCatalog,
         localToolProfiles,
+        contextStrategyCatalog,
         modelProvidersResult,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
@@ -271,6 +303,7 @@ export class AdminStore {
         loadMcpCatalog(this.transport),
         loadToolCatalog(this.transport),
         loadLocalToolProfiles(this.transport),
+        loadContextStrategyCatalog(this.transport),
         loadModelProviders(this.transport),
       ]);
       this._diagnostics.set(diagnostics);
@@ -283,6 +316,7 @@ export class AdminStore {
       this._mcpCatalog.set(mcpCatalog);
       this._toolCatalog.set(toolCatalog);
       this._localToolProfiles.set(localToolProfiles);
+      this._contextStrategyCatalog.set(contextStrategyCatalog);
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
     } catch (error) {
@@ -928,6 +962,21 @@ async function loadLocalToolProfiles(
 ): Promise<AdminLocalToolProfileList | null> {
   try {
     return (await transport.adminLocalToolProfiles?.()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the context strategy catalog (task #3849). Optional, compatibility-gated
+ * route: backends (or transport mocks) without it yield `null` so the
+ * context-policy controls degrade to a non-blocking empty state.
+ */
+async function loadContextStrategyCatalog(
+  transport: ChatTransport,
+): Promise<ContextStrategyCatalog | null> {
+  try {
+    return (await transport.adminContextStrategies?.()) ?? null;
   } catch {
     return null;
   }

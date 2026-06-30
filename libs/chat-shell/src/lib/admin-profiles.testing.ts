@@ -7,6 +7,7 @@ import type {
   AdminToolCatalog,
   ApiCapabilityDescriptor,
   ChatTransport,
+  ContextStrategyCatalog,
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   ProfileBundleExportPlan,
@@ -71,6 +72,7 @@ export interface TransportOptions {
   readonly mcpCatalog?: AdminMcpCatalog | null;
   readonly toolCatalog?: AdminToolCatalog | null;
   readonly localToolProfiles?: AdminLocalToolProfileList | null;
+  readonly contextStrategyCatalog?: ContextStrategyCatalog | null;
 }
 
 export function makeTransport(options: TransportOptions = {}): ChatTransport {
@@ -122,6 +124,10 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
     adminMcpCatalog: async () => options.mcpCatalog ?? null,
     adminToolCatalog: async () => options.toolCatalog ?? null,
     adminLocalToolProfiles: async () => options.localToolProfiles ?? null,
+    adminContextStrategies: async () =>
+      options.contextStrategyCatalog === undefined
+        ? contextStrategyCatalog()
+        : options.contextStrategyCatalog,
     adminCreateLocalToolProfile: recordingFn(
       async (body: unknown) =>
         ({ id: 'created', ...(body as object) }) as unknown,
@@ -206,11 +212,17 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
     applyAdminProfileRegistryPrompt: recordingFn(async () =>
       appliedRegistryPlan('prompt'),
     ),
-    planAdminProfileRegistryRuntimeConfig: recordingFn(async () =>
-      runtimeConfigPlan(false),
+    planAdminProfileRegistryRuntimeConfig: recordingFn(
+      async (
+        _profileId: string,
+        request: ProfileRegistryRuntimeConfigRequest,
+      ) => runtimeConfigPlan(false, request),
     ),
-    applyAdminProfileRegistryRuntimeConfig: recordingFn(async () =>
-      runtimeConfigPlan(true),
+    applyAdminProfileRegistryRuntimeConfig: recordingFn(
+      async (
+        _profileId: string,
+        request: ProfileRegistryRuntimeConfigRequest,
+      ) => runtimeConfigPlan(true, request),
     ),
   } as unknown as ChatTransport;
 }
@@ -222,9 +234,27 @@ type RegistryPlanKind = 'update' | 'lifecycle' | 'prompt';
  * {@link registryPlan}: no `kind`, runtime-config-specific implications, plus
  * `runtimeConfig`/`nextWrite` and (on apply) `applied`/`record`/`effects`.
  */
-function runtimeConfigPlan(applied: boolean) {
+function runtimeConfigPlan(
+  applied: boolean,
+  request?: ProfileRegistryRuntimeConfigRequest,
+) {
+  const strategyId = request?.contextPolicy?.strategyId;
+  const knownStrategyIds = contextStrategyCatalog().strategies.map((s) => s.id);
+  // Mirror Crew: an unknown strategy id comes back as a non-ok plan with a
+  // diagnostic at contextPolicy.strategyId rather than applying.
+  const contextDiagnostics =
+    strategyId !== undefined && !knownStrategyIds.includes(strategyId)
+      ? [
+          {
+            severity: 'error' as const,
+            code: 'context_strategy_unknown',
+            path: 'contextPolicy.strategyId',
+            message: `unknown context strategy ${strategyId}`,
+          },
+        ]
+      : [];
   const base = {
-    ok: true,
+    ok: contextDiagnostics.length === 0,
     profileId: 'rt-prime',
     mode: applied ? ('apply' as const) : ('plan' as const),
     expectedRevision: 5,
@@ -235,8 +265,11 @@ function runtimeConfigPlan(applied: boolean) {
       providerAlias: 'default',
       localToolProfileId: 'planner-tools',
       mcpBindings: [],
+      ...(request?.contextPolicy !== undefined
+        ? { contextPolicy: request.contextPolicy }
+        : {}),
     },
-    diagnostics: [],
+    diagnostics: contextDiagnostics,
     implications: {
       registryRevisionWillIncrement: true as const,
       profileFileWillChange: true,
@@ -246,7 +279,9 @@ function runtimeConfigPlan(applied: boolean) {
       mcpRefreshRecommended: false,
     },
   };
-  return applied
+  // A non-ok plan (e.g. unknown strategy) is returned as a plain plan even on
+  // apply, mirroring Crew (no `applied`/`record`/`effects`).
+  return applied && base.ok
     ? {
         ...base,
         applied: true as const,
@@ -259,6 +294,47 @@ function runtimeConfigPlan(applied: boolean) {
         },
       }
     : base;
+}
+
+/**
+ * A representative context strategy catalog (task #3849), matching the live
+ * Crew shape: `recent_window` default plus a compaction-capable strategy.
+ */
+export function contextStrategyCatalog(): ContextStrategyCatalog {
+  return {
+    schemaVersion: 1,
+    defaultStrategyId: 'recent_window',
+    policyDefaults: {
+      enabled: true,
+      strategyId: 'recent_window',
+      autoCompactionEnabled: false,
+      compactAtPercent: 80,
+      targetPercentAfterCompaction: 55,
+      maxContextPercentForWake: 95,
+      debugVisibility: 'status',
+      includeDebugEventsInModelContext: false,
+      strategyConfig: {},
+    },
+    strategies: [
+      {
+        id: 'recent_window',
+        label: 'Recent Window',
+        description: 'Preserves the current wake assembly behavior.',
+        status: 'active',
+        supportsAutoCompaction: false,
+        modelFacingDebugDefault: false,
+      },
+      {
+        id: 'rolling_summary_compaction',
+        label: 'Rolling Summary Compaction',
+        description: 'Plans context-fill-triggered compaction.',
+        status: 'planned',
+        supportsAutoCompaction: true,
+        modelFacingDebugDefault: false,
+      },
+    ],
+    percentRange: { min: 1, max: 100 },
+  };
 }
 
 function registryPlan(kind: RegistryPlanKind) {

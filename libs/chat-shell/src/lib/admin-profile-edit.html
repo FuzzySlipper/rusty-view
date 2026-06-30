@@ -592,6 +592,110 @@
         }
       </div>
 
+      <div class="rv-admin-profiles__context-policy">
+        <span class="rv-admin-profiles__group-label">Context strategy</span>
+        <p class="rv-admin-profiles__hint">
+          Edit this profile's context strategy and auto-compaction policy.
+          Untouched, the current policy is preserved. Strategies come from the
+          backend catalog.
+        </p>
+        @if (contextStrategies().length === 0) {
+        <div class="rv-admin-profiles__empty">
+          No context strategy catalog available.
+        </div>
+        } @else {
+        <label class="rv-admin-profiles__field">
+          <span>Strategy</span>
+          <select
+            [value]="contextPolicyForm().strategyId"
+            (change)="updateContextStrategy($event)"
+          >
+            @for (strategy of contextStrategies(); track strategy.id) {
+            <option [value]="strategy.id">
+              {{ strategy.label }}@if (strategy.status !== 'active') { (planned) }
+            </option>
+            }
+          </select>
+        </label>
+
+        <label class="rv-admin-profiles__check">
+          <input
+            type="checkbox"
+            [checked]="contextPolicyForm().enabled"
+            (change)="toggleContextField('enabled', $event)"
+          />
+          <span>Strategy enabled</span>
+        </label>
+
+        <label class="rv-admin-profiles__check">
+          <input
+            type="checkbox"
+            [checked]="contextPolicyForm().autoCompactionEnabled"
+            (change)="toggleContextField('autoCompactionEnabled', $event)"
+          />
+          <span>Auto-compaction enabled</span>
+        </label>
+
+        <label class="rv-admin-profiles__field">
+          <span>Compact at percent</span>
+          <input
+            type="number"
+            [min]="contextPercentRange().min"
+            [max]="contextPercentRange().max"
+            [value]="contextPolicyForm().compactAtPercent"
+            (input)="updateContextPercent('compactAtPercent', $event)"
+          />
+        </label>
+
+        <label class="rv-admin-profiles__field">
+          <span>Target percent after compaction</span>
+          <input
+            type="number"
+            [min]="contextPercentRange().min"
+            [max]="contextPercentRange().max"
+            [value]="contextPolicyForm().targetPercentAfterCompaction"
+            (input)="
+              updateContextPercent('targetPercentAfterCompaction', $event)
+            "
+          />
+        </label>
+
+        <label class="rv-admin-profiles__field">
+          <span>Max context percent for wake</span>
+          <input
+            type="number"
+            [min]="contextPercentRange().min"
+            [max]="contextPercentRange().max"
+            [value]="contextPolicyForm().maxContextPercentForWake"
+            (input)="updateContextPercent('maxContextPercentForWake', $event)"
+          />
+        </label>
+
+        <label class="rv-admin-profiles__field">
+          <span>Debug visibility</span>
+          <select
+            [value]="contextPolicyForm().debugVisibility"
+            (change)="updateContextDebugVisibility($event)"
+          >
+            @for (visibility of debugVisibilities; track visibility) {
+            <option [value]="visibility">{{ visibility }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="rv-admin-profiles__check">
+          <input
+            type="checkbox"
+            [checked]="contextPolicyForm().includeDebugEventsInModelContext"
+            (change)="
+              toggleContextField('includeDebugEventsInModelContext', $event)
+            "
+          />
+          <span>Include debug events in model context</span>
+        </label>
+        }
+      </div>
+
       <div class="rv-admin-profiles__actions">
         <button
           type="button"

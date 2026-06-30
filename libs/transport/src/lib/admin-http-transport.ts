@@ -14,6 +14,7 @@ import type {
   AdminMcpCatalog,
   AdminToolCatalog,
   AdminPage,
+  ContextStrategyCatalog,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
   AdminProfileRegistryRecord,
@@ -177,6 +178,15 @@ export class AdminHttpTransport {
 
   capabilities(): Promise<ApiCapabilityRegistry> {
     return this.request('GET', '/v1/admin/capabilities');
+  }
+
+  /**
+   * Context strategy catalog (task #3849): default strategy id, available
+   * strategy descriptors, policy defaults, and the percent range. Drives the
+   * profile context-policy controls so strategy ids are never hardcoded.
+   */
+  contextStrategies(): Promise<ContextStrategyCatalog> {
+    return this.request('GET', '/v1/admin/context-strategies');
   }
 
   /**

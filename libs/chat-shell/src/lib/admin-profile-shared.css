@@ -453,10 +453,20 @@
 
 .rv-admin-profiles__mcp-select,
 .rv-admin-profiles__tool-policy,
+.rv-admin-profiles__context-policy,
 .rv-admin-profiles__advanced {
   display: grid;
   gap: var(--rv-space-xs);
   margin-top: var(--rv-space-sm);
+}
+
+/* Checkbox rows lay the box beside its label rather than stacking (the base
+   `.rv-admin-profiles label` rule stacks via grid). */
+.rv-admin-profiles__check {
+  grid-auto-flow: column;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  justify-content: start;
 }
 
 .rv-admin-profiles__group-sublabel {

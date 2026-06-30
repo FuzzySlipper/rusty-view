@@ -217,6 +217,45 @@ describe('AdminHttpTransport', () => {
     expect(lastRequest().url).toContain('/v1/admin/capabilities');
   });
 
+  it('reads the context strategy catalog (#3849)', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        schemaVersion: 1,
+        defaultStrategyId: 'recent_window',
+        policyDefaults: {
+          enabled: true,
+          strategyId: 'recent_window',
+          autoCompactionEnabled: false,
+          compactAtPercent: 80,
+          targetPercentAfterCompaction: 55,
+          maxContextPercentForWake: 95,
+          debugVisibility: 'status',
+          includeDebugEventsInModelContext: false,
+          strategyConfig: {},
+        },
+        strategies: [
+          {
+            id: 'recent_window',
+            label: 'Recent Window',
+            description: 'Compatibility strategy.',
+            status: 'active',
+            supportsAutoCompaction: false,
+            modelFacingDebugDefault: false,
+          },
+        ],
+        percentRange: { min: 1, max: 100 },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const catalog = await transport.contextStrategies();
+
+    expect(catalog.defaultStrategyId).toBe('recent_window');
+    expect(catalog.strategies).toHaveLength(1);
+    expect(lastRequest().method).toBe('GET');
+    expect(lastRequest().url).toContain('/v1/admin/context-strategies');
+  });
+
   it('pauses a session runtime through the control route', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

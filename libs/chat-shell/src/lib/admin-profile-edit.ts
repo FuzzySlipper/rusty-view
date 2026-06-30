@@ -16,6 +16,9 @@ import type {
   AdminProfileRegistryRecord,
   AdminToolDescriptor,
   AdminToolsetDescriptor,
+  ContextDebugVisibility,
+  ContextStrategyDescriptor,
+  ContextStrategyPolicy,
   CreateProfileMcpBinding,
   ProfileBundleExportEntry,
   ProfileRegistryFieldUpdateRequest,
@@ -89,6 +92,40 @@ const LIFECYCLE_STATUSES: readonly ProfileRegistryLifecycleStatus[] = [
   'archived',
 ];
 
+const CONTEXT_DEBUG_VISIBILITIES: readonly ContextDebugVisibility[] = [
+  'off',
+  'status',
+  'verbose',
+];
+
+/**
+ * Editable view of a {@link ContextStrategyPolicy} (task #3849). Mirrors the
+ * wire policy minus `strategyConfig`, which the form preserves verbatim from the
+ * seed source rather than editing.
+ */
+interface ContextPolicyDraft {
+  readonly enabled: boolean;
+  readonly strategyId: string;
+  readonly autoCompactionEnabled: boolean;
+  readonly compactAtPercent: number;
+  readonly targetPercentAfterCompaction: number;
+  readonly maxContextPercentForWake: number;
+  readonly debugVisibility: ContextDebugVisibility;
+  readonly includeDebugEventsInModelContext: boolean;
+}
+
+/** Local fallback used only when neither the record nor the catalog seed one. */
+const FALLBACK_CONTEXT_POLICY: ContextPolicyDraft = {
+  enabled: true,
+  strategyId: '',
+  autoCompactionEnabled: false,
+  compactAtPercent: 80,
+  targetPercentAfterCompaction: 55,
+  maxContextPercentForWake: 95,
+  debugVisibility: 'status',
+  includeDebugEventsInModelContext: false,
+};
+
 /**
  * Edit Profile window (#3690). Extracted from the former monolithic profiles
  * panel; scoped to a single profile by {@link profileId}. Owns registry field
@@ -147,6 +184,18 @@ export class AdminProfileEditComponent {
   protected readonly runtimeMcpDirty = signal(false);
   /** Current full bindings, kept to merge advanced fields back on build. */
   private seededMcpBindings: readonly CreateProfileMcpBinding[] = [];
+
+  // ---- context strategy policy (#3849) ----
+  protected readonly debugVisibilities = CONTEXT_DEBUG_VISIBILITIES;
+  protected readonly contextPolicyForm =
+    signal<ContextPolicyDraft>(FALLBACK_CONTEXT_POLICY);
+  /**
+   * Whether the operator touched the context policy. Only sent when dirty so an
+   * untouched edit preserves the profile's current policy.
+   */
+  protected readonly runtimeContextDirty = signal(false);
+  /** Opaque strategy config preserved verbatim from the seed source on build. */
+  private seededStrategyConfig: Record<string, unknown> = {};
 
   /** The registry record being edited, resolved from the store by id. */
   protected readonly record = computed<AdminProfileRegistryRecord | undefined>(
@@ -510,6 +559,42 @@ export class AdminProfileEditComponent {
       })),
     );
     this.runtimeMcpDirty.set(false);
+    this.seedContextPolicy(record);
+  }
+
+  /**
+   * Seed the context-policy form (#3849): prefer the profile's current policy,
+   * then the catalog defaults, then a local fallback. The catalog's default
+   * strategy id fills in a missing/empty strategy so the dropdown is never blank.
+   */
+  private seedContextPolicy(record: AdminProfileRegistryRecord): void {
+    const seed =
+      record.contextPolicy ?? this.admin.contextPolicyDefaults() ?? undefined;
+    const fallbackStrategy =
+      this.admin.defaultContextStrategyId() ??
+      FALLBACK_CONTEXT_POLICY.strategyId;
+    this.seededStrategyConfig = seed?.strategyConfig ?? {};
+    this.contextPolicyForm.set({
+      enabled: seed?.enabled ?? FALLBACK_CONTEXT_POLICY.enabled,
+      strategyId: seed?.strategyId ?? fallbackStrategy,
+      autoCompactionEnabled:
+        seed?.autoCompactionEnabled ??
+        FALLBACK_CONTEXT_POLICY.autoCompactionEnabled,
+      compactAtPercent:
+        seed?.compactAtPercent ?? FALLBACK_CONTEXT_POLICY.compactAtPercent,
+      targetPercentAfterCompaction:
+        seed?.targetPercentAfterCompaction ??
+        FALLBACK_CONTEXT_POLICY.targetPercentAfterCompaction,
+      maxContextPercentForWake:
+        seed?.maxContextPercentForWake ??
+        FALLBACK_CONTEXT_POLICY.maxContextPercentForWake,
+      debugVisibility:
+        seed?.debugVisibility ?? FALLBACK_CONTEXT_POLICY.debugVisibility,
+      includeDebugEventsInModelContext:
+        seed?.includeDebugEventsInModelContext ??
+        FALLBACK_CONTEXT_POLICY.includeDebugEventsInModelContext,
+    });
+    this.runtimeContextDirty.set(false);
   }
 
   /** Configured model provider aliases for the provider dropdown (#3534). */
@@ -626,6 +711,66 @@ export class AdminProfileEditComponent {
     );
   }
 
+  // ---- context strategy policy controls (#3849) --------------------------
+
+  /** Selectable strategies from the catalog (#3849); empty if route absent. */
+  protected contextStrategies(): readonly ContextStrategyDescriptor[] {
+    return this.admin.contextStrategies();
+  }
+
+  /** Percent control bounds from the catalog (#3849). */
+  protected contextPercentRange(): { min: number; max: number } {
+    return this.admin.contextPercentRange();
+  }
+
+  protected updateContextStrategy(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.runtimeContextDirty.set(true);
+    this.contextPolicyForm.update((form) => ({ ...form, strategyId: value }));
+  }
+
+  protected updateContextDebugVisibility(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (
+      value === 'off' ||
+      value === 'status' ||
+      value === 'verbose'
+    ) {
+      this.runtimeContextDirty.set(true);
+      this.contextPolicyForm.update((form) => ({
+        ...form,
+        debugVisibility: value,
+      }));
+    }
+  }
+
+  protected toggleContextField(
+    field:
+      | 'enabled'
+      | 'autoCompactionEnabled'
+      | 'includeDebugEventsInModelContext',
+    event: Event,
+  ): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.runtimeContextDirty.set(true);
+    this.contextPolicyForm.update((form) => ({ ...form, [field]: checked }));
+  }
+
+  protected updateContextPercent(
+    field:
+      | 'compactAtPercent'
+      | 'targetPercentAfterCompaction'
+      | 'maxContextPercentForWake',
+    event: Event,
+  ): void {
+    const raw = Number((event.target as HTMLInputElement).value);
+    if (!Number.isFinite(raw)) return;
+    const { min, max } = this.contextPercentRange();
+    const clamped = Math.min(max, Math.max(min, Math.round(raw)));
+    this.runtimeContextDirty.set(true);
+    this.contextPolicyForm.update((form) => ({ ...form, [field]: clamped }));
+  }
+
   /** Build the runtime-config request body for plan/apply (#3742). */
   protected buildRuntimeConfigRequest(
     record: AdminProfileRegistryRecord,
@@ -636,6 +781,7 @@ export class AdminProfileEditComponent {
       localToolProfileId?: string | null;
       toolPolicy?: { requestedToolsets: readonly string[]; requestedTools: readonly string[] };
       mcpBindings?: readonly CreateProfileMcpBinding[];
+      contextPolicy?: ContextStrategyPolicy;
     } = { expectedRevision: record.revision ?? 0 };
 
     // Provider: only set an alias (never auto-clear to avoid wiping inline
@@ -681,6 +827,17 @@ export class AdminProfileEditComponent {
           }
           return merged;
         });
+    }
+
+    // Context policy: only sent when touched, preserving the seed's opaque
+    // strategyConfig. Invalid values surface as plan diagnostics (e.g.
+    // contextPolicy.strategyId) rather than applying.
+    if (this.runtimeContextDirty()) {
+      const form = this.contextPolicyForm();
+      request.contextPolicy = {
+        ...form,
+        strategyConfig: this.seededStrategyConfig,
+      };
     }
 
     return request;

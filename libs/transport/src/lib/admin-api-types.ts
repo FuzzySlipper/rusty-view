@@ -666,6 +666,12 @@ export interface AdminProfileRegistryRecord {
    */
   readonly mcpBindings?: readonly AdminProfileRuntimeMcpBinding[];
   /**
+   * Current context-strategy policy for the profile (task #3849). Seeds the
+   * Edit window's context-policy controls. Absent on backends that predate the
+   * context-strategy contract.
+   */
+  readonly contextPolicy?: ContextStrategyPolicy;
+  /**
    * DB-backed static prompt text for the profile's soul (long-form
    * persona/instruction text). Only populated for registry-backed records;
    * file-backed fallback records omit this (prompt text lives in
@@ -767,6 +773,57 @@ export interface AdminProfileRuntimeMcpBinding {
   readonly toolProfileKey?: string;
 }
 
+// ---- context strategy catalog + policy (task #3849) ----
+
+/** How verbose the context debug surface is for a session/profile. */
+export type ContextDebugVisibility = 'off' | 'status' | 'verbose';
+
+/**
+ * A profile/session context-strategy policy (task #3849). Mirrors Crew's
+ * camelCase wire shape exactly. `strategyId` is intentionally typed as a plain
+ * string (not a closed union): valid ids come from the strategy catalog
+ * (`GET /v1/admin/context-strategies`), never hardcoded in the frontend.
+ */
+export interface ContextStrategyPolicy {
+  readonly enabled: boolean;
+  readonly strategyId: string;
+  readonly autoCompactionEnabled: boolean;
+  readonly compactAtPercent: number;
+  readonly targetPercentAfterCompaction: number;
+  readonly maxContextPercentForWake: number;
+  readonly debugVisibility: ContextDebugVisibility;
+  readonly includeDebugEventsInModelContext: boolean;
+  readonly strategyConfig: Record<string, unknown>;
+}
+
+/**
+ * One selectable context strategy from the catalog (task #3849). `status`
+ * distinguishes shipped strategies from planned ones; `supportsAutoCompaction`
+ * gates the auto-compaction control.
+ */
+export interface ContextStrategyDescriptor {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly status: 'active' | 'planned';
+  readonly supportsAutoCompaction: boolean;
+  readonly modelFacingDebugDefault: false;
+}
+
+/**
+ * Context strategy catalog response (`GET /v1/admin/context-strategies`, task
+ * #3849). The UI drives strategy selection from `strategies`/`defaultStrategyId`
+ * and seeds new policies from `policyDefaults` instead of hardcoding ids or
+ * thresholds. `percentRange` bounds the percent controls.
+ */
+export interface ContextStrategyCatalog {
+  readonly schemaVersion: 1;
+  readonly defaultStrategyId: string;
+  readonly policyDefaults: ContextStrategyPolicy;
+  readonly strategies: readonly ContextStrategyDescriptor[];
+  readonly percentRange: { readonly min: number; readonly max: number };
+}
+
 /**
  * Body for the registry runtime-config plan/apply routes (task #3742): change a
  * profile's provider and/or built-in tools and/or MCP bindings on an existing
@@ -789,6 +846,12 @@ export interface ProfileRegistryRuntimeConfigRequest {
   readonly localToolProfileId?: string | null;
   readonly toolPolicy?: CreateProfileToolPolicy;
   readonly mcpBindings?: readonly CreateProfileMcpBinding[];
+  /**
+   * Context-strategy policy to apply (task #3849). Omit to keep the profile's
+   * current policy. Invalid values (e.g. an unknown `strategyId`) come back as
+   * plan diagnostics at path `contextPolicy.*` rather than applying.
+   */
+  readonly contextPolicy?: ContextStrategyPolicy;
 }
 
 /**
@@ -802,6 +865,8 @@ export interface EditableProfileRuntimeConfig {
   readonly localToolProfileId?: string;
   readonly toolPolicy?: ProfileRuntimeToolPolicy;
   readonly mcpBindings: readonly AdminProfileRuntimeMcpBinding[];
+  /** Resolved context-strategy policy after the requested change (task #3849). */
+  readonly contextPolicy?: ContextStrategyPolicy;
 }
 
 /**
