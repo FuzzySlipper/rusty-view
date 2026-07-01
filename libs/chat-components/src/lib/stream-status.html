@@ -1,6 +1,8 @@
 <button
   type="button"
   class="rv-status"
+  data-testid="stream-status"
+  [attr.data-stream-status]="status()"
   [class]="statusClass()"
   (click)="reconnect.emit()"
   [title]="'Click to reconnect'"

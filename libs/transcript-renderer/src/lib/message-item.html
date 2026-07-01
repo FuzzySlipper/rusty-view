@@ -1,14 +1,22 @@
 <div
   class="rv-message"
+  data-testid="message-row"
+  [attr.data-message-id]="message().id"
+  [attr.data-message-role]="message().author.role"
+  [attr.data-message-status]="message().status"
   [class]="roleClass()"
   [class.rv-message--decorated]="decoration().className !== undefined"
   [class.rv-message--search-match]="searchMatched()"
   [class.rv-message--search-active]="searchActive()"
 >
   <header class="rv-message__header">
-    <span class="rv-message__author">{{ authorLabel() }}</span>
+    <span class="rv-message__author" data-testid="message-author"
+      >{{ authorLabel() }}</span
+    >
     @if (statusIndicator()) {
-    <span class="rv-message__status">{{ statusIndicator() }}</span>
+    <span class="rv-message__status" data-testid="message-status"
+      >{{ statusIndicator() }}</span
+    >
     }
   </header>
 
@@ -16,7 +24,7 @@
   <div class="rv-message__prefix">{{ decoration().prefix }}</div>
   }
 
-  <div class="rv-message__blocks">
+  <div class="rv-message__blocks" data-testid="message-blocks">
     @for (block of message().blocks; track block.id) {
     <rv-message-block
       [block]="block"

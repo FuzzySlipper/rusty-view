@@ -1,5 +1,6 @@
 <div
   class="rv-input"
+  data-testid="message-input"
   [class.rv-input--drag-active]="dragActive()"
   (dragover)="onDragOver($event)"
   (dragleave)="onDragLeave($event)"
@@ -11,6 +12,7 @@
       <span>Attach</span>
       <input
         type="file"
+        data-testid="message-attachment-input"
         [attr.accept]="accept() ?? null"
         [multiple]="activeScope()?.multiple !== false"
         (change)="onFileInput($event)"
@@ -19,6 +21,7 @@
     @if (attachmentScopes().length > 0) {
     <select
       class="rv-input__scope"
+      data-testid="message-attachment-scope"
       [value]="activeScope()?.id ?? ''"
       (change)="updateScope($event)"
       aria-label="Attachment scope"
@@ -33,6 +36,7 @@
 
   <textarea
     class="rv-input__field"
+    data-testid="message-input-field"
     [placeholder]="placeholder()"
     [disabled]="disabled()"
     [value]="text()"
@@ -49,6 +53,7 @@
   <button
     type="button"
     class="rv-input__send"
+    data-testid="send-message"
     [disabled]="disabled() || text().trim().length === 0"
     (click)="submit()"
   >
@@ -60,6 +65,7 @@
     <button
       type="button"
       class="rv-input__attachment"
+      data-testid="message-attachment-chip"
       (click)="removeAttachment(item)"
       [title]="item.attachment.name"
     >
@@ -76,6 +82,7 @@
     @for (cmd of filteredCommands(); track cmd.name; let i = $index) {
     <div
       class="rv-input__hint"
+      data-testid="message-command-hint"
       [class.rv-input__hint--active]="i === hintIndex()"
       [id]="'hint-' + i"
       role="option"

@@ -1,14 +1,21 @@
-<div class="rv-debug">
+<div class="rv-debug" data-testid="debug-shell">
   <!-- Header: title + stream status + cursor + inspector toggle -->
   <header class="rv-debug__header">
-    <span class="rv-debug__title">rusty-view</span>
+    <span class="rv-debug__title" data-testid="app-title">rusty-view</span>
     <rv-top-menu />
     <rv-stream-status
       [status]="connectionStatus()"
       (reconnect)="onReconnect()"
     />
-    <span class="rv-debug__cursor">cursor: {{ cursorLabel() }}</span>
-    <button type="button" class="rv-debug__toggle" (click)="toggleInspector()">
+    <span class="rv-debug__cursor" data-testid="cursor-label"
+      >cursor: {{ cursorLabel() }}</span
+    >
+    <button
+      type="button"
+      class="rv-debug__toggle"
+      data-testid="inspector-toggle"
+      (click)="toggleInspector()"
+    >
       {{ showInspector() ? 'Hide Inspector' : 'Show Inspector' }}
     </button>
   </header>
@@ -24,20 +31,25 @@
     <main class="rv-debug__main">
       <!-- Historical session banner -->
       @if (isViewingHistorical()) {
-      <div class="rv-debug__historical-banner" role="status">
+      <div
+        class="rv-debug__historical-banner"
+        role="status"
+        data-testid="historical-session-banner"
+      >
         <span class="rv-debug__historical-banner__label">
           Viewing historical session: {{ viewingSessionId() }}
         </span>
         <button
           type="button"
           class="rv-debug__historical-banner__return"
+          data-testid="return-to-active-session"
           (click)="onReturnToActive()"
         >
           Return to active
         </button>
       </div>
       } @if (store.activeSessionId()) {
-      <div class="rv-debug__transcript">
+      <div class="rv-debug__transcript" data-testid="transcript-shell">
         <rv-transcript-viewport [messages]="store.messages()" />
       </div>
       @if (!isViewingHistorical()) {
@@ -48,11 +60,15 @@
         (send)="onSendMessage($event)"
       />
       @if (pluginCommandError()) {
-      <div class="rv-debug__command-error" role="alert">
+      <div
+        class="rv-debug__command-error"
+        role="alert"
+        data-testid="command-error"
+      >
         {{ pluginCommandError() }}
       </div>
       } } } @else {
-      <div class="rv-debug__no-session">
+      <div class="rv-debug__no-session" data-testid="no-session">
         Select a profile from the sidebar to begin.
       </div>
       }
@@ -65,6 +81,7 @@
         <button
           type="button"
           class="rv-debug__inspector-tab"
+          data-testid="inspector-tab-events"
           [class.rv-debug__inspector-tab--active]="inspectorTab() === 'events'"
           (click)="showInspectorTab('events')"
         >
@@ -73,6 +90,7 @@
         <button
           type="button"
           class="rv-debug__inspector-tab"
+          data-testid="inspector-tab-context"
           [class.rv-debug__inspector-tab--active]="inspectorTab() === 'context'"
           (click)="showInspectorTab('context')"
         >

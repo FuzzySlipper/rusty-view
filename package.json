@@ -16,6 +16,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,html,css,scss,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,html,css,scss,json,md,yml,yaml}\"",
     "e2e": "nx run-many -t e2e --all",
+    "e2e:live": "RV_LIVE_RUN=1 playwright test --config apps/rusty-view-e2e/playwright.config.mts --grep @live-agent --project=chromium",
+    "e2e:live:headed": "RV_LIVE_RUN=1 playwright test --config apps/rusty-view-e2e/playwright.config.mts --grep @live-agent --project=chromium --headed",
     "graph": "nx graph",
     "protocol:generate": "nx run protocol:generate",
     "protocol:check": "nx run protocol:check",

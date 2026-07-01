@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
@@ -54,6 +55,7 @@ import {
 })
 export class DebugShellComponent {
   protected readonly store = inject(ChatStore);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly slashCommands =
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
 
@@ -97,6 +99,10 @@ export class DebugShellComponent {
   protected readonly viewingSessionId = computed(() =>
     this.store.viewingHistoricalSessionId(),
   );
+
+  constructor() {
+    this.installTestSnapshotApi();
+  }
 
   protected onSelectSession(sessionId: string): void {
     void this.store.selectSession(sessionId);
@@ -192,6 +198,38 @@ export class DebugShellComponent {
         return;
     }
   }
+
+  private installTestSnapshotApi(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const api: RustyViewTestApi = {
+      getActiveSessionId: () => this.store.activeSessionId(),
+      getConnectionStatus: () => this.store.connectionState().status,
+      getIsGenerating: () => this.store.isGenerating(),
+      getIsStreaming: () => this.store.isStreaming(),
+      getLastCursor: () => this.store.lastCursor(),
+      getMessageCount: () => this.store.messages().length,
+      getRawEventCount: () => this.store.rawEvents().length,
+      getMessages: () =>
+        this.store.messages().map((message) => ({
+          id: message.id,
+          role: message.author.role,
+          status: message.status,
+          blockKinds: message.blocks.map((block) => block.kind),
+          text: message.blocks.map((block) => block.content).join('\n'),
+        })),
+    };
+
+    const testWindow = window as RustyViewTestWindow;
+    testWindow.__RUSTY_VIEW_TEST__ = api;
+    this.destroyRef.onDestroy(() => {
+      if (testWindow.__RUSTY_VIEW_TEST__ === api) {
+        delete testWindow.__RUSTY_VIEW_TEST__;
+      }
+    });
+  }
 }
 
 function confirmCommand(message: string | undefined): Promise<boolean> {
@@ -200,3 +238,25 @@ function confirmCommand(message: string | undefined): Promise<boolean> {
   }
   return Promise.resolve(true);
 }
+
+interface RustyViewTestApi {
+  getActiveSessionId(): string | null;
+  getConnectionStatus(): string;
+  getIsGenerating(): boolean;
+  getIsStreaming(): boolean;
+  getLastCursor(): string | null;
+  getMessageCount(): number;
+  getRawEventCount(): number;
+  getMessages(): readonly {
+    readonly id: string;
+    readonly role: string;
+    readonly status: string;
+    readonly blockKinds: readonly string[];
+    readonly text: string;
+  }[];
+}
+
+type RustyViewTestWindow = Window &
+  typeof globalThis & {
+    __RUSTY_VIEW_TEST__?: RustyViewTestApi;
+  };

@@ -98,6 +98,8 @@ Testing:
 * Unit tests for pure TypeScript/domain logic
 * Angular component tests sparingly
 * Playwright for browser behavior
+* Live conversation Playwright scenarios for real frontend + real Rusty Crew
+  backend/profile/LLM verification; see [`docs/live-testing.md`](live-testing.md)
 * Storybook for component contracts
 * Large transcript torture fixtures
 * CI typecheck/lint/test/build required

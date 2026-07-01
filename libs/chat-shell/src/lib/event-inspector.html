@@ -1,9 +1,12 @@
-<div class="rv-event-inspector">
-  <div class="rv-event-inspector__list">
+<div class="rv-event-inspector" data-testid="event-inspector">
+  <div class="rv-event-inspector__list" data-testid="event-inspector-list">
     @for (event of events(); track event.event_id) {
     <button
       type="button"
       class="rv-event"
+      data-testid="event-row"
+      [attr.data-event-id]="event.event_id"
+      [attr.data-event-kind]="event.kind"
       [class.rv-event--selected]="selectedEventId() === event.event_id"
       (click)="selectEvent.emit(event.event_id)"
     >
@@ -17,11 +20,13 @@
       <span class="rv-event__id">{{ event.event_id }}</span>
     </button>
     } @empty {
-    <div class="rv-event-inspector__empty">No events yet.</div>
+    <div class="rv-event-inspector__empty" data-testid="event-inspector-empty">
+      No events yet.
+    </div>
     }
   </div>
   @if (selectedEvent(events()); as selected) {
-  <div class="rv-event-inspector__detail">
+  <div class="rv-event-inspector__detail" data-testid="event-inspector-detail">
     <rv-json-inspector [data]="selected" />
   </div>
   }

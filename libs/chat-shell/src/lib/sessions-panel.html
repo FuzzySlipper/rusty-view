@@ -1,9 +1,10 @@
-<div class="rv-sessions-panel">
+<div class="rv-sessions-panel" data-testid="sessions-panel">
   <header class="rv-sessions-panel__header">
     <span class="rv-sessions-panel__title">Sessions</span>
     <button
       type="button"
       class="rv-sessions-panel__close"
+      data-testid="sessions-panel-close"
       (click)="closePanel()"
       aria-label="Close sessions"
     >
@@ -15,6 +16,7 @@
     <button
       type="button"
       class="rv-sessions-panel__chip"
+      data-testid="sessions-filter-all"
       [class.rv-sessions-panel__chip--active]="filterProfileId() === null"
       (click)="setFilter(null)"
     >
@@ -24,6 +26,8 @@
     <button
       type="button"
       class="rv-sessions-panel__chip"
+      data-testid="sessions-filter-profile"
+      [attr.data-profile-id]="pid"
       [class.rv-sessions-panel__chip--active]="filterProfileId() === pid"
       (click)="setFilter(pid)"
     >
@@ -69,6 +73,10 @@
         <button
           type="button"
           class="rv-sessions-panel__row"
+          data-testid="session-row"
+          [attr.data-session-id]="session.session_id"
+          [attr.data-profile-id]="session.profile_id"
+          [attr.data-session-status]="session.status"
           [class.rv-sessions-panel__row--active]="
                 store.activeSessionId() === session.session_id
               "
@@ -116,6 +124,8 @@
           <button
             type="button"
             class="rv-sessions-panel__control"
+            data-testid="session-resume-runtime"
+            [attr.data-session-id]="session.session_id"
             (click)="resumeSessionRuntime(session.session_id)"
             [disabled]="
                     admin.saving() ||
@@ -131,6 +141,8 @@
           <button
             type="button"
             class="rv-sessions-panel__control rv-sessions-panel__control--danger"
+            data-testid="session-pause-runtime"
+            [attr.data-session-id]="session.session_id"
             (click)="pauseSessionRuntime(session.session_id)"
             [disabled]="
                     admin.saving() ||

@@ -1,4 +1,4 @@
-<div class="rv-profiles">
+<div class="rv-profiles" data-testid="profile-panel">
   <div class="rv-profiles__header">Brain profiles</div>
 
   @if (!hasProfiles()) {
@@ -12,6 +12,10 @@
       <button
         type="button"
         class="rv-profile"
+        data-testid="profile-row"
+        [attr.data-profile-id]="profile.profileId"
+        [attr.data-profile-status]="profile.status"
+        [attr.data-active-session-id]="profile.activeSessionId"
         [class.rv-profile--selected]="selectedProfileId() === profile.profileId"
         (click)="onSelectProfile(profile.profileId)"
       >
@@ -38,7 +42,12 @@
   </ul>
   }
 
-  <button type="button" class="rv-profiles__refresh" (click)="onRefresh()">
+  <button
+    type="button"
+    class="rv-profiles__refresh"
+    data-testid="profile-refresh"
+    (click)="onRefresh()"
+  >
     Refresh
   </button>
 </div>

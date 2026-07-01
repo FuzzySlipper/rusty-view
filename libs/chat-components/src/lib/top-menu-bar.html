@@ -1,11 +1,13 @@
 <nav class="rv-top-menu" aria-label="Top menu">
   @for (item of items(); track item.id) {
-    <button
-      type="button"
-      class="rv-top-menu__item"
-      (click)="onSelect(item.id)"
-    >
-      {{ item.label }}
-    </button>
+  <button
+    type="button"
+    class="rv-top-menu__item"
+    data-testid="top-menu-item"
+    [attr.data-menu-id]="item.id"
+    (click)="onSelect(item.id)"
+  >
+    {{ item.label }}
+  </button>
   }
 </nav>

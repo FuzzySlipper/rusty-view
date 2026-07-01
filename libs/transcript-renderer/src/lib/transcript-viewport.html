@@ -1,5 +1,9 @@
 @if (hasNavigation()) {
-<nav class="rv-transcript-nav" aria-label="Conversation navigation">
+<nav
+  class="rv-transcript-nav"
+  aria-label="Conversation navigation"
+  data-testid="transcript-navigation"
+>
   @if (branchBreadcrumbs().length > 0) {
   <ol class="rv-transcript-nav__breadcrumbs">
     @for (crumb of branchBreadcrumbs(); track crumb.branch.id) {
@@ -7,6 +11,8 @@
       <button
         type="button"
         class="rv-transcript-nav__button"
+        data-testid="transcript-branch-jump"
+        [attr.data-branch-id]="crumb.branch.id"
         [class.rv-transcript-nav__button--current]="$last"
         (click)="jumpToBranch(crumb)"
       >
@@ -21,6 +27,8 @@
     <button
       type="button"
       class="rv-transcript-nav__button"
+      data-testid="transcript-snapshot-jump"
+      [attr.data-snapshot-id]="target.id"
       (click)="jumpToSnapshot(target)"
     >
       {{ navigationLabel(target, target.id) }}
@@ -30,12 +38,17 @@
   }
 </nav>
 } @if (searchEnabled()) {
-<section class="rv-transcript-search" aria-label="Conversation search">
+<section
+  class="rv-transcript-search"
+  aria-label="Conversation search"
+  data-testid="transcript-search"
+>
   <label class="rv-transcript-search__query">
     <span class="rv-transcript-search__label">Search</span>
     <input
       type="search"
       class="rv-transcript-search__input"
+      data-testid="transcript-search-input"
       [value]="searchQuery()"
       (input)="updateSearchQuery($event)"
       placeholder="Find in transcript"
@@ -43,6 +56,7 @@
   </label>
   <select
     class="rv-transcript-search__select"
+    data-testid="transcript-search-role"
     [value]="searchRole()"
     (change)="updateSearchRole($event)"
     aria-label="Role filter"
@@ -56,6 +70,7 @@
   <input
     type="date"
     class="rv-transcript-search__date"
+    data-testid="transcript-search-date-from"
     [value]="searchDateFrom()"
     (input)="updateSearchDateFrom($event)"
     aria-label="Search from date"
@@ -63,15 +78,21 @@
   <input
     type="date"
     class="rv-transcript-search__date"
+    data-testid="transcript-search-date-to"
     [value]="searchDateTo()"
     (input)="updateSearchDateTo($event)"
     aria-label="Search to date"
   />
   <div class="rv-transcript-search__nav" aria-live="polite">
-    <span class="rv-transcript-search__status">{{ searchStatus() }}</span>
+    <span
+      class="rv-transcript-search__status"
+      data-testid="transcript-search-status"
+      >{{ searchStatus() }}</span
+    >
     <button
       type="button"
       class="rv-transcript-search__button"
+      data-testid="transcript-search-previous"
       [disabled]="searchResults().length === 0"
       (click)="previousSearchResult()"
       aria-label="Previous search result"
@@ -81,6 +102,7 @@
     <button
       type="button"
       class="rv-transcript-search__button"
+      data-testid="transcript-search-next"
       [disabled]="searchResults().length === 0"
       (click)="nextSearchResult()"
       aria-label="Next search result"
@@ -90,6 +112,7 @@
     <button
       type="button"
       class="rv-transcript-search__button"
+      data-testid="transcript-search-clear"
       [disabled]="searchQuery().length === 0 && searchRole() === 'all' && searchDateFrom().length === 0 && searchDateTo().length === 0"
       (click)="clearSearch()"
       aria-label="Clear search"
@@ -98,7 +121,11 @@
     </button>
   </div>
   @if (activeSearchSnippet()) {
-  <div class="rv-transcript-search__snippet" [title]="activeSearchSnippet()">
+  <div
+    class="rv-transcript-search__snippet"
+    data-testid="transcript-search-snippet"
+    [title]="activeSearchSnippet()"
+  >
     {{ activeSearchSnippet() }}
   </div>
   }
@@ -108,11 +135,14 @@
 <cdk-virtual-scroll-viewport
   autosize
   class="rv-transcript"
+  data-testid="transcript-viewport"
   (scroll)="onScroll()"
 >
   <div
     *cdkVirtualFor="let message of renderMessages(); trackBy: trackByMessageId"
     class="rv-transcript__item"
+    data-testid="transcript-item"
+    [attr.data-message-id]="message.id"
   >
     <rv-message-item
       [message]="message"

@@ -1,8 +1,10 @@
 @if (customRenderer(); as renderer) {
 <div
   class="rv-block rv-block--custom"
+  data-testid="message-block"
   [class.rv-block--search-match]="searchMatched()"
   [attr.data-block-kind]="block().kind"
+  [attr.data-block-id]="block().id"
 >
   <ng-container
     *ngComponentOutlet="renderer.component; inputs: customRendererInputs()"
@@ -16,12 +18,15 @@
 } @else if (tool(); as tool) {
 <div
   class="rv-block rv-block--tool"
+  data-testid="tool-call-block"
   [class.rv-block--search-match]="searchMatched()"
+  [attr.data-block-id]="block().id"
   [attr.data-status]="tool.status"
 >
   <button
     type="button"
     class="rv-block__header rv-block__tool-header"
+    data-testid="tool-call-toggle"
     (click)="toggleExpand()"
     [attr.aria-expanded]="expanded()"
     [disabled]="!hasDetail()"
@@ -36,17 +41,24 @@
     <span class="rv-block__tool-summary">{{ tool.summary }}</span>
   </button>
   @if (expanded() && hasDetail()) {
-  <pre class="rv-block__content">{{ block().content }}</pre>
+  <pre class="rv-block__content" data-testid="tool-call-detail">
+{{
+    block().content
+  }}</pre
+  >
   }
 </div>
 } @else if (isReasoning()) {
 <div
   class="rv-block rv-block--reasoning"
+  data-testid="reasoning-block"
   [class.rv-block--search-match]="searchMatched()"
+  [attr.data-block-id]="block().id"
 >
   <button
     type="button"
     class="rv-block__header rv-block__reasoning-header"
+    data-testid="reasoning-toggle"
     (click)="toggleExpand()"
     [attr.aria-expanded]="expanded()"
     [disabled]="!hasDetail()"
@@ -57,18 +69,26 @@
     <span class="rv-block__reasoning-label">Reasoning</span>
   </button>
   @if (expanded() && hasDetail()) {
-  <pre class="rv-block__content">{{ block().content }}</pre>
+  <pre class="rv-block__content" data-testid="reasoning-content">
+{{
+    block().content
+  }}</pre
+  >
   }
 </div>
 } @else if (isCollapsible()) {
 <div
   class="rv-block rv-block--collapsible"
+  data-testid="collapsible-block"
   [class.rv-block--search-match]="searchMatched()"
   [class.rv-block--debug]="block().kind === 'debug'"
+  [attr.data-block-id]="block().id"
+  [attr.data-block-kind]="block().kind"
 >
   <button
     type="button"
     class="rv-block__header"
+    data-testid="collapsible-block-toggle"
     (click)="toggleExpand()"
     [attr.aria-expanded]="expanded()"
   >
@@ -77,16 +97,23 @@
     <span class="rv-block__expand">expand</span>
     }
   </button>
-  <pre class="rv-block__content">{{ displayContent() }}</pre>
+  <pre class="rv-block__content" data-testid="collapsible-block-content">
+{{
+    displayContent()
+  }}</pre
+  >
 </div>
 } @else {
 <div
   class="rv-block rv-block--text"
+  data-testid="text-block"
   [class.rv-block--search-match]="searchMatched()"
+  [attr.data-block-id]="block().id"
 >
   @if (shouldRenderFormatted() && renderedHtml()) {
   <div
     class="rv-block__markdown"
+    data-testid="text-block-formatted"
     [innerHTML]="renderedHtml()"
     tabindex="0"
     (click)="onMarkdownInteraction($event)"
@@ -94,7 +121,7 @@
     (keydown.space)="$event.preventDefault(); onMarkdownInteraction($event)"
   ></div>
   } @else {
-  <p class="rv-block__content">
+  <p class="rv-block__content" data-testid="text-block-content">
     @for (segment of highlightedSegments(); track $index) { @if
     (segment.matched) {
     <mark class="rv-block__search-mark">{{ segment.text }}</mark>
@@ -107,6 +134,7 @@
     <button
       type="button"
       class="rv-block__raw-button"
+      data-testid="text-raw-toggle"
       (click)="toggleRaw()"
       [attr.aria-pressed]="showRaw()"
       tabindex="0"
