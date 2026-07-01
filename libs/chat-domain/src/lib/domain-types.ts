@@ -21,6 +21,7 @@ export interface MessageAuthor {
 
 export type KnownMessageBlockKind =
   | 'text'
+  | 'reasoning'
   | 'tool_call'
   | 'tool_result'
   | 'debug'

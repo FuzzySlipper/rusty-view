@@ -20,6 +20,7 @@ const KNOWN_EVENT_KINDS: Record<ChatEventKind, true> = {
   message_created: true,
   assistant_turn_started: true,
   assistant_text_delta: true,
+  assistant_reasoning_delta: true,
   assistant_message_completed: true,
   assistant_turn_finished: true,
   tool_call_started: true,

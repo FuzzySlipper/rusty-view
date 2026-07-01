@@ -320,6 +320,38 @@
   visibility: hidden;
 }
 
+/* ---- reasoning / think blocks (task #3867) ---- */
+
+.rv-block--reasoning {
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  overflow: hidden;
+}
+
+.rv-block__reasoning-header {
+  border-bottom: none;
+}
+
+.rv-block__reasoning-label {
+  text-transform: uppercase;
+  font-weight: var(--rv-font-weight-bold);
+  letter-spacing: 0.03em;
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-block--reasoning .rv-block__content {
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  font-style: italic;
+  color: var(--rv-color-text-secondary);
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
 /* ---- per-block raw toggle ---- */
 
 .rv-block__raw-toggle {

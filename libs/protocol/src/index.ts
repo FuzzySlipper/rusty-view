@@ -61,6 +61,8 @@ export type ChatEventPayload = Schemas['ChatEventPayload'];
 export type SessionSnapshotPayload = Schemas['SessionSnapshotPayload'];
 export type MessageCreatedPayload = Schemas['MessageCreatedPayload'];
 export type AssistantTextDeltaPayload = Schemas['AssistantTextDeltaPayload'];
+export type AssistantReasoningDeltaPayload =
+  Schemas['AssistantReasoningDeltaPayload'];
 export type AssistantMessageCompletedPayload =
   Schemas['AssistantMessageCompletedPayload'];
 export type ToolCallPayload = Schemas['ToolCallPayload'];

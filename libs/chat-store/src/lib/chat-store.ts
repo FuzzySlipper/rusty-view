@@ -415,6 +415,12 @@ export class ChatStore implements OnDestroy {
    * Request/response writes can commit events before the live SSE consumer sees
    * them. Replay from the pre-write cursor so the transcript updates even if the
    * stream callback is delayed or misses the small write/subscribe window.
+   *
+   * Replay is paginated: a single assistant turn can span many pages, so this
+   * follows `has_more` via {@link ChatTransport.replayAllEvents} until the backend
+   * reports no more. Ingesting only the first page could stop the transcript
+   * mid-turn — e.g. the terminal `assistant_turn_finished` lands on a later page —
+   * leaving the input wedged as "streaming" until a manual refresh (task #3865).
    */
   private async catchUpAfterWrite(
     sessionId: string,
@@ -422,7 +428,7 @@ export class ChatStore implements OnDestroy {
     latestCursor: string,
   ): Promise<void> {
     if (cursorBeforeWrite === latestCursor) return;
-    const events = await this.transport.replayEvents(sessionId, {
+    const events = await this.transport.replayAllEvents(sessionId, {
       ...(cursorBeforeWrite !== null ? { cursor: cursorBeforeWrite } : {}),
     });
     this.ingestEvents(events);

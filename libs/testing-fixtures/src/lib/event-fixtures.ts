@@ -64,6 +64,15 @@ export const assistantDeltaEvent: ChatEvent = makeEvent(
   },
 );
 
+export const assistantReasoningDeltaEvent: ChatEvent = makeEvent(
+  'assistant_reasoning_delta',
+  {
+    wake_id: 'wake_asst_1',
+    text: 'The door creaks — I should describe who enters.',
+    visibility: 'reasoning',
+  },
+);
+
 export const assistantMessageCompletedEvent: ChatEvent = makeEvent(
   'assistant_message_completed',
   {
@@ -144,6 +153,7 @@ export const allKindEvents: readonly ChatEvent[] = Object.freeze([
   userMessageEvent,
   assistantTurnStartedEvent,
   assistantDeltaEvent,
+  assistantReasoningDeltaEvent,
   assistantMessageCompletedEvent,
   assistantTurnFinishedEvent,
   toolCallStartedEvent,

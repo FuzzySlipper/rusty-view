@@ -3,6 +3,7 @@ import type {
   ApiError,
   ChatCommandRegistry,
   ChatEvent,
+  ChatEventPage,
   ChatSessionOpenResult,
   ChatSessionPage,
   ChatSessionStatus,
@@ -122,11 +123,15 @@ export class ChatHttpTransport {
     return unwrapEnvelope(body);
   }
 
-  /** Replay historical events after a cursor. */
-  async replayEvents(
+  /**
+   * Replay a single page of historical events after a cursor. Returns the raw
+   * page (`{ items, latest_cursor, has_more }`) so callers can follow the cursor
+   * across pages; most callers want {@link replayAllEvents} instead.
+   */
+  async replayEventsPage(
     sessionId: string,
     query?: ReplayEventsQuery,
-  ): Promise<ChatEvent[]> {
+  ): Promise<ChatEventPage> {
     const body = await this.requestJson<ReplayChatSessionEventsResponse>(
       'GET',
       SESSION_EVENTS_PATH,
@@ -135,7 +140,56 @@ export class ChatHttpTransport {
         ...(query !== undefined ? { query } : {}),
       },
     );
-    return unwrapEnvelope(body).items;
+    return unwrapEnvelope(body);
+  }
+
+  /** Replay one page of historical events after a cursor (items only). */
+  async replayEvents(
+    sessionId: string,
+    query?: ReplayEventsQuery,
+  ): Promise<ChatEvent[]> {
+    return (await this.replayEventsPage(sessionId, query)).items;
+  }
+
+  /**
+   * Guard against a malformed/non-advancing cursor pinning the catch-up loop:
+   * even a well-behaved backend paginates a large turn into a bounded number of
+   * pages, so stop after this many. A single assistant response can produce
+   * hundreds of events, so allow plenty of pages before bailing.
+   */
+  static readonly MAX_REPLAY_PAGES = 200;
+
+  /**
+   * Replay ALL historical events after a cursor, following the page's
+   * `has_more`/`latest_cursor` until the backend reports no more (task #3865).
+   *
+   * Crew paginates event replay: a single assistant turn can span hundreds of
+   * events across several pages. Consuming only the first page can stop the
+   * transcript mid-turn (e.g. the terminal `assistant_turn_finished` lands on a
+   * later page), leaving the UI wedged as "streaming" until a manual refresh.
+   *
+   * Termination is guarded three ways so a malformed cursor cannot loop forever:
+   * `has_more === false`, a `latest_cursor` that fails to advance, and a hard
+   * {@link MAX_REPLAY_PAGES} page cap.
+   */
+  async replayAllEvents(
+    sessionId: string,
+    query?: ReplayEventsQuery,
+  ): Promise<ChatEvent[]> {
+    const all: ChatEvent[] = [];
+    let cursor = query?.cursor;
+    for (let page = 0; page < ChatHttpTransport.MAX_REPLAY_PAGES; page++) {
+      const result = await this.replayEventsPage(sessionId, {
+        ...(query ?? {}),
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      all.push(...result.items);
+      if (!result.has_more) break;
+      // A cursor that does not advance would page the same events forever.
+      if (result.latest_cursor === cursor) break;
+      cursor = result.latest_cursor;
+    }
+    return all;
   }
 
   /** Append a user message and request an agent wake. */

@@ -179,6 +179,91 @@ describe('projectConversation', () => {
     expect(projection.activeTurn?.messageId).toBe('a1');
   });
 
+  it('assistant_reasoning_delta accumulates into a separate reasoning block', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'assistant_reasoning_delta',
+        { wake_id: 'w1', text: 'Let me ', visibility: 'reasoning' },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_reasoning_delta',
+        { wake_id: 'w1', text: 'think.', visibility: 'reasoning' },
+        { event_id: 'e3' },
+      ),
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    const blocks = projection.messages[0]?.blocks ?? [];
+    const reasoning = blocks.filter((b) => b.kind === 'reasoning');
+    expect(reasoning).toHaveLength(1);
+    expect(reasoning[0]?.content).toBe('Let me think.');
+    expect(reasoning[0]?.renderPolicy).toBe('collapsed');
+    // Reasoning does not leak into the visible answer text.
+    expect(projection.activeTurn?.streamingText).toBe('');
+  });
+
+  it('reasoning shares one message with answer text and preserves order', () => {
+    // Reasoning (wake w1) streams before any text delta (message asst:w1); both
+    // must land on the SAME assistant message, reasoning first then text.
+    const projection = projectConversation([
+      makeEvent(
+        'assistant_reasoning_delta',
+        { wake_id: 'w1', text: 'thinking…', visibility: 'reasoning' },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'w1', text: 'The answer.' },
+        { event_id: 'e2' },
+      ),
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    const blocks = projection.messages[0]?.blocks ?? [];
+    expect(blocks.map((b) => b.kind)).toEqual(['reasoning', 'text']);
+    expect(blocks[0]?.content).toBe('thinking…');
+    expect(blocks[1]?.content).toBe('The answer.');
+  });
+
+  it('interleaved reasoning/text/tool ordering, cleared by turn_finished', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'assistant_reasoning_delta',
+        { wake_id: 'w1', text: 'plan', visibility: 'reasoning' },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'w1', text: 'answer ' },
+        { event_id: 'e3' },
+      ),
+      makeEvent(
+        'assistant_reasoning_delta',
+        { wake_id: 'w1', text: 'reconsider', visibility: 'reasoning' },
+        { event_id: 'e4' },
+      ),
+      makeEvent(
+        'assistant_message_completed',
+        { wake_id: 'w1', body: 'answer done' },
+        { event_id: 'e5' },
+      ),
+      makeEvent('assistant_turn_finished', {}, { event_id: 'e6' }),
+    ]);
+
+    const blocks = projection.messages[0]?.blocks ?? [];
+    // Two reasoning segments bracket the text, staying in chronological order.
+    expect(blocks.map((b) => b.kind)).toEqual([
+      'reasoning',
+      'text',
+      'reasoning',
+    ]);
+    expect(projection.messages[0]?.status).toBe('completed');
+    expect(projection.activeTurn).toBeUndefined();
+  });
+
   it('tool_call lifecycle: started → completed', () => {
     const projection = projectConversation([
       makeEvent(

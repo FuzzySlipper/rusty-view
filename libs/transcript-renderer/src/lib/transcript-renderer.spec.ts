@@ -135,6 +135,30 @@ describe('MessageBlockComponent', () => {
     expect(host.textContent).toContain('tool_call');
   });
 
+  it('renders reasoning blocks folded by default, revealing content on expand', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'reasoning',
+        content: 'Weighing the options before answering.',
+        renderPolicy: 'collapsed',
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+
+    // A dedicated reasoning block with a header, collapsed by default.
+    const container = host.querySelector('.rv-block--reasoning');
+    expect(container).not.toBeNull();
+    expect(host.textContent).toContain('Reasoning');
+    // Reasoning text is hidden until the user expands it.
+    expect(host.textContent).not.toContain('Weighing the options');
+
+    const header = host.querySelector('.rv-block__header') as HTMLButtonElement;
+    header.click();
+    fixture.detectChanges();
+
+    expect(host.textContent).toContain('Weighing the options before answering.');
+  });
+
   it('truncates long collapsible content and expands on click', async () => {
     const longContent = 'x'.repeat(600);
     const fixture = await createBlock(

@@ -18,6 +18,7 @@ export {
   userMessageEvent,
   assistantTurnStartedEvent,
   assistantDeltaEvent,
+  assistantReasoningDeltaEvent,
   assistantMessageCompletedEvent,
   assistantTurnFinishedEvent,
   toolCallStartedEvent,

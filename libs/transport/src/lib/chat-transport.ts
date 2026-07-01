@@ -1,6 +1,7 @@
 import type {
   ChatCommandRegistry,
   ChatEvent,
+  ChatEventPage,
   ChatSessionOpenResult,
   ChatSessionPage,
   ExecuteChatCommandRequest,
@@ -125,11 +126,30 @@ export class ChatTransport {
     return this.http.openSession(sessionId, query);
   }
 
+  replayEventsPage(
+    sessionId: string,
+    query?: ReplayEventsQuery,
+  ): Promise<ChatEventPage> {
+    return this.http.replayEventsPage(sessionId, query);
+  }
+
   replayEvents(
     sessionId: string,
     query?: ReplayEventsQuery,
   ): Promise<ChatEvent[]> {
     return this.http.replayEvents(sessionId, query);
+  }
+
+  /**
+   * Replay all historical events after a cursor, following pagination until the
+   * backend reports no more (task #3865). Prefer this over {@link replayEvents}
+   * for catch-up/recovery so a multi-page turn is fully ingested.
+   */
+  replayAllEvents(
+    sessionId: string,
+    query?: ReplayEventsQuery,
+  ): Promise<ChatEvent[]> {
+    return this.http.replayAllEvents(sessionId, query);
   }
 
   sendMessage(

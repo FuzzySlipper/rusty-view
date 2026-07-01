@@ -71,6 +71,7 @@ function createMockTransport(opts: {
     listSessions: vi.fn(async () => opts.sessions ?? emptySessionPage()),
     openSession: vi.fn(async () => opts.openResult ?? emptyOpenResult()),
     replayEvents: vi.fn(async () => opts.replayEvents ?? []),
+    replayAllEvents: vi.fn(async () => opts.replayEvents ?? []),
     sendMessage: vi.fn(async () => opts.sendResult ?? acceptedResult()),
     sessionContext: vi.fn(async () => {
       if (opts.contextUsageError === true) {
@@ -479,13 +480,65 @@ describe('ChatStore', () => {
     await store.selectSession('sess_test');
     await store.sendMessage('caught up after POST');
 
-    expect(transport.replayEvents).toHaveBeenCalledWith('sess_test', {
+    expect(transport.replayAllEvents).toHaveBeenCalledWith('sess_test', {
       cursor: 'cur_0',
     });
     expect(store.rawEvents().map((event) => event.event_id)).toContain('cur_1');
     expect(store.messages().at(-1)?.blocks[0]?.content).toBe(
       'caught up after POST',
     );
+  });
+
+  it('catch-up ingests a full multi-page turn so a terminal event on a later page clears streaming', async () => {
+    // replayAllEvents (transport) follows has_more across pages and hands the
+    // store the concatenated result — including the terminal turn event that Crew
+    // may return on a later page. The store must ingest all of it (task #3865).
+    const midTurn: ChatEvent[] = [
+      {
+        event_id: 'cur_1',
+        session_id: 'sess_test',
+        sequence_id: 1,
+        created_at: '2026-06-22T10:00:01Z',
+        kind: 'assistant_turn_started',
+        payload: {} as ChatEvent['payload'],
+      },
+      {
+        event_id: 'cur_2',
+        session_id: 'sess_test',
+        sequence_id: 2,
+        created_at: '2026-06-22T10:00:02Z',
+        kind: 'assistant_text_delta',
+        payload: { wake_id: 'w1', text: 'A figure steps ' },
+      },
+    ];
+    const terminalOnLaterPage: ChatEvent[] = [
+      {
+        event_id: 'cur_3',
+        session_id: 'sess_test',
+        sequence_id: 3,
+        created_at: '2026-06-22T10:00:03Z',
+        kind: 'assistant_turn_finished',
+        payload: {} as ChatEvent['payload'],
+      },
+    ];
+    const transport = createMockTransport({
+      sendResult: {
+        status: 'accepted',
+        message_id: 'msg_1',
+        latest_cursor: 'cur_3',
+      },
+      // Simulates replayAllEvents concatenating page 1 (mid-turn) + page 2 (terminal).
+      replayEvents: [...midTurn, ...terminalOnLaterPage],
+      streamEvents: [],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('hello');
+
+    expect(store.rawEvents().map((e) => e.event_id)).toContain('cur_3');
+    // The terminal event was ingested, so the active turn is cleared.
+    expect(store.isStreaming()).toBe(false);
   });
 
   it('runCommand switches session when result has new_session_id', async () => {

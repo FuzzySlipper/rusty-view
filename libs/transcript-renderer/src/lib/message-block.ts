@@ -192,11 +192,20 @@ export class MessageBlockComponent {
     () => this.block().content.length > 0,
   );
 
+  /**
+   * Reasoning / think blocks (task #3867): folded behind an expandable header,
+   * collapsed by default, kept visually distinct from the assistant's answer.
+   */
+  protected readonly isReasoning = computed(
+    () => this.customRenderer() === undefined && this.block().kind === 'reasoning',
+  );
+
   protected readonly isCollapsible = computed(
     () =>
       this.customRenderer() === undefined &&
       this.attachment() === undefined &&
-      this.block().kind !== 'text',
+      this.block().kind !== 'text' &&
+      this.block().kind !== 'reasoning',
   );
 
   protected readonly displayContent = computed(() => {

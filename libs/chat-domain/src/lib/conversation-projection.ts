@@ -67,6 +67,8 @@ function applyEvent(
       return applyAssistantTurnStarted(withCursor, event);
     case 'assistant_text_delta':
       return applyAssistantTextDelta(withCursor, event);
+    case 'assistant_reasoning_delta':
+      return applyAssistantReasoningDelta(withCursor, event);
     case 'assistant_message_completed':
       return applyAssistantMessageCompleted(withCursor, event);
     case 'assistant_turn_finished':
@@ -223,6 +225,63 @@ function applyAssistantTextDelta(
     projection.activeTurn,
     messageId,
     delta,
+  );
+
+  return { ...projection, messages, activeTurn };
+}
+
+/**
+ * Project an `assistant_reasoning_delta` into the active assistant turn's
+ * reasoning block (task #3867).
+ *
+ * Reasoning/think output is kept SEPARATE from normal assistant text: it lands
+ * in a dedicated `reasoning` block (rendered collapsed/expandable), never folded
+ * into the visible answer. Deltas accumulate into the current reasoning block, or
+ * start a new one when other content (text/tool activity) has intervened — so
+ * reasoning, text, and tool blocks stay in chronological order within the turn.
+ *
+ * The reasoning block attaches to the SAME assistant message the text deltas use
+ * (`asst:${wake_id}`), so reasoning that streams before any answer text still
+ * shares one message rather than splitting into two.
+ */
+function applyAssistantReasoningDelta(
+  projection: ConversationProjection,
+  event: ChatEvent,
+): ConversationProjection {
+  const payload = payloadRecord(event.payload);
+
+  // The contract keys reasoning deltas by an optional `wake_id` (no message_id)
+  // and carries the chunk under `text`. Accept a direct `message_id`/`delta` too
+  // for forward-compatibility with any contract drift.
+  const directMessageId = readOptionalString(payload, 'message_id');
+  const wakeId = readOptionalString(payload, 'wake_id');
+  const messageId =
+    directMessageId ??
+    (wakeId !== undefined
+      ? `asst:${wakeId}`
+      : projection.activeTurn?.messageId);
+
+  const delta =
+    readOptionalString(payload, 'text') ?? readOptionalString(payload, 'delta');
+
+  if (messageId === undefined || delta === undefined) {
+    return projection;
+  }
+
+  const messages = upsertReasoningDelta(
+    projection.messages,
+    messageId,
+    event,
+    delta,
+  );
+
+  // Reasoning implies a live turn is under way. Ensure one exists and points at
+  // this message, but leave `streamingText` (the visible answer) untouched —
+  // reasoning must not leak into the assistant's text.
+  const activeTurn = updateActiveTurnForReasoning(
+    projection.activeTurn,
+    messageId,
+    event,
   );
 
   return { ...projection, messages, activeTurn };
@@ -584,6 +643,63 @@ function upsertStreamingDelta(
   return [...messages, message];
 }
 
+function upsertReasoningDelta(
+  messages: readonly ChatMessage[],
+  messageId: string,
+  event: ChatEvent,
+  delta: string,
+): readonly ChatMessage[] {
+  const existingIndex = messages.findIndex((msg) => msg.id === messageId);
+  if (existingIndex >= 0) {
+    return messages.map((msg, i) => {
+      if (i !== existingIndex) return msg;
+      const reasoningBlock = findOrCreateReasoningBlock(msg, delta);
+      return { ...msg, blocks: replaceBlock(msg.blocks, reasoningBlock) };
+    });
+  }
+
+  // Reasoning arrived before any answer text — create the streaming assistant
+  // message to host it.
+  const message = buildMessage(
+    messageId,
+    event.session_id,
+    'assistant',
+    event.created_at,
+    'streaming',
+    [{ kind: 'reasoning', content: delta }],
+  );
+  return [...messages, message];
+}
+
+function findOrCreateReasoningBlock(
+  message: ChatMessage,
+  delta: string,
+): MessageBlock {
+  // Append to the current reasoning segment — the LAST block, if it is a
+  // reasoning block. When other content (text/tool) intervened, start a fresh
+  // reasoning segment so blocks stay in chronological order.
+  const last = message.blocks[message.blocks.length - 1];
+  if (last !== undefined && last.kind === 'reasoning') {
+    return { ...last, content: last.content + delta };
+  }
+  return makeReasoningBlock(message.id, message.blocks.length, delta);
+}
+
+function makeReasoningBlock(
+  messageId: string,
+  index: number,
+  content: string,
+): MessageBlock {
+  return {
+    id: `${messageId}-reasoning-${index}`,
+    messageId,
+    kind: 'reasoning',
+    content,
+    estimatedHeight: undefined,
+    renderPolicy: 'collapsed',
+  };
+}
+
 function findOrCreateTextBlock(
   message: ChatMessage,
   delta: string,
@@ -788,4 +904,21 @@ function updateActiveTurnForDelta(
     messageId,
     streamingText: activeTurn.streamingText + delta,
   };
+}
+
+function updateActiveTurnForReasoning(
+  activeTurn: ActiveAssistantTurn | undefined,
+  messageId: string,
+  event: ChatEvent,
+): ActiveAssistantTurn {
+  if (activeTurn === undefined) {
+    // Reasoning began the turn — start a minimal one. No streamingText yet:
+    // reasoning is tracked in its own block, not the visible answer text.
+    return { startedAt: event.created_at, messageId, streamingText: '' };
+  }
+  // Adopt the message id if the turn didn't have one yet; otherwise leave the
+  // turn (and its streamingText) untouched.
+  return activeTurn.messageId === undefined
+    ? { ...activeTurn, messageId }
+    : activeTurn;
 }

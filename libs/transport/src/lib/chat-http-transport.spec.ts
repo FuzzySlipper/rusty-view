@@ -1,4 +1,6 @@
 import type {
+  ChatEvent,
+  ChatEventPage,
   ChatSessionPage,
   ChatSessionOpenResult,
   SendChatMessageResult,
@@ -439,6 +441,97 @@ describe('ChatHttpTransport', () => {
         const transportError = error as ChatTransportError;
         expect(transportError.code).toBe('network_error');
       }
+    });
+  });
+
+  describe('replayAllEvents (paged replay, task #3865)', () => {
+    function replayEvent(id: string): ChatEvent {
+      return {
+        event_id: id,
+        session_id: 'sess_1',
+        sequence_id: Number(id.replace(/\D/g, '')) || 0,
+        created_at: '2026-06-22T10:00:00Z',
+        kind: 'assistant_text_delta',
+        payload: { wake_id: 'w', text: id },
+      };
+    }
+
+    /** A fetch that returns each queued page in turn, capturing request URLs. */
+    function queuedFetch(pages: ChatEventPage[]): {
+      fetch: FetchImpl;
+      urls: () => string[];
+    } {
+      const urls: string[] = [];
+      let call = 0;
+      const fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+        urls.push(input.toString());
+        const page = pages[Math.min(call, pages.length - 1)];
+        call += 1;
+        return jsonOk(page);
+      }) as FetchImpl;
+      return { fetch, urls: () => urls };
+    }
+
+    it('follows has_more across pages, concatenating events and advancing the cursor', async () => {
+      const { fetch, urls } = queuedFetch([
+        {
+          items: [replayEvent('e1'), replayEvent('e2')],
+          latest_cursor: 'e2',
+          has_more: true,
+        },
+        { items: [replayEvent('e3')], latest_cursor: 'e3', has_more: false },
+      ]);
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const events = await transport.replayAllEvents('sess_1', { cursor: 'e0' });
+
+      expect(events.map((e) => e.event_id)).toEqual(['e1', 'e2', 'e3']);
+      expect(urls()).toHaveLength(2);
+      // Page 1 uses the caller's cursor; page 2 follows the returned latest_cursor.
+      expect(new URL(urls()[0] as string).searchParams.get('cursor')).toBe('e0');
+      expect(new URL(urls()[1] as string).searchParams.get('cursor')).toBe('e2');
+    });
+
+    it('returns a single page when has_more is false', async () => {
+      const { fetch, urls } = queuedFetch([
+        { items: [replayEvent('e1')], latest_cursor: 'e1', has_more: false },
+      ]);
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const events = await transport.replayAllEvents('sess_1');
+
+      expect(events.map((e) => e.event_id)).toEqual(['e1']);
+      expect(urls()).toHaveLength(1);
+    });
+
+    it('stops when the cursor fails to advance (malformed-cursor guard)', async () => {
+      // has_more stays true but latest_cursor never moves past the input cursor.
+      const { fetch, urls } = queuedFetch([
+        { items: [replayEvent('e1')], latest_cursor: 'e0', has_more: true },
+      ]);
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const events = await transport.replayAllEvents('sess_1', { cursor: 'e0' });
+
+      expect(events.map((e) => e.event_id)).toEqual(['e1']);
+      expect(urls()).toHaveLength(1);
+    });
+
+    it('caps at MAX_REPLAY_PAGES when has_more never turns false', async () => {
+      let n = 0;
+      const fetch = (async (): Promise<Response> => {
+        n += 1;
+        return jsonOk({
+          items: [replayEvent(`e${n}`)],
+          latest_cursor: `e${n}`,
+          has_more: true,
+        } satisfies ChatEventPage);
+      }) as FetchImpl;
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const events = await transport.replayAllEvents('sess_1');
+
+      expect(events).toHaveLength(ChatHttpTransport.MAX_REPLAY_PAGES);
     });
   });
 });
