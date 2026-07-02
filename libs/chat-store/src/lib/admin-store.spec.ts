@@ -1,0 +1,721 @@
+import { TestBed } from '@angular/core/testing';
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  ChatTransport,
+  ChatTransportError,
+  type AdminDiagnosticsBundle,
+  type AdminPage,
+  type RuntimeSessionDiagnostics,
+  type AdminAgentDiagnostics,
+  type McpSurfaceDiagnostics,
+  type RuntimeConfigValidationReport,
+  type ApiCapabilityRegistry,
+  type AdminProfileRegistryDiagnostics,
+  type AdminMcpCatalog,
+  type AdminToolCatalog,
+  type AdminLocalToolProfile,
+  type AdminLocalToolProfileList,
+  type AdminLocalToolProfileWriteRequest,
+  type AdminControlResponse,
+  type CreatedServiceProfile,
+  type ContextStrategyCatalog,
+  type ModelProviderPage,
+  type ModelProviderRecord,
+  type ModelProviderWriteRequest,
+  type ModelProviderWriteResponse,
+  type RuntimeBrainModuleDiagnostics,
+  type RuntimeConfigApplyResult,
+  type RuntimePauseControlRequest,
+  type RuntimePauseControlResult,
+  type RuntimePauseScope,
+  type RuntimeResumeNoopResult,
+  type ProfileRegistryFieldUpdateRequest,
+  type ProfileRegistryWriteApplyResult,
+  type ProfileRegistryWritePlan,
+} from '@rusty-view/transport';
+
+import { AdminStore } from './admin-store';
+
+interface AdminTransportMock {
+  readonly adminDiagnostics: ReturnType<
+    typeof vi.fn<() => Promise<AdminDiagnosticsBundle>>
+  >;
+  readonly adminSessions: ReturnType<
+    typeof vi.fn<() => Promise<AdminPage<RuntimeSessionDiagnostics>>>
+  >;
+  readonly adminAgents: ReturnType<
+    typeof vi.fn<() => Promise<AdminPage<AdminAgentDiagnostics>>>
+  >;
+  readonly adminMcpSurfaces: ReturnType<
+    typeof vi.fn<() => Promise<AdminPage<McpSurfaceDiagnostics>>>
+  >;
+  readonly adminConfigValidation: ReturnType<
+    typeof vi.fn<() => Promise<RuntimeConfigValidationReport | null>>
+  >;
+  readonly adminCapabilities: ReturnType<
+    typeof vi.fn<() => Promise<ApiCapabilityRegistry>>
+  >;
+  readonly adminProfileDiagnostics: ReturnType<
+    typeof vi.fn<() => Promise<AdminProfileRegistryDiagnostics>>
+  >;
+  readonly adminMcpCatalog: ReturnType<
+    typeof vi.fn<() => Promise<AdminMcpCatalog>>
+  >;
+  readonly adminToolCatalog: ReturnType<
+    typeof vi.fn<() => Promise<AdminToolCatalog>>
+  >;
+  readonly adminLocalToolProfiles: ReturnType<
+    typeof vi.fn<() => Promise<AdminLocalToolProfileList>>
+  >;
+  readonly adminContextStrategies: ReturnType<
+    typeof vi.fn<() => Promise<ContextStrategyCatalog>>
+  >;
+  readonly adminModelProviders: ReturnType<
+    typeof vi.fn<() => Promise<ModelProviderPage>>
+  >;
+  readonly adminCreateLocalToolProfile: ReturnType<
+    typeof vi.fn<
+      (
+        request: AdminLocalToolProfileWriteRequest,
+      ) => Promise<AdminLocalToolProfile>
+    >
+  >;
+  readonly adminUpdateLocalToolProfile: ReturnType<
+    typeof vi.fn<
+      (
+        id: string,
+        request: AdminLocalToolProfileWriteRequest,
+      ) => Promise<AdminLocalToolProfile>
+    >
+  >;
+  readonly adminDeleteLocalToolProfile: ReturnType<
+    typeof vi.fn<(id: string) => Promise<void>>
+  >;
+  readonly planAdminProfileRegistryUpdate: ReturnType<
+    typeof vi.fn<
+      (
+        profileId: string,
+        request: ProfileRegistryFieldUpdateRequest,
+      ) => Promise<ProfileRegistryWritePlan>
+    >
+  >;
+  readonly applyAdminProfileRegistryUpdate: ReturnType<
+    typeof vi.fn<
+      (
+        profileId: string,
+        request: ProfileRegistryFieldUpdateRequest,
+      ) => Promise<ProfileRegistryWriteApplyResult>
+    >
+  >;
+  readonly createAdminProfile: ReturnType<
+    typeof vi.fn<
+      (request: {
+        readonly profileId: string;
+      }) => Promise<AdminControlResponse<CreatedServiceProfile>>
+    >
+  >;
+  readonly createAdminModelProvider: ReturnType<
+    typeof vi.fn<
+      (
+        request: ModelProviderWriteRequest,
+        refresh: string,
+      ) => Promise<ModelProviderWriteResponse>
+    >
+  >;
+  readonly updateAdminModelProvider: ReturnType<
+    typeof vi.fn<
+      (
+        alias: string,
+        request: ModelProviderWriteRequest,
+        refresh: string,
+      ) => Promise<ModelProviderWriteResponse>
+    >
+  >;
+  readonly pauseRuntime: ReturnType<
+    typeof vi.fn<
+      (
+        scope: RuntimePauseScope,
+        targetId: string,
+        request: RuntimePauseControlRequest,
+      ) => Promise<AdminControlResponse<RuntimePauseControlResult>>
+    >
+  >;
+  readonly resumeRuntime: ReturnType<
+    typeof vi.fn<
+      (
+        scope: RuntimePauseScope,
+        targetId: string,
+        request: RuntimePauseControlRequest,
+      ) => Promise<
+        AdminControlResponse<
+          RuntimePauseControlResult | RuntimeResumeNoopResult
+        >
+      >
+    >
+  >;
+}
+
+function emptyPage<T>(): AdminPage<T> {
+  return { items: [], total: 0, limit: 100, offset: 0 };
+}
+
+function diagnosticsBundle(): AdminDiagnosticsBundle {
+  return {
+    overview: {
+      generatedAt: '2026-07-02T00:00:00Z',
+      health: 'ok',
+      degraded: false,
+      reasonCodes: [],
+      summary: {
+        sessions: 0,
+        activeSessions: 0,
+        idleSessions: 0,
+        archivedSessions: 0,
+        delegatedSessions: 0,
+        blockedDelegations: 0,
+        pendingQueueItems: 0,
+        expiredQueueItems: 0,
+        toolErrors: 0,
+        recentErrors: 0,
+      },
+      runtime: {
+        brainModules: [],
+        sessions: [],
+        delegatedSessions: [],
+        runtimePauses: [],
+      },
+    },
+    health: {},
+  };
+}
+
+function diagnosticsWithBrains(
+  brainModules: readonly RuntimeBrainModuleDiagnostics[],
+): AdminDiagnosticsBundle {
+  const base = diagnosticsBundle();
+  return {
+    ...base,
+    overview: {
+      ...base.overview,
+      runtime: {
+        ...base.overview.runtime,
+        brainModules,
+      },
+    },
+  };
+}
+
+function controlResponse<TResult>(
+  name: string,
+  result: TResult,
+): AdminControlResponse<TResult> {
+  return {
+    command: {
+      name,
+      target: {},
+      requestId: 'req-test',
+    },
+    outcome: {
+      status: 'completed',
+      summary: 'done',
+      result,
+    },
+    audit: {
+      started: true,
+      terminal: true,
+    },
+    observation: {},
+  };
+}
+
+function applyResult(): RuntimeConfigApplyResult {
+  return {
+    brainsRegistered: 1,
+    brainsAlreadyPresent: 0,
+    sessionsCreated: 1,
+    sessionsAlreadyPresent: 0,
+    sessionsReactivated: 0,
+    sessionsMissing: 0,
+    scheduledJobsRegistered: 0,
+  };
+}
+
+function createdProfile(profileId: string): CreatedServiceProfile {
+  return {
+    profileId,
+    agentId: `agent-${profileId}`,
+    sessionId: `session-${profileId}`,
+    implementationId: 'impl-test',
+    profilePath: `/profiles/${profileId}`,
+    runtimeConfigPath: `/profiles/${profileId}/runtime.json`,
+    applyResult: applyResult(),
+  };
+}
+
+function registryPlan(profileId: string): ProfileRegistryWritePlan {
+  return {
+    ok: true,
+    kind: 'field_update',
+    profileId,
+    mode: 'plan',
+    expectedRevision: 1,
+    current: {},
+    next: {},
+    nextWrite: {},
+    diagnostics: [],
+    implications: {},
+  } as unknown as ProfileRegistryWritePlan;
+}
+
+function registryApplyResult(
+  profileId: string,
+): ProfileRegistryWriteApplyResult {
+  return {
+    ...registryPlan(profileId),
+    applied: true,
+    record: {},
+    effects: {},
+  } as unknown as ProfileRegistryWriteApplyResult;
+}
+
+function provider(alias: string): ModelProviderRecord {
+  return {
+    alias,
+    status: 'active',
+    protocol: 'chat_completions',
+    providerKind: 'openai',
+    modelId: 'gpt-test',
+    credential: { hasSecret: false },
+    metadataJson: {},
+    revision: 1,
+    createdAt: '2026-07-02T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  };
+}
+
+function providerWriteResponse(alias: string): ModelProviderWriteResponse {
+  return {
+    provider: provider(alias),
+    refresh: {
+      mode: 'none',
+      affectedProfiles: [],
+      outcomes: [],
+    },
+  };
+}
+
+function pauseResult(targetId: string): RuntimePauseControlResult {
+  return {
+    pauseId: 'pause-1',
+    scope: 'profile',
+    targetId,
+    pausedBy: 'tester',
+    pausedAt: '2026-07-02T00:00:00Z',
+    affectedSessionIds: ['session-alpha'],
+    inFlightWakeCount: 0,
+    cancellationSupported: true,
+    limitation: 'none',
+  };
+}
+
+function session(
+  sessionId: string,
+  profileId: string,
+  status: string,
+): RuntimeSessionDiagnostics {
+  return {
+    sessionId,
+    agentId: `agent-${profileId}`,
+    profileId,
+    kind: 'full',
+    status,
+    toolCount: 0,
+    brainTurnCount: 0,
+    lastActiveAt: '2026-07-02T00:00:00Z',
+    stale: false,
+  };
+}
+
+function agent(profileId: string): AdminAgentDiagnostics {
+  return {
+    agentId: `agent-${profileId}`,
+    profileId,
+    sessions: 2,
+    activeSessions: 1,
+    idleSessions: 1,
+    archivedSessions: 0,
+    staleSessions: 0,
+  };
+}
+
+function brain(profileId: string): RuntimeBrainModuleDiagnostics {
+  return {
+    profileId,
+    implementationId: 'impl-test',
+    moduleId: 'brain-test',
+    selectedToolCount: 0,
+    selectedToolSource: 'profile',
+    toolAdapterStatus: 'ready',
+  };
+}
+
+function apiError(reasonCode: string, message: string): ChatTransportError {
+  return new ChatTransportError({
+    code: 'http_error',
+    message,
+    statusCode: 503,
+    endpoint: 'http://test/v1/admin/diagnostics',
+    apiError: {
+      code: 'internal_error',
+      reason_code: reasonCode,
+      message,
+      retryable: true,
+    },
+  });
+}
+
+function createTransport(
+  overrides: Partial<AdminTransportMock> = {},
+): AdminTransportMock {
+  return {
+    adminDiagnostics: vi.fn(async () => diagnosticsBundle()),
+    adminSessions: vi.fn(async () => emptyPage<RuntimeSessionDiagnostics>()),
+    adminAgents: vi.fn(async () => emptyPage<AdminAgentDiagnostics>()),
+    adminMcpSurfaces: vi.fn(async () => emptyPage<McpSurfaceDiagnostics>()),
+    adminConfigValidation: vi.fn(async () => null),
+    adminCapabilities: vi.fn(
+      async () =>
+        ({
+          schema_version: 1,
+          slash_commands: [],
+          capabilities: [],
+        }) satisfies ApiCapabilityRegistry,
+    ),
+    adminProfileDiagnostics: vi.fn(
+      async () =>
+        ({
+          generatedAt: '2026-07-02T00:00:00Z',
+          registryCount: 0,
+          fileFallbackCount: 0,
+          driftCount: 0,
+          missingAssetCount: 0,
+          records: [],
+          diagnostics: [],
+        }) satisfies AdminProfileRegistryDiagnostics,
+    ),
+    adminMcpCatalog: vi.fn(async () => ({
+      servers: [],
+      toolProfiles: [],
+      bindings: [],
+    })),
+    adminToolCatalog: vi.fn(async () => ({ toolsets: [], tools: [] })),
+    adminLocalToolProfiles: vi.fn(async () => ({ profiles: [] })),
+    adminContextStrategies: vi.fn(
+      async () =>
+        ({
+          schemaVersion: 1,
+          strategies: [],
+          defaultStrategyId: 'sliding-window',
+          policyDefaults: {
+            enabled: true,
+            strategyId: 'sliding-window',
+            autoCompactionEnabled: true,
+            compactAtPercent: 80,
+            targetPercentAfterCompaction: 40,
+            maxContextPercentForWake: 95,
+            debugVisibility: 'status',
+            includeDebugEventsInModelContext: false,
+            strategyConfig: {},
+          },
+          percentRange: { min: 1, max: 100 },
+        }) satisfies ContextStrategyCatalog,
+    ),
+    adminModelProviders: vi.fn(async () => emptyPage()),
+    adminCreateLocalToolProfile: vi.fn(async () => ({
+      id: 'tools-default',
+      enabled: true,
+      system: false,
+      readOnly: false,
+      requestedToolsets: [],
+      requestedTools: [],
+    })),
+    adminUpdateLocalToolProfile: vi.fn(async (id: string) => ({
+      id,
+      enabled: true,
+      system: false,
+      readOnly: false,
+      requestedToolsets: [],
+      requestedTools: [],
+    })),
+    adminDeleteLocalToolProfile: vi.fn(async () => undefined),
+    planAdminProfileRegistryUpdate: vi.fn(async (profileId: string) =>
+      registryPlan(profileId),
+    ),
+    applyAdminProfileRegistryUpdate: vi.fn(async (profileId: string) =>
+      registryApplyResult(profileId),
+    ),
+    createAdminProfile: vi.fn(async (request: { readonly profileId: string }) =>
+      controlResponse('create-profile', createdProfile(request.profileId)),
+    ),
+    createAdminModelProvider: vi.fn(async () => providerWriteResponse('main')),
+    updateAdminModelProvider: vi.fn(async (alias: string) =>
+      providerWriteResponse(alias),
+    ),
+    pauseRuntime: vi.fn(async (_scope, targetId) =>
+      controlResponse('pause-runtime', pauseResult(targetId)),
+    ),
+    resumeRuntime: vi.fn(async (_scope, targetId) =>
+      controlResponse('resume-runtime', {
+        ...pauseResult(targetId),
+        resumedAt: '2026-07-02T00:01:00Z',
+      }),
+    ),
+    ...overrides,
+  };
+}
+
+function setupAdminStore(transport: AdminTransportMock): AdminStore {
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      AdminStore,
+      {
+        provide: ChatTransport,
+        useValue: transport as unknown as ChatTransport,
+      },
+    ],
+  });
+  return TestBed.inject(AdminStore);
+}
+
+describe('AdminStore structured errors', () => {
+  it('keeps transport details while exposing a string message for top-level errors', async () => {
+    const transport = createTransport({
+      adminDiagnostics: vi.fn(async () => {
+        throw apiError('admin_down', 'Admin diagnostics failed');
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.refresh();
+
+    expect(store.error()).toBe('Admin diagnostics failed (admin_down)');
+    expect(store.errorDetail()?.transportCode).toBe('http_error');
+    expect(store.errorDetail()?.statusCode).toBe(503);
+    expect(store.errorDetail()?.endpoint).toContain('/v1/admin/diagnostics');
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe('admin_down');
+    expect(store.errorDetail()?.retryable).toBe(true);
+    expect(store.loading()).toBe(false);
+  });
+
+  it('captures provider load errors separately from overall refresh success', async () => {
+    const transport = createTransport({
+      adminModelProviders: vi.fn(async () => {
+        throw apiError('provider_registry_unavailable', 'Providers failed');
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.refresh();
+
+    expect(store.error()).toBeNull();
+    expect(store.providerLoadError()).toBe(
+      'Providers failed (provider_registry_unavailable)',
+    );
+    expect(store.providerLoadErrorDetail()?.apiError?.reasonCode).toBe(
+      'provider_registry_unavailable',
+    );
+  });
+
+  it('preserves local tool profile write error details', async () => {
+    const transport = createTransport({
+      adminCreateLocalToolProfile: vi.fn(async () => {
+        throw apiError('tool_profile_invalid', 'Tool profile rejected');
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    const ok = await store.createLocalToolProfile({
+      id: 'tools-default',
+      requestedToolsets: ['shell'],
+    });
+
+    expect(ok).toBe(false);
+    expect(store.toolProfileWriteError()).toBe(
+      'Tool profile rejected (tool_profile_invalid)',
+    );
+    expect(store.toolProfileWriteErrorDetail()?.apiError?.reasonCode).toBe(
+      'tool_profile_invalid',
+    );
+    expect(store.saving()).toBe(false);
+  });
+});
+
+describe('AdminStore behavior', () => {
+  it('refresh populates diagnostics, providers, and profile summaries', async () => {
+    const alphaSessions = [
+      session('session-alpha-live', 'alpha', 'active'),
+      session('session-alpha-idle', 'alpha', 'idle'),
+    ];
+    const transport = createTransport({
+      adminDiagnostics: vi.fn(async () =>
+        diagnosticsWithBrains([brain('alpha')]),
+      ),
+      adminSessions: vi.fn(async () => ({
+        ...emptyPage<RuntimeSessionDiagnostics>(),
+        items: alphaSessions,
+        total: alphaSessions.length,
+      })),
+      adminAgents: vi.fn(async () => ({
+        ...emptyPage<AdminAgentDiagnostics>(),
+        items: [agent('alpha')],
+        total: 1,
+      })),
+      adminMcpSurfaces: vi.fn(async () => ({
+        ...emptyPage<McpSurfaceDiagnostics>(),
+        items: [{ profileId: 'alpha', status: 'ready' }],
+        total: 1,
+      })),
+      adminModelProviders: vi.fn(async () => ({
+        ...emptyPage<ModelProviderRecord>(),
+        items: [provider('main')],
+        total: 1,
+      })),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.refresh();
+
+    expect(store.loading()).toBe(false);
+    expect(store.sessions()?.items).toHaveLength(2);
+    expect(store.providerAliases().map((item) => item.alias)).toEqual(['main']);
+    expect(store.profiles()).toHaveLength(1);
+    expect(store.profiles()[0]?.profileId).toBe('alpha');
+    expect(store.profiles()[0]?.activeSessions).toBe(1);
+    expect(store.profiles()[0]?.idleSessions).toBe(1);
+    expect(store.profiles()[0]?.brainModules).toHaveLength(1);
+    expect(store.profiles()[0]?.mcpSurfaces).toHaveLength(1);
+  });
+
+  it('createProfile stores the control result and refreshes admin data', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    await store.createProfile({ profileId: 'new-profile' });
+
+    expect(transport.createAdminProfile).toHaveBeenCalledWith({
+      profileId: 'new-profile',
+    });
+    expect(store.createResult()?.outcome.result?.profileId).toBe('new-profile');
+    expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
+    expect(store.saving()).toBe(false);
+  });
+
+  it('updates and deletes local tool profiles through the write helper', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    const updated = await store.updateLocalToolProfile('tools-default', {
+      displayName: 'Default tools',
+    });
+    const deleted = await store.deleteLocalToolProfile('tools-default');
+
+    expect(updated).toBe(true);
+    expect(deleted).toBe(true);
+    expect(transport.adminUpdateLocalToolProfile).toHaveBeenCalledWith(
+      'tools-default',
+      { displayName: 'Default tools' },
+    );
+    expect(transport.adminDeleteLocalToolProfile).toHaveBeenCalledWith(
+      'tools-default',
+    );
+    expect(store.toolProfileWriteError()).toBeNull();
+    expect(store.saving()).toBe(false);
+  });
+
+  it('plans and applies profile registry field updates', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+    const request: ProfileRegistryFieldUpdateRequest = {
+      expectedRevision: 1,
+      displayName: 'Alpha',
+    };
+
+    await store.planRegistryUpdate('alpha', request);
+    expect(transport.planAdminProfileRegistryUpdate).toHaveBeenCalledWith(
+      'alpha',
+      request,
+    );
+    expect(store.registryWritePlan()?.profileId).toBe('alpha');
+
+    await store.applyRegistryUpdate('alpha', request);
+    expect(transport.applyAdminProfileRegistryUpdate).toHaveBeenCalledWith(
+      'alpha',
+      request,
+    );
+    expect(store.registryWriteResult()).not.toBeNull();
+    expect(store.registryWritePlan()).toBeNull();
+    expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
+    expect(store.saving()).toBe(false);
+  });
+
+  it('createModelProvider stores write result and forwards refresh mode', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+    const request: ModelProviderWriteRequest = {
+      alias: 'main',
+      protocol: 'chat_completions',
+      modelId: 'gpt-test',
+    };
+
+    await store.createModelProvider(request, 'apply');
+
+    expect(transport.createAdminModelProvider).toHaveBeenCalledWith(
+      request,
+      'apply',
+    );
+    expect(store.providerWriteResult()?.provider.alias).toBe('main');
+    expect(store.saving()).toBe(false);
+  });
+
+  it('updateModelProvider stores write result and refreshes data', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+    const request: ModelProviderWriteRequest = {
+      protocol: 'chat_completions',
+      modelId: 'gpt-next',
+    };
+
+    await store.updateModelProvider('main', request, 'plan');
+
+    expect(transport.updateAdminModelProvider).toHaveBeenCalledWith(
+      'main',
+      request,
+      'plan',
+    );
+    expect(store.providerWriteResult()?.provider.alias).toBe('main');
+    expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it('pauseRuntime and resumeRuntime expose control results', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    await store.pauseRuntime('profile', 'alpha', { reason: 'maintenance' });
+    expect(store.runtimePauseResult()?.outcome.result?.targetId).toBe('alpha');
+
+    await store.resumeRuntime('profile', 'alpha');
+
+    expect(transport.pauseRuntime).toHaveBeenCalledWith('profile', 'alpha', {
+      reason: 'maintenance',
+    });
+    expect(transport.resumeRuntime).toHaveBeenCalledWith(
+      'profile',
+      'alpha',
+      {},
+    );
+    expect(store.runtimeResumeResult()?.outcome.result?.targetId).toBe('alpha');
+    expect(store.saving()).toBe(false);
+  });
+});

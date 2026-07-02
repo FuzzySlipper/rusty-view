@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "alias": "cheap-tester",
+        "status": "active",
+        "protocol": "chat_completions",
+        "providerKind": "openai-compatible",
+        "displayName": "Cheap tester",
+        "baseUrl": "http://router.example.invalid/v1",
+        "modelId": "synthetic-long-context",
+        "credential": { "hasSecret": false },
+        "metadataJson": {},
+        "revision": 3,
+        "createdAt": "2026-07-02T00:00:00Z",
+        "updatedAt": "2026-07-02T00:00:00Z"
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0
+  },
+  "meta": { "request_id": "req-recorded-providers", "schema_version": 1 }
+}
+

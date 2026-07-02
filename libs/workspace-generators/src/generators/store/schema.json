@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "rv:store options",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Store name, e.g. 'profile-editor'.",
+      "$default": "$name"
+    },
+    "project": {
+      "type": "string",
+      "description": "Target library project.",
+      "default": "chat-store"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Optional directory under src/lib."
+    }
+  },
+  "required": ["name"]
+}

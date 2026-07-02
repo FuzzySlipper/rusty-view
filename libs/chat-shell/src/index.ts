@@ -60,7 +60,7 @@ export {
   parseSlashCommand,
   pluginCommandArgsSchema,
   pluginCommandDescriptor,
-} from './lib/slash-command-runtime';
+} from './lib/slash-commands/slash-command-runtime';
 export type {
   ChatMessageToolbarAction,
   ChatMessageToolbarContext,
@@ -91,7 +91,7 @@ export type {
   SlashCommandParseFailure,
   SlashCommandParseResult,
   TypedSlashCommandArguments,
-} from './lib/slash-command-runtime';
+} from './lib/slash-commands/slash-command-runtime';
 export type {
   ChatContentRenderer,
   ChatContentRenderContext,

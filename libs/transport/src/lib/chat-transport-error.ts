@@ -19,6 +19,7 @@ export interface ChatTransportErrorInit {
   readonly code: ChatTransportErrorCode;
   readonly message: string;
   readonly statusCode?: number;
+  readonly endpoint?: string;
   readonly apiError?: ApiError;
   readonly cause?: unknown;
 }
@@ -31,6 +32,7 @@ export interface ChatTransportErrorInit {
 export class ChatTransportError extends Error {
   readonly code: ChatTransportErrorCode;
   readonly statusCode?: number;
+  readonly endpoint?: string;
   readonly apiError?: ApiError;
   // `cause` is inherited from Error (es2022+ lib). Do not redeclare it.
 
@@ -42,6 +44,9 @@ export class ChatTransportError extends Error {
     // Assign optional fields conditionally to satisfy exactOptionalPropertyTypes.
     if (init.statusCode !== undefined) {
       this.statusCode = init.statusCode;
+    }
+    if (init.endpoint !== undefined) {
+      this.endpoint = init.endpoint;
     }
     if (init.apiError !== undefined) {
       this.apiError = init.apiError;
@@ -95,6 +100,27 @@ export function toChatTransportError(
   return new ChatTransportError({
     code: fallbackCode,
     message: String(error),
+    cause: error,
+  });
+}
+
+/**
+ * Attach request endpoint metadata to a classified transport error.
+ *
+ * The original error is preserved as the `cause` when a new wrapper is needed,
+ * so callers can still inspect the lower-level failure during debugging.
+ */
+export function withChatTransportEndpoint(
+  error: ChatTransportError,
+  endpoint: string,
+): ChatTransportError {
+  if (error.endpoint === endpoint) return error;
+  return new ChatTransportError({
+    code: error.code,
+    message: error.message,
+    ...(error.statusCode !== undefined ? { statusCode: error.statusCode } : {}),
+    endpoint,
+    ...(error.apiError !== undefined ? { apiError: error.apiError } : {}),
     cause: error,
   });
 }

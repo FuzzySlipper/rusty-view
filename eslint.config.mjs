@@ -172,4 +172,27 @@ export default [
       ],
     },
   },
+  {
+    files: ['apps/**/*.ts', 'libs/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        { ignoreVoid: true, ignoreIIFE: true },
+      ],
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        {
+          checksVoidReturn: {
+            attributes: false,
+          },
+        },
+      ],
+    },
+  },
 ];

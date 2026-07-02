@@ -1,7 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
   ChatTransport,
-  ChatTransportError,
   type AdminAgentDiagnostics,
   type AdminControlResponse,
   type AdminDiagnosticsBundle,
@@ -49,6 +48,12 @@ import {
   type RuntimeSessionDiagnostics,
 } from '@rusty-view/transport';
 
+import {
+  storeErrorDetail,
+  storeErrorDetailMessage,
+  type StoreErrorDetail,
+} from './store-error';
+
 export interface AdminProfileSummary {
   readonly profileId: string;
   readonly agentIds: readonly string[];
@@ -88,7 +93,9 @@ export class AdminStore {
    * Error from the most recent local-tool-profile write (#3689). First-class
    * (unlike the read which degrades to empty) so the editor surfaces failures.
    */
-  private readonly _toolProfileWriteError = signal<string | null>(null);
+  private readonly _toolProfileWriteError = signal<StoreErrorDetail | null>(
+    null,
+  );
   private readonly _exportPlan = signal<ProfileBundleExportPlan | null>(null);
   private readonly _registryWritePlan = signal<ProfileRegistryWritePlan | null>(
     null,
@@ -113,10 +120,10 @@ export class AdminStore {
    * the model-provider registry is a first-class part of this panel; a failure
    * to load it must be visible rather than looking like an empty registry.
    */
-  private readonly _providerLoadError = signal<string | null>(null);
+  private readonly _providerLoadError = signal<StoreErrorDetail | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
-  private readonly _error = signal<string | null>(null);
+  private readonly _error = signal<StoreErrorDetail | null>(null);
   private readonly _createResult =
     signal<AdminControlResponse<CreatedServiceProfile> | null>(null);
   private readonly _reloadResult =
@@ -144,10 +151,18 @@ export class AdminStore {
   readonly runtimeConfigResult = this._runtimeConfigResult.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
-  readonly providerLoadError = this._providerLoadError.asReadonly();
+  readonly providerLoadErrorDetail = this._providerLoadError.asReadonly();
+  readonly providerLoadError = computed(() => {
+    const error = this._providerLoadError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
   readonly loading = this._loading.asReadonly();
   readonly saving = this._saving.asReadonly();
-  readonly error = this._error.asReadonly();
+  readonly errorDetail = this._error.asReadonly();
+  readonly error = computed(() => {
+    const error = this._error();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
   readonly createResult = this._createResult.asReadonly();
   readonly reloadResult = this._reloadResult.asReadonly();
   readonly runtimePauseResult = this._runtimePauseResult.asReadonly();
@@ -248,7 +263,12 @@ export class AdminStore {
   );
 
   /** Error from the latest local-tool-profile write, or null (#3689). */
-  readonly toolProfileWriteError = this._toolProfileWriteError.asReadonly();
+  readonly toolProfileWriteErrorDetail =
+    this._toolProfileWriteError.asReadonly();
+  readonly toolProfileWriteError = computed(() => {
+    const error = this._toolProfileWriteError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
 
   /**
    * Selectable context strategies from Crew's catalog (task #3849). Empty when
@@ -320,7 +340,7 @@ export class AdminStore {
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._loading.set(false);
     }
@@ -335,7 +355,7 @@ export class AdminStore {
       this._createResult.set(result);
       await this.refresh();
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -386,7 +406,7 @@ export class AdminStore {
       await this.refresh();
       return true;
     } catch (error) {
-      this._toolProfileWriteError.set(errorMessage(error));
+      this._toolProfileWriteError.set(storeErrorDetail(error));
       return false;
     } finally {
       this._saving.set(false);
@@ -402,7 +422,7 @@ export class AdminStore {
       this._reloadResult.set(result);
       await this.refresh();
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -421,7 +441,7 @@ export class AdminStore {
       const plan = await this.transport.adminProfileExportPlan(profileId);
       this._exportPlan.set(plan);
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -452,7 +472,7 @@ export class AdminStore {
       );
       this._registryWritePlan.set(plan);
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -483,7 +503,7 @@ export class AdminStore {
         await this.refresh();
       }
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -509,7 +529,7 @@ export class AdminStore {
       );
       this._registryWritePlan.set(plan);
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -539,7 +559,7 @@ export class AdminStore {
         await this.refresh();
       }
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -565,7 +585,7 @@ export class AdminStore {
       );
       this._registryWritePlan.set(plan);
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -596,7 +616,7 @@ export class AdminStore {
         await this.refresh();
       }
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -616,14 +636,13 @@ export class AdminStore {
     this._runtimeConfigPlan.set(null);
     this._runtimeConfigResult.set(null);
     try {
-      const plan =
-        await this.transport.planAdminProfileRegistryRuntimeConfig(
-          profileId,
-          request,
-        );
+      const plan = await this.transport.planAdminProfileRegistryRuntimeConfig(
+        profileId,
+        request,
+      );
       this._runtimeConfigPlan.set(plan);
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -657,7 +676,7 @@ export class AdminStore {
         this._runtimeConfigPlan.set(result);
       }
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -709,7 +728,7 @@ export class AdminStore {
       this._providerWriteResult.set(result);
       await this.refresh();
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -743,11 +762,14 @@ export class AdminStore {
         // Normal saves omit `expectedRevision` and never hit this; this guards
         // the case Crew still reports a mismatch.
         await this.refresh();
-        this._error.set(
-          'This provider was changed elsewhere; the list has been refreshed. Review the current values and save again to overwrite.',
-        );
+        this._error.set({
+          source: 'error',
+          message:
+            'This provider was changed elsewhere; the list has been refreshed. Review the current values and save again to overwrite.',
+          retryable: false,
+        });
       } else {
-        this._error.set(errorMessage(error));
+        this._error.set(storeErrorDetail(error));
       }
     } finally {
       this._saving.set(false);
@@ -777,7 +799,7 @@ export class AdminStore {
       this._runtimePauseResult.set(result);
       await this.refresh();
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -801,7 +823,7 @@ export class AdminStore {
       this._runtimeResumeResult.set(result);
       await this.refresh();
     } catch (error) {
-      this._error.set(errorMessage(error));
+      this._error.set(storeErrorDetail(error));
     } finally {
       this._saving.set(false);
     }
@@ -900,13 +922,6 @@ function sumAgentCount(
   return sessions.filter((session) => session.status === status).length;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ChatTransportError && error.apiError !== undefined) {
-    return `${error.message} (${error.apiError.reason_code})`;
-  }
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * Whether an error is a model provider revision-mismatch conflict (task #3722).
  * Crew returns a `409` with `reason_code: 'model_provider_revision_mismatch'`
@@ -915,8 +930,8 @@ function errorMessage(error: unknown): string {
  */
 function isProviderRevisionConflict(error: unknown): boolean {
   return (
-    error instanceof ChatTransportError &&
-    error.apiError?.reason_code === 'model_provider_revision_mismatch'
+    storeErrorDetail(error).apiError?.reasonCode ===
+    'model_provider_revision_mismatch'
   );
 }
 
@@ -988,12 +1003,12 @@ async function loadContextStrategyCatalog(
  */
 async function loadModelProviders(transport: ChatTransport): Promise<{
   page: ModelProviderPage | null;
-  error: string | null;
+  error: StoreErrorDetail | null;
 }> {
   try {
     const page = await transport.adminModelProviders({ limit: 100 });
     return { page, error: null };
   } catch (error) {
-    return { page: null, error: errorMessage(error) };
+    return { page: null, error: storeErrorDetail(error) };
   }
 }

@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "data": {
+    "overview": {
+      "generatedAt": "2026-07-02T00:00:08Z",
+      "health": "ok",
+      "degraded": false,
+      "reasonCodes": ["ok"],
+      "summary": {
+        "sessions": 1,
+        "activeSessions": 1,
+        "idleSessions": 0,
+        "archivedSessions": 0,
+        "delegatedSessions": 0,
+        "blockedDelegations": 0,
+        "pendingQueueItems": 0,
+        "expiredQueueItems": 0,
+        "toolErrors": 0,
+        "recentErrors": 0
+      },
+      "runtime": {
+        "brainModules": [
+          {
+            "profileId": "tester",
+            "implementationId": "brain-recorded",
+            "moduleId": "rusty-crew.synthetic",
+            "selectedToolCount": 1,
+            "selectedToolSource": "profile",
+            "toolAdapterStatus": "ready"
+          }
+        ],
+        "sessions": [],
+        "delegatedSessions": [],
+        "runtimePauses": []
+      }
+    },
+    "health": {}
+  },
+  "meta": { "request_id": "req-recorded-admin", "schema_version": 1 }
+}
+

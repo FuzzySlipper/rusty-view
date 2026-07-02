@@ -16,7 +16,7 @@ import {
   findSlashCommand,
   normalizeSlashCommandText,
   pluginCommandDescriptor,
-} from './slash-command-runtime';
+} from './slash-commands/slash-command-runtime';
 
 /**
  * Command composer for the operator app. Slash command input backed by the

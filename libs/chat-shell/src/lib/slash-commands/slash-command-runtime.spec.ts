@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   ChatPluginCommandContext,
   ChatPluginSlashCommand,
-} from './plugin-api';
+} from '../plugin-api';
 import {
   coerceSlashCommandArguments,
   commandsForPalette,

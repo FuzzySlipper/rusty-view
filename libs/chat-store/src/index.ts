@@ -15,6 +15,12 @@
 export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
 export { AdminStore } from './lib/admin-store';
 export type { AdminProfileSummary } from './lib/admin-store';
+export {
+  storeErrorDetail,
+  storeErrorDetailMessage,
+  storeErrorMessage,
+} from './lib/store-error';
+export type { StoreApiErrorDetail, StoreErrorDetail } from './lib/store-error';
 export { IndexedDbChatStorage } from './lib/indexed-db-chat-storage';
 export type { PendingSend } from './lib/pending-operations';
 

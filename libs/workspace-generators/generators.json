@@ -15,11 +15,29 @@
       "description": "Scaffold a typed test fixture in @rusty-view/testing-fixtures.",
       "aliases": ["f"]
     },
+    "feature": {
+      "factory": "./src/generators/feature/generator",
+      "schema": "./src/generators/feature/schema.json",
+      "description": "Scaffold a bounded feature slice inside an Angular library.",
+      "aliases": ["feat"]
+    },
     "library": {
       "factory": "./src/generators/library/generator",
       "schema": "./src/generators/library/schema.json",
       "description": "Scaffold a boundary-tagged library (delegates to Nx library generators with rusty-view conventions).",
       "aliases": ["lib"]
+    },
+    "live-scenario": {
+      "factory": "./src/generators/live-scenario/generator",
+      "schema": "./src/generators/live-scenario/schema.json",
+      "description": "Scaffold a real-backend/live-LLM Playwright scenario for rusty-view.",
+      "aliases": ["live"]
+    },
+    "store": {
+      "factory": "./src/generators/store/generator",
+      "schema": "./src/generators/store/schema.json",
+      "description": "Scaffold an Angular signal store with basic unit coverage.",
+      "aliases": ["s"]
     }
   }
 }

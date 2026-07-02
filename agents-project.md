@@ -179,6 +179,22 @@ const updatedProjection = messageDeltas.reduce(
 return updatedProjection;
 ```
 
+### Async work must be handled or explicitly detached
+
+Every promise must be awaited, returned, or intentionally detached with `void`.
+Detached work should be rare and should have local error handling unless the
+callee already guarantees non-throwing behavior.
+
+**Bad:**
+```typescript
+storage.putEvents(sessionId, events);
+```
+
+**Good:**
+```typescript
+void storage.putEvents(sessionId, events).catch(() => undefined);
+```
+
 ### No clever abstractions until duplication has stabilized
 
 Do not create generic utilities, base classes, or framework-shaped machinery

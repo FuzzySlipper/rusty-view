@@ -31,7 +31,11 @@ import {
   COMMANDS_PATH,
   SESSION_COMMANDS_PATH,
 } from './chat-routes';
-import { ChatTransportError, classifyFetchError } from './chat-transport-error';
+import {
+  ChatTransportError,
+  classifyFetchError,
+  withChatTransportEndpoint,
+} from './chat-transport-error';
 import type { ChatTransportErrorInit } from './chat-transport-error';
 import type { ChatTransportConfig } from './chat-transport-config';
 import type { FetchImpl } from './chat-transport-config';
@@ -342,11 +346,11 @@ export class ChatHttpTransport {
     try {
       response = await this.fetchImpl(url, init);
     } catch (error) {
-      throw classifyFetchError(error);
+      throw withChatTransportEndpoint(classifyFetchError(error), url);
     }
 
     if (!response.ok) {
-      await this.handleHttpError(response);
+      await this.handleHttpError(response, url);
     }
 
     let body: unknown;
@@ -357,13 +361,17 @@ export class ChatHttpTransport {
         code: 'envelope_error',
         message: `Response body is not valid JSON (HTTP ${response.status})`,
         statusCode: response.status,
+        endpoint: url,
       });
     }
 
     return body as TBody;
   }
 
-  private async handleHttpError(response: Response): Promise<never> {
+  private async handleHttpError(
+    response: Response,
+    endpoint: string,
+  ): Promise<never> {
     const statusCode = response.status;
     let apiError: ApiError | undefined;
     let message = `HTTP ${statusCode} ${response.statusText}`;
@@ -387,6 +395,7 @@ export class ChatHttpTransport {
       code,
       message,
       statusCode,
+      endpoint,
       ...(apiError !== undefined ? { apiError } : {}),
     };
     throw new ChatTransportError(init);

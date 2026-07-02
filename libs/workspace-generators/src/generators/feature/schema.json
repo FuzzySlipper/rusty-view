@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "title": "rv:feature options",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Feature name, e.g. 'profile-editor'.",
+      "$default": "$name"
+    },
+    "project": {
+      "type": "string",
+      "description": "Target Angular library project, e.g. 'chat-shell'."
+    },
+    "directory": {
+      "type": "string",
+      "description": "Directory under src/lib for feature slices.",
+      "default": "features"
+    },
+    "selectorPrefix": {
+      "type": "string",
+      "description": "Angular selector prefix.",
+      "default": "rv"
+    }
+  },
+  "required": ["name", "project"]
+}

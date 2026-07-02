@@ -6,7 +6,7 @@ import {
 } from '@angular/core';
 import { ChatStore } from '@rusty-view/chat-store';
 import { CHAT_SLASH_COMMANDS } from './plugin-api';
-import { pluginCommandDescriptor } from './slash-command-runtime';
+import { pluginCommandDescriptor } from './slash-commands/slash-command-runtime';
 
 /**
  * Help panel: lists every command available in the current command registry.

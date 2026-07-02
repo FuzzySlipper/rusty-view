@@ -27,6 +27,7 @@ import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
 
 import { DEBUG_ACTOR, type PendingSend } from './pending-operations';
+import { storeErrorDetail } from './store-error';
 
 /**
  * DI token for the {@link ChatStorageAdapter}. The shell provides a concrete
@@ -404,7 +405,7 @@ export class ChatStore implements OnDestroy {
       this._pendingSends.update((sends) =>
         sends.map((s) =>
           s.id === pendingId
-            ? { ...s, status: 'error', error: String(error) }
+            ? { ...s, status: 'error', error: storeErrorDetail(error) }
             : s,
         ),
       );
@@ -485,7 +486,7 @@ export class ChatStore implements OnDestroy {
       this._pendingCommands.update((cmds) =>
         cmds.map((c) =>
           c.id === pendingId
-            ? { ...c, status: 'error', error: String(error) }
+            ? { ...c, status: 'error', error: storeErrorDetail(error) }
             : c,
         ),
       );

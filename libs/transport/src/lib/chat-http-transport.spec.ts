@@ -393,6 +393,7 @@ describe('ChatHttpTransport', () => {
         const transportError = error as ChatTransportError;
         expect(transportError.code).toBe('auth_error');
         expect(transportError.statusCode).toBe(401);
+        expect(transportError.endpoint).toContain('/v1/chat/sessions');
       }
     });
 
@@ -409,6 +410,7 @@ describe('ChatHttpTransport', () => {
         const transportError = error as ChatTransportError;
         expect(transportError.code).toBe('http_error');
         expect(transportError.statusCode).toBe(404);
+        expect(transportError.endpoint).toContain('/v1/chat/sessions/missing');
       }
     });
 
@@ -440,6 +442,7 @@ describe('ChatHttpTransport', () => {
       } catch (error) {
         const transportError = error as ChatTransportError;
         expect(transportError.code).toBe('network_error');
+        expect(transportError.endpoint).toContain('/v1/chat/sessions');
       }
     });
   });
@@ -483,13 +486,19 @@ describe('ChatHttpTransport', () => {
       ]);
       const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
 
-      const events = await transport.replayAllEvents('sess_1', { cursor: 'e0' });
+      const events = await transport.replayAllEvents('sess_1', {
+        cursor: 'e0',
+      });
 
       expect(events.map((e) => e.event_id)).toEqual(['e1', 'e2', 'e3']);
       expect(urls()).toHaveLength(2);
       // Page 1 uses the caller's cursor; page 2 follows the returned latest_cursor.
-      expect(new URL(urls()[0] as string).searchParams.get('cursor')).toBe('e0');
-      expect(new URL(urls()[1] as string).searchParams.get('cursor')).toBe('e2');
+      expect(new URL(urls()[0] as string).searchParams.get('cursor')).toBe(
+        'e0',
+      );
+      expect(new URL(urls()[1] as string).searchParams.get('cursor')).toBe(
+        'e2',
+      );
     });
 
     it('returns a single page when has_more is false', async () => {
@@ -511,7 +520,9 @@ describe('ChatHttpTransport', () => {
       ]);
       const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
 
-      const events = await transport.replayAllEvents('sess_1', { cursor: 'e0' });
+      const events = await transport.replayAllEvents('sess_1', {
+        cursor: 'e0',
+      });
 
       expect(events.map((e) => e.event_id)).toEqual(['e1']);
       expect(urls()).toHaveLength(1);

@@ -6,7 +6,7 @@ import type {
   ChatPluginEnumProvider,
   ChatPluginPalette,
   ChatPluginSlashCommand,
-} from './plugin-api';
+} from '../plugin-api';
 
 export interface ParsedSlashCommand {
   readonly raw: string;

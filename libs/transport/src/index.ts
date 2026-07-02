@@ -128,6 +128,7 @@ export {
   ChatTransportError,
   classifyFetchError,
   toChatTransportError,
+  withChatTransportEndpoint,
 } from './lib/chat-transport-error';
 export type {
   ChatTransportErrorCode,

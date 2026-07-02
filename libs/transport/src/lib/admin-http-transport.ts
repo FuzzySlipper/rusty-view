@@ -1,4 +1,8 @@
-import { ChatTransportError, classifyFetchError } from './chat-transport-error';
+import {
+  ChatTransportError,
+  classifyFetchError,
+  withChatTransportEndpoint,
+} from './chat-transport-error';
 import type { ChatTransportConfig, FetchImpl } from './chat-transport-config';
 import { HEADER_NAMES } from './chat-routes';
 import type {
@@ -509,7 +513,7 @@ export class AdminHttpTransport {
     try {
       response = await this.fetchImpl(url, init);
     } catch (error) {
-      throw classifyFetchError(error);
+      throw withChatTransportEndpoint(classifyFetchError(error), url);
     }
 
     let json: unknown;
@@ -520,6 +524,7 @@ export class AdminHttpTransport {
         code: 'envelope_error',
         message: `Admin API returned non-JSON response (${response.status}).`,
         statusCode: response.status,
+        endpoint: url,
       });
     }
 
@@ -536,6 +541,7 @@ export class AdminHttpTransport {
             : 'http_error',
         message: envelope.error.message,
         statusCode: response.status,
+        endpoint: url,
         apiError: envelope.error,
       });
     }
@@ -544,6 +550,7 @@ export class AdminHttpTransport {
       code: 'envelope_error',
       message: 'Admin API response did not match the expected envelope.',
       statusCode: response.status,
+      endpoint: url,
     });
   }
 }
@@ -662,10 +669,7 @@ function providerWriteBody(
  * of the selection arrays: Crew uses `toolsets`/`tools`.
  */
 interface LocalToolProfileWire
-  extends Omit<
-    AdminLocalToolProfile,
-    'requestedToolsets' | 'requestedTools'
-  > {
+  extends Omit<AdminLocalToolProfile, 'requestedToolsets' | 'requestedTools'> {
   readonly toolsets?: readonly string[];
   readonly tools?: readonly string[];
 }

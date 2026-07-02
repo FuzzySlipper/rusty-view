@@ -12,7 +12,7 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
-import { ChatTransport } from '@rusty-view/transport';
+import { ChatTransport, ChatTransportError } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
 import type { ChatConnectionState } from '@rusty-view/transport';
 
@@ -62,7 +62,9 @@ function createMockTransport(opts: {
   replayEvents?: ChatEvent[];
   streamEvents?: ChatEvent[];
   sendResult?: SendChatMessageResult;
+  sendError?: unknown;
   commandResult?: ExecuteChatCommandResult;
+  commandError?: unknown;
   contextUsage?: SessionContextUsageResult;
   contextUsageError?: boolean;
 }): ChatTransport {
@@ -72,7 +74,12 @@ function createMockTransport(opts: {
     openSession: vi.fn(async () => opts.openResult ?? emptyOpenResult()),
     replayEvents: vi.fn(async () => opts.replayEvents ?? []),
     replayAllEvents: vi.fn(async () => opts.replayEvents ?? []),
-    sendMessage: vi.fn(async () => opts.sendResult ?? acceptedResult()),
+    sendMessage: vi.fn(async () => {
+      if (opts.sendError !== undefined) {
+        throw opts.sendError;
+      }
+      return opts.sendResult ?? acceptedResult();
+    }),
     sessionContext: vi.fn(async () => {
       if (opts.contextUsageError === true) {
         throw new Error('context route unavailable');
@@ -82,9 +89,12 @@ function createMockTransport(opts: {
     listCommands: vi.fn(
       async () => ({ commands: [] }) satisfies ChatCommandRegistry,
     ),
-    sendCommand: vi.fn(
-      async () => opts.commandResult ?? completedCommandResult(),
-    ),
+    sendCommand: vi.fn(async () => {
+      if (opts.commandError !== undefined) {
+        throw opts.commandError;
+      }
+      return opts.commandResult ?? completedCommandResult();
+    }),
     streamEvents: vi.fn(() => createMockStream(opts.streamEvents ?? [])),
   };
   return mock as unknown as ChatTransport;
@@ -440,6 +450,36 @@ describe('ChatStore', () => {
     expect(store.pendingSends()).toHaveLength(0);
   });
 
+  it('sendMessage preserves structured transport error details on failure', async () => {
+    const transport = createMockTransport({
+      sendError: new ChatTransportError({
+        code: 'http_error',
+        message: 'Session is archived',
+        statusCode: 409,
+        endpoint: 'http://test/v1/chat/sessions/sess_test/messages',
+        apiError: {
+          code: 'conflict',
+          reason_code: 'session_archived',
+          message: 'Session is archived',
+          retryable: false,
+        },
+      }),
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('test message');
+
+    const pending = store.pendingSends()[0];
+    expect(pending?.status).toBe('error');
+    expect(pending?.error?.message).toBe('Session is archived');
+    expect(pending?.error?.transportCode).toBe('http_error');
+    expect(pending?.error?.statusCode).toBe(409);
+    expect(pending?.error?.endpoint).toContain('/v1/chat/sessions/');
+    expect(pending?.error?.apiError?.reasonCode).toBe('session_archived');
+    expect(pending?.error?.retryable).toBe(false);
+  });
+
   it('sendMessage replays missed events from the pre-send cursor', async () => {
     const replayed: ChatEvent = {
       event_id: 'cur_1',
@@ -573,6 +613,27 @@ describe('ChatStore', () => {
     await store.runCommand('/new');
 
     expect(store.activeSessionId()).toBe('sess_new');
+  });
+
+  it('runCommand preserves network error details on failure', async () => {
+    const transport = createMockTransport({
+      commandError: new ChatTransportError({
+        code: 'network_error',
+        message: 'Request timed out',
+        endpoint: 'http://test/v1/chat/sessions/sess_test/commands',
+      }),
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.runCommand('/status');
+
+    const pending = store.pendingCommands()[0];
+    expect(pending?.status).toBe('error');
+    expect(pending?.error?.source).toBe('transport');
+    expect(pending?.error?.transportCode).toBe('network_error');
+    expect(pending?.error?.endpoint).toContain('/commands');
+    expect(pending?.error?.retryable).toBe(true);
   });
 
   it('SSE stream events are ingested into the projection', async () => {
@@ -997,7 +1058,8 @@ describe('ChatStore.submit (slash-command routing)', () => {
 
     expect(store.pendingCommands()).toHaveLength(1);
     expect(store.pendingCommands()[0]?.status).toBe('error');
-    expect(store.pendingCommands()[0]?.error).toContain('boom');
+    expect(store.pendingCommands()[0]?.error?.message).toBe('boom');
+    expect(store.pendingCommands()[0]?.error?.source).toBe('error');
     expect(store.isSubmitting()).toBe(true);
   });
 });

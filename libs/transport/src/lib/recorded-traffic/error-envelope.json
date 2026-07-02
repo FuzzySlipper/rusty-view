@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "error": {
+    "code": "not_found",
+    "reason_code": "session_not_found",
+    "message": "Recorded session was not found",
+    "retryable": false
+  },
+  "meta": { "request_id": "req-recorded-error", "schema_version": 1 }
+}
+

@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "session_id": "sess-recorded",
+        "agent_id": "agent-recorded",
+        "profile_id": "tester",
+        "kind": "full",
+        "status": "active",
+        "title": "Recorded transport conformance",
+        "latest_cursor": "evt-0002",
+        "updated_at": "2026-07-02T00:00:02Z",
+        "message_count": 2,
+        "tool_event_count": 0
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0
+  },
+  "meta": { "request_id": "req-recorded-sessions", "schema_version": 1 }
+}
+

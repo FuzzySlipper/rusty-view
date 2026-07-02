@@ -26,7 +26,7 @@ import {
   executeSlashCommand,
   findSlashCommand,
   pluginCommandDescriptor,
-} from './slash-command-runtime';
+} from './slash-commands/slash-command-runtime';
 
 /**
  * Debug chat shell — the composition layer that wires everything together.
