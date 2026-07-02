@@ -39,26 +39,28 @@ interface ProviderFormState {
   readonly status: ModelProviderStatus;
 }
 
-const INITIAL_FORM: ProviderFormState = {
-  alias: '',
-  displayName: '',
-  description: '',
-  protocol: 'chat_completions',
-  providerKind: 'custom',
-  baseUrl: '',
-  modelId: '',
-  contextWindowTokens: '',
-  // Sensible create-time defaults so operators don't start from blank fields.
-  maxOutputTokens: '4096',
-  temperature: '0.7',
-  reasoningEffort: '',
-  reasoningFormat: '',
-  credentialMode: 'api_key',
-  secret: '',
-  clearSecret: false,
-  oauthCallbackUrl: '',
-  status: 'active',
-};
+function initialForm(): ProviderFormState {
+  return {
+    alias: '',
+    displayName: '',
+    description: '',
+    protocol: 'chat_completions',
+    providerKind: 'custom',
+    baseUrl: '',
+    modelId: '',
+    contextWindowTokens: '',
+    // Sensible create-time defaults so operators don't start from blank fields.
+    maxOutputTokens: '4096',
+    temperature: '0.7',
+    reasoningEffort: '',
+    reasoningFormat: '',
+    credentialMode: 'api_key',
+    secret: '',
+    clearSecret: false,
+    oauthCallbackUrl: '',
+    status: 'active',
+  };
+}
 
 const REFRESH_MODES: readonly ModelProviderRefreshMode[] = [
   'none',
@@ -101,11 +103,14 @@ export class AdminProvidersPanelComponent {
 
   protected readonly refreshModes = REFRESH_MODES;
   protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
-  protected readonly form = signal<ProviderFormState>(INITIAL_FORM);
+  protected readonly form = signal<ProviderFormState>(initialForm());
   protected readonly editingAlias = signal<string | null>(null);
   protected readonly refreshMode = signal<ModelProviderRefreshMode>('none');
   /** Status line for the most recent base-URL capability probe (#3722 follow-up). */
   protected readonly probeStatus = signal<string>('');
+  protected readonly oauthCallbackReady = computed(
+    () => this.form().oauthCallbackUrl.trim() !== '',
+  );
 
   protected readonly saveDisabled = computed(() => {
     const form = this.form();
@@ -180,7 +185,8 @@ export class AdminProvidersPanelComponent {
       );
       return;
     }
-    const patch: { contextWindowTokens?: string; reasoningFormat?: string } = {};
+    const patch: { contextWindowTokens?: string; reasoningFormat?: string } =
+      {};
     const detected: string[] = [];
     if (
       typeof match.context_length === 'number' &&
@@ -231,9 +237,10 @@ export class AdminProvidersPanelComponent {
             ...current,
             credentialMode: value,
             protocol: 'responses',
-            providerKind: current.providerKind.trim() === 'custom'
-              ? 'openai'
-              : current.providerKind,
+            providerKind:
+              current.providerKind.trim() === 'custom'
+                ? 'openai'
+                : current.providerKind,
             baseUrl:
               current.baseUrl.trim() === ''
                 ? 'https://chatgpt.com/backend-api/codex'
@@ -296,7 +303,7 @@ export class AdminProvidersPanelComponent {
 
   protected cancelEdit(): void {
     this.editingAlias.set(null);
-    this.form.set(INITIAL_FORM);
+    this.form.set(initialForm());
   }
 
   protected saveProvider(): void {
@@ -357,23 +364,10 @@ export class AdminProvidersPanelComponent {
 
   protected completeOpenAiOauthLogin(): void {
     const alias = this.editingAlias();
-    const pending = this.oauthPendingLogin();
-    if (alias === null || pending === null) return;
-    const callback = parseOauthCallback(this.form().oauthCallbackUrl);
-    if (callback.status === 'cancelled') {
-      this.admin.setLocalError('OpenAI OAuth was cancelled before completion.');
-      return;
-    }
-    if (callback.status === 'invalid') {
-      this.admin.setLocalError(
-        'OpenAI OAuth callback URL must include code and state.',
-      );
-      return;
-    }
+    const callbackUrl = this.form().oauthCallbackUrl.trim();
+    if (alias === null || callbackUrl === '') return;
     void this.admin.completeOpenAiOauthLogin(alias, {
-      pendingLoginId: pending.pendingLoginId,
-      code: callback.code,
-      state: callback.state,
+      callbackUrl,
     });
   }
 
@@ -445,27 +439,6 @@ function credentialLabel(provider: ModelProviderRecord): string {
   return status.replace('_', '-');
 }
 
-type ParsedOauthCallback =
-  | { readonly status: 'complete'; readonly code: string; readonly state: string }
-  | { readonly status: 'cancelled' }
-  | { readonly status: 'invalid' };
-
-function parseOauthCallback(value: string): ParsedOauthCallback {
-  const trimmed = value.trim();
-  if (trimmed === '') return { status: 'invalid' };
-  let params: URLSearchParams;
-  try {
-    params = new URL(trimmed).searchParams;
-  } catch {
-    params = new URLSearchParams(trimmed.replace(/^\?/, ''));
-  }
-  if (params.has('error')) return { status: 'cancelled' };
-  const code = params.get('code')?.trim();
-  const state = params.get('state')?.trim();
-  if (!code || !state) return { status: 'invalid' };
-  return { status: 'complete', code, state };
-}
-
 /**
  * Convert a human-friendly decimal temperature (e.g. "0.7") to the backend's
  * integer milli units (700). Omitted when blank or non-numeric.
@@ -507,10 +480,7 @@ async function probeProviderModels(
   baseUrl: string,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch.bind(globalThis),
 ): Promise<readonly ProbedModel[]> {
-  const normalized = baseUrl
-    .trim()
-    .replace(/\/+$/, '')
-    .replace(/\/v1$/i, '');
+  const normalized = baseUrl.trim().replace(/\/+$/, '').replace(/\/v1$/i, '');
   if (normalized === '') return [];
   const response = await fetchImpl(`${normalized}/v1/models`);
   if (!response.ok) {

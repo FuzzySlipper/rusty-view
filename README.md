@@ -65,13 +65,16 @@ Nx, normally `http://localhost:4200`.
 | `pnpm typecheck`                    | `tsc --noEmit` per project                                      |
 | `pnpm test`                         | Unit tests for all projects                                     |
 | `pnpm e2e`                          | Playwright smoke tests                                          |
-| `pnpm e2e:live`                     | Opt-in real frontend + real Rusty Crew + real LLM scenarios     |
+| `pnpm e2e:live`                     | Local fallback for live real Crew/LLM scenarios                 |
 | `pnpm format` / `pnpm format:check` | Prettier write / check                                          |
 | `pnpm protocol:generate`            | Regenerate OpenAPI-derived protocol types                       |
 | `pnpm protocol:check`               | Verify generated protocol types are current                     |
 | `pnpm run ci`                       | Format check, token lint, lint, typecheck, tests, build, checks |
 
-Live scenarios are intentionally opt-in and write human-inspectable artifacts.
+Agents should run live scenarios through the shared `den-playwright` broker so
+server ports, process ownership, and evidence artifacts are managed consistently.
+The local script remains as a fallback. Live scenarios are intentionally opt-in
+and write human-inspectable artifacts.
 See [docs/live-testing.md](docs/live-testing.md).
 
 ## Workspace Generators

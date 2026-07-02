@@ -1,0 +1,15 @@
+{
+  "project": "rusty-view",
+  "serve": {
+    "command": "pnpm exec nx run rusty-view:serve -- --host {host} --port {port}",
+    "preferredPort": 4200,
+    "healthUrl": "/",
+    "readyText": "rv-root",
+    "reusePolicy": "broker_owned"
+  },
+  "tests": {
+    "command": "pnpm exec playwright test",
+    "config": "apps/rusty-view-e2e/playwright.config.mts",
+    "artifactPolicy": "live-ui"
+  }
+}

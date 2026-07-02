@@ -834,6 +834,7 @@ export class AdminStore {
       this._openAiOauthStatus.set({
         provider: result.provider,
         credential: result.provider.credential,
+        loginConfig: result.loginConfig,
         pendingLogins: [result.pendingLogin],
       });
     } catch (error) {
@@ -856,9 +857,13 @@ export class AdminStore {
         request,
       );
       this._openAiOauthCompleteResult.set(result);
+      const loginConfig =
+        this._openAiOauthStatus()?.loginConfig ??
+        this._openAiOauthStartResult()?.loginConfig;
       this._openAiOauthStatus.set({
         provider: result.provider,
         credential: result.credential,
+        ...(loginConfig === undefined ? {} : { loginConfig }),
         pendingLogins: [],
       });
       await this.refresh();
@@ -874,11 +879,16 @@ export class AdminStore {
     this._error.set(null);
     this._openAiOauthClearResult.set(null);
     try {
-      const result = await this.transport.adminClearOpenAiOauthCredential(alias);
+      const result =
+        await this.transport.adminClearOpenAiOauthCredential(alias);
       this._openAiOauthClearResult.set(result);
+      const loginConfig =
+        this._openAiOauthStatus()?.loginConfig ??
+        this._openAiOauthStartResult()?.loginConfig;
       this._openAiOauthStatus.set({
         provider: result.provider,
         credential: result.credential,
+        ...(loginConfig === undefined ? {} : { loginConfig }),
         pendingLogins: [],
       });
       await this.refresh();
@@ -1054,8 +1064,16 @@ function providerCredentialErrorDetail(error: unknown): StoreErrorDetail {
   return message === undefined ? detail : { ...detail, message };
 }
 
-function providerCredentialErrorMessage(reasonCode: string): string | undefined {
+function providerCredentialErrorMessage(
+  reasonCode: string,
+): string | undefined {
   switch (reasonCode) {
+    case 'openai_oauth_unregistered_redirect_uri':
+      return 'OpenAI OAuth rejected the redirect URI override. Start again with the Crew configured redirect URI.';
+    case 'openai_oauth_invalid_callback_url':
+      return 'OpenAI OAuth callback URL must include code and state.';
+    case 'openai_oauth_callback_error':
+      return 'OpenAI OAuth callback returned an authorization error.';
     case 'openai_oauth_pending_login_not_found':
       return 'OpenAI OAuth login expired or was cancelled. Start a new login.';
     case 'openai_oauth_state_mismatch':

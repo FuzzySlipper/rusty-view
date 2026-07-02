@@ -882,6 +882,17 @@ describe('AdminHttpTransport', () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({
         provider: { alias: 'openai-oauth', credential: { hasSecret: false } },
+        loginConfig: {
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          redirectUriOverrideAllowed: false,
+          redirectUriMode: 'registered',
+          callbackUrlCompletionAccepted: true,
+          callbackUrlCompletionField: 'callbackUrl',
+          pendingLoginIdRequiredForCallbackUrl: false,
+          remoteOperatorFlow: 'paste_callback_url',
+        },
         pendingLogin: {
           pendingLoginId: 'pending-1',
           providerAlias: 'openai-oauth',
@@ -948,6 +959,35 @@ describe('AdminHttpTransport', () => {
     expect(result.credential.kind).toBe('openai_oauth');
   });
 
+  it('completes OpenAI OAuth by forwarding the pasted callback URL', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        provider: {
+          alias: 'openai-oauth',
+          credential: { hasSecret: true, kind: 'openai_oauth' },
+        },
+        credential: { hasSecret: true, kind: 'openai_oauth' },
+        completionMode: 'real',
+        pendingLoginId: 'pending-1',
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.completeOpenAiOauthLogin('openai-oauth', {
+      callbackUrl:
+        'http://localhost:1455/auth/callback?code=code-1&state=callback-state',
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/model-providers/openai-oauth/oauth/openai/complete',
+    );
+    expect(req.body).toContain('"callbackUrl"');
+    expect(req.body).toContain('callback-state');
+    expect(req.body).not.toContain('"pendingLoginId"');
+  });
+
   it('reads and clears OpenAI OAuth status through explicit credential routes', async () => {
     let captured: CapturedRequest | undefined;
     const fetch = (async (
@@ -963,6 +1003,17 @@ describe('AdminHttpTransport', () => {
       return jsonOk({
         provider: { alias: 'openai-oauth', credential: { hasSecret: false } },
         credential: { hasSecret: false },
+        loginConfig: {
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          redirectUriOverrideAllowed: false,
+          redirectUriMode: 'registered',
+          callbackUrlCompletionAccepted: true,
+          callbackUrlCompletionField: 'callbackUrl',
+          pendingLoginIdRequiredForCallbackUrl: false,
+          remoteOperatorFlow: 'paste_callback_url',
+        },
         pendingLogins: [],
       });
     }) as FetchImpl;
@@ -1028,9 +1079,7 @@ describe('AdminHttpTransport', () => {
   it('defaults missing selection arrays to empty when listing local tool profiles', async () => {
     const { fetch } = capturingFetch(
       jsonOk({
-        items: [
-          { id: 'bare', enabled: true, system: true, readOnly: true },
-        ],
+        items: [{ id: 'bare', enabled: true, system: true, readOnly: true }],
       }),
     );
     const transport = new AdminHttpTransport(makeConfig(fetch));

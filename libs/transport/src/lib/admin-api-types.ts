@@ -1286,14 +1286,28 @@ export interface OpenAiOauthStartRequest {
   readonly originator?: string;
 }
 
+export interface OpenAiOauthLoginConfig {
+  readonly issuer: string;
+  readonly clientId: string;
+  readonly redirectUri: string;
+  readonly redirectUriOverrideAllowed: boolean;
+  readonly redirectUriMode: string;
+  readonly callbackUrlCompletionAccepted: boolean;
+  readonly callbackUrlCompletionField: string;
+  readonly pendingLoginIdRequiredForCallbackUrl: boolean;
+  readonly remoteOperatorFlow: string;
+}
+
 export interface OpenAiOauthStartResponse {
   readonly provider: ModelProviderRecord;
+  readonly loginConfig: OpenAiOauthLoginConfig;
   readonly pendingLogin: OpenAiOauthPendingLogin;
 }
 
 export interface OpenAiOauthStatusResponse {
   readonly provider: ModelProviderRecord;
   readonly credential: ModelProviderCredential;
+  readonly loginConfig?: OpenAiOauthLoginConfig;
   readonly pendingLogins: readonly OpenAiOauthPendingLogin[];
 }
 
@@ -1311,8 +1325,10 @@ export interface OpenAiOauthFakeTokenResponse {
 }
 
 export interface OpenAiOauthCompleteRequest {
-  readonly pendingLoginId: string;
-  readonly state: string;
+  readonly callbackUrl?: string;
+  readonly authorizationResponseUrl?: string;
+  readonly pendingLoginId?: string;
+  readonly state?: string;
   readonly code?: string;
   readonly expectedRevision?: number;
   readonly testMode?: boolean;

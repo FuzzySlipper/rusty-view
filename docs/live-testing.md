@@ -32,16 +32,37 @@ prompt so it asks for substantive real analysis.
 
 ## Commands
 
-The normal e2e suite skips live scenarios. Opt in explicitly:
+The normal e2e suite skips live scenarios. Agents should run live scenarios
+through the shared Playwright broker service, following the Den Services usage
+doc `den-services/playwright-broker-agent-usage`
+(`/home/dev/den-services/playwright-broker/docs/agent-usage.md`). The repo
+manifest is `den-playwright.json`; the broker owns the dev-server host/port,
+sets `BASE_URL`, records run metadata, and keeps agents from killing unrelated
+processes on busy ports.
+
+From `/home/dev/den-services`:
 
 ```bash
-pnpm e2e:live
+export DEN_PLAYWRIGHT_BROKER_CONFIG_PATH=/home/dev/den-services/playwright-broker/config/config.example.yaml
+
+den-playwright run rusty-view \
+  -repo /home/dev/rusty-view \
+  -den-project rusty-view \
+  -den-task <task-id> \
+  --grep @live-agent \
+  --pw-project chromium
 ```
 
 For visual debugging:
 
 ```bash
-pnpm e2e:live:headed
+den-playwright run rusty-view \
+  -repo /home/dev/rusty-view \
+  -den-project rusty-view \
+  -den-task <task-id> \
+  --grep @live-agent \
+  --pw-project chromium \
+  --headed
 ```
 
 Useful environment variables:
@@ -55,16 +76,30 @@ RV_LIVE_MIN_STREAMING_MS=15000
 Run a focused scenario:
 
 ```bash
-RV_LIVE_RUN=1 pnpm exec playwright test \
-  --config apps/rusty-view-e2e/playwright.config.mts \
+den-playwright run rusty-view \
+  -repo /home/dev/rusty-view \
+  -den-project rusty-view \
+  -den-task <task-id> \
   --grep "@reasoning" \
-  --project=chromium --headed
+  --pw-project chromium
+```
+
+The local scripts remain available as a manual fallback when the broker service
+is unavailable or the user explicitly asks for a direct run:
+
+```bash
+pnpm e2e:live
+pnpm e2e:live:headed
 ```
 
 ## Artifacts
 
 Each live scenario writes artifacts under Playwright's test output directory in
-a `live-artifacts` folder:
+a `live-artifacts` folder. Broker-managed runs also provide
+`PLAYWRIGHT_BROKER_ARTIFACT_ROOT`, `PLAYWRIGHT_BROKER_EVIDENCE_PATH`, and a
+`run-index.json` that links the test run, server allocation, Den task metadata,
+and artifact paths. The broker marks live UI runs as requiring human/agent
+inspection; do not treat that marker as a failure.
 
 - milestone screenshots;
 - before/after screenshots for visual-impact checks;

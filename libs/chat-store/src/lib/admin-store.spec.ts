@@ -322,6 +322,20 @@ function provider(alias: string): ModelProviderRecord {
   };
 }
 
+function openAiOauthLoginConfig(): OpenAiOauthStartResponse['loginConfig'] {
+  return {
+    issuer: 'https://auth.openai.com',
+    clientId: 'app-client',
+    redirectUri: 'http://localhost:1455/auth/callback',
+    redirectUriOverrideAllowed: false,
+    redirectUriMode: 'registered',
+    callbackUrlCompletionAccepted: true,
+    callbackUrlCompletionField: 'callbackUrl',
+    pendingLoginIdRequiredForCallbackUrl: false,
+    remoteOperatorFlow: 'paste_callback_url',
+  };
+}
+
 function providerWriteResponse(alias: string): ModelProviderWriteResponse {
   return {
     provider: provider(alias),
@@ -493,10 +507,12 @@ function createTransport(
     adminOpenAiOauthStatus: vi.fn(async (alias: string) => ({
       provider: provider(alias),
       credential: { hasSecret: false },
+      loginConfig: openAiOauthLoginConfig(),
       pendingLogins: [],
     })),
     adminStartOpenAiOauthLogin: vi.fn(async (alias: string) => ({
       provider: provider(alias),
+      loginConfig: openAiOauthLoginConfig(),
       pendingLogin: {
         pendingLoginId: 'pending-1',
         providerAlias: alias,
@@ -777,17 +793,15 @@ describe('AdminStore behavior', () => {
     expect(store.openAiOauthStatus()?.pendingLogins).toHaveLength(1);
 
     await store.completeOpenAiOauthLogin('openai-oauth', {
-      pendingLoginId: 'pending-1',
-      state: 'callback-state',
-      code: 'authorization-code',
+      callbackUrl:
+        'http://localhost:1455/auth/callback?code=authorization-code&state=callback-state',
     });
 
     expect(transport.adminCompleteOpenAiOauthLogin).toHaveBeenCalledWith(
       'openai-oauth',
       {
-        pendingLoginId: 'pending-1',
-        state: 'callback-state',
-        code: 'authorization-code',
+        callbackUrl:
+          'http://localhost:1455/auth/callback?code=authorization-code&state=callback-state',
       },
     );
     expect(store.openAiOauthCompleteResult()?.credential.kind).toBe(

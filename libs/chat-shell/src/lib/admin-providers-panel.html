@@ -234,8 +234,8 @@
       >
         Cancel
       </button>
-      }
-      @if (editingAlias() !== null && form().credentialMode === 'openai_oauth') {
+      } @if (editingAlias() !== null && form().credentialMode ===
+      'openai_oauth') {
       <button
         type="button"
         class="rv-admin-providers__button"
@@ -248,7 +248,7 @@
         type="button"
         class="rv-admin-providers__button"
         (click)="completeOpenAiOauthLogin()"
-        [disabled]="admin.saving() || oauthPendingLogin() === null"
+        [disabled]="admin.saving() || !oauthCallbackReady()"
       >
         Complete OpenAI OAuth
       </button>
@@ -266,28 +266,26 @@
     @if (oauthPendingLogin(); as pendingLogin) {
     <div class="rv-admin-providers__oauth" role="status">
       <span>{{ pendingLogin.providerAlias }}</span>
-      <a [href]="pendingLogin.authorizationUrl" target="_blank" rel="noreferrer">
+      <a
+        [href]="pendingLogin.authorizationUrl"
+        target="_blank"
+        rel="noreferrer"
+      >
         authorization URL
       </a>
       <span>expires {{ pendingLogin.expiresAt }}</span>
     </div>
-    }
-
-    @if (admin.openAiOauthStatus(); as oauthStatus) {
+    } @if (admin.openAiOauthStatus(); as oauthStatus) {
     <div class="rv-admin-providers__result" role="status">
       <span>{{ oauthStatus.provider.alias }}</span>
       <span>{{ oauthStatus.credential.kind ?? 'api_key' }}</span>
       <span>
-        {{
-          oauthStatus.credential.status ??
-            (oauthStatus.credential.hasSecret ? 'configured' : 'missing')
-        }}
+        {{ oauthStatus.credential.status ?? (oauthStatus.credential.hasSecret ?
+        'configured' : 'missing') }}
       </span>
       <span>{{ oauthStatus.credential.updatedAt ?? 'not updated' }}</span>
     </div>
-    }
-
-    @if (admin.providerWriteResult(); as result) {
+    } @if (admin.providerWriteResult(); as result) {
     <div class="rv-admin-providers__result" role="status">
       <span>provider {{ result.provider.alias }}</span>
       <span>{{ credentialLabel(result.provider) }}</span>

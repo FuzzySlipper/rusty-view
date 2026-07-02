@@ -726,6 +726,8 @@ function openAiOauthCompleteBody(
   request: OpenAiOauthCompleteRequest,
 ): Record<string, unknown> {
   return {
+    callbackUrl: request.callbackUrl,
+    authorizationResponseUrl: request.authorizationResponseUrl,
     pendingLoginId: request.pendingLoginId,
     state: request.state,
     code: request.code,

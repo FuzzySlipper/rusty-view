@@ -91,9 +91,9 @@ See [theming.md](theming.md).
 ## Live Testing
 
 For bugs that depend on real streaming, controls, or rendered transcript output,
-use the live Playwright scenarios against a real Rusty Crew backend/profile/LLM.
-The close criterion is inspected browser evidence, not merely a passing
-deterministic assertion.
+use the broker-managed live Playwright scenarios against a real Rusty Crew
+backend/profile/LLM. The close criterion is inspected browser evidence, not
+merely a passing deterministic assertion.
 
 See [live-testing.md](live-testing.md).
 
