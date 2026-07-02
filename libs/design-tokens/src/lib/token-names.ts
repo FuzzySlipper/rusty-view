@@ -5,7 +5,7 @@
  * `../styles/tokens.css`. Components reference tokens via CSS `var()` in their
  * component-scoped styles; these constants exist so that any programmatic
  * reference to a token name is type-checked and refactor-safe instead of a
- * magic string. No app-specific theme assumptions, no roleplay concepts.
+ * magic string. No app-specific theme assumptions, no product concepts.
  */
 
 export const COLOR_TOKENS = {

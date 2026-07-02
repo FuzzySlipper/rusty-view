@@ -4,9 +4,9 @@ import { InjectionToken, type Type } from '@angular/core';
  * Extension tokens for the chat shell's menu and options surfaces.
  *
  * These are the composition seams documented in `docs/rusty-view.md` (the
- * `CHAT_*` provider family). Downstream consumers — notably rusty-roleplay —
- * provide additional/override entries through these tokens without forking the
- * base chat mechanics. rusty-view ships boring debug defaults.
+ * `CHAT_*` provider family). Downstream consumers provide additional/override
+ * entries through these tokens without forking the base chat mechanics.
+ * rusty-view ships boring debug defaults.
  *
  * Tokens live in chat-shell (where the surfaces are rendered) so both the
  * default wiring and downstream providers import from a single public barrel.
@@ -43,8 +43,8 @@ export const CHAT_TOP_MENU_ITEMS = new InjectionToken<
 
 /**
  * A tab in the Options panel. `component` is a standalone component rendered
- * inside the panel body when the tab is active. Downstream tabs (e.g. a
- * roleplay theme tab) are added by providing additional entries here.
+ * inside the panel body when the tab is active. Downstream tabs are added by
+ * providing additional entries here.
  */
 export interface ChatOptionsTab {
   readonly id: string;

@@ -38,9 +38,9 @@ export {
 
 /**
  * Extension token for overriding the *default* appearance that rusty-view
- * ships with. Downstream consumers (e.g. rusty-roleplay) provide a partial
- * {@link AppearanceSettings} here to bias the debug defaults toward their
- * house theme without reimplementing the application logic.
+ * ships with. Downstream consumers provide a partial
+ * {@link AppearanceSettings} here to bias the debug defaults toward their house
+ * theme without reimplementing the application logic.
  *
  * The merged value is applied on top of {@link DEFAULT_APPEARANCE}; persisted
  * user preferences (from {@link CHAT_SETTINGS_STORAGE}) still win once loaded.

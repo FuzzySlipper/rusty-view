@@ -6,7 +6,7 @@
  * `./styles/tokens.css`; the typed token *names* are re-exported here so that
  * components can reference token names in a refactor-safe way.
  *
- * No app-specific theme assumptions and no roleplay concepts. Defaults are
+ * No app-specific theme assumptions and no product concepts. Defaults are
  * debug-appropriate: dense, monospace-friendly, and dark-first with a light
  * override for `prefers-color-scheme: light`.
  *

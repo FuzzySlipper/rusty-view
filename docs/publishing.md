@@ -1,8 +1,8 @@
 # Publishing the `@rusty-view/*` libraries
 
-The rusty-view libraries are consumed by other repos (e.g. `rusty-roleplay`) as
-versioned package dependencies. This doc explains how they are built for
-external consumption and how to publish them.
+The rusty-view libraries are consumed by other repos as versioned package
+dependencies. This doc explains how they are built for external consumption and
+how to publish them.
 
 ## Why publishing needs care
 
@@ -29,9 +29,9 @@ mode is set per Angular lib in `tsconfig.lib.prod.json`:
 { "angularCompilerOptions": { "compilationMode": "partial" } }
 ```
 
-(`chat-store`, `transcript-renderer`, `chat-components`, `chat-shell`.) The
-pure-TS libs (`@nx/js:tsc`: `protocol`, `transport`, `chat-domain`,
-`design-tokens`) have no compilation-mode concern.
+(`chat-store`, `chat-theme`, `transcript-renderer`, `chat-components`,
+`chat-shell`.) The pure-TS libs (`@nx/js:tsc`: `protocol`, `transport`,
+`chat-domain`, `design-tokens`) have no compilation-mode concern.
 
 ## Publish
 
@@ -57,7 +57,8 @@ pnpm publish:libs -- --version 0.0.3 --dry-run
    are skipped).
 
 Published set: `protocol`, `transport`, `chat-domain`, `design-tokens`,
-`chat-store`, `transcript-renderer`, `chat-components`, `chat-shell`.
+`chat-store`, `chat-theme`, `transcript-renderer`, `chat-components`,
+`chat-shell`.
 `testing-fixtures` (test-only) and `workspace-generators` (internal) are not
 published.
 

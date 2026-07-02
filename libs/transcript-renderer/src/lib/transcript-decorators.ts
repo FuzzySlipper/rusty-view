@@ -4,16 +4,15 @@ import type { ChatMessage } from '@rusty-view/chat-domain';
 /**
  * Extension token for message decoration.
  *
- * The base transcript renderer is roleplay-agnostic. Rusty-roleplay (or any
- * downstream consumer) provides decorators via this multi-provider token to
- * add styling, prefixes, suffixes, or metadata to specific messages without
- * modifying the renderer.
+ * The base transcript renderer is product-agnostic. Downstream consumers
+ * provide decorators via this multi-provider token to add styling, prefixes,
+ * suffixes, or metadata to specific messages without modifying the renderer.
  *
  * Example provider:
  *   { provide: CHAT_MESSAGE_DECORATORS, multi: true, useValue: myDecorator }
  */
 export interface ChatMessageDecorator {
-  /** Unique kind identifier for this decorator (e.g. 'rp-narration'). */
+  /** Unique kind identifier for this decorator (e.g. 'consumer-highlight'). */
   readonly kind: string;
   /** Return true if this decorator applies to the given message. */
   canDecorate(message: ChatMessage): boolean;

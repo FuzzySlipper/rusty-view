@@ -32,8 +32,8 @@ import {
  * Debug chat shell — the composition layer that wires everything together.
  *
  * Layout: header with stream status → profile sidebar → central transcript +
- * message input → event inspector panel. Dense, workbench-style, roleplay-
- * agnostic.
+ * message input → event inspector panel. Dense, workbench-style, and
+ * product-agnostic.
  *
  * Container component: injects ChatStore. All presentational components below
  * receive data through inputs and emit events through outputs.

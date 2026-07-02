@@ -1,7 +1,7 @@
 import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 
 /**
- * Small, roleplay-agnostic UI-state blob persisted alongside the chat cache.
+ * Small, product-agnostic UI-state blob persisted alongside the chat cache.
  *
  * Currently holds the selected brain-profile id so the sidebar selection
  * survives refresh/reconnect, and the command history (submitted slash

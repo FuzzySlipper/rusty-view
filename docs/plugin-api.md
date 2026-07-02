@@ -1,9 +1,9 @@
 # Rusty View Plugin API
 
-`rusty-view` is both a reusable agent oversight/debug UI and the upstream chat
-substrate for downstream apps such as `rusty-roleplay`. The plugin API keeps
-that split clean: `rusty-view` owns generic chat mechanics, while consumers
-register their own presentation and actions.
+`rusty-view` is both a reusable agent oversight/debug UI and a generic chat
+substrate for downstream apps. The plugin API keeps that split clean:
+`rusty-view` owns generic chat mechanics, while consumers register their own
+presentation and actions.
 
 ## Boundary
 
@@ -18,9 +18,9 @@ Core packages may expose hooks for:
 - top-menu entries
 - user-data actions with side-effect and confirmation metadata
 
-Core packages must not introduce downstream domain concepts such as characters,
-personas, lorebooks, expression sprites, roleplay groups, prompt-manager
-semantics, or roleplay regex scripts.
+Core packages must not introduce downstream domain concepts such as product
+profiles, app-specific prompt managers, bespoke transcript decorations, or
+consumer-owned workflow semantics.
 
 ## Registration
 
@@ -155,13 +155,17 @@ const inspectTargets = {
 
 ## Current Status
 
-Task #3338 defined and exported the contracts. Task #3339 wires the generic
-content renderer registry into the transcript renderer. Task #3342 adds the
-generic slash command parser/runtime and wires plugin commands into the debug
-input, command composer, Help panel, and command history. Some contribution
-points already have rendered surfaces (`CHAT_TOP_MENU_ITEMS`,
-`CHAT_OPTIONS_TABS`, `CHAT_CONTENT_RENDERERS`, `CHAT_SLASH_COMMANDS`), while
-others are API commitments for upcoming substrate tasks:
+The plugin contracts are exported from `@rusty-view/chat-shell`, with content
+renderer contracts re-exported from `@rusty-view/transcript-renderer`. The
+debug shell renders these contribution points today:
+
+- `CHAT_TOP_MENU_ITEMS`
+- `CHAT_OPTIONS_TABS`
+- `CHAT_CONTENT_RENDERERS`
+- `CHAT_SLASH_COMMANDS`
+
+These contribution points are exported contracts, but do not yet have complete
+default UI in the reference shell:
 
 - sidebar-panel rendering
 - message toolbar rendering

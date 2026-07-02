@@ -5,11 +5,11 @@
  * tab. They are *not* design tokens themselves — they are a small, typed
  * preferences object that the {@link ChatTheme} service translates into live
  * `--rv-*` CSS custom properties on the document root. Keeping them separate
- * from the raw token names means downstream consumers (e.g. rusty-roleplay)
- * can override defaults via the {@link CHAT_THEME} token without re-implementing
- * the application logic.
+ * from the raw token names means downstream consumers can override defaults via
+ * the {@link CHAT_THEME} token without re-implementing the application logic.
  *
- * No roleplay concepts. Values are debug-appropriate: industrial, dense.
+ * No downstream product concepts. Values are debug-appropriate: industrial,
+ * dense.
  */
 
 /**

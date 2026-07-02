@@ -4,7 +4,7 @@ Shell/container components and extension contracts for the Rusty View debug
 chat client.
 
 Downstream consumers register generic UI and action contributions with
-`provideChatPlugins(...)`. See `docs/07-rusty-view-plugin-api.md` for the
+`provideChatPlugins(...)`. See `docs/plugin-api.md` for the
 architecture boundary and the public plugin surface.
 
 Content block renderers are dispatched by

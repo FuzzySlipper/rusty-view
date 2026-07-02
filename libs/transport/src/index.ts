@@ -6,7 +6,7 @@
  * registry/execute (HTTP), and live event streaming (fetch-based SSE with
  * cursor resume + bounded exponential backoff reconnection).
  *
- * Framework-neutral: no Angular, no components, no roleplay concepts. The
+ * Framework-neutral: no Angular, no components, no product concepts. The
  * Angular chat-store adapts transport's connection state to Signals.
  *
  * Protocol types come from @rusty-view/protocol (generated from OpenAPI).

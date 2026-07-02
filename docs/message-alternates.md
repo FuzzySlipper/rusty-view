@@ -12,7 +12,7 @@ original message shape.
 
 ## Public View Model
 
-Task #3340 chooses a slot/variant model:
+Rusty View uses a slot/variant model:
 
 ```text
 MessageAlternateSlot

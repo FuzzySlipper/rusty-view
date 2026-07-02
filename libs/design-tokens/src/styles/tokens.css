@@ -6,7 +6,7 @@
  * component or layout rules — values only.
  *
  * Defaults are dark-first (debug tools favour dark) with a light theme under
- * `prefers-color-scheme: light`. No roleplay concepts, no app-specific theming.
+ * `prefers-color-scheme: light`. No product concepts, no app-specific theming.
  */
 
 :root {

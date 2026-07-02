@@ -43,9 +43,9 @@ not the current planning queue.
 
 ## Architecture Soul
 
-> A boring industrial chat console and reusable chat client kit. Roleplay-
-> agnostic by design. `rusty-roleplay` consumes this; `rusty-view` never knows
-> about roleplay.
+> A boring industrial chat console and reusable chat client kit. Product-
+> agnostic by design. Downstream consumers may add product-specific presentation;
+> `rusty-view` owns the reusable chat mechanics.
 
 - **Backend protocol truth** lives in `rusty-crew` (Rust). TypeScript protocol
   files are generated or schema-derived, never hand-written.
@@ -59,5 +59,5 @@ not the current planning queue.
 - **Frontend code is deliberately hostile to improvisation.** Agents must use
   workspace generators, obey boundary rules, and prefer boring explicitness.
 
-See `docs/rusty-view.md` for the full system design and the docs directory for
-the broader roleplay system design documents.
+See `docs/rusty-view.md` for the current system design and the docs directory
+for committed implementation surfaces.

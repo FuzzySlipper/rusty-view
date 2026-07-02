@@ -53,7 +53,7 @@ export const DEFAULT_MARKDOWN_RENDER_POLICY: MarkdownRenderPolicy = {
  * DI token for the global text render mode preference.
  *
  * Provides a readonly signal of {@link TextRenderMode}. The default is
- * `auto`. The transcript-renderer is roleplay-agnostic and does not depend
+ * `auto`. The transcript-renderer is product-agnostic and does not depend
  * on `@rusty-view/chat-theme`; the shell overrides this token with a computed
  * signal sourced from its appearance settings so live changes propagate
  * immediately.
@@ -137,9 +137,9 @@ export const DEFAULT_ALLOWED_HTML_ATTRS: readonly string[] = [
 ];
 
 /**
- * Policy contract for HTML sanitization. Downstream consumers (e.g.
- * rusty-roleplay) can override {@link TRANSCRIPT_HTML_POLICY} to impose a
- * stricter or richer allowed surface without changing the base renderer.
+ * Policy contract for HTML sanitization. Downstream consumers can override
+ * {@link TRANSCRIPT_HTML_POLICY} to impose a stricter or richer allowed surface
+ * without changing the base renderer.
  */
 export interface HtmlSanitizerPolicy {
   readonly allowedTags: readonly string[];

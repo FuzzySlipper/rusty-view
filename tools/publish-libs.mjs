@@ -2,9 +2,9 @@
 /**
  * Publish the @rusty-view/* libraries to a registry for cross-repo consumption.
  *
- * Why this exists: the libs are consumed by other repos (e.g. rusty-roleplay).
- * Inside this workspace they link via `workspace:*` specifiers and tsconfig
- * paths, but `workspace:*` does not resolve once installed elsewhere, and the
+ * Why this exists: the libs are consumed by other repos. Inside this workspace
+ * they link via `workspace:*` specifiers and tsconfig paths, but `workspace:*`
+ * does not resolve once installed elsewhere, and the
  * ng-packagr / tsc dist output is the thing that gets published — not the
  * source package. ng-packagr cannot rewrite the workspace protocol, so this
  * tool does the two things needed to make the built artifacts installable
@@ -38,6 +38,7 @@ const PUBLISHABLE = [
   'chat-domain',
   'design-tokens',
   'chat-store',
+  'chat-theme',
   'transcript-renderer',
   'chat-components',
   'chat-shell',

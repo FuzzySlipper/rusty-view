@@ -100,9 +100,9 @@ Behavior-oriented templates live under
 - `scroll-and-refresh`: scroll interaction during streaming and refresh recovery.
 
 Prefer adding another behavior template over writing a narrow one-off probe for a
-single historical bug. The prompt may include markers or concrete requested
-content when that is needed to verify persistence/refresh, but avoid shaping the
-runtime into a fake path that normal usage will not take.
+single past bug. The prompt may include markers or concrete requested content
+when that is needed to verify persistence/refresh, but avoid shaping the runtime
+into a fake path that normal usage will not take.
 
 ## Scenario Pattern
 

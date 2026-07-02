@@ -107,7 +107,7 @@ export default [
             {
               // The shell is the composition layer: it wires transport into the
               // store and renders components + the transcript. It may not reach
-              // for roleplay concepts (none exist in rusty-view by construction).
+              // for product concepts (none exist in rusty-view by construction).
               sourceTag: 'scope:chat-shell',
               onlyDependOnLibsWithTags: [
                 'scope:protocol',

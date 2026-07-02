@@ -3,7 +3,7 @@
  *
  * Virtualized transcript rendering: 10k+ messages, streaming-safe delta
  * rendering, scroll anchoring, tail-follow, jump-to-message, collapsible
- * blocks, and roleplay-agnostic extension hooks.
+ * blocks, and product-agnostic extension hooks.
  *
  * The virtualizer (Angular CDK) is hidden behind the public component API.
  * Implemented in Den task #3184.

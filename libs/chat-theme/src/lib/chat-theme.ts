@@ -88,7 +88,7 @@ const THEME_DATA_ATTRIBUTE = 'data-rv-theme';
  *     in production — never `localStorage`/`sessionStorage`).
  *
  * Not injectable-tree-rooted by default to keep it testable; the shell provides
- * it. It has no roleplay knowledge.
+ * it. It has no downstream product knowledge.
  */
 @Injectable()
 export class ChatTheme {

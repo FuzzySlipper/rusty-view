@@ -3,7 +3,7 @@
  *
  * Angular Signals store for chat session state: current session, message
  * projection (via chat-domain reducer), stream status, connection state, raw
- * event log, command registry, and pending sends. No roleplay-specific state.
+ * event log, command registry, and pending sends. No product-specific state.
  *
  * All network communication goes through @rusty-view/transport. All durable
  * storage goes through a ChatStorageAdapter (provided via CHAT_STORAGE_ADAPTER

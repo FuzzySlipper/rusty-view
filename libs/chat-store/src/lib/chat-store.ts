@@ -42,7 +42,7 @@ export const CHAT_STORAGE_ADAPTER = new InjectionToken<ChatStorageAdapter>(
  * Owns: active session, message projection (via chat-domain reducer), stream
  * status, connection state, raw event log, command registry, pending sends.
  *
- * Does NOT own: roleplay-specific state (characters, personas, lore, scene).
+ * Does NOT own: downstream product-specific state.
  *
  * All network communication goes through {@link ChatTransport} — the store
  * makes no direct fetch/SSE calls. All durable storage goes through

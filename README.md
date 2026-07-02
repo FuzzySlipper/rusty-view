@@ -1,94 +1,104 @@
 # rusty-view
 
-Boring, industrial, **roleplay-agnostic** chat client kit and operator console for
-[Rusty Crew](../rusty-crew) sessions. Built as an Angular + Nx monorepo of
-strictly-boundaried libraries plus a `rusty-view` reference app.
+Rusty View is a boring, industrial chat console and reusable Angular client kit
+for Rusty Crew sessions. It renders real agent transcripts, streams assistant
+turns, exposes debug/admin panels, and keeps the reusable chat mechanics separate
+from any downstream product-specific UI.
 
-`rusty-view` knows nothing about roleplay. A future `rusty-roleplay` repo will
-consume these packages and add roleplay presentation — without forking the core
-transcript/client mechanics.
-
-## Why strict?
-
-Frontend projects rot quickly when agents improvise. This repo is deliberately
-hostile to improvisation: load-bearing library boundaries enforced by Nx module
-boundaries + ESLint, generated/shared protocol types (never hand-written), and
-TypeScript strict mode with the full paranoid flag set. See
-[`docs/rusty-view.md`](docs/rusty-view.md) for the full design and
-[`agents-project.md`](agents-project.md) for the working policy.
-
-## Repository layout
+## What Lives Here
 
 ```text
 apps/
-  rusty-view/            durable operator chat client (reference implementation)
-  rusty-view-e2e/        Playwright smoke for rusty-view
+  rusty-view/            operator/debug chat console
+  rusty-view-e2e/        Playwright smoke and live conversation scenarios
 libs/
-  protocol/              generated TS wire types from the rusty-crew OpenAPI
-  transport/             HTTP/SSE client (framework-agnostic)
-  chat-domain/           pure TS projection / event-reduction logic
-  chat-store/            Angular Signals store
-  transcript-renderer/   virtualized transcript rendering (10k+ messages)
-  chat-components/       dumb presentational components
-  chat-shell/            app layout / container components
-  design-tokens/         CSS custom properties + typed token names
-  testing-fixtures/      fake sessions, giant transcripts, stream fixtures
-  workspace-generators/  rv:component / rv:fixture / rv:library generators
-docs/                    rusty-view.md + broader RP system design (00–06)
+  protocol/              generated OpenAPI wire types
+  transport/             framework-neutral HTTP/SSE and admin clients
+  chat-domain/           pure TS projection/search/navigation primitives
+  chat-store/            Angular Signals store and IndexedDB chat storage
+  transcript-renderer/   virtualized transcript and block rendering
+  chat-components/       presentational inputs, status, menus, inspectors
+  chat-shell/            debug shell, panels, command/plugin composition
+  chat-theme/            persisted appearance settings and theme service
+  design-tokens/         CSS custom properties and typed token names
+  testing-fixtures/      protocol/session/transcript test fixtures
+  workspace-generators/  local Nx generators
+docs/                    current repo docs only
 ```
 
-## Dependency direction
+## Architecture
+
+Rusty Crew owns backend protocol truth. Rusty View consumes generated
+OpenAPI-derived TypeScript types and keeps each layer narrow:
 
 ```text
-rusty-crew (Rust backend, owns protocol truth)
-  ↓ generated/shared protocol types
-rusty-view (this repo — boring chat client kit)
-  ↓ versioned package dependency
-rusty-roleplay (separate future repo — RP presentation layer)
+Rusty Crew API/SSE
+  -> @rusty-view/protocol
+  -> @rusty-view/transport
+  -> @rusty-view/chat-store
+  -> @rusty-view/chat-domain
+  -> @rusty-view/transcript-renderer + shell/components
 ```
 
-## Getting started
+See [docs/rusty-view.md](docs/rusty-view.md) for the current architecture map.
+
+## Getting Started
 
 Requires Node 20+ and pnpm 11+.
 
 ```bash
 pnpm install
-pnpm start            # serve rusty-view (http://localhost:4200)
+pnpm start
 ```
+
+`pnpm start` serves `apps/rusty-view` at the Angular dev-server URL printed by
+Nx, normally `http://localhost:4200`.
 
 ## Commands
 
-| Script                              | What it does                                                                       |
-| ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm start`                        | Serve `rusty-view`                                                                 |
-| `pnpm build`                        | Build all projects                                                                 |
-| `pnpm lint`                         | ESLint (incl. module-boundary + forbidden-pattern rules)                           |
-| `pnpm typecheck`                    | `tsc --noEmit` per project                                                         |
-| `pnpm test`                         | Unit tests (vitest) for all projects                                               |
-| `pnpm test:affected`                | Unit tests for affected projects only                                              |
-| `pnpm e2e`                          | Playwright smoke for `rusty-view` (needs browsers: `pnpm exec playwright install`) |
-| `pnpm format` / `pnpm format:check` | Prettier write / check                                                             |
-| `pnpm run ci`                       | Full gate: format check → lint → typecheck → test → build                          |
-| `pnpm graph`                        | Open the Nx project graph                                                          |
+| Script                              | What it does                                                    |
+| ----------------------------------- | --------------------------------------------------------------- |
+| `pnpm start`                        | Serve `rusty-view`                                              |
+| `pnpm build`                        | Build all projects                                              |
+| `pnpm lint`                         | ESLint, including module-boundary rules                         |
+| `pnpm lint:tokens`                  | Check component styles for design-token violations              |
+| `pnpm typecheck`                    | `tsc --noEmit` per project                                      |
+| `pnpm test`                         | Unit tests for all projects                                     |
+| `pnpm e2e`                          | Playwright smoke tests                                          |
+| `pnpm e2e:live`                     | Opt-in real frontend + real Rusty Crew + real LLM scenarios     |
+| `pnpm format` / `pnpm format:check` | Prettier write / check                                          |
+| `pnpm protocol:generate`            | Regenerate OpenAPI-derived protocol types                       |
+| `pnpm protocol:check`               | Verify generated protocol types are current                     |
+| `pnpm run ci`                       | Format check, token lint, lint, typecheck, tests, build, checks |
 
-## Workspace generators
+Live scenarios are intentionally opt-in and write human-inspectable artifacts.
+See [docs/live-testing.md](docs/live-testing.md).
 
-Use these instead of hand-creating Angular structures:
+## Workspace Generators
+
+Use the local generators instead of hand-creating Angular structures:
 
 ```bash
 pnpm exec nx g rv:component --name=message-bubble --project=chat-components
-pnpm exec nx g rv:fixture    --name=huge-session
-pnpm exec nx g rv:library    --name=my-lib --type=js --scope=chat-domain
+pnpm exec nx g rv:fixture --name=huge-session
+pnpm exec nx g rv:library --name=my-lib --type=js --scope=chat-domain
 ```
 
-`rv:component` scaffolds a presentational component (OnPush, standalone,
-`rv-` kebab selector, strictly-typed signal input/output) and exports it from the
-host library's barrel. `rv:library` delegates to Nx's library generators with
-rusty-view conventions and a validated boundary `scope` tag.
-
-## Backend contract
+## Protocol Contract
 
 Protocol types are generated from the Rusty Crew OpenAPI artifact:
-`rusty-crew/docs/rusty-view-chat-api-v0.openapi.json`. See
-`rusty-crew/docs/rusty-view-chat-api-contract.md`. Never hand-write backend
-protocol shapes in this repo.
+
+```text
+/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json
+```
+
+Generated files are not hand-edited. Frontend domain/view-model types live in
+`@rusty-view/chat-domain`; wire types live in `@rusty-view/protocol`.
+
+## Docs
+
+- [docs/rusty-view.md](docs/rusty-view.md) - current architecture map
+- [docs/live-testing.md](docs/live-testing.md) - real LLM/front-end testing
+- [docs/plugin-api.md](docs/plugin-api.md) - plugin and contribution contracts
+- [docs/theming.md](docs/theming.md) - design tokens and appearance settings
+- [docs/publishing.md](docs/publishing.md) - package publishing notes

@@ -21,9 +21,9 @@ not the current planning queue.
 
 ## Architecture Soul
 
-> A boring industrial chat console and reusable chat client kit. Roleplay-
-> agnostic by design. `rusty-roleplay` consumes this; `rusty-view` never knows
-> about roleplay.
+> A boring industrial chat console and reusable chat client kit. Product-
+> agnostic by design. Downstream consumers may add product-specific presentation;
+> `rusty-view` owns the reusable chat mechanics.
 
 - **Backend protocol truth** lives in `rusty-crew` (Rust). TypeScript protocol
   files are generated or schema-derived, never hand-written.
@@ -37,8 +37,8 @@ not the current planning queue.
 - **Frontend code is deliberately hostile to improvisation.** Agents must use
   workspace generators, obey boundary rules, and prefer boring explicitness.
 
-See `docs/rusty-view.md` for the full system design and the docs directory for
-the broader roleplay system design documents.
+See `docs/rusty-view.md` for the current system design and the docs directory
+for committed implementation surfaces.
 
 ## Repository Structure
 
@@ -50,15 +50,15 @@ the broader roleplay system design documents.
     /protocol               # generated TypeScript types (no Angular, no app logic)
     /transport              # HTTP/SSE client for rusty-crew (no components)
     /chat-domain            # pure TypeScript domain logic (no Angular)
-    /chat-store             # Angular Signals store (no roleplay state)
+    /chat-store             # Angular Signals store (no product-specific state)
     /chat-theme             # appearance settings + live token application
-    /transcript-renderer    # virtualized transcript rendering (roleplay-agnostic)
+    /transcript-renderer    # virtualized transcript rendering (product-agnostic)
     /chat-components        # dumb presentational components (no service injection)
     /chat-shell             # app layout (session list, transcript, inspectors)
     /design-tokens          # colors, spacing, typography (no app assumptions)
     /testing-fixtures        # fake sessions, giant transcripts, streaming fixtures
     /workspace-generators   # Nx generators for approved scaffolding
-  /docs                     # design docs (rusty-view.md + system design 00-06)
+  /docs                     # current repo docs only
 ```
 
 ## Dependency Direction
@@ -66,27 +66,27 @@ the broader roleplay system design documents.
 ```text
 rusty-crew (Rust backend, owns protocol truth)
   ↓ generated/shared protocol types
-rusty-view (this repo — boring chat client kit)
+rusty-view (this repo - boring chat client kit)
   ↓ versioned package dependency
-rusty-roleplay (separate future repo — RP presentation layer)
+downstream product app
 ```
 
-`rusty-view` must know nothing about roleplay concepts. `rusty-roleplay` may
-know about characters, personas, lorebooks, scene state, and presets, but it
-must not own or fork core transcript mechanics.
+`rusty-view` must know nothing about downstream product concepts. Consumers may
+add product-specific presentation, but they must not own or fork core transcript
+mechanics.
 
 ## Library Boundary Rules
 
 | Library | Owns | May not |
 |---------|------|---------|
 | protocol | Generated TS types from Rust | Angular, app logic, hand-written types |
-| transport | HTTP/SSE/WS interaction with rusty-crew | Component imports, roleplay concepts |
+| transport | HTTP/SSE/WS interaction with rusty-crew | Component imports, product concepts |
 | chat-domain | Conversation projection, event reduction, branch modeling | Angular components, network calls |
-| chat-store | Current session state, message projection, stream status | Roleplay-specific state, direct network calls |
-| chat-theme | Appearance settings + live `--rv-*` token application, settings persistence | Roleplay concepts, session/transcript state, direct `localStorage` |
-| transcript-renderer | Virtualized rendering, scroll behavior, streaming deltas | Roleplay concepts, hardcoded message decoration |
+| chat-store | Current session state, message projection, stream status | Product-specific state, direct network calls |
+| chat-theme | Appearance settings + live `--rv-*` token application, settings persistence | Product concepts, session/transcript state, direct `localStorage` |
+| transcript-renderer | Virtualized rendering, scroll behavior, streaming deltas | Product concepts, hardcoded message decoration |
 | chat-components | Dumb presentational components (inputs/outputs only) | Service injection, store access, domain logic |
-| chat-shell | Debug app layout, session list, inspector panels | Roleplay UI |
+| chat-shell | Debug app layout, session list, inspector panels | Product-specific UI |
 | design-tokens | Colors, spacing, typography | App-specific theme assumptions |
 | testing-fixtures | Fake sessions, giant transcripts, streaming fixtures | Production code imports |
 
@@ -293,7 +293,7 @@ a reviewer can look at each line and immediately know why it's there.
 - No domain logic inside Angular components.
 - No global state singleton unless explicitly approved.
 - No global CSS except reset and design tokens.
-- No roleplay imports inside rusty-view.
+- No downstream product imports inside rusty-view.
 
 ## Protocol Rules
 
@@ -305,9 +305,9 @@ a reviewer can look at each line and immediately know why it's there.
 
 ## Transcript Rules
 
-- Transcript renderer must remain roleplay-agnostic.
-- RP concepts must be added through decorators/providers in rusty-roleplay,
-  not hardcoded into base renderer.
+- Transcript renderer must remain product-agnostic.
+- Product-specific concepts must be added through decorators/providers in
+  downstream consumers, not hardcoded into the base renderer.
 - Virtualization is mandatory for large transcripts.
 - Tool/debug output must be collapsible.
 - Large message rendering must be chunkable.
@@ -354,7 +354,7 @@ Use workspace generators for new components, features, stores, and tests.
 
 Never manually duplicate Rust protocol types in TypeScript.
 
-Never add roleplay-specific concepts to base chat packages.
+Never add product-specific concepts to base chat packages.
 
 Never add direct HTTP, WebSocket, SSE, IndexedDB, localStorage, or
 sessionStorage usage outside the approved adapter packages.
@@ -366,7 +366,7 @@ Never bypass the chat store to mutate transcript state.
 Never import from another package's internal files. Use public API entrypoints
 only.
 
-Never fix a roleplay frontend problem by weakening base chat boundaries.
+Never fix a downstream frontend problem by weakening base chat boundaries.
 
 Prefer explicit, boring, typed code over clever abstractions.
 
