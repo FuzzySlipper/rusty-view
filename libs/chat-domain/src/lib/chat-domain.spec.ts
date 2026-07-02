@@ -458,6 +458,61 @@ describe('inline tool/command blocks', () => {
     expect(toolBlocks[0]?.tool?.summary).toBe('git_status');
   });
 
+  it('adopts a tool-only placeholder into the later real assistant wake message', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'tool_call_started',
+        {
+          wake_id: 'tool-wake',
+          tool_name: 'env_default_get_messages',
+        },
+        { event_id: 'sess:586' },
+      ),
+      makeEvent(
+        'tool_call_completed',
+        {
+          wake_id: 'tool-wake',
+          tool_name: 'env_default_get_messages',
+          is_error: false,
+        },
+        { event_id: 'sess:587' },
+      ),
+      makeEvent(
+        'assistant_reasoning_delta',
+        {
+          wake_id: 'service-sess-4',
+          text: 'thinking',
+          visibility: 'reasoning',
+        },
+        { event_id: 'sess:588' },
+      ),
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'service-sess-4', text: 'done' },
+        { event_id: 'sess:589' },
+      ),
+      makeEvent(
+        'assistant_message_completed',
+        { wake_id: 'service-sess-4', body: 'done' },
+        { event_id: 'sess:590' },
+      ),
+      makeEvent('assistant_turn_finished', {}, { event_id: 'sess:591' }),
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    const message = projection.messages[0];
+    expect(message?.id).toBe('asst:service-sess-4');
+    expect(message?.status).toBe('completed');
+    expect(message?.blocks.map((block) => block.kind)).toEqual([
+      'tool_call',
+      'reasoning',
+      'text',
+    ]);
+    expect(message?.blocks[0]?.tool?.status).toBe('completed');
+    expect(projection.activeTurn).toBeUndefined();
+  });
+
   it('treats a completed event with is_error as a failure', () => {
     const projection = projectConversation([
       makeEvent('assistant_text_delta', { wake_id: 'w1', text: 'x' }),

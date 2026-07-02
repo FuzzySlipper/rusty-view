@@ -7,8 +7,8 @@ test('baseline multi-turn real conversation @live-agent @conversation', async ({
   await live.requireLiveRun();
   await live.openAppAndSelectProfile();
 
-  const assistantBefore = await live.assistantMessages().count();
-  const userBefore = await live.userMessages().count();
+  const assistantBefore = await live.assistantStateCount();
+  const userBefore = await live.userStateCount();
 
   await live.runTurn({
     prompt:
@@ -18,15 +18,15 @@ test('baseline multi-turn real conversation @live-agent @conversation', async ({
 
   await live.runTurn({
     prompt:
-      'Live UI verification turn 2: refer to your prior answer and add one more item. Keep the response short.',
+      'Live UI verification turn 2: add one more visible UI state a chat client should preserve while streaming. Keep the response short.',
     assistantCompletedTimeoutMs: 180_000,
   });
 
   await expect
-    .poll(async () => live.assistantMessages().count())
+    .poll(async () => live.assistantStateCount())
     .toBeGreaterThanOrEqual(assistantBefore + 2);
   await expect
-    .poll(async () => live.userMessages().count())
+    .poll(async () => live.userStateCount())
     .toBeGreaterThanOrEqual(userBefore + 2);
 
   live.note(

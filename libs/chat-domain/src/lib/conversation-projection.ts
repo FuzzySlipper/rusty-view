@@ -212,9 +212,14 @@ function applyAssistantTextDelta(
     return projection;
   }
 
+  const adoptedMessages = adoptActivityOnlyStreamingPlaceholder(
+    projection.messages,
+    messageId,
+  );
+
   // Update or create the streaming message.
   const messages = upsertStreamingDelta(
-    projection.messages,
+    adoptedMessages,
     messageId,
     event,
     delta,
@@ -268,8 +273,13 @@ function applyAssistantReasoningDelta(
     return projection;
   }
 
-  const messages = upsertReasoningDelta(
+  const adoptedMessages = adoptActivityOnlyStreamingPlaceholder(
     projection.messages,
+    messageId,
+  );
+
+  const messages = upsertReasoningDelta(
+    adoptedMessages,
     messageId,
     event,
     delta,
@@ -314,8 +324,13 @@ function applyAssistantMessageCompleted(
     return projection;
   }
 
-  const messages = finalizeAssistantMessage(
+  const adoptedMessages = adoptActivityOnlyStreamingPlaceholder(
     projection.messages,
+    messageId,
+  );
+
+  const messages = finalizeAssistantMessage(
+    adoptedMessages,
     messageId,
     event,
     body,
@@ -802,6 +817,96 @@ function findLastStreamingAssistant(
     }
   }
   return undefined;
+}
+
+function adoptActivityOnlyStreamingPlaceholder(
+  messages: readonly ChatMessage[],
+  realMessageId: string,
+): readonly ChatMessage[] {
+  if (messages.some((message) => message.id === realMessageId)) {
+    return mergeActivityOnlyPlaceholderIntoExistingMessage(
+      messages,
+      realMessageId,
+    );
+  }
+
+  const placeholderIndex =
+    findLastActivityOnlyStreamingAssistantIndex(messages);
+  if (placeholderIndex < 0) {
+    return messages;
+  }
+
+  return messages.map((message, index) => {
+    if (index !== placeholderIndex) {
+      return message;
+    }
+    return {
+      ...message,
+      id: realMessageId,
+      blocks: message.blocks.map((block) => ({
+        ...block,
+        messageId: realMessageId,
+      })),
+    };
+  });
+}
+
+function mergeActivityOnlyPlaceholderIntoExistingMessage(
+  messages: readonly ChatMessage[],
+  realMessageId: string,
+): readonly ChatMessage[] {
+  const placeholderIndex =
+    findLastActivityOnlyStreamingAssistantIndex(messages);
+  if (placeholderIndex < 0) {
+    return messages;
+  }
+
+  const placeholder = messages[placeholderIndex];
+  if (placeholder === undefined || placeholder.id === realMessageId) {
+    return messages;
+  }
+
+  const realIndex = messages.findIndex(
+    (message) => message.id === realMessageId,
+  );
+  if (realIndex < 0) {
+    return messages;
+  }
+
+  const adoptedBlocks = placeholder.blocks.map((block) => ({
+    ...block,
+    messageId: realMessageId,
+  }));
+
+  return messages
+    .filter((_, index) => index !== placeholderIndex)
+    .map((message) =>
+      message.id === realMessageId
+        ? { ...message, blocks: [...adoptedBlocks, ...message.blocks] }
+        : message,
+    );
+}
+
+function findLastActivityOnlyStreamingAssistantIndex(
+  messages: readonly ChatMessage[],
+): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (
+      message !== undefined &&
+      message.author.role === 'assistant' &&
+      message.status === 'streaming' &&
+      message.blocks.length > 0 &&
+      message.blocks.every(isActivityBlock)
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function isActivityBlock(block: MessageBlock): boolean {
+  return block.kind === 'tool_call' || block.kind === 'command';
 }
 
 /**

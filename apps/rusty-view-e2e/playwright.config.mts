@@ -4,6 +4,10 @@ import { workspaceRoot } from '@nx/devkit';
 
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
+const devServerUrl = new URL(baseURL);
+const devServerPort =
+  devServerUrl.port || (devServerUrl.protocol === 'https:' ? '443' : '80');
+const devServerHost = devServerUrl.hostname || 'localhost';
 
 /**
  * Read environment variables from file.
@@ -31,8 +35,8 @@ export default defineConfig({
   },
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'pnpm exec nx run rusty-view:serve',
-    url: 'http://localhost:4200',
+    command: `pnpm exec nx run rusty-view:serve -- --host ${devServerHost} --port ${devServerPort}`,
+    url: devServerUrl.origin,
     reuseExistingServer: true,
     cwd: workspaceRoot,
   },

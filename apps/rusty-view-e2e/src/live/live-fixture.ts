@@ -34,6 +34,60 @@ interface PageErrorEntry {
   readonly stack?: string;
 }
 
+interface ScreenshotArtifact {
+  readonly name: string;
+  readonly path: string;
+  readonly fullPage: boolean;
+  readonly capturedAtMs: number;
+}
+
+interface DebugSnapshotArtifact {
+  readonly name: string;
+  readonly path: string;
+  readonly capturedAtMs: number;
+  readonly snapshot: RustyViewDebugSnapshot | null;
+}
+
+interface TimelineEvent {
+  readonly name: string;
+  readonly atMs: number;
+  readonly elapsedMs: number;
+  readonly details?: Record<string, unknown>;
+}
+
+interface LiveTurnEvidence {
+  readonly index: number;
+  readonly promptPreview: string;
+  readonly promptLength: number;
+  beforeAssistantCount: number;
+  userSentAtMs?: number;
+  assistantStateAtMs?: number;
+  assistantVisibleAtMs?: number;
+  assistantContentVisibleAtMs?: number;
+  assistantCompletedAtMs?: number;
+  firstAssistantMessageId?: string;
+  completedAssistantMessageId?: string;
+  assistantMessageId?: string;
+  rawEventCountAtStart?: number;
+  rawEventCountAtComplete?: number;
+  messageCountAtStart?: number;
+  messageCountAtComplete?: number;
+  finalStatus?: string;
+  finalBlockKinds?: readonly string[];
+  finalTextPreview?: string;
+}
+
+interface VisualImpactEvidence {
+  readonly name: string;
+  readonly beforePath: string;
+  readonly afterPath: string;
+  readonly changedBytes: number;
+  readonly minChangedBytes: number;
+  readonly beforeTextPreview: string;
+  readonly afterTextPreview: string;
+  readonly capturedAtMs: number;
+}
+
 interface RustyViewDebugSnapshot {
   readonly activeSessionId: string | null;
   readonly connectionStatus: string;
@@ -81,11 +135,17 @@ export const test = base.extend<{ live: LiveConversation }>({
 
 export class LiveConversation {
   readonly backendUrl = env('RV_LIVE_BACKEND_URL') ?? 'http://127.0.0.1:9347';
-  readonly targetProfile = env('RV_LIVE_PROFILE');
+  readonly targetProfile = env('RV_LIVE_PROFILE') ?? 'tester';
 
   private readonly consoleEntries: ConsoleEntry[] = [];
   private readonly pageErrors: PageErrorEntry[] = [];
   private readonly summaryLines: string[] = [];
+  private readonly screenshots: ScreenshotArtifact[] = [];
+  private readonly debugSnapshots: DebugSnapshotArtifact[] = [];
+  private readonly timeline: TimelineEvent[] = [];
+  private readonly turns: LiveTurnEvidence[] = [];
+  private readonly visualChecks: VisualImpactEvidence[] = [];
+  private readonly startedAt = Date.now();
   private traceStarted = false;
 
   constructor(
@@ -99,6 +159,11 @@ export class LiveConversation {
 
   async start(): Promise<void> {
     await mkdir(this.artifactDir, { recursive: true });
+    this.recordTimeline('fixture:start', {
+      backendUrl: this.backendUrl,
+      targetProfile: this.targetProfile,
+      baseUrl: env('BASE_URL') ?? '<playwright-default>',
+    });
     this.page.on('console', (message) => {
       const location = message.location();
       this.consoleEntries.push({
@@ -131,14 +196,18 @@ export class LiveConversation {
   }
 
   async finish(): Promise<void> {
+    this.recordTimeline('fixture:finish:start');
+    const visibleTranscriptText = await this.visibleTranscriptText();
+    const finalDebugSnapshot = await this.captureDebugSnapshot('final');
     await this.writeJson('console.json', this.consoleEntries);
     await this.writeJson('page-errors.json', this.pageErrors);
-    await this.writeText(
-      'visible-transcript.txt',
-      await this.visibleTranscriptText(),
-    );
-    await this.writeJson('debug-snapshot.json', await this.debugSnapshot());
+    await this.writeText('visible-transcript.txt', visibleTranscriptText);
+    await this.writeJson('debug-snapshot.json', finalDebugSnapshot);
     await this.writeText('scenario-summary.md', this.summaryMarkdown());
+    await this.writeJson(
+      'evidence-packet.json',
+      this.evidencePacket(visibleTranscriptText, finalDebugSnapshot),
+    );
 
     if (this.traceStarted) {
       try {
@@ -150,6 +219,7 @@ export class LiveConversation {
       }
     }
 
+    this.recordTimeline('fixture:finish:complete');
     this.note(`Live artifacts: ${this.artifactDir}`);
   }
 
@@ -169,10 +239,12 @@ export class LiveConversation {
 
   async openAppAndSelectProfile(): Promise<void> {
     await this.page.goto('/');
+    this.recordTimeline('app:navigated', { url: this.page.url() });
     await expect(this.page.getByTestId('debug-shell')).toBeVisible({
       timeout: 10_000,
     });
     await this.screenshot('00-app-loaded');
+    await this.captureDebugSnapshot('00-app-loaded');
 
     const profiles = this.page.getByTestId('profile-row');
     await expect(profiles.first()).toBeVisible({ timeout: 10_000 });
@@ -188,31 +260,130 @@ export class LiveConversation {
       timeout: 10_000,
     });
     await this.screenshot('01-profile-selected');
+    await this.captureDebugSnapshot('01-profile-selected');
+    this.recordTimeline('profile:selected', {
+      profile: this.targetProfile,
+      url: this.page.url(),
+    });
   }
 
   async runTurn(options: LiveTurnOptions): Promise<Locator> {
-    const beforeAssistantCount = await this.assistantMessages().count();
-    await this.sendPrompt(options.prompt);
-    await this.screenshot(this.nextArtifactName('prompt-sent'));
+    const turn: LiveTurnEvidence = {
+      index: this.turns.length + 1,
+      promptPreview: previewText(options.prompt, 300),
+      promptLength: options.prompt.length,
+      beforeAssistantCount: (await this.assistantMessageStates()).length,
+    };
+    this.turns.push(turn);
+    const beforeSnapshot = await this.captureDebugSnapshot(
+      `turn-${turn.index}-before-send`,
+    );
+    if (beforeSnapshot !== null) {
+      turn.rawEventCountAtStart = beforeSnapshot.rawEventCount;
+      turn.messageCountAtStart = beforeSnapshot.messageCount;
+    }
+    const beforeAssistantCount = (await this.assistantMessageStates()).length;
+    turn.beforeAssistantCount = beforeAssistantCount;
 
-    const assistant = await this.waitForNextAssistant(
+    await this.sendPrompt(options.prompt);
+    turn.userSentAtMs = Date.now();
+    this.recordTimeline('turn:user-sent', {
+      turn: turn.index,
+      promptLength: turn.promptLength,
+      beforeAssistantCount,
+    });
+    await this.screenshot(this.nextArtifactName('prompt-sent'));
+    await this.captureDebugSnapshot(`turn-${turn.index}-prompt-sent`);
+
+    const assistant = await this.waitForNextAssistantMessage(
       beforeAssistantCount,
       options.assistantStartedTimeoutMs ?? 120_000,
     );
+    turn.assistantStateAtMs = Date.now();
+    turn.assistantVisibleAtMs = Date.now();
+    const assistantMessageId = await assistant.getAttribute('data-message-id');
+    if (assistantMessageId !== null) {
+      turn.firstAssistantMessageId = assistantMessageId;
+      turn.assistantMessageId = assistantMessageId;
+    }
+    this.recordTimeline('turn:assistant-visible', {
+      turn: turn.index,
+      messageId: turn.assistantMessageId,
+    });
+    await this.captureDebugSnapshot(`turn-${turn.index}-assistant-visible`);
+    await this.waitForVisibleAssistantContent(
+      assistant,
+      Math.min(options.assistantCompletedTimeoutMs ?? 180_000, 60_000),
+    );
+    turn.assistantContentVisibleAtMs = Date.now();
+    this.recordTimeline('turn:assistant-content-visible', {
+      turn: turn.index,
+      messageId: turn.assistantMessageId,
+    });
+    await this.captureDebugSnapshot(`turn-${turn.index}-assistant-content`);
 
     if (options.minStreamingMs !== undefined && options.minStreamingMs > 0) {
+      this.recordTimeline('turn:min-streaming-window:start', {
+        turn: turn.index,
+        minStreamingMs: options.minStreamingMs,
+      });
       await this.waitForMinimumStreaming(assistant, options.minStreamingMs);
+      this.recordTimeline('turn:min-streaming-window:complete', {
+        turn: turn.index,
+        minStreamingMs: options.minStreamingMs,
+      });
       await this.screenshot(this.nextArtifactName('streaming-in-progress'));
+      await this.captureDebugSnapshot(`turn-${turn.index}-streaming-window`);
     }
 
-    await this.waitForAssistantCompleted(
-      assistant,
+    const completedAssistant = await this.waitForAssistantCompletedAfter(
+      beforeAssistantCount,
       options.assistantCompletedTimeoutMs ?? 180_000,
     );
-    await expect(assistant).toBeVisible();
-    await expect(assistant).not.toHaveText('');
+    turn.assistantCompletedAtMs = Date.now();
+    const completedMessageId =
+      await completedAssistant.getAttribute('data-message-id');
+    if (completedMessageId !== null) {
+      turn.completedAssistantMessageId = completedMessageId;
+      turn.assistantMessageId = completedMessageId;
+    }
+    if (
+      turn.firstAssistantMessageId !== undefined &&
+      turn.completedAssistantMessageId !== undefined &&
+      turn.firstAssistantMessageId !== turn.completedAssistantMessageId
+    ) {
+      this.recordTimeline('turn:assistant-id-changed-before-completion', {
+        turn: turn.index,
+        firstMessageId: turn.firstAssistantMessageId,
+        completedMessageId: turn.completedAssistantMessageId,
+      });
+    }
+    const completeSnapshot = await this.captureDebugSnapshot(
+      `turn-${turn.index}-assistant-complete`,
+    );
+    if (completeSnapshot !== null) {
+      turn.rawEventCountAtComplete = completeSnapshot.rawEventCount;
+      turn.messageCountAtComplete = completeSnapshot.messageCount;
+    }
+    const finalState = completeSnapshot?.messages.find(
+      (message) => message.id === turn.assistantMessageId,
+    );
+    if (finalState !== undefined) {
+      turn.finalStatus = finalState.status;
+      turn.finalBlockKinds = finalState.blockKinds;
+    }
+    turn.finalTextPreview = previewText(finalState?.text ?? '', 500);
+    this.recordTimeline('turn:assistant-complete', {
+      turn: turn.index,
+      messageId: turn.assistantMessageId,
+      rawEventCount: turn.rawEventCountAtComplete,
+      messageCount: turn.messageCountAtComplete,
+      blockKinds: turn.finalBlockKinds,
+    });
+    await expect(completedAssistant).toBeVisible();
+    await expect(completedAssistant).not.toHaveText('');
     await this.screenshot(this.nextArtifactName('assistant-complete'));
-    return assistant;
+    return completedAssistant;
   }
 
   async sendPrompt(prompt: string): Promise<void> {
@@ -222,19 +393,41 @@ export class LiveConversation {
     await this.page.getByTestId('send-message').click();
   }
 
-  async waitForNextAssistant(
+  async waitForNextAssistantMessage(
     previousCount: number,
     timeoutMs: number,
   ): Promise<Locator> {
     await expect
-      .poll(async () => this.assistantMessages().count(), {
+      .poll(async () => (await this.assistantMessageStates()).length, {
         timeout: timeoutMs,
       })
       .toBeGreaterThan(previousCount);
 
-    const assistant = this.assistantMessages().nth(previousCount);
+    const assistantState = (await this.assistantMessageStates()).at(-1);
+    if (assistantState === undefined) {
+      throw new Error(
+        'Assistant message state appeared but could not be read.',
+      );
+    }
+
+    const assistant = this.messageById(assistantState.id);
     await expect(assistant).toBeVisible({ timeout: 10_000 });
     return assistant;
+  }
+
+  async waitForVisibleAssistantContent(
+    assistant: Locator,
+    timeoutMs: number,
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const text = (await assistant.innerText().catch(() => '')).trim();
+          return text.length;
+        },
+        { timeout: timeoutMs },
+      )
+      .toBeGreaterThan(0);
   }
 
   async waitForMinimumStreaming(
@@ -259,6 +452,19 @@ export class LiveConversation {
     assistant: Locator,
     timeoutMs: number,
   ): Promise<void> {
+    const messageId = await assistant.getAttribute('data-message-id');
+    if (messageId !== null) {
+      await expect
+        .poll(
+          async () =>
+            (await this.assistantMessageStates()).find(
+              (message) => message.id === messageId,
+            )?.status,
+          { timeout: timeoutMs },
+        )
+        .toBe('completed');
+    }
+
     await expect(assistant).toHaveAttribute(
       'data-message-status',
       'completed',
@@ -266,6 +472,35 @@ export class LiveConversation {
         timeout: timeoutMs,
       },
     );
+  }
+
+  async waitForAssistantCompletedAfter(
+    previousCount: number,
+    timeoutMs: number,
+  ): Promise<Locator> {
+    await expect
+      .poll(
+        async () => {
+          const latest = (await this.assistantMessageStates())
+            .slice(previousCount)
+            .at(-1);
+          return latest?.status;
+        },
+        { timeout: timeoutMs },
+      )
+      .toBe('completed');
+
+    const completedState = (await this.assistantMessageStates())
+      .slice(previousCount)
+      .at(-1);
+    if (completedState === undefined) {
+      throw new Error('Assistant completed but its message state disappeared.');
+    }
+
+    const assistant = this.messageById(completedState.id);
+    await expect(assistant).toBeVisible({ timeout: 10_000 });
+    await expect(assistant).toHaveAttribute('data-message-status', 'completed');
+    return assistant;
   }
 
   async expectVisibleImpact(
@@ -276,15 +511,34 @@ export class LiveConversation {
     const region = options.region ?? this.page.getByTestId('transcript-shell');
     const beforeName = `${name}-before`;
     const afterName = `${name}-after`;
+    const beforeText = await region.innerText().catch(() => '');
     const before = await this.screenshot(beforeName, region);
     await action();
     // Allow Angular rendering/layout to settle before comparing screenshots.
     // eslint-disable-next-line playwright/no-wait-for-timeout
     await this.page.waitForTimeout(options.settleMs ?? 300);
+    const afterText = await region.innerText().catch(() => '');
     const after = await this.screenshot(afterName, region);
 
     const changedBytes = countChangedBytes(before, after);
     const minimum = options.minChangedBytes ?? 250;
+    this.visualChecks.push({
+      name,
+      beforePath: this.artifactPath(`${beforeName}.png`),
+      afterPath: this.artifactPath(`${afterName}.png`),
+      changedBytes,
+      minChangedBytes: minimum,
+      beforeTextPreview: previewText(beforeText, 500),
+      afterTextPreview: previewText(afterText, 500),
+      capturedAtMs: Date.now(),
+    });
+    this.recordTimeline('visual-impact:checked', {
+      name,
+      changedBytes,
+      minChangedBytes: minimum,
+      beforeTextLength: beforeText.length,
+      afterTextLength: afterText.length,
+    });
     this.note(
       `Visual impact ${name}: ${changedBytes} changed screenshot bytes; artifacts ${beforeName}.png and ${afterName}.png`,
     );
@@ -303,6 +557,12 @@ export class LiveConversation {
       locator === undefined
         ? await this.page.screenshot({ path, fullPage: true })
         : await locator.screenshot({ path });
+    this.screenshots.push({
+      name,
+      path,
+      fullPage: locator === undefined,
+      capturedAtMs: Date.now(),
+    });
     this.note(`Screenshot: ${path}`);
     return buffer;
   }
@@ -334,6 +594,48 @@ export class LiveConversation {
     });
   }
 
+  async assistantStateCount(): Promise<number> {
+    return (await this.assistantMessageStates()).length;
+  }
+
+  async userStateCount(): Promise<number> {
+    const snapshot = await this.debugSnapshot();
+    if (snapshot === null) {
+      return 0;
+    }
+    return snapshot.messages.filter((message) => message.role === 'user')
+      .length;
+  }
+
+  async latestAssistantState(): Promise<
+    RustyViewDebugSnapshot['messages'][number] | undefined
+  > {
+    return (await this.assistantMessageStates()).at(-1);
+  }
+
+  async captureDebugSnapshot(
+    name: string,
+  ): Promise<RustyViewDebugSnapshot | null> {
+    const snapshot = await this.debugSnapshot().catch(() => null);
+    const path = this.artifactPath(`${sanitizeFileName(name)}-debug.json`);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify(snapshot, null, 2) + '\n', 'utf8');
+    this.debugSnapshots.push({
+      name,
+      path,
+      capturedAtMs: Date.now(),
+      snapshot,
+    });
+    this.recordTimeline('debug-snapshot:captured', {
+      name,
+      rawEventCount: snapshot?.rawEventCount,
+      messageCount: snapshot?.messageCount,
+      isStreaming: snapshot?.isStreaming,
+      isGenerating: snapshot?.isGenerating,
+    });
+    return snapshot;
+  }
+
   latestAssistantMessage(): Locator {
     return this.assistantMessages().last();
   }
@@ -348,6 +650,12 @@ export class LiveConversation {
     return this.page
       .getByTestId('message-row')
       .and(this.page.locator('[data-message-role="user"]'));
+  }
+
+  messageById(messageId: string): Locator {
+    return this.page.locator(
+      `[data-testid="message-row"][data-message-id=${cssString(messageId)}]`,
+    );
   }
 
   note(message: string): void {
@@ -368,6 +676,16 @@ export class LiveConversation {
     } catch {
       return false;
     }
+  }
+
+  private async assistantMessageStates(): Promise<
+    RustyViewDebugSnapshot['messages']
+  > {
+    const snapshot = await this.debugSnapshot();
+    if (snapshot === null) {
+      return [];
+    }
+    return snapshot.messages.filter((message) => message.role === 'assistant');
   }
 
   private async resolveTargetProfile(
@@ -420,6 +738,68 @@ export class LiveConversation {
     await writeFile(this.artifactPath(name), value, 'utf8');
   }
 
+  private recordTimeline(
+    name: string,
+    details?: Record<string, unknown>,
+  ): void {
+    const atMs = Date.now();
+    this.timeline.push({
+      name,
+      atMs,
+      elapsedMs: atMs - this.startedAt,
+      ...(details === undefined ? {} : { details }),
+    });
+  }
+
+  private evidencePacket(
+    visibleTranscriptText: string,
+    finalDebugSnapshot: RustyViewDebugSnapshot | null,
+  ): unknown {
+    return {
+      schemaVersion: 1,
+      test: {
+        title: this.testInfo.title,
+        project: this.testInfo.project.name,
+        status: this.testInfo.status,
+        expectedStatus: this.testInfo.expectedStatus,
+        durationMs: this.testInfo.duration,
+        retry: this.testInfo.retry,
+      },
+      environment: {
+        baseUrl: env('BASE_URL') ?? null,
+        backendUrl: this.backendUrl,
+        targetProfile: this.targetProfile,
+        currentUrl: this.page.url(),
+      },
+      startedAtMs: this.startedAt,
+      finishedAtMs: Date.now(),
+      consoleEntries: this.consoleEntries,
+      pageErrors: this.pageErrors,
+      screenshots: this.screenshots,
+      debugSnapshots: this.debugSnapshots.map((entry) => ({
+        name: entry.name,
+        path: entry.path,
+        capturedAtMs: entry.capturedAtMs,
+        rawEventCount: entry.snapshot?.rawEventCount,
+        messageCount: entry.snapshot?.messageCount,
+        isStreaming: entry.snapshot?.isStreaming,
+        isGenerating: entry.snapshot?.isGenerating,
+        activeSessionId: entry.snapshot?.activeSessionId,
+        connectionStatus: entry.snapshot?.connectionStatus,
+        lastCursor: entry.snapshot?.lastCursor,
+      })),
+      turns: this.turns,
+      visualChecks: this.visualChecks,
+      timeline: this.timeline,
+      finalDebugSnapshot,
+      visibleTranscriptText,
+      summaryLines: this.summaryLines,
+      humanInspectionRequired: true,
+      closeCriteria:
+        'Inspect screenshots, visible transcript, trace, and evidence timeline before claiming live UI behavior works. Deterministic assertions are guardrails, not proof.',
+    };
+  }
+
   private nextArtifactName(label: string): string {
     return `${String(this.summaryLines.length).padStart(2, '0')}-${label}`;
   }
@@ -432,6 +812,10 @@ export class LiveConversation {
       `- Requested profile: ${this.targetProfile ?? '<first non-archived>'}`,
       `- Console entries: ${this.consoleEntries.length}`,
       `- Page errors: ${this.pageErrors.length}`,
+      `- Screenshots: ${this.screenshots.length}`,
+      `- Debug snapshots: ${this.debugSnapshots.length}`,
+      `- Timeline events: ${this.timeline.length}`,
+      `- Evidence packet: ${this.artifactPath('evidence-packet.json')}`,
       '',
       '## Evidence Log',
       '',
@@ -449,6 +833,10 @@ function sanitizeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+function cssString(value: string): string {
+  return JSON.stringify(value);
+}
+
 function countChangedBytes(left: Buffer, right: Buffer): number {
   const max = Math.max(left.length, right.length);
   let changed = 0;
@@ -458,6 +846,14 @@ function countChangedBytes(left: Buffer, right: Buffer): number {
     }
   }
   return changed;
+}
+
+function previewText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return normalized.slice(0, maxLength - 3) + '...';
 }
 
 function errorMessage(error: unknown): string {

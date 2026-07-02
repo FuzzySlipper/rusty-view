@@ -19,10 +19,11 @@ test('long real LLM streaming leaves visual evidence @live-agent @streaming', as
   await live.runTurn({
     prompt: [
       'Live UI long-stream verification:',
-      'Write a deliberately long answer with at least 18 numbered items.',
-      'Each item should be two or three sentences.',
-      'The content can be about practical frontend streaming failure modes.',
-      'Do not summarize early; the goal is to keep a real response streaming long enough for UI observation.',
+      'Examine the projects at /home/dev/voxelforge, /home/dev/asha, and /home/dev/asha-studio.',
+      'Analyze whether it makes sense to port voxelforge functionality into asha core, asha-studio, or a new asha-focused repo.',
+      'Use concrete project-architecture criteria: ownership boundaries, UI/editor needs, data model fit, build/runtime coupling, migration risk, and testing strategy.',
+      'Write a detailed recommendation with at least 10 sections and include tradeoffs for all three placement options.',
+      'Do not rush or summarize early; the purpose of this scenario is to produce a naturally long real LLM response that remains observable while Rusty View renders it.',
     ].join('\n'),
     minStreamingMs,
     assistantStartedTimeoutMs: 180_000,

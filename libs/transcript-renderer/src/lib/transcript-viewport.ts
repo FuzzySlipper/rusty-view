@@ -6,6 +6,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  Injector,
   input,
   output,
   signal,
@@ -109,6 +110,7 @@ export class TranscriptViewportComponent {
   private previousMessages: readonly ChatMessage[] = [];
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -214,7 +216,7 @@ export class TranscriptViewportComponent {
     // Emit the initial data once the viewport has a non-zero size. A
     // ResizeObserver covers the case where the height lands after first render
     // (behind an `@if`, or a CSS-grid cell resolving from 0 → its real height).
-    afterNextRender(() => {
+    this.afterNextRender(() => {
       const host = this.viewport().elementRef.nativeElement;
       const emitWhenSized = () => {
         if (this.viewportReady || host.clientHeight === 0) return;
@@ -245,14 +247,14 @@ export class TranscriptViewportComponent {
       if (prependedCount > 0 && !this.isAtBottom) {
         // Older history was prepended above the viewport. Preserve the anchor
         // so the user doesn't see a jump.
-        afterNextRender(() => {
+        this.afterNextRender(() => {
           this.preserveScrollAnchor();
         });
         return;
       }
 
       if (this.tailFollow() && this.isAtBottom) {
-        afterNextRender(() => {
+        this.afterNextRender(() => {
           this.scrollToBottom();
         });
       }
@@ -311,10 +313,14 @@ export class TranscriptViewportComponent {
     const msgs = this.renderMessages();
     const index = msgs.findIndex((m) => m.id === messageId);
     if (index >= 0) {
-      afterNextRender(() => {
+      this.afterNextRender(() => {
         this.scrollToIndex(index);
       });
     }
+  }
+
+  private afterNextRender(callback: () => void): void {
+    afterNextRender(callback, { injector: this.injector });
   }
 
   protected updateSearchQuery(event: Event): void {
