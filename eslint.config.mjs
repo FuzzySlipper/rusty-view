@@ -8,8 +8,8 @@ import nx from '@nx/eslint-plugin';
  * boundary table in `agents-project.md`. Two orthogonal tag dimensions are used:
  *
  *   - `type:*`   governs which project *kinds* may be depended on
- *                (apps are composition roots; libs cannot depend on apps or on
- *                testing fixtures; only apps/tests may consume fixtures).
+ *                (apps/e2e are composition roots; libs cannot depend on apps
+ *                or on testing fixtures; only apps/tests may consume fixtures).
  *
  *   - `scope:*`  governs the directional wiring between chat libraries
  *                (protocol is a leaf; transport/domain depend on protocol;
@@ -60,6 +60,16 @@ export default [
               // Test/fixture packages may reuse libs and other fixtures.
               sourceTag: 'type:testing',
               onlyDependOnLibsWithTags: ['type:lib', 'type:testing'],
+            },
+            {
+              // Browser e2e projects may drive apps and reuse app-level fixtures.
+              sourceTag: 'type:e2e',
+              onlyDependOnLibsWithTags: [
+                'type:app',
+                'type:lib',
+                'type:testing',
+                'type:e2e',
+              ],
             },
             // ---- scope layer: directional wiring between chat libraries ----
             {
@@ -123,6 +133,24 @@ export default [
               // Fixtures model protocol + domain shapes; nothing more.
               sourceTag: 'scope:testing-fixtures',
               onlyDependOnLibsWithTags: ['scope:protocol', 'scope:chat-domain'],
+            },
+            {
+              // Browser e2e tests are outside production library boundaries.
+              sourceTag: 'scope:rusty-view-e2e',
+              onlyDependOnLibsWithTags: [
+                'scope:rusty-view',
+                'scope:protocol',
+                'scope:transport',
+                'scope:chat-domain',
+                'scope:chat-store',
+                'scope:chat-theme',
+                'scope:transcript-renderer',
+                'scope:chat-components',
+                'scope:chat-shell',
+                'scope:design-tokens',
+                'scope:testing-fixtures',
+                'scope:rusty-view-e2e',
+              ],
             },
             {
               sourceTag: 'scope:workspace-generators',

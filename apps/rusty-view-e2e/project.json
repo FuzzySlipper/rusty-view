@@ -4,6 +4,7 @@
   "projectType": "application",
   "sourceRoot": "apps/rusty-view-e2e/src",
   "implicitDependencies": ["rusty-view"],
+  "tags": ["type:e2e", "scope:rusty-view-e2e"],
   "// targets": "to see all targets run: nx show project rusty-view-e2e --web",
   "targets": {}
 }
