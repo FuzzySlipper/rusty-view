@@ -39,6 +39,8 @@ import type {
   OpenAiOauthStartResponse,
   OpenAiOauthStatusResponse,
   ProfileBundleExportPlan,
+  ProfileBrainRebuildRequest,
+  ProfileBrainRebuildResult,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
@@ -473,6 +475,24 @@ export class AdminHttpTransport {
     });
   }
 
+  planProfileBrainRebuild(
+    profileId: string,
+    request: ProfileBrainRebuildRequest = {},
+  ): Promise<AdminControlResponse<ProfileBrainRebuildResult>> {
+    return this.request('POST', profileBrainRebuildPath(profileId, 'plan'), {
+      body: compactRecord(request),
+    });
+  }
+
+  applyProfileBrainRebuild(
+    profileId: string,
+    request: ProfileBrainRebuildRequest = {},
+  ): Promise<AdminControlResponse<ProfileBrainRebuildResult>> {
+    return this.request('POST', profileBrainRebuildPath(profileId, 'apply'), {
+      body: compactRecord(request),
+    });
+  }
+
   reloadConfig(
     reason = 'rusty-view service config reload',
   ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
@@ -647,6 +667,13 @@ function registryWritePath(
   mode: 'plan' | 'apply',
 ): string {
   return `/v1/admin/profiles/registry/${encodeURIComponent(profileId)}/${kind}/${mode}`;
+}
+
+function profileBrainRebuildPath(
+  profileId: string,
+  mode: 'plan' | 'apply',
+): string {
+  return `/v1/admin/control/profiles/${encodeURIComponent(profileId)}/rebuild-brain/${mode}`;
 }
 
 /**

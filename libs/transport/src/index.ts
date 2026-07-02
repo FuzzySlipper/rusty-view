@@ -91,6 +91,8 @@ export type {
   ProfileBundleExportEntryKind,
   ProfileBundleExportPlan,
   ProfileBundleExportSource,
+  ProfileBrainRebuildRequest,
+  ProfileBrainRebuildResult,
   ProfileRegistryDerivedRuntimeRef,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleEffects,

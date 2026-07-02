@@ -35,6 +35,8 @@ import {
   type OpenAiOauthStartResponse,
   type OpenAiOauthStatusResponse,
   type ProfileBundleExportPlan,
+  type ProfileBrainRebuildRequest,
+  type ProfileBrainRebuildResult,
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryLifecycleRequest,
   type ProfileRegistryPromptRequest,
@@ -142,6 +144,8 @@ export class AdminStore {
     signal<AdminControlResponse<CreatedServiceProfile> | null>(null);
   private readonly _reloadResult =
     signal<AdminControlResponse<RuntimeConfigApplyResult> | null>(null);
+  private readonly _profileBrainRebuildResult =
+    signal<AdminControlResponse<ProfileBrainRebuildResult> | null>(null);
   private readonly _runtimePauseResult =
     signal<AdminControlResponse<RuntimePauseControlResult> | null>(null);
   private readonly _runtimeResumeResult = signal<AdminControlResponse<
@@ -184,6 +188,8 @@ export class AdminStore {
   });
   readonly createResult = this._createResult.asReadonly();
   readonly reloadResult = this._reloadResult.asReadonly();
+  readonly profileBrainRebuildResult =
+    this._profileBrainRebuildResult.asReadonly();
   readonly runtimePauseResult = this._runtimePauseResult.asReadonly();
   readonly runtimeResumeResult = this._runtimeResumeResult.asReadonly();
 
@@ -701,12 +707,50 @@ export class AdminStore {
     }
   }
 
+  async planProfileBrainRebuild(
+    profileId: string,
+    request: ProfileBrainRebuildRequest = {},
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._profileBrainRebuildResult.set(null);
+    try {
+      this._profileBrainRebuildResult.set(
+        await this.transport.planAdminProfileBrainRebuild(profileId, request),
+      );
+    } catch (error) {
+      this._error.set(storeErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async applyProfileBrainRebuild(
+    profileId: string,
+    request: ProfileBrainRebuildRequest = {},
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._profileBrainRebuildResult.set(null);
+    try {
+      this._profileBrainRebuildResult.set(
+        await this.transport.applyAdminProfileBrainRebuild(profileId, request),
+      );
+      await this.refresh();
+    } catch (error) {
+      this._error.set(storeErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
   /** Clear the current registry write plan/result (e.g. after dismissing). */
   clearRegistryWrite(): void {
     this._registryWritePlan.set(null);
     this._registryWriteResult.set(null);
     this._runtimeConfigPlan.set(null);
     this._runtimeConfigResult.set(null);
+    this._profileBrainRebuildResult.set(null);
   }
 
   /**

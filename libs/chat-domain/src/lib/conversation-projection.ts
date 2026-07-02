@@ -303,9 +303,9 @@ function applyAssistantMessageCompleted(
 ): ConversationProjection {
   const payload = event.payload;
 
-  // The OpenAPI contract specifies `message_id` and `body`, but the live backend
-  // emits `status` + `summary` (and sometimes `wake_id`) with no `message_id`.
-  // Accept both shapes.
+  // The OpenAPI contract specifies `message_id` and `body`. Some live backend
+  // terminal events carry only `status` + `summary` (and sometimes `wake_id`);
+  // the summary is status/debug metadata, not an authoritative message body.
   const messageId =
     'message_id' in payload && typeof payload.message_id === 'string'
       ? payload.message_id
@@ -316,11 +316,13 @@ function applyAssistantMessageCompleted(
   const body =
     'body' in payload && typeof payload.body === 'string'
       ? payload.body
-      : 'summary' in payload && typeof payload.summary === 'string'
-        ? payload.summary
-        : undefined;
+      : undefined;
+  const summary =
+    'summary' in payload && typeof payload.summary === 'string'
+      ? payload.summary
+      : undefined;
 
-  if (messageId === undefined || body === undefined) {
+  if (messageId === undefined) {
     return projection;
   }
 
@@ -334,6 +336,7 @@ function applyAssistantMessageCompleted(
     messageId,
     event,
     body,
+    summary,
   );
 
   return { ...projection, messages };
@@ -949,7 +952,8 @@ function finalizeAssistantMessage(
   messages: readonly ChatMessage[],
   messageId: string,
   event: ChatEvent,
-  body: string,
+  body: string | undefined,
+  summary: string | undefined,
 ): readonly ChatMessage[] {
   const existingIndex = messages.findIndex((msg) => msg.id === messageId);
   if (existingIndex >= 0) {
@@ -957,16 +961,25 @@ function finalizeAssistantMessage(
       if (i !== existingIndex) return msg;
       const textBlocks = msg.blocks.filter((b) => b.kind === 'text');
       if (textBlocks.length === 1) {
-        // No tool interleaving — replace the single text block with the
-        // authoritative final body (deltas may have been lossy).
+        if (body === undefined) {
+          // Summary-only terminal events are status/debug metadata. Preserve the
+          // accumulated deltas instead of replacing the answer with the summary.
+          return { ...msg, status: 'completed' as const };
+        }
+        // No tool interleaving and an explicit final body — replace the single
+        // text block with the authoritative final body (deltas may be lossy).
         const blocks = msg.blocks.map((b) =>
           b.kind === 'text' ? { ...b, content: body } : b,
         );
         return { ...msg, status: 'completed' as const, blocks };
       }
       if (textBlocks.length === 0) {
-        // Completed with no streamed text — attach the body as a text block.
-        const block = makeTextBlock(msg.id, msg.blocks.length, body);
+        const content = body ?? summary;
+        if (content === undefined || content === '') {
+          return { ...msg, status: 'completed' as const };
+        }
+        // Completed with no streamed text — attach available terminal text.
+        const block = makeTextBlock(msg.id, msg.blocks.length, content);
         return {
           ...msg,
           status: 'completed' as const,
@@ -980,13 +993,17 @@ function finalizeAssistantMessage(
   }
 
   // Message not seen during streaming — create it as completed.
+  const content = body ?? summary;
+  if (content === undefined || content === '') {
+    return messages;
+  }
   const message = buildMessage(
     messageId,
     event.session_id,
     'assistant',
     event.created_at,
     'completed',
-    [{ kind: 'text', content: body }],
+    [{ kind: 'text', content }],
   );
   return [...messages, message];
 }

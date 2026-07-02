@@ -45,7 +45,7 @@ From `/home/dev/den-services`:
 ```bash
 export DEN_PLAYWRIGHT_BROKER_CONFIG_PATH=/home/dev/den-services/playwright-broker/config/config.example.yaml
 
-den-playwright run rusty-view \
+go run ./playwright-broker/cmd/den-playwright run rusty-view \
   -repo /home/dev/rusty-view \
   -den-project rusty-view \
   -den-task <task-id> \
@@ -56,7 +56,7 @@ den-playwright run rusty-view \
 For visual debugging:
 
 ```bash
-den-playwright run rusty-view \
+go run ./playwright-broker/cmd/den-playwright run rusty-view \
   -repo /home/dev/rusty-view \
   -den-project rusty-view \
   -den-task <task-id> \
@@ -76,7 +76,7 @@ RV_LIVE_MIN_STREAMING_MS=15000
 Run a focused scenario:
 
 ```bash
-den-playwright run rusty-view \
+go run ./playwright-broker/cmd/den-playwright run rusty-view \
   -repo /home/dev/rusty-view \
   -den-project rusty-view \
   -den-task <task-id> \

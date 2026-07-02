@@ -48,13 +48,21 @@ const MESSAGE_EVENTS = [
     session_id: SESSION_ID,
     sequence_id: 2,
     created_at: '2026-06-22T10:00:02Z',
-    kind: 'assistant_text_delta',
-    payload: { message_id: 'msg_asst_1', delta: ASSISTANT_BODY },
+    kind: 'assistant_turn_started',
+    payload: {},
   },
   {
     event_id: `${SESSION_ID}:3`,
     session_id: SESSION_ID,
     sequence_id: 3,
+    created_at: '2026-06-22T10:00:02Z',
+    kind: 'assistant_text_delta',
+    payload: { message_id: 'msg_asst_1', delta: ASSISTANT_BODY },
+  },
+  {
+    event_id: `${SESSION_ID}:4`,
+    session_id: SESSION_ID,
+    sequence_id: 4,
     created_at: '2026-06-22T10:00:03Z',
     kind: 'tool_call_started',
     payload: {
@@ -64,9 +72,9 @@ const MESSAGE_EVENTS = [
     },
   },
   {
-    event_id: `${SESSION_ID}:4`,
+    event_id: `${SESSION_ID}:5`,
     session_id: SESSION_ID,
-    sequence_id: 4,
+    sequence_id: 5,
     created_at: '2026-06-22T10:00:04Z',
     kind: 'tool_call_completed',
     payload: {
@@ -77,17 +85,21 @@ const MESSAGE_EVENTS = [
     },
   },
   {
-    event_id: `${SESSION_ID}:5`,
-    session_id: SESSION_ID,
-    sequence_id: 5,
-    created_at: '2026-06-22T10:00:05Z',
-    kind: 'assistant_message_completed',
-    payload: { message_id: 'msg_asst_1', body: ASSISTANT_BODY },
-  },
-  {
     event_id: `${SESSION_ID}:6`,
     session_id: SESSION_ID,
     sequence_id: 6,
+    created_at: '2026-06-22T10:00:05Z',
+    kind: 'assistant_message_completed',
+    payload: {
+      message_id: 'msg_asst_1',
+      status: 'completed',
+      summary: 'responses replay wake completed',
+    },
+  },
+  {
+    event_id: `${SESSION_ID}:7`,
+    session_id: SESSION_ID,
+    sequence_id: 7,
     created_at: '2026-06-22T10:00:06Z',
     kind: 'message_created',
     payload: {
@@ -158,6 +170,9 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(items).toHaveCount(3, { timeout: 10_000 });
   await expect(page.getByText(USER_BODY)).toBeVisible();
   await expect(page.getByText(ASSISTANT_BODY, { exact: false })).toBeVisible();
+  await expect(page.locator('.rv-message--assistant')).not.toContainText(
+    'responses replay wake completed',
+  );
 
   // Role classes are applied (user vs assistant), proving the rows are real
   // message items and not placeholders.

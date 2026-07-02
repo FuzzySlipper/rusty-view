@@ -60,6 +60,8 @@ import type {
   OpenAiOauthStartResponse,
   OpenAiOauthStatusResponse,
   ProfileBundleExportPlan,
+  ProfileBrainRebuildRequest,
+  ProfileBrainRebuildResult,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
@@ -349,9 +351,7 @@ export class ChatTransport {
     return this.adminHttp.updateModelProvider(alias, request, refresh);
   }
 
-  adminOpenAiOauthStatus(
-    alias: string,
-  ): Promise<OpenAiOauthStatusResponse> {
+  adminOpenAiOauthStatus(alias: string): Promise<OpenAiOauthStatusResponse> {
     return this.adminHttp.openAiOauthStatus(alias);
   }
 
@@ -380,6 +380,20 @@ export class ChatTransport {
     request: CreateAdminProfileRequest,
   ): Promise<AdminControlResponse<CreatedServiceProfile>> {
     return this.adminHttp.createProfile(request);
+  }
+
+  planAdminProfileBrainRebuild(
+    profileId: string,
+    request?: ProfileBrainRebuildRequest,
+  ): Promise<AdminControlResponse<ProfileBrainRebuildResult>> {
+    return this.adminHttp.planProfileBrainRebuild(profileId, request);
+  }
+
+  applyAdminProfileBrainRebuild(
+    profileId: string,
+    request?: ProfileBrainRebuildRequest,
+  ): Promise<AdminControlResponse<ProfileBrainRebuildResult>> {
+    return this.adminHttp.applyProfileBrainRebuild(profileId, request);
   }
 
   reloadAdminConfig(

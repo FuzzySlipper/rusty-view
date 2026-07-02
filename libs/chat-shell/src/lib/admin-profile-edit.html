@@ -557,9 +557,7 @@
           bindings are preserved; clearing all selections removes them.
         </p>
         @if (mcpServers().length === 0) {
-        <div class="rv-admin-profiles__empty">
-          No MCP servers configured.
-        </div>
+        <div class="rv-admin-profiles__empty">No MCP servers configured.</div>
         } @else {
         <ul class="rv-admin-profiles__mcp-server-list">
           @for (server of mcpServers(); track server.id) {
@@ -612,7 +610,8 @@
           >
             @for (strategy of contextStrategies(); track strategy.id) {
             <option [value]="strategy.id">
-              {{ strategy.label }}@if (strategy.status !== 'active') { (planned) }
+              {{ strategy.label }}@if (strategy.status !== 'active') { (planned)
+              }
             </option>
             }
           </select>
@@ -724,9 +723,7 @@
           >rebuild recommended {{ plan.implications.runtimeRebuildRecommended
           }}</span
         >
-        <span
-          >mcp refresh {{ plan.implications.mcpRefreshRecommended }}</span
-        >
+        <span>mcp refresh {{ plan.implications.mcpRefreshRecommended }}</span>
         @for (diag of plan.diagnostics; track diag.code) {
         <span
           class="rv-admin-profiles__diag"
@@ -740,6 +737,10 @@
       } @else if (runtimeConfigResult(); as result) {
       <div class="rv-admin-profiles__result" role="status">
         <span>applied revision {{ result.record.revision }}</span>
+        <span
+          >rebuild recommended {{ result.implications.runtimeRebuildRecommended
+          }}</span
+        >
         @if (result.effects; as effects) {
         <span
           >mcp bindings +{{ effects.mcpBindings.added }} / -{{
@@ -748,6 +749,42 @@
         }
       </div>
       }
+
+      <div class="rv-admin-profiles__registry-group">
+        <span class="rv-admin-profiles__group-label">Brain rebuild</span>
+        <div class="rv-admin-profiles__actions">
+          <button
+            type="button"
+            class="rv-admin-profiles__button"
+            (click)="planBrainRebuild(record)"
+            [disabled]="admin.saving()"
+          >
+            Plan rebuild
+          </button>
+          <button
+            type="button"
+            class="rv-admin-profiles__button rv-admin-profiles__button--primary"
+            (click)="applyBrainRebuild(record)"
+            [disabled]="admin.saving()"
+          >
+            Apply rebuild
+          </button>
+        </div>
+        @if (brainRebuildResult(); as rebuild) {
+        <div class="rv-admin-profiles__result" role="status">
+          <span>{{ rebuild.command.name }}</span>
+          <span>{{ rebuild.outcome.status }}</span>
+          <span>{{ rebuild.outcome.summary }}</span>
+          @if (rebuild.outcome.reasonCode) {
+          <span>reason {{ rebuild.outcome.reasonCode }}</span>
+          } @for (detail of rebuildOutcomeDetails(rebuild); track detail) {
+          <span>{{ detail }}</span>
+          } @if (rebuildResultJson(rebuild) !== '') {
+          <pre>{{ rebuildResultJson(rebuild) }}</pre>
+          }
+        </div>
+        }
+      </div>
     </section>
     }
 

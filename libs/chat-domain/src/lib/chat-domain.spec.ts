@@ -148,6 +148,42 @@ describe('projectConversation', () => {
     expect(projection.activeTurn).toBeUndefined();
   });
 
+  it('preserves streamed assistant deltas when completion only carries a terminal summary', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'wake-1', text: 'Actual long answer. ' },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'wake-1', text: 'Second paragraph.' },
+        { event_id: 'e3' },
+      ),
+      makeEvent(
+        'assistant_message_completed',
+        {
+          wake_id: 'wake-1',
+          status: 'completed',
+          summary: 'responses replay wake completed',
+        },
+        { event_id: 'e4' },
+      ),
+      makeEvent('assistant_turn_finished', {}, { event_id: 'e5' }),
+    ]);
+
+    const message = projection.messages[0];
+    expect(message?.status).toBe('completed');
+    expect(message?.blocks[0]?.content).toBe(
+      'Actual long answer. Second paragraph.',
+    );
+    expect(message?.blocks[0]?.content).not.toBe(
+      'responses replay wake completed',
+    );
+    expect(projection.activeTurn).toBeUndefined();
+  });
+
   it('assistant_text_delta creates a streaming message if turn not started', () => {
     const projection = projectConversation([
       makeEvent(

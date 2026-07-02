@@ -10,6 +10,8 @@ import type {
   ContextStrategyCatalog,
   CreateAdminProfileRequest,
   CreatedServiceProfile,
+  ProfileBrainRebuildRequest,
+  ProfileBrainRebuildResult,
   ProfileBundleExportPlan,
   ProfileRegistryRuntimeConfigRequest,
 } from '@rusty-view/transport';
@@ -224,7 +226,47 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
         request: ProfileRegistryRuntimeConfigRequest,
       ) => runtimeConfigPlan(true, request),
     ),
+    planAdminProfileBrainRebuild: recordingFn(
+      async (profileId: string, _request: ProfileBrainRebuildRequest = {}) =>
+        brainRebuildResponse(profileId, 'planned'),
+    ),
+    applyAdminProfileBrainRebuild: recordingFn(
+      async (profileId: string, _request: ProfileBrainRebuildRequest = {}) =>
+        brainRebuildResponse(profileId, 'completed'),
+    ),
   } as unknown as ChatTransport;
+}
+
+function brainRebuildResponse(
+  profileId: string,
+  status: NonNullable<ProfileBrainRebuildResult['status']>,
+): AdminControlResponse<ProfileBrainRebuildResult> {
+  return {
+    command: {
+      name: 'profile_rebuild_brain',
+      target: { profile_id: profileId },
+      requestId: 'req-rebuild',
+      reason: 'profile runtime config changed from Rusty View',
+    },
+    outcome: {
+      status: status === 'planned' ? 'completed' : 'completed',
+      summary:
+        status === 'planned'
+          ? 'profile brain rebuild planned'
+          : 'profile brain rebuild applied',
+      result: {
+        profileId,
+        status,
+        affectedSessionIds: ['session-1'],
+        blockedInFlightWakeIds: [],
+        sessionIdsPreserved: true,
+        sessionHistoryPreserved: true,
+        mcpRefresh: { status: 'completed' },
+      },
+    },
+    audit: { started: true, terminal: true },
+    observation: {},
+  };
 }
 
 type RegistryPlanKind = 'update' | 'lifecycle' | 'prompt';

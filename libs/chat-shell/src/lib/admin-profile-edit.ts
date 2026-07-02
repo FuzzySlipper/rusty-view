@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { AdminStore } from '@rusty-view/chat-store';
 import type {
+  AdminControlResponse,
   AdminLocalToolProfile,
   AdminMcpBinding,
   AdminMcpServer,
@@ -20,6 +21,7 @@ import type {
   ContextStrategyDescriptor,
   ContextStrategyPolicy,
   CreateProfileMcpBinding,
+  ProfileBrainRebuildResult,
   ProfileBundleExportEntry,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
@@ -187,8 +189,9 @@ export class AdminProfileEditComponent {
 
   // ---- context strategy policy (#3849) ----
   protected readonly debugVisibilities = CONTEXT_DEBUG_VISIBILITIES;
-  protected readonly contextPolicyForm =
-    signal<ContextPolicyDraft>(FALLBACK_CONTEXT_POLICY);
+  protected readonly contextPolicyForm = signal<ContextPolicyDraft>(
+    FALLBACK_CONTEXT_POLICY,
+  );
   /**
    * Whether the operator touched the context policy. Only sent when dirty so an
    * untouched edit preserves the profile's current policy.
@@ -231,6 +234,18 @@ export class AdminProfileEditComponent {
       return result !== null &&
         'applied' in result &&
         result.profileId === this.profileId()
+        ? result
+        : null;
+    });
+
+  protected readonly brainRebuildResult =
+    computed<AdminControlResponse<ProfileBrainRebuildResult> | null>(() => {
+      const result = this.admin.profileBrainRebuildResult();
+      if (result === null) return null;
+      const target = result.command.target;
+      const targetProfile =
+        target['profile_id'] ?? target['profileId'] ?? target['profile'];
+      return targetProfile === undefined || targetProfile === this.profileId()
         ? result
         : null;
     });
@@ -699,7 +714,10 @@ export class AdminProfileEditComponent {
     );
   }
 
-  protected updateRuntimeMcpToolProfileKey(serverId: string, event: Event): void {
+  protected updateRuntimeMcpToolProfileKey(
+    serverId: string,
+    event: Event,
+  ): void {
     const value = (event.target as HTMLInputElement).value;
     this.runtimeMcpDirty.set(true);
     this.runtimeMcpSelections.update((selections) =>
@@ -731,11 +749,7 @@ export class AdminProfileEditComponent {
 
   protected updateContextDebugVisibility(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    if (
-      value === 'off' ||
-      value === 'status' ||
-      value === 'verbose'
-    ) {
+    if (value === 'off' || value === 'status' || value === 'verbose') {
       this.runtimeContextDirty.set(true);
       this.contextPolicyForm.update((form) => ({
         ...form,
@@ -779,7 +793,10 @@ export class AdminProfileEditComponent {
       expectedRevision: number;
       providerAlias?: string;
       localToolProfileId?: string | null;
-      toolPolicy?: { requestedToolsets: readonly string[]; requestedTools: readonly string[] };
+      toolPolicy?: {
+        requestedToolsets: readonly string[];
+        requestedTools: readonly string[];
+      };
       mcpBindings?: readonly CreateProfileMcpBinding[];
       contextPolicy?: ContextStrategyPolicy;
     } = { expectedRevision: record.revision ?? 0 };
@@ -857,6 +874,63 @@ export class AdminProfileEditComponent {
     );
   }
 
+  protected planBrainRebuild(record: AdminProfileRegistryRecord): void {
+    void this.admin.planProfileBrainRebuild(record.profileId, {
+      reason: 'profile runtime config changed from Rusty View',
+    });
+  }
+
+  protected applyBrainRebuild(record: AdminProfileRegistryRecord): void {
+    void this.admin.applyProfileBrainRebuild(record.profileId, {
+      reason: 'profile runtime config changed from Rusty View',
+    });
+  }
+
+  protected rebuildOutcomeDetails(
+    response: AdminControlResponse<ProfileBrainRebuildResult>,
+  ): readonly string[] {
+    const details: string[] = [];
+    const affected = response.outcome.affectedIds;
+    if (affected !== undefined) {
+      for (const [key, value] of Object.entries(affected)) {
+        details.push(`${key} ${value}`);
+      }
+    }
+    const result = response.outcome.result;
+    if (result === undefined) return details;
+    details.push(...labeledList('sessions', result.sessionIds));
+    details.push(
+      ...labeledList('affected sessions', result.affectedSessionIds),
+    );
+    details.push(...labeledList('active sessions', result.activeSessionIds));
+    details.push(...labeledList('blocked sessions', result.blockedSessionIds));
+    details.push(
+      ...labeledList('blocked wakes', result.blockedInFlightWakeIds),
+    );
+    if (result.sessionIdsPreserved !== undefined) {
+      details.push(`session ids preserved ${result.sessionIdsPreserved}`);
+    }
+    if (result.sessionHistoryPreserved !== undefined) {
+      details.push(`history preserved ${result.sessionHistoryPreserved}`);
+    }
+    if (result.reasonCode !== undefined) {
+      details.push(`reason ${result.reasonCode}`);
+    }
+    return details;
+  }
+
+  protected rebuildResultJson(
+    response: AdminControlResponse<ProfileBrainRebuildResult>,
+  ): string {
+    const result = response.outcome.result;
+    if (result === undefined) return '';
+    try {
+      return JSON.stringify(result, null, 2);
+    } catch {
+      return String(result);
+    }
+  }
+
   // ---- MCP binding resolution for this profile (#3649) -------------------
 
   protected mcpBindings(): readonly AdminMcpBinding[] {
@@ -887,4 +961,10 @@ function registryFieldEntry(
   const trimmed = formValue.trim();
   if (trimmed === (currentValue ?? '')) return {};
   return { [key]: trimmed === '' ? null : trimmed };
+}
+
+function labeledList(label: string, values?: readonly string[]): string[] {
+  return values === undefined || values.length === 0
+    ? []
+    : [`${label} ${values.join(', ')}`];
 }

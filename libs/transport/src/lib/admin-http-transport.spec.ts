@@ -156,6 +156,74 @@ describe('AdminHttpTransport', () => {
     expect(req.body).toContain('Field Prime');
   });
 
+  it('plans and applies a profile brain rebuild through the guarded control route', async () => {
+    let captured: CapturedRequest | undefined;
+    const fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      captured = {
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      };
+      return jsonOk({
+        command: {
+          name: 'profile_rebuild_brain',
+          target: { profile_id: 'field prime' },
+          requestId: 'req',
+          reason: 'profile runtime config changed from Rusty View',
+        },
+        outcome: {
+          status: 'blocked',
+          summary: 'profile has in-flight wakes',
+          reasonCode: 'in_flight_wakes',
+          result: {
+            profileId: 'field prime',
+            blockedInFlightWakeIds: ['wake-1'],
+            sessionIdsPreserved: true,
+            sessionHistoryPreserved: true,
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      });
+    }) as FetchImpl;
+    const lastRequest = (): CapturedRequest => {
+      if (captured === undefined) throw new Error('fetch was not called');
+      return captured;
+    };
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const plan = await transport.planProfileBrainRebuild('field prime', {
+      reason: 'profile runtime config changed from Rusty View',
+    });
+
+    let req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/control/profiles/field%20prime/rebuild-brain/plan',
+    );
+    expect(req.body).toContain(
+      'profile runtime config changed from Rusty View',
+    );
+    expect(plan.outcome.status).toBe('blocked');
+
+    await transport.applyProfileBrainRebuild('field prime', {
+      reason: 'profile runtime config changed from Rusty View',
+    });
+
+    req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/control/profiles/field%20prime/rebuild-brain/apply',
+    );
+    expect(req.body).toContain(
+      'profile runtime config changed from Rusty View',
+    );
+  });
+
   it('reloads runtime config through the control route', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

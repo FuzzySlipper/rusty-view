@@ -482,7 +482,7 @@ export interface RuntimeConfigApplyResult {
 }
 
 export interface AdminControlOutcome<TResult = unknown> {
-  readonly status: 'completed' | 'failed';
+  readonly status: 'completed' | 'blocked' | 'failed';
   readonly summary: string;
   readonly affectedIds?: Record<string, string | number>;
   readonly result?: TResult;
@@ -506,6 +506,27 @@ export interface AdminControlResponse<TResult = unknown> {
     readonly started?: string;
     readonly terminal?: string;
   };
+}
+
+export interface ProfileBrainRebuildRequest {
+  readonly reason?: string;
+}
+
+export interface ProfileBrainRebuildResult {
+  readonly profileId?: string;
+  readonly status?: 'planned' | 'completed' | 'blocked' | 'failed';
+  readonly summary?: string;
+  readonly sessionIds?: readonly string[];
+  readonly affectedSessionIds?: readonly string[];
+  readonly configuredSessionIds?: readonly string[];
+  readonly activeSessionIds?: readonly string[];
+  readonly blockedSessionIds?: readonly string[];
+  readonly blockedInFlightWakeIds?: readonly string[];
+  readonly sessionIdsPreserved?: boolean;
+  readonly sessionHistoryPreserved?: boolean;
+  readonly mcpRefresh?: unknown;
+  readonly reasonCode?: string;
+  readonly [key: string]: unknown;
 }
 
 export type ApiCapabilityAuth = 'none' | 'chat' | 'admin';

@@ -12,6 +12,10 @@ type RuntimeConfigSpy = {
   mock: { calls: [string, ProfileRegistryRuntimeConfigRequest][] };
 };
 
+type RebuildSpy = {
+  mock: { calls: [string, { readonly reason?: string }][] };
+};
+
 import { AdminProfileEditComponent } from './admin-profile-edit';
 import {
   lastRuntimeConfigRequest,
@@ -56,6 +60,8 @@ interface EditComponentApi {
   runtimeToolsetSelections(): readonly string[];
   planRuntimeConfig(record: AdminProfileRegistryRecord): void;
   applyRuntimeConfig(record: AdminProfileRegistryRecord): void;
+  planBrainRebuild(record: AdminProfileRegistryRecord): void;
+  applyBrainRebuild(record: AdminProfileRegistryRecord): void;
   updateContextStrategy(event: { target: { value: string } }): void;
   updateContextDebugVisibility(event: { target: { value: string } }): void;
   toggleContextField(
@@ -453,15 +459,18 @@ describe('AdminProfileEditComponent', () => {
         localToolProfileId: 'planner-tools',
         toolPolicy: { requestedToolsets: ['local_code_read'] },
         mcpBindings: [
-          { serverId: 'den', toolProfileKey: 'den-key', transport: 'streamable_http' },
+          {
+            serverId: 'den',
+            toolProfileKey: 'den-key',
+            transport: 'streamable_http',
+          },
         ],
       }),
       mcpCatalog: mcpCatalog(),
       toolCatalog: toolCatalog(),
       localToolProfiles: localToolProfiles(),
     });
-    const component =
-      fixture.componentInstance as unknown as EditComponentApi;
+    const component = fixture.componentInstance as unknown as EditComponentApi;
     component.showSection('runtime');
     fixture.detectChanges();
     return { fixture, component };
@@ -477,7 +486,9 @@ describe('AdminProfileEditComponent', () => {
 
   it('prefers a selected local tool profile and omits inline toolPolicy (#3742)', async () => {
     const { fixture, component } = await runtimeWindow();
-    const transport = TestBed.inject(ChatTransport) as unknown as { planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy };
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
     component.planRuntimeConfig(recordFor('rt-prime'));
     await fixture.whenStable();
 
@@ -494,7 +505,9 @@ describe('AdminProfileEditComponent', () => {
 
   it('sends inline toolPolicy with localToolProfileId:null when the profile is cleared (#3742)', async () => {
     const { fixture, component } = await runtimeWindow();
-    const transport = TestBed.inject(ChatTransport) as unknown as { applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy };
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
     // Clear the local tool profile, open custom tools, add a toolset.
     component.updateRuntimeLocalToolProfile({ target: { value: '' } });
     component.toggleRuntimeCustomTools();
@@ -515,7 +528,9 @@ describe('AdminProfileEditComponent', () => {
 
   it('only sends mcpBindings after the bindings are edited (#3742)', async () => {
     const { fixture, component } = await runtimeWindow();
-    const transport = TestBed.inject(ChatTransport) as unknown as { planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy };
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
     // Toggle the seeded server off; bindings become dirty and are sent.
     component.toggleRuntimeMcpServer('den', { target: { checked: false } });
     fixture.detectChanges();
@@ -526,6 +541,40 @@ describe('AdminProfileEditComponent', () => {
       transport.planAdminProfileRegistryRuntimeConfig,
     );
     expect(request.mcpBindings).toEqual([]);
+  });
+
+  it('plans and applies a profile brain rebuild from the runtime tab (#3988)', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileBrainRebuild: RebuildSpy;
+      applyAdminProfileBrainRebuild: RebuildSpy;
+    };
+    const record = recordFor('rt-prime');
+
+    component.planBrainRebuild(record);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(transport.planAdminProfileBrainRebuild.mock.calls[0]).toEqual([
+      'rt-prime',
+      { reason: 'profile runtime config changed from Rusty View' },
+    ]);
+    let html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('profile brain rebuild planned');
+    expect(html).toContain('session ids preserved true');
+    expect(html).toContain('history preserved true');
+
+    component.applyBrainRebuild(record);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(transport.applyAdminProfileBrainRebuild.mock.calls[0]).toEqual([
+      'rt-prime',
+      { reason: 'profile runtime config changed from Rusty View' },
+    ]);
+    html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('profile brain rebuild applied');
+    expect(html).toContain('affected sessions session-1');
   });
 
   // ---- context strategy policy edit (#3849) -------------------------------
@@ -541,7 +590,10 @@ describe('AdminProfileEditComponent', () => {
 
   it('shows an empty state when the strategy catalog is unavailable (#3849)', async () => {
     const fixture = await editWindow('rt-prime', {
-      profileDiagnostics: registryDiagnostics({ profileId: 'rt-prime', revision: 5 }),
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'rt-prime',
+        revision: 5,
+      }),
       contextStrategyCatalog: null,
     });
     const component = fixture.componentInstance as unknown as EditComponentApi;
@@ -595,7 +647,9 @@ describe('AdminProfileEditComponent', () => {
       debugVisibility: 'verbose',
     });
     // camelCase + preserved opaque config round-trips.
-    expect(request.contextPolicy).toHaveProperty('targetPercentAfterCompaction');
+    expect(request.contextPolicy).toHaveProperty(
+      'targetPercentAfterCompaction',
+    );
     expect(request.contextPolicy).toHaveProperty('maxContextPercentForWake');
     expect(request.contextPolicy).toHaveProperty('strategyConfig');
   });
