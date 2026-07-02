@@ -67,6 +67,7 @@
 .rv-admin-providers__meta,
 .rv-admin-providers__empty,
 .rv-admin-providers__result,
+.rv-admin-providers__oauth,
 .rv-admin-providers__probe {
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
@@ -149,6 +150,17 @@
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
+}
+
+.rv-admin-providers__oauth {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-sm);
+  align-items: center;
+}
+
+.rv-admin-providers__oauth a {
+  color: var(--rv-color-accent);
 }
 
 .rv-admin-providers__outcome--applied {

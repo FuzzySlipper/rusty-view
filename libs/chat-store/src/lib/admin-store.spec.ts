@@ -24,6 +24,12 @@ import {
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
+  type OpenAiOauthClearResponse,
+  type OpenAiOauthCompleteRequest,
+  type OpenAiOauthCompleteResponse,
+  type OpenAiOauthStartRequest,
+  type OpenAiOauthStartResponse,
+  type OpenAiOauthStatusResponse,
   type RuntimeBrainModuleDiagnostics,
   type RuntimeConfigApplyResult,
   type RuntimePauseControlRequest,
@@ -131,6 +137,28 @@ interface AdminTransportMock {
         refresh: string,
       ) => Promise<ModelProviderWriteResponse>
     >
+  >;
+  readonly adminOpenAiOauthStatus: ReturnType<
+    typeof vi.fn<(alias: string) => Promise<OpenAiOauthStatusResponse>>
+  >;
+  readonly adminStartOpenAiOauthLogin: ReturnType<
+    typeof vi.fn<
+      (
+        alias: string,
+        request?: OpenAiOauthStartRequest,
+      ) => Promise<OpenAiOauthStartResponse>
+    >
+  >;
+  readonly adminCompleteOpenAiOauthLogin: ReturnType<
+    typeof vi.fn<
+      (
+        alias: string,
+        request: OpenAiOauthCompleteRequest,
+      ) => Promise<OpenAiOauthCompleteResponse>
+    >
+  >;
+  readonly adminClearOpenAiOauthCredential: ReturnType<
+    typeof vi.fn<(alias: string) => Promise<OpenAiOauthClearResponse>>
   >;
   readonly pauseRuntime: ReturnType<
     typeof vi.fn<
@@ -462,6 +490,39 @@ function createTransport(
     updateAdminModelProvider: vi.fn(async (alias: string) =>
       providerWriteResponse(alias),
     ),
+    adminOpenAiOauthStatus: vi.fn(async (alias: string) => ({
+      provider: provider(alias),
+      credential: { hasSecret: false },
+      pendingLogins: [],
+    })),
+    adminStartOpenAiOauthLogin: vi.fn(async (alias: string) => ({
+      provider: provider(alias),
+      pendingLogin: {
+        pendingLoginId: 'pending-1',
+        providerAlias: alias,
+        issuer: 'https://auth.openai.com',
+        clientId: 'app-client',
+        redirectUri: 'http://localhost:1455/auth/callback',
+        scopes: ['openid'],
+        codeChallenge: 'challenge',
+        authorizationUrl: 'https://auth.openai.com/oauth/authorize?...',
+        createdAt: '2026-07-02T00:00:00Z',
+        expiresAt: '2026-07-02T00:10:00Z',
+      },
+    })),
+    adminCompleteOpenAiOauthLogin: vi.fn(async (alias: string) => ({
+      provider: {
+        ...provider(alias),
+        credential: { hasSecret: true, kind: 'openai_oauth' },
+      },
+      credential: { hasSecret: true, kind: 'openai_oauth' },
+      completionMode: 'test',
+      pendingLoginId: 'pending-1',
+    })),
+    adminClearOpenAiOauthCredential: vi.fn(async (alias: string) => ({
+      provider: provider(alias),
+      credential: { hasSecret: false },
+    })),
     pauseRuntime: vi.fn(async (_scope, targetId) =>
       controlResponse('pause-runtime', pauseResult(targetId)),
     ),
@@ -696,6 +757,59 @@ describe('AdminStore behavior', () => {
     );
     expect(store.providerWriteResult()?.provider.alias).toBe('main');
     expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it('tracks OpenAI OAuth pending login and completion without exposing token material', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    await store.startOpenAiOauthLogin('openai-oauth', {
+      originator: 'rusty_view',
+    });
+
+    expect(transport.adminStartOpenAiOauthLogin).toHaveBeenCalledWith(
+      'openai-oauth',
+      { originator: 'rusty_view' },
+    );
+    expect(store.openAiOauthStartResult()?.pendingLogin.pendingLoginId).toBe(
+      'pending-1',
+    );
+    expect(store.openAiOauthStatus()?.pendingLogins).toHaveLength(1);
+
+    await store.completeOpenAiOauthLogin('openai-oauth', {
+      pendingLoginId: 'pending-1',
+      state: 'callback-state',
+      code: 'authorization-code',
+    });
+
+    expect(transport.adminCompleteOpenAiOauthLogin).toHaveBeenCalledWith(
+      'openai-oauth',
+      {
+        pendingLoginId: 'pending-1',
+        state: 'callback-state',
+        code: 'authorization-code',
+      },
+    );
+    expect(store.openAiOauthCompleteResult()?.credential.kind).toBe(
+      'openai_oauth',
+    );
+    expect(JSON.stringify(store.openAiOauthCompleteResult())).not.toContain(
+      'refresh-token',
+    );
+    expect(store.openAiOauthStatus()?.pendingLogins).toHaveLength(0);
+  });
+
+  it('clears OpenAI OAuth credentials through the explicit credential endpoint', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    await store.clearOpenAiOauthCredential('openai-oauth');
+
+    expect(transport.adminClearOpenAiOauthCredential).toHaveBeenCalledWith(
+      'openai-oauth',
+    );
+    expect(store.openAiOauthClearResult()?.credential.hasSecret).toBe(false);
+    expect(store.openAiOauthStatus()?.credential.hasSecret).toBe(false);
   });
 
   it('pauseRuntime and resumeRuntime expose control results', async () => {

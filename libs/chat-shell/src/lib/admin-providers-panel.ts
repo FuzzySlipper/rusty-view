@@ -13,7 +13,10 @@ import type {
   ModelProviderRefreshMode,
   ModelProviderStatus,
   ModelProviderWriteRequest,
+  OpenAiOauthPendingLogin,
 } from '@rusty-view/transport';
+
+type ProviderCredentialMode = 'api_key' | 'openai_oauth';
 
 interface ProviderFormState {
   readonly alias: string;
@@ -29,8 +32,10 @@ interface ProviderFormState {
   readonly temperature: string;
   readonly reasoningEffort: string;
   readonly reasoningFormat: string;
+  readonly credentialMode: ProviderCredentialMode;
   readonly secret: string;
   readonly clearSecret: boolean;
+  readonly oauthCallbackUrl: string;
   readonly status: ModelProviderStatus;
 }
 
@@ -48,8 +53,10 @@ const INITIAL_FORM: ProviderFormState = {
   temperature: '0.7',
   reasoningEffort: '',
   reasoningFormat: '',
+  credentialMode: 'api_key',
   secret: '',
   clearSecret: false,
+  oauthCallbackUrl: '',
   status: 'active',
 };
 
@@ -123,7 +130,7 @@ export class AdminProvidersPanelComponent {
   protected updateText(
     field: Exclude<
       keyof ProviderFormState,
-      'protocol' | 'status' | 'clearSecret'
+      'protocol' | 'status' | 'credentialMode' | 'clearSecret'
     >,
     event: Event,
   ): void {
@@ -215,6 +222,29 @@ export class AdminProvidersPanelComponent {
     }
   }
 
+  protected updateCredentialMode(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value !== 'api_key' && value !== 'openai_oauth') return;
+    this.form.update((current) =>
+      value === 'openai_oauth'
+        ? {
+            ...current,
+            credentialMode: value,
+            protocol: 'responses',
+            providerKind: current.providerKind.trim() === 'custom'
+              ? 'openai'
+              : current.providerKind,
+            baseUrl:
+              current.baseUrl.trim() === ''
+                ? 'https://chatgpt.com/backend-api/codex'
+                : current.baseUrl,
+            secret: '',
+            clearSecret: false,
+          }
+        : { ...current, credentialMode: value, oauthCallbackUrl: '' },
+    );
+  }
+
   protected updateRefreshMode(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     if (value === 'none' || value === 'plan' || value === 'apply') {
@@ -228,6 +258,8 @@ export class AdminProvidersPanelComponent {
   }
 
   protected selectProviderForEdit(provider: ModelProviderRecord): void {
+    const credentialMode =
+      provider.credential.kind === 'openai_oauth' ? 'openai_oauth' : 'api_key';
     this.editingAlias.set(provider.alias);
     this.form.set({
       alias: provider.alias,
@@ -251,10 +283,15 @@ export class AdminProvidersPanelComponent {
           : milliToDecimal(provider.temperatureMilli),
       reasoningEffort: provider.reasoningEffort ?? '',
       reasoningFormat: provider.reasoningFormat ?? '',
+      credentialMode,
       secret: '',
       clearSecret: false,
+      oauthCallbackUrl: '',
       status: provider.status,
     });
+    if (credentialMode === 'openai_oauth') {
+      void this.admin.loadOpenAiOauthStatus(provider.alias);
+    }
   }
 
   protected cancelEdit(): void {
@@ -278,7 +315,72 @@ export class AdminProvidersPanelComponent {
   }
 
   protected credentialLabel(provider: ModelProviderRecord): string {
-    return provider.credential.hasSecret ? 'secret set' : 'no secret';
+    return credentialLabel(provider);
+  }
+
+  protected credentialKindLabel(provider: ModelProviderRecord): string {
+    return provider.credential.kind ?? 'api_key';
+  }
+
+  protected credentialUpdatedLabel(provider: ModelProviderRecord): string {
+    return provider.credential.updatedAt ?? 'not updated';
+  }
+
+  protected oauthPendingLogin(): OpenAiOauthPendingLogin | null {
+    return (
+      this.admin.openAiOauthStartResult()?.pendingLogin ??
+      this.admin.openAiOauthStatus()?.pendingLogins[0] ??
+      null
+    );
+  }
+
+  protected startOpenAiOauthLogin(): void {
+    const alias = this.editingAlias();
+    if (alias === null) return;
+    void this.admin
+      .startOpenAiOauthLogin(alias, { originator: 'rusty_view' })
+      .then(() => {
+        const authorizationUrl =
+          this.admin.openAiOauthStartResult()?.pendingLogin.authorizationUrl;
+        if (
+          authorizationUrl !== undefined &&
+          typeof globalThis.open === 'function'
+        ) {
+          try {
+            globalThis.open(authorizationUrl, '_blank', 'noopener');
+          } catch {
+            // Some test DOMs expose window.open but throw a not-implemented error.
+          }
+        }
+      });
+  }
+
+  protected completeOpenAiOauthLogin(): void {
+    const alias = this.editingAlias();
+    const pending = this.oauthPendingLogin();
+    if (alias === null || pending === null) return;
+    const callback = parseOauthCallback(this.form().oauthCallbackUrl);
+    if (callback.status === 'cancelled') {
+      this.admin.setLocalError('OpenAI OAuth was cancelled before completion.');
+      return;
+    }
+    if (callback.status === 'invalid') {
+      this.admin.setLocalError(
+        'OpenAI OAuth callback URL must include code and state.',
+      );
+      return;
+    }
+    void this.admin.completeOpenAiOauthLogin(alias, {
+      pendingLoginId: pending.pendingLoginId,
+      code: callback.code,
+      state: callback.state,
+    });
+  }
+
+  protected clearOpenAiOauthCredential(provider?: ModelProviderRecord): void {
+    const alias = provider?.alias ?? this.editingAlias();
+    if (alias === null) return;
+    void this.admin.clearOpenAiOauthCredential(alias);
   }
 }
 
@@ -294,11 +396,13 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
     ...optionalStringField('baseUrl', form.baseUrl),
     ...optionalStringField('reasoningEffort', form.reasoningEffort),
     ...optionalStringField('reasoningFormat', form.reasoningFormat),
-    ...optionalSecret(form.secret, form.clearSecret),
+    ...optionalSecret(form),
     ...optionalNumberField('contextWindowTokens', form.contextWindowTokens),
     ...optionalNumberField('maxOutputTokens', form.maxOutputTokens),
     ...optionalTemperatureMilli(form.temperature),
-    ...(form.clearSecret ? { clearSecret: true } : {}),
+    ...(form.credentialMode === 'api_key' && form.clearSecret
+      ? { clearSecret: true }
+      : {}),
   };
   // NOTE: `expectedRevision` is intentionally omitted (task #3722). Crew
   // overwrites the current record when it is absent, so normal edits succeed
@@ -327,12 +431,39 @@ function optionalNumberField<TKey extends string>(
 }
 
 function optionalSecret(
-  secret: string,
-  clearSecret: boolean,
+  form: ProviderFormState,
 ): { secret: string } | Record<string, never> {
-  if (clearSecret) return {};
-  const trimmed = secret.trim();
+  if (form.credentialMode !== 'api_key' || form.clearSecret) return {};
+  const trimmed = form.secret.trim();
   return trimmed === '' ? {} : { secret: trimmed };
+}
+
+function credentialLabel(provider: ModelProviderRecord): string {
+  const status =
+    provider.credential.status ??
+    (provider.credential.hasSecret ? 'configured' : 'missing');
+  return status.replace('_', '-');
+}
+
+type ParsedOauthCallback =
+  | { readonly status: 'complete'; readonly code: string; readonly state: string }
+  | { readonly status: 'cancelled' }
+  | { readonly status: 'invalid' };
+
+function parseOauthCallback(value: string): ParsedOauthCallback {
+  const trimmed = value.trim();
+  if (trimmed === '') return { status: 'invalid' };
+  let params: URLSearchParams;
+  try {
+    params = new URL(trimmed).searchParams;
+  } catch {
+    params = new URLSearchParams(trimmed.replace(/^\?/, ''));
+  }
+  if (params.has('error')) return { status: 'cancelled' };
+  const code = params.get('code')?.trim();
+  const state = params.get('state')?.trim();
+  if (!code || !state) return { status: 'invalid' };
+  return { status: 'complete', code, state };
 }
 
 /**

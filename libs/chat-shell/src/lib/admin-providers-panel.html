@@ -161,6 +161,17 @@
         </select>
       </label>
       <label>
+        <span>Credential Mode</span>
+        <select
+          [value]="form().credentialMode"
+          (change)="updateCredentialMode($event)"
+        >
+          <option value="api_key">API key</option>
+          <option value="openai_oauth">OpenAI OAuth</option>
+        </select>
+      </label>
+      @if (form().credentialMode === 'api_key') {
+      <label>
         <span>API Key (set/replace; never shown after save)</span>
         <input
           type="password"
@@ -178,6 +189,17 @@
         />
         <span>Clear stored secret</span>
       </label>
+      } @else {
+      <label>
+        <span>OAuth Callback URL</span>
+        <input
+          type="text"
+          [value]="form().oauthCallbackUrl"
+          (input)="updateText('oauthCallbackUrl', $event)"
+          autocomplete="off"
+        />
+      </label>
+      }
     </div>
 
     @if (probeStatus() !== '') {
@@ -213,7 +235,57 @@
         Cancel
       </button>
       }
+      @if (editingAlias() !== null && form().credentialMode === 'openai_oauth') {
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="startOpenAiOauthLogin()"
+        [disabled]="admin.saving()"
+      >
+        Start OpenAI OAuth
+      </button>
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="completeOpenAiOauthLogin()"
+        [disabled]="admin.saving() || oauthPendingLogin() === null"
+      >
+        Complete OpenAI OAuth
+      </button>
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="clearOpenAiOauthCredential()"
+        [disabled]="admin.saving()"
+      >
+        Clear OpenAI OAuth
+      </button>
+      }
     </div>
+
+    @if (oauthPendingLogin(); as pendingLogin) {
+    <div class="rv-admin-providers__oauth" role="status">
+      <span>{{ pendingLogin.providerAlias }}</span>
+      <a [href]="pendingLogin.authorizationUrl" target="_blank" rel="noreferrer">
+        authorization URL
+      </a>
+      <span>expires {{ pendingLogin.expiresAt }}</span>
+    </div>
+    }
+
+    @if (admin.openAiOauthStatus(); as oauthStatus) {
+    <div class="rv-admin-providers__result" role="status">
+      <span>{{ oauthStatus.provider.alias }}</span>
+      <span>{{ oauthStatus.credential.kind ?? 'api_key' }}</span>
+      <span>
+        {{
+          oauthStatus.credential.status ??
+            (oauthStatus.credential.hasSecret ? 'configured' : 'missing')
+        }}
+      </span>
+      <span>{{ oauthStatus.credential.updatedAt ?? 'not updated' }}</span>
+    </div>
+    }
 
     @if (admin.providerWriteResult(); as result) {
     <div class="rv-admin-providers__result" role="status">
@@ -258,6 +330,8 @@
           <span>{{ provider.providerKind }}</span>
           <span>{{ provider.modelId }}</span>
           <span>{{ credentialLabel(provider) }}</span>
+          <span>{{ credentialKindLabel(provider) }}</span>
+          <span>{{ credentialUpdatedLabel(provider) }}</span>
         </div>
         @if (provider.baseUrl) {
         <div class="rv-admin-providers__meta">
@@ -272,6 +346,16 @@
           >
             Edit
           </button>
+          @if (provider.credential.kind === 'openai_oauth') {
+          <button
+            type="button"
+            class="rv-admin-providers__button"
+            (click)="clearOpenAiOauthCredential(provider)"
+            [disabled]="admin.saving()"
+          >
+            Clear OAuth
+          </button>
+          }
         </div>
       </li>
       }

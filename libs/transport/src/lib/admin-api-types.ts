@@ -1107,6 +1107,19 @@ export type ModelProviderStatus = 'active' | 'disabled' | 'archived';
 /** Wire protocol the provider speaks. */
 export type ModelProviderProtocol = 'responses' | 'chat_completions';
 
+/** Redacted credential auth kind reported by Crew. */
+export type ModelProviderCredentialKind =
+  | 'api_key'
+  | 'openai_oauth'
+  | 'legacy_raw_api_key';
+
+/** Redacted credential state; older Crew builds omit this field. */
+export type ModelProviderCredentialStatus =
+  | 'configured'
+  | 'missing'
+  | 'expired'
+  | 'refresh_needed';
+
 /**
  * Redacted credential status for a model provider. The backend never returns
  * the raw secret; `hasSecret` tells the UI whether a key is configured and
@@ -1116,6 +1129,8 @@ export interface ModelProviderCredential {
   readonly hasSecret: boolean;
   readonly secretRef?: string;
   readonly updatedAt?: string;
+  readonly kind?: ModelProviderCredentialKind;
+  readonly status?: ModelProviderCredentialStatus;
 }
 
 /**
@@ -1173,10 +1188,35 @@ export interface ModelProviderWriteRequest {
   readonly reasoningFormat?: string;
   readonly secret?: string;
   readonly apiKey?: string;
+  readonly credentialSecret?: ModelProviderCredentialSecretInput;
   readonly clearSecret?: boolean;
   readonly metadataJson?: Record<string, unknown>;
   readonly expectedRevision?: number;
 }
+
+/** Explicit typed credential write for provider setup. Do not use for raw OAuth bundles in UI. */
+export type ModelProviderCredentialSecretInput =
+  | {
+      readonly kind: 'api_key';
+      readonly version?: 1;
+      readonly value: string;
+    }
+  | {
+      readonly kind: 'openai_oauth';
+      readonly version?: 1;
+      readonly issuer: string;
+      readonly clientId: string;
+      readonly idToken: string;
+      readonly accessToken: string;
+      readonly refreshToken: string;
+      readonly exchangedApiToken?: string;
+      readonly lastRefreshAt?: string;
+      readonly accountId?: string;
+      readonly email?: string;
+      readonly planType?: string;
+      readonly isFedrampAccount?: boolean;
+      readonly accessTokenExpiresAt?: string;
+    };
 /**
  * Refresh mode applied after a provider write: `none` (no rebuild), `plan`
  * (prepare runtime rebuild plans for affected profiles), or `apply` (execute
@@ -1220,4 +1260,78 @@ export interface ModelProviderPage {
   readonly total: number;
   readonly limit: number;
   readonly offset: number;
+}
+
+// ---- OpenAI OAuth provider credential setup ----
+
+export interface OpenAiOauthPendingLogin {
+  readonly pendingLoginId: string;
+  readonly providerAlias: string;
+  readonly issuer: string;
+  readonly clientId: string;
+  readonly redirectUri: string;
+  readonly scopes: readonly string[];
+  readonly codeChallenge: string;
+  readonly authorizationUrl: string;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+}
+
+export interface OpenAiOauthStartRequest {
+  readonly issuer?: string;
+  readonly clientId?: string;
+  readonly redirectUri?: string;
+  readonly scopes?: readonly string[];
+  readonly allowedWorkspaceIds?: readonly string[];
+  readonly originator?: string;
+}
+
+export interface OpenAiOauthStartResponse {
+  readonly provider: ModelProviderRecord;
+  readonly pendingLogin: OpenAiOauthPendingLogin;
+}
+
+export interface OpenAiOauthStatusResponse {
+  readonly provider: ModelProviderRecord;
+  readonly credential: ModelProviderCredential;
+  readonly pendingLogins: readonly OpenAiOauthPendingLogin[];
+}
+
+export interface OpenAiOauthFakeTokenResponse {
+  readonly idToken: string;
+  readonly accessToken: string;
+  readonly refreshToken: string;
+  readonly exchangedApiToken?: string;
+  readonly lastRefreshAt?: string;
+  readonly accountId?: string;
+  readonly email?: string;
+  readonly planType?: string;
+  readonly isFedrampAccount?: boolean;
+  readonly accessTokenExpiresAt?: string;
+}
+
+export interface OpenAiOauthCompleteRequest {
+  readonly pendingLoginId: string;
+  readonly state: string;
+  readonly code?: string;
+  readonly expectedRevision?: number;
+  readonly testMode?: boolean;
+  readonly fakeTokenResponse?: OpenAiOauthFakeTokenResponse;
+}
+
+export interface OpenAiOauthCompleteResponse {
+  readonly provider: ModelProviderRecord;
+  readonly credential: ModelProviderCredential;
+  readonly completionMode: 'real' | 'test';
+  readonly oauthSummary?: unknown;
+  readonly pendingLoginId: string;
+}
+
+export interface OpenAiOauthClearRequest {
+  readonly expectedRevision?: number;
+}
+
+export interface OpenAiOauthClearResponse {
+  readonly provider: ModelProviderRecord;
+  readonly credential: ModelProviderCredential;
 }

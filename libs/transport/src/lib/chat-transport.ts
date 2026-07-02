@@ -47,13 +47,18 @@ import type {
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
   ModelProviderPage,
-  ModelProviderProtocol,
   ModelProviderQuery,
   ModelProviderRecord,
   ModelProviderRefreshMode,
-  ModelProviderStatus,
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
+  OpenAiOauthClearRequest,
+  OpenAiOauthClearResponse,
+  OpenAiOauthCompleteRequest,
+  OpenAiOauthCompleteResponse,
+  OpenAiOauthStartRequest,
+  OpenAiOauthStartResponse,
+  OpenAiOauthStatusResponse,
   ProfileBundleExportPlan,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
@@ -342,6 +347,33 @@ export class ChatTransport {
     refresh?: ModelProviderRefreshMode,
   ): Promise<ModelProviderWriteResponse> {
     return this.adminHttp.updateModelProvider(alias, request, refresh);
+  }
+
+  adminOpenAiOauthStatus(
+    alias: string,
+  ): Promise<OpenAiOauthStatusResponse> {
+    return this.adminHttp.openAiOauthStatus(alias);
+  }
+
+  adminStartOpenAiOauthLogin(
+    alias: string,
+    request?: OpenAiOauthStartRequest,
+  ): Promise<OpenAiOauthStartResponse> {
+    return this.adminHttp.startOpenAiOauthLogin(alias, request);
+  }
+
+  adminCompleteOpenAiOauthLogin(
+    alias: string,
+    request: OpenAiOauthCompleteRequest,
+  ): Promise<OpenAiOauthCompleteResponse> {
+    return this.adminHttp.completeOpenAiOauthLogin(alias, request);
+  }
+
+  adminClearOpenAiOauthCredential(
+    alias: string,
+    request?: OpenAiOauthClearRequest,
+  ): Promise<OpenAiOauthClearResponse> {
+    return this.adminHttp.clearOpenAiOauthCredential(alias, request);
   }
 
   createAdminProfile(

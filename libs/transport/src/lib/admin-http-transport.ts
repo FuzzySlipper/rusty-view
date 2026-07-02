@@ -26,13 +26,18 @@ import type {
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
   ModelProviderPage,
-  ModelProviderProtocol,
   ModelProviderQuery,
   ModelProviderRecord,
   ModelProviderRefreshMode,
-  ModelProviderStatus,
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
+  OpenAiOauthClearRequest,
+  OpenAiOauthClearResponse,
+  OpenAiOauthCompleteRequest,
+  OpenAiOauthCompleteResponse,
+  OpenAiOauthStartRequest,
+  OpenAiOauthStartResponse,
+  OpenAiOauthStatusResponse,
   ProfileBundleExportPlan,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
@@ -429,6 +434,37 @@ export class AdminHttpTransport {
     );
   }
 
+  openAiOauthStatus(alias: string): Promise<OpenAiOauthStatusResponse> {
+    return this.request('GET', openAiOauthProviderPath(alias, 'status'));
+  }
+
+  startOpenAiOauthLogin(
+    alias: string,
+    request: OpenAiOauthStartRequest = {},
+  ): Promise<OpenAiOauthStartResponse> {
+    return this.request('POST', openAiOauthProviderPath(alias, 'start'), {
+      body: compactRecord(openAiOauthStartBody(request)),
+    });
+  }
+
+  completeOpenAiOauthLogin(
+    alias: string,
+    request: OpenAiOauthCompleteRequest,
+  ): Promise<OpenAiOauthCompleteResponse> {
+    return this.request('POST', openAiOauthProviderPath(alias, 'complete'), {
+      body: compactRecord(openAiOauthCompleteBody(request)),
+    });
+  }
+
+  clearOpenAiOauthCredential(
+    alias: string,
+    request: OpenAiOauthClearRequest = {},
+  ): Promise<OpenAiOauthClearResponse> {
+    return this.request('POST', openAiOauthProviderPath(alias, 'clear'), {
+      body: compactRecord({ expectedRevision: request.expectedRevision }),
+    });
+  }
+
   createProfile(
     request: CreateAdminProfileRequest,
   ): Promise<AdminControlResponse<CreatedServiceProfile>> {
@@ -598,6 +634,13 @@ function providerItemPath(alias: string): string {
   return `/v1/admin/model-providers/${encodeURIComponent(alias)}`;
 }
 
+function openAiOauthProviderPath(
+  alias: string,
+  action: 'status' | 'start' | 'complete' | 'clear',
+): string {
+  return `${providerItemPath(alias)}/oauth/openai/${action}`;
+}
+
 function registryWritePath(
   profileId: string,
   kind: 'update' | 'lifecycle' | 'prompt' | 'runtime-config',
@@ -647,6 +690,9 @@ function providerWriteBody(
   if (request.clearSecret !== undefined) {
     body['clearSecret'] = request.clearSecret;
   }
+  if (request.credentialSecret !== undefined) {
+    body['credentialSecret'] = request.credentialSecret;
+  }
   if (request.metadataJson !== undefined) {
     body['metadataJson'] = request.metadataJson;
   }
@@ -661,6 +707,32 @@ function providerWriteBody(
     body['apiKey'] = request.apiKey;
   }
   return body;
+}
+
+function openAiOauthStartBody(
+  request: OpenAiOauthStartRequest,
+): Record<string, unknown> {
+  return {
+    issuer: request.issuer,
+    clientId: request.clientId,
+    redirectUri: request.redirectUri,
+    scopes: request.scopes,
+    allowedWorkspaceIds: request.allowedWorkspaceIds,
+    originator: request.originator,
+  };
+}
+
+function openAiOauthCompleteBody(
+  request: OpenAiOauthCompleteRequest,
+): Record<string, unknown> {
+  return {
+    pendingLoginId: request.pendingLoginId,
+    state: request.state,
+    code: request.code,
+    expectedRevision: request.expectedRevision,
+    testMode: request.testMode,
+    fakeTokenResponse: request.fakeTokenResponse,
+  };
 }
 
 /**

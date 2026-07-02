@@ -9,6 +9,8 @@ import {
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
+  type OpenAiOauthCompleteRequest,
+  type OpenAiOauthStartRequest,
 } from '@rusty-view/transport';
 
 import { AdminProvidersPanelComponent } from './admin-providers-panel';
@@ -105,6 +107,50 @@ function makeTransport(
         refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
       }),
     ),
+    adminOpenAiOauthStatus: vi.fn(async (alias: string) => ({
+      provider: {
+        ...makeProvider(alias, true),
+        credential: { hasSecret: true, kind: 'openai_oauth' },
+      },
+      credential: { hasSecret: true, kind: 'openai_oauth' },
+      pendingLogins: [],
+    })),
+    adminStartOpenAiOauthLogin: vi.fn(
+      async (alias: string) => ({
+        provider: {
+          ...makeProvider(alias),
+          credential: { hasSecret: false, kind: 'openai_oauth' },
+        },
+        pendingLogin: {
+          pendingLoginId: 'pending-1',
+          providerAlias: alias,
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          scopes: ['openid'],
+          codeChallenge: 'challenge',
+          authorizationUrl:
+            'https://auth.openai.com/oauth/authorize?state=callback-state',
+          createdAt: '2026-07-02T00:00:00Z',
+          expiresAt: '2026-07-02T00:10:00Z',
+        },
+      }),
+    ),
+    adminCompleteOpenAiOauthLogin: vi.fn(
+      async (alias: string) => ({
+        provider: {
+          ...makeProvider(alias, true),
+          credential: { hasSecret: true, kind: 'openai_oauth' },
+        },
+        credential: { hasSecret: true, kind: 'openai_oauth' },
+        completionMode: 'real',
+        pendingLoginId: 'pending-1',
+      }),
+    ),
+    adminClearOpenAiOauthCredential: vi.fn(async (alias: string) => ({
+      provider: makeProvider(alias),
+      credential: { hasSecret: false },
+    })),
   } as unknown as ChatTransport;
 }
 
@@ -133,7 +179,15 @@ describe('AdminProvidersPanelComponent', () => {
   it('lists configured provider aliases with redacted credential status', async () => {
     const fixture = await createPanel([
       makeProvider('default'),
-      makeProvider('alternate', true),
+      {
+        ...makeProvider('alternate', true),
+        credential: {
+          hasSecret: true,
+          secretRef: 'kv//default',
+          updatedAt: '2026-07-02T00:00:00Z',
+          kind: 'api_key',
+        },
+      },
     ]);
     const text =
       (fixture.nativeElement as HTMLElement).querySelector(
@@ -143,8 +197,10 @@ describe('AdminProvidersPanelComponent', () => {
     expect(text).toContain('default');
     expect(text).toContain('alternate');
     // Credential status is rendered as a label, never the raw secret.
-    expect(text).toContain('no secret');
-    expect(text).toContain('secret set');
+    expect(text).toContain('missing');
+    expect(text).toContain('configured');
+    expect(text).toContain('api_key');
+    expect(text).toContain('2026-07-02T00:00:00Z');
     expect(text).not.toContain('alternate-secret');
     expect(text).not.toContain('secretRef');
   });
@@ -178,6 +234,122 @@ describe('AdminProvidersPanelComponent', () => {
     await fixture.whenStable();
 
     expect(transport.createAdminModelProvider.mock.calls).toHaveLength(1);
+  });
+
+  it('creates an OpenAI OAuth provider without asking for raw OAuth credentials', async () => {
+    const fixture = await createPanel([]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mock: { calls: [ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'alias' | 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      updateCredentialMode(event: { target: { value: string } }): void;
+      saveProvider(): void;
+      form(): { secret: string; protocol: string; providerKind: string };
+    };
+
+    component.updateText('alias', { target: { value: 'openai-oauth' } });
+    component.updateText('modelId', { target: { value: 'gpt-5' } });
+    component.updateCredentialMode({
+      target: { value: 'openai_oauth' },
+    });
+    fixture.detectChanges();
+    component.saveProvider();
+    await fixture.whenStable();
+
+    const call = transport.createAdminModelProvider.mock.calls[0];
+    if (call === undefined) throw new Error('expected a create call');
+    const [request] = call;
+    expect(request.protocol).toBe('responses');
+    expect(request.providerKind).toBe('openai');
+    expect(request).not.toHaveProperty('secret');
+    expect(request).not.toHaveProperty('credentialSecret');
+    expect(component.form().secret).toBe('');
+  });
+
+  it('starts and completes OpenAI OAuth using the pending login from Crew', async () => {
+    const oauthProvider: ModelProviderRecord = {
+      ...makeProvider('openai-oauth', true),
+      protocol: 'responses',
+      providerKind: 'openai',
+      credential: { hasSecret: true, kind: 'openai_oauth' },
+    };
+    const fixture = await createPanel([oauthProvider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      adminStartOpenAiOauthLogin: {
+        mock: { calls: [string, OpenAiOauthStartRequest][] };
+      };
+      adminCompleteOpenAiOauthLogin: {
+        mock: { calls: [string, OpenAiOauthCompleteRequest][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      startOpenAiOauthLogin(): void;
+      updateText(
+        field: 'oauthCallbackUrl',
+        event: { target: { value: string } },
+      ): void;
+      completeOpenAiOauthLogin(): void;
+    };
+    const openSpy = vi
+      .spyOn(globalThis, 'open')
+      .mockImplementation(() => null);
+
+    component.selectProviderForEdit(oauthProvider);
+    component.startOpenAiOauthLogin();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('authorization URL');
+    expect(text).toContain('openai-oauth');
+    expect(transport.adminStartOpenAiOauthLogin.mock.calls[0]?.[0]).toBe(
+      'openai-oauth',
+    );
+
+    component.updateText('oauthCallbackUrl', {
+      target: {
+        value: 'http://localhost:1455/auth/callback?code=code-1&state=callback-state',
+      },
+    });
+    component.completeOpenAiOauthLogin();
+    await fixture.whenStable();
+
+    expect(transport.adminCompleteOpenAiOauthLogin.mock.calls[0]?.[1]).toEqual({
+      pendingLoginId: 'pending-1',
+      code: 'code-1',
+      state: 'callback-state',
+    });
+    openSpy.mockRestore();
+  });
+
+  it('clears OpenAI OAuth credentials through the explicit clear route', async () => {
+    const oauthProvider: ModelProviderRecord = {
+      ...makeProvider('openai-oauth', true),
+      credential: { hasSecret: true, kind: 'openai_oauth' },
+    };
+    const fixture = await createPanel([oauthProvider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      adminClearOpenAiOauthCredential: {
+        mock: { calls: [string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      clearOpenAiOauthCredential(provider: ModelProviderRecord): void;
+    };
+
+    component.clearOpenAiOauthCredential(oauthProvider);
+    await fixture.whenStable();
+
+    expect(transport.adminClearOpenAiOauthCredential.mock.calls[0]?.[0]).toBe(
+      'openai-oauth',
+    );
   });
 
   it('applies create defaults and converts the decimal temperature to milli', async () => {

@@ -878,6 +878,116 @@ describe('AdminHttpTransport', () => {
     expect(req.body).toContain('"expectedRevision":3');
   });
 
+  it('starts an OpenAI OAuth provider login through the explicit route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        provider: { alias: 'openai-oauth', credential: { hasSecret: false } },
+        pendingLogin: {
+          pendingLoginId: 'pending-1',
+          providerAlias: 'openai-oauth',
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          scopes: ['openid'],
+          codeChallenge: 'challenge',
+          authorizationUrl: 'https://auth.openai.com/oauth/authorize?...',
+          createdAt: '2026-07-02T00:00:00Z',
+          expiresAt: '2026-07-02T00:10:00Z',
+        },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.startOpenAiOauthLogin('openai-oauth', {
+      redirectUri: 'http://localhost:1455/auth/callback',
+      originator: 'rusty_view',
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/model-providers/openai-oauth/oauth/openai/start',
+    );
+    expect(req.body).toContain('rusty_view');
+    expect(result.pendingLogin.authorizationUrl).toContain('/oauth/authorize');
+  });
+
+  it('completes OpenAI OAuth with deterministic fake token response without echoing secrets', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        provider: {
+          alias: 'openai-oauth',
+          credential: { hasSecret: true, kind: 'openai_oauth' },
+        },
+        credential: { hasSecret: true, kind: 'openai_oauth' },
+        completionMode: 'test',
+        pendingLoginId: 'pending-1',
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.completeOpenAiOauthLogin('openai-oauth', {
+      pendingLoginId: 'pending-1',
+      state: 'callback-state',
+      testMode: true,
+      fakeTokenResponse: {
+        idToken: 'id.jwt.token',
+        accessToken: 'access.jwt.token',
+        refreshToken: 'refresh-token',
+      },
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/model-providers/openai-oauth/oauth/openai/complete',
+    );
+    expect(req.body).toContain('"testMode":true');
+    expect(req.body).toContain('refresh-token');
+    expect(JSON.stringify(result)).not.toContain('refresh-token');
+    expect(result.credential.kind).toBe('openai_oauth');
+  });
+
+  it('reads and clears OpenAI OAuth status through explicit credential routes', async () => {
+    let captured: CapturedRequest | undefined;
+    const fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      captured = {
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      };
+      return jsonOk({
+        provider: { alias: 'openai-oauth', credential: { hasSecret: false } },
+        credential: { hasSecret: false },
+        pendingLogins: [],
+      });
+    }) as FetchImpl;
+    const lastRequest = (): CapturedRequest => {
+      if (captured === undefined) throw new Error('fetch was not called');
+      return captured;
+    };
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.openAiOauthStatus('openai-oauth');
+    expect(lastRequest().method).toBe('GET');
+    expect(lastRequest().url).toContain(
+      '/v1/admin/model-providers/openai-oauth/oauth/openai/status',
+    );
+
+    await transport.clearOpenAiOauthCredential('openai-oauth', {
+      expectedRevision: 7,
+    });
+    expect(lastRequest().method).toBe('POST');
+    expect(lastRequest().url).toContain(
+      '/v1/admin/model-providers/openai-oauth/oauth/openai/clear',
+    );
+    expect(lastRequest().body).toContain('"expectedRevision":7');
+  });
+
   it('lists local tool profiles from the live Crew route and normalizes the wire shape', async () => {
     // Crew returns `{ items: [...] }` with `toolsets`/`tools` fields; the
     // transport normalizes to `{ profiles: [...] }` with

@@ -28,6 +28,12 @@ import {
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
+  type OpenAiOauthClearResponse,
+  type OpenAiOauthCompleteRequest,
+  type OpenAiOauthCompleteResponse,
+  type OpenAiOauthStartRequest,
+  type OpenAiOauthStartResponse,
+  type OpenAiOauthStatusResponse,
   type ProfileBundleExportPlan,
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryLifecycleRequest,
@@ -115,6 +121,14 @@ export class AdminStore {
   private readonly _modelProviders = signal<ModelProviderPage | null>(null);
   private readonly _providerWriteResult =
     signal<ModelProviderWriteResponse | null>(null);
+  private readonly _openAiOauthStatus =
+    signal<OpenAiOauthStatusResponse | null>(null);
+  private readonly _openAiOauthStartResult =
+    signal<OpenAiOauthStartResponse | null>(null);
+  private readonly _openAiOauthCompleteResult =
+    signal<OpenAiOauthCompleteResponse | null>(null);
+  private readonly _openAiOauthClearResult =
+    signal<OpenAiOauthClearResponse | null>(null);
   /**
    * Provider-specific load error. Unlike the compatibility-diagnostic routes,
    * the model-provider registry is a first-class part of this panel; a failure
@@ -151,6 +165,11 @@ export class AdminStore {
   readonly runtimeConfigResult = this._runtimeConfigResult.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
+  readonly openAiOauthStatus = this._openAiOauthStatus.asReadonly();
+  readonly openAiOauthStartResult = this._openAiOauthStartResult.asReadonly();
+  readonly openAiOauthCompleteResult =
+    this._openAiOauthCompleteResult.asReadonly();
+  readonly openAiOauthClearResult = this._openAiOauthClearResult.asReadonly();
   readonly providerLoadErrorDetail = this._providerLoadError.asReadonly();
   readonly providerLoadError = computed(() => {
     const error = this._providerLoadError();
@@ -781,6 +800,98 @@ export class AdminStore {
     this._providerWriteResult.set(null);
   }
 
+  setLocalError(message: string): void {
+    this._error.set({ source: 'error', message, retryable: false });
+  }
+
+  async loadOpenAiOauthStatus(alias: string): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      this._openAiOauthStatus.set(
+        await this.transport.adminOpenAiOauthStatus(alias),
+      );
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async startOpenAiOauthLogin(
+    alias: string,
+    request: OpenAiOauthStartRequest = {},
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._openAiOauthStartResult.set(null);
+    try {
+      const result = await this.transport.adminStartOpenAiOauthLogin(
+        alias,
+        request,
+      );
+      this._openAiOauthStartResult.set(result);
+      this._openAiOauthStatus.set({
+        provider: result.provider,
+        credential: result.provider.credential,
+        pendingLogins: [result.pendingLogin],
+      });
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async completeOpenAiOauthLogin(
+    alias: string,
+    request: OpenAiOauthCompleteRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._openAiOauthCompleteResult.set(null);
+    try {
+      const result = await this.transport.adminCompleteOpenAiOauthLogin(
+        alias,
+        request,
+      );
+      this._openAiOauthCompleteResult.set(result);
+      this._openAiOauthStatus.set({
+        provider: result.provider,
+        credential: result.credential,
+        pendingLogins: [],
+      });
+      await this.refresh();
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async clearOpenAiOauthCredential(alias: string): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._openAiOauthClearResult.set(null);
+    try {
+      const result = await this.transport.adminClearOpenAiOauthCredential(alias);
+      this._openAiOauthClearResult.set(result);
+      this._openAiOauthStatus.set({
+        provider: result.provider,
+        credential: result.credential,
+        pendingLogins: [],
+      });
+      await this.refresh();
+    } catch (error) {
+      if (isProviderRevisionConflict(error)) {
+        await this.refresh();
+      }
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
   async pauseRuntime(
     scope: RuntimePauseScope,
     targetId: string,
@@ -933,6 +1044,35 @@ function isProviderRevisionConflict(error: unknown): boolean {
     storeErrorDetail(error).apiError?.reasonCode ===
     'model_provider_revision_mismatch'
   );
+}
+
+function providerCredentialErrorDetail(error: unknown): StoreErrorDetail {
+  const detail = storeErrorDetail(error);
+  const reasonCode = detail.apiError?.reasonCode;
+  if (reasonCode === undefined) return detail;
+  const message = providerCredentialErrorMessage(reasonCode);
+  return message === undefined ? detail : { ...detail, message };
+}
+
+function providerCredentialErrorMessage(reasonCode: string): string | undefined {
+  switch (reasonCode) {
+    case 'openai_oauth_pending_login_not_found':
+      return 'OpenAI OAuth login expired or was cancelled. Start a new login.';
+    case 'openai_oauth_state_mismatch':
+      return 'OpenAI OAuth callback did not match the pending login. Start a new login and use the newest callback URL.';
+    case 'openai_oauth_transport':
+    case 'openai_oauth_upstream_status':
+    case 'openai_oauth_malformed_response':
+      return 'OpenAI OAuth token exchange failed. Check the callback URL and try the login again.';
+    case 'openai_oauth_credential_error':
+      return 'OpenAI OAuth credential exchange failed before tokens could be stored.';
+    case 'openai_oauth_refresh_failed':
+      return 'OpenAI OAuth token refresh failed. Clear the credential and sign in again.';
+    case 'model_provider_revision_mismatch':
+      return 'This provider was changed elsewhere; the list has been refreshed. Review the current values and save again to overwrite.';
+    default:
+      return undefined;
+  }
 }
 
 /**
