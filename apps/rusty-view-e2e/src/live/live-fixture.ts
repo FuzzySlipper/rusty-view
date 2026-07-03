@@ -15,6 +15,9 @@ export interface LiveTurnOptions {
   readonly assistantStartedTimeoutMs?: number;
   readonly assistantCompletedTimeoutMs?: number;
   readonly minStreamingMs?: number;
+  readonly finalTextMustInclude?: readonly string[];
+  readonly finalTextMinLength?: number;
+  readonly allowProviderFailureText?: boolean;
 }
 
 export interface VisualImpactOptions {
@@ -114,6 +117,7 @@ interface RustyViewTestApi {
   getMessageCount(): number;
   getRawEventCount(): number;
   getMessages(): RustyViewDebugSnapshot['messages'];
+  scrollToMessageId(messageId: string): void;
 }
 
 type BrowserWindowWithRustyView = Window &
@@ -373,6 +377,7 @@ export class LiveConversation {
       turn.finalBlockKinds = finalState.blockKinds;
     }
     turn.finalTextPreview = previewText(finalState?.text ?? '', 500);
+    this.assertFinalAssistantText(finalState, options);
     this.recordTimeline('turn:assistant-complete', {
       turn: turn.index,
       messageId: turn.assistantMessageId,
@@ -411,7 +416,7 @@ export class LiveConversation {
     }
 
     const assistant = this.messageById(assistantState.id);
-    await expect(assistant).toBeVisible({ timeout: 10_000 });
+    await this.ensureMessageRowVisible(assistantState.id, 10_000);
     return assistant;
   }
 
@@ -498,9 +503,35 @@ export class LiveConversation {
     }
 
     const assistant = this.messageById(completedState.id);
-    await expect(assistant).toBeVisible({ timeout: 10_000 });
+    await this.ensureMessageRowVisible(completedState.id, 10_000);
     await expect(assistant).toHaveAttribute('data-message-status', 'completed');
     return assistant;
+  }
+
+  async ensureMessageRowVisible(
+    messageId: string,
+    timeoutMs: number,
+  ): Promise<void> {
+    this.recordTimeline('transcript:scroll-to-message:start', { messageId });
+    const row = this.messageById(messageId);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await this.page.evaluate((id) => {
+        const api = (window as BrowserWindowWithRustyView).__RUSTY_VIEW_TEST__;
+        api?.scrollToMessageId(id);
+      }, messageId);
+      if (await row.isVisible().catch(() => false)) {
+        this.recordTimeline('transcript:scroll-to-message:visible', {
+          messageId,
+        });
+        return;
+      }
+      // Let CDK virtual scroll render the requested window before retrying.
+      // eslint-disable-next-line playwright/no-wait-for-timeout
+      await this.page.waitForTimeout(250);
+    }
+    await expect(row).toBeVisible({ timeout: timeoutMs });
+    this.recordTimeline('transcript:scroll-to-message:visible', { messageId });
   }
 
   async expectVisibleImpact(
@@ -656,6 +687,47 @@ export class LiveConversation {
     return this.page.locator(
       `[data-testid="message-row"][data-message-id=${cssString(messageId)}]`,
     );
+  }
+
+  private assertFinalAssistantText(
+    finalState: RustyViewDebugSnapshot['messages'][number] | undefined,
+    options: LiveTurnOptions,
+  ): void {
+    expect(
+      finalState,
+      'completed assistant row should have a matching final debug state',
+    ).toBeDefined();
+    const text = finalState?.text.trim() ?? '';
+    const failure = options.allowProviderFailureText
+      ? null
+      : providerFailureReason(text);
+    if (failure !== null) {
+      this.recordTimeline('turn:provider-failure-detected', {
+        reason: failure,
+        textPreview: previewText(text, 500),
+      });
+    }
+    expect(
+      failure,
+      `final assistant text must be substantive, not a provider/runtime failure. Text: ${previewText(
+        text,
+        500,
+      )}`,
+    ).toBeNull();
+
+    if (options.finalTextMinLength !== undefined) {
+      expect(
+        text.length,
+        `final assistant text should contain at least ${options.finalTextMinLength} characters`,
+      ).toBeGreaterThanOrEqual(options.finalTextMinLength);
+    }
+
+    for (const marker of options.finalTextMustInclude ?? []) {
+      expect(
+        text,
+        `final assistant text should include marker "${marker}"`,
+      ).toContain(marker);
+    }
   }
 
   note(message: string): void {
@@ -854,6 +926,22 @@ function previewText(value: string, maxLength: number): string {
     return normalized;
   }
   return normalized.slice(0, maxLength - 3) + '...';
+}
+
+function providerFailureReason(text: string): string | null {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length === 0) return 'empty_final_text';
+  const checks: readonly [string, RegExp][] = [
+    ['openai_responses_wake_failed', /\bOpenAI Responses wake\b.*\bfailed\b/i],
+    ['provider_stream_idle_timeout', /\bprovider stream idle timeout\b/i],
+    ['wake_dispatch_failed', /\bwake_dispatch_failed\b/i],
+    ['provider_transport_error', /\bprovider transport error\b/i],
+    ['failed_provider', /\bfailed:\s*provider\b/i],
+  ];
+  for (const [reason, pattern] of checks) {
+    if (pattern.test(normalized)) return reason;
+  }
+  return null;
 }
 
 function errorMessage(error: unknown): string {

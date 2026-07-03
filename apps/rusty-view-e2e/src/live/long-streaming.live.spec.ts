@@ -22,12 +22,19 @@ test('long real LLM streaming leaves visual evidence @live-agent @streaming', as
       'Examine the projects at /home/dev/voxelforge, /home/dev/asha, and /home/dev/asha-studio.',
       'Analyze whether it makes sense to port voxelforge functionality into asha core, asha-studio, or a new asha-focused repo.',
       'Use concrete project-architecture criteria: ownership boundaries, UI/editor needs, data model fit, build/runtime coupling, migration risk, and testing strategy.',
-      'Write a detailed recommendation with at least 10 sections and include tradeoffs for all three placement options.',
+      'Write a detailed recommendation with at least 10 sections, including sections titled "Executive recommendation", "Asha core option", "Asha Studio option", and "New Asha-focused repo option".',
       'Do not rush or summarize early; the purpose of this scenario is to produce a naturally long real LLM response that remains observable while Rusty View renders it.',
     ].join('\n'),
     minStreamingMs,
     assistantStartedTimeoutMs: 180_000,
     assistantCompletedTimeoutMs: 300_000,
+    finalTextMinLength: 2_000,
+    finalTextMustInclude: [
+      'Executive recommendation',
+      'Asha core option',
+      'Asha Studio option',
+      'New Asha-focused repo option',
+    ],
   });
 
   live.note(

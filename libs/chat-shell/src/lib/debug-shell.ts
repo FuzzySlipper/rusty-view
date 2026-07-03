@@ -5,6 +5,7 @@ import {
   DestroyRef,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { ChatStore } from '@rusty-view/chat-store';
 import {
@@ -58,6 +59,7 @@ export class DebugShellComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly slashCommands =
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
+  private readonly transcriptViewport = viewChild(TranscriptViewportComponent);
 
   protected readonly showInspector = signal(true);
   /** Which inspector tab is shown: the raw event log or context diagnostics. */
@@ -220,6 +222,9 @@ export class DebugShellComponent {
           blockKinds: message.blocks.map((block) => block.kind),
           text: message.blocks.map((block) => block.content).join('\n'),
         })),
+      scrollToMessageId: (messageId: string) => {
+        this.transcriptViewport()?.scrollToMessageId(messageId);
+      },
     };
 
     const testWindow = window as RustyViewTestWindow;
@@ -254,6 +259,7 @@ interface RustyViewTestApi {
     readonly blockKinds: readonly string[];
     readonly text: string;
   }[];
+  scrollToMessageId(messageId: string): void;
 }
 
 type RustyViewTestWindow = Window &

@@ -33,6 +33,8 @@ const SESSION_SUMMARY = {
 const USER_BODY = 'The door creaks open.';
 const ASSISTANT_BODY =
   'A figure steps through the doorway, into the amber light.';
+const LIVE_SCROLL_SESSION_ID = 'render-live-scroll-session';
+const LIVE_SCROLL_ASSISTANT_ID = 'msg_live_scroll_asst';
 
 const MESSAGE_EVENTS = [
   {
@@ -118,6 +120,24 @@ function envelope(data: unknown): string {
   });
 }
 
+function sseFrame(
+  sessionId: string,
+  eventId: string,
+  sequenceId: number,
+  kind: string,
+  payload: unknown,
+): string {
+  const data = JSON.stringify({
+    event_id: eventId,
+    session_id: sessionId,
+    sequence_id: sequenceId,
+    created_at: '2026-06-22T10:10:00Z',
+    kind,
+    payload,
+  });
+  return `id: ${eventId}\ndata: ${data}\n\n`;
+}
+
 function fulfillJson(route: Route, data: unknown): Promise<void> {
   return route.fulfill({
     status: 200,
@@ -195,6 +215,147 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(toolBlock.locator('.rv-block__content')).toContainText('hits');
   await toolBlock.locator('.rv-block__tool-header').click();
   await expect(toolBlock.locator('.rv-block__content')).toHaveCount(0);
+});
+
+test('scrollToMessageId materializes a live assistant row after tall history', async ({
+  page,
+}) => {
+  const historicalEvents = Array.from({ length: 28 }, (_, index) => ({
+    event_id: `${LIVE_SCROLL_SESSION_ID}:${index + 1}`,
+    session_id: LIVE_SCROLL_SESSION_ID,
+    sequence_id: index + 1,
+    created_at: '2026-06-22T10:00:00Z',
+    kind: 'message_created',
+    payload: {
+      message_id: `msg_live_scroll_user_${index + 1}`,
+      role: 'user',
+      body: [
+        `Historical prompt ${index + 1}`,
+        'This row is intentionally tall so autosize virtual scroll cannot rely on a fixed 50px item estimate.',
+        'It mimics accumulated live-test history with long prompts, tool requests, and diagnostic instructions above the new assistant turn.',
+        'The target assistant row lands after these messages and must still be reachable through scrollToMessageId.',
+      ].join('\n'),
+    },
+  }));
+  const liveAssistantEvents = [
+    sseFrame(
+      LIVE_SCROLL_SESSION_ID,
+      `${LIVE_SCROLL_SESSION_ID}:29`,
+      29,
+      'assistant_turn_started',
+      {},
+    ),
+    sseFrame(
+      LIVE_SCROLL_SESSION_ID,
+      `${LIVE_SCROLL_SESSION_ID}:30`,
+      30,
+      'assistant_text_delta',
+      {
+        message_id: LIVE_SCROLL_ASSISTANT_ID,
+        delta:
+          'Live assistant row rendered after SSE state update and tall history.',
+      },
+    ),
+    sseFrame(
+      LIVE_SCROLL_SESSION_ID,
+      `${LIVE_SCROLL_SESSION_ID}:31`,
+      31,
+      'assistant_message_completed',
+      {
+        message_id: LIVE_SCROLL_ASSISTANT_ID,
+        status: 'completed',
+      },
+    ),
+  ];
+  const liveSessionSummary = {
+    session_id: LIVE_SCROLL_SESSION_ID,
+    agent_id: 'tester',
+    profile_id: 'tester',
+    kind: 'full',
+    status: 'idle',
+    title: 'Live Scroll Fixture',
+    latest_cursor: `${LIVE_SCROLL_SESSION_ID}:28`,
+    created_at: '2026-06-22T09:00:00Z',
+    updated_at: '2026-06-22T10:00:00Z',
+    message_count: 29,
+    tool_event_count: 0,
+  };
+
+  await page.route('**/v1/chat/commands', (route) =>
+    fulfillJson(route, { commands: [] }),
+  );
+  await page.route('**/v1/chat/sessions', (route) =>
+    fulfillJson(route, {
+      items: [liveSessionSummary],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    }),
+  );
+  await page.route('**/v1/chat/sessions/*/events*', (route) =>
+    fulfillJson(route, {
+      items: [],
+      latest_cursor: `${LIVE_SCROLL_SESSION_ID}:31`,
+      has_more: false,
+    }),
+  );
+  await page.route('**/v1/chat/sessions/*/stream*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: liveAssistantEvents.join(''),
+    }),
+  );
+  await page.route('**/v1/chat/sessions/*', (route) =>
+    fulfillJson(route, {
+      session: liveSessionSummary,
+      events: historicalEvents,
+    }),
+  );
+
+  await page.goto('/');
+
+  await page.locator('.rv-profile').first().click();
+  await expect
+    .poll(() =>
+      page.evaluate((messageId) => {
+        const api = (
+          window as Window & {
+            __RUSTY_VIEW_TEST__?: {
+              getMessages(): readonly { readonly id: string }[];
+            };
+          }
+        ).__RUSTY_VIEW_TEST__;
+        return api?.getMessages().some((message) => message.id === messageId);
+      }, LIVE_SCROLL_ASSISTANT_ID),
+    )
+    .toBe(true);
+
+  await page.getByTestId('transcript-viewport').evaluate((element) => {
+    element.scrollTo({ top: 0 });
+  });
+  await expect(
+    page.locator(
+      `[data-testid="message-row"][data-message-id="${LIVE_SCROLL_ASSISTANT_ID}"]`,
+    ),
+  ).toHaveCount(0);
+
+  await page.evaluate((messageId) => {
+    const api = (
+      window as Window & {
+        __RUSTY_VIEW_TEST__?: { scrollToMessageId(id: string): void };
+      }
+    ).__RUSTY_VIEW_TEST__;
+    api?.scrollToMessageId(messageId);
+  }, LIVE_SCROLL_ASSISTANT_ID);
+
+  const assistantRow = page.locator(
+    `[data-testid="message-row"][data-message-id="${LIVE_SCROLL_ASSISTANT_ID}"]`,
+  );
+  await expect(assistantRow).toBeVisible({ timeout: 10_000 });
+  await expect(assistantRow).toContainText(
+    'Live assistant row rendered after SSE state update',
+  );
 });
 
 /**

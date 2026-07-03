@@ -111,6 +111,7 @@ export class TranscriptViewportComponent {
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
+  private readonly pendingSeekTimers = new Set<ReturnType<typeof setTimeout>>();
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -205,6 +206,13 @@ export class TranscriptViewportComponent {
   private viewportReady = false;
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      for (const timer of this.pendingSeekTimers) {
+        clearTimeout(timer);
+      }
+      this.pendingSeekTimers.clear();
+    });
+
     // Keep the rendered data in sync with the input once the viewport is ready.
     effect(() => {
       const msgs = this.messages();
@@ -303,6 +311,11 @@ export class TranscriptViewportComponent {
 
   /** Scroll to the bottom of the transcript (latest message). */
   scrollToBottom(): void {
+    this.scrollToBottomOffset();
+    this.settleScrollToBottom(0);
+  }
+
+  private scrollToBottomOffset(): void {
     const vp = this.viewport();
     // Scroll to a very large offset — CDK clamps to the maximum scrollable
     // distance. This works with both fixed-size and autosize strategies.
@@ -310,11 +323,11 @@ export class TranscriptViewportComponent {
   }
 
   scrollToMessageId(messageId: string): void {
-    const msgs = this.renderMessages();
+    const msgs = this.currentMessagesForScroll();
     const index = msgs.findIndex((m) => m.id === messageId);
     if (index >= 0) {
       this.afterNextRender(() => {
-        this.scrollToIndex(index);
+        this.seekMessageIntoView(messageId, index, 0);
       });
     }
   }
@@ -391,16 +404,118 @@ export class TranscriptViewportComponent {
     return target?.label ?? fallback;
   }
 
-  /**
-   * Scroll to a specific message index. Uses an estimated pixel offset based
-   * on the default item height, since the autosize strategy does not support
-   * `scrollToIndex`. The autosize strategy will re-measure and adjust once
-   * the target item is rendered.
-   */
-  private scrollToIndex(index: number): void {
+  private seekMessageIntoView(
+    messageId: string,
+    index: number,
+    attempt: number,
+  ): void {
+    if (this.viewportReady) {
+      this.renderMessages.set(this.messages());
+    }
+
+    const rendered = this.findRenderedMessageElement(messageId);
+    if (rendered !== null) {
+      rendered.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
+    this.scrollTowardIndex(index);
+
+    if (attempt >= 12) return;
+    const timer = setTimeout(() => {
+      this.pendingSeekTimers.delete(timer);
+      this.afterNextRender(() => {
+        this.seekMessageIntoView(messageId, index, attempt + 1);
+      });
+    }, 50);
+    this.pendingSeekTimers.add(timer);
+  }
+
+  private scrollTowardIndex(index: number): void {
     const vp = this.viewport();
-    const offset = index * TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX;
-    vp.scrollToOffset(offset, 'smooth');
+    vp.checkViewportSize();
+
+    const msgs = this.currentMessagesForScroll();
+    if (msgs.length === 0) return;
+
+    const clampedIndex = Math.max(0, Math.min(index, msgs.length - 1));
+    if (clampedIndex === 0) {
+      vp.scrollToOffset(0);
+      return;
+    }
+
+    if (clampedIndex >= msgs.length - 1) {
+      this.scrollToBottom();
+      return;
+    }
+
+    const range = vp.getRenderedRange();
+    const averageItemSize = this.averageRenderedItemSize();
+    const currentOffset = vp.measureScrollOffset('top');
+
+    let nextOffset: number;
+    if (range.end > 0 && clampedIndex >= range.end) {
+      nextOffset =
+        currentOffset + (clampedIndex - range.end + 1) * averageItemSize;
+    } else if (range.start > 0 && clampedIndex < range.start) {
+      nextOffset =
+        currentOffset - (range.start - clampedIndex + 1) * averageItemSize;
+    } else {
+      nextOffset = clampedIndex * averageItemSize;
+    }
+
+    vp.scrollToOffset(Math.max(0, nextOffset));
+  }
+
+  private currentMessagesForScroll(): readonly ChatMessage[] {
+    return this.messages();
+  }
+
+  private averageRenderedItemSize(): number {
+    const vp = this.viewport();
+    const range = vp.getRenderedRange();
+    const renderedCount = Math.max(0, range.end - range.start);
+    if (renderedCount === 0) {
+      return TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX;
+    }
+
+    const measured = vp.measureRenderedContentSize();
+    if (measured <= 0) {
+      return TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX;
+    }
+
+    return Math.max(
+      TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX,
+      measured / renderedCount,
+    );
+  }
+
+  private findRenderedMessageElement(messageId: string): HTMLElement | null {
+    const host = this.viewport().elementRef.nativeElement;
+    const items = host.querySelectorAll<HTMLElement>(
+      '[data-testid="transcript-item"]',
+    );
+    for (let i = 0; i < items.length; i++) {
+      const item = items.item(i);
+      if (item.dataset['messageId'] === messageId) return item;
+    }
+    return null;
+  }
+
+  private settleScrollToBottom(attempt: number): void {
+    if (attempt >= 12) return;
+    const timer = setTimeout(() => {
+      this.pendingSeekTimers.delete(timer);
+      this.afterNextRender(() => {
+        const bottomOffset = this.viewport().measureScrollOffset('bottom');
+        if (bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
+          return;
+        }
+        this.scrollToBottomOffset();
+        this.settleScrollToBottom(attempt + 1);
+      });
+    }, 50);
+    this.pendingSeekTimers.add(timer);
   }
 
   /**
