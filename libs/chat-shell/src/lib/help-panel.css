@@ -9,7 +9,7 @@
   flex-direction: column;
   gap: var(--rv-space-md);
   padding: var(--rv-space-md);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-sm);
   color: var(--rv-color-text-secondary);
 }

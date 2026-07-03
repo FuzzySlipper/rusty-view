@@ -74,19 +74,46 @@ describe('ChatTheme', () => {
     ).toBe('');
   });
 
-  it('flattens prose to mono when fontFamily is mono', async () => {
+  it('applies selected font families to prose and UI chrome', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({ fontFamily: 'serif' });
+    TestBed.flushEffects?.();
+
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-sans'),
+    ).toContain('Georgia');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-ui'),
+    ).toContain('Georgia');
+    expect(theme.settings().fontFamily).toBe('serif');
+
+    await theme.update({ fontFamily: 'readable' });
+    TestBed.flushEffects?.();
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-ui'),
+    ).toContain('Atkinson Hyperlegible');
+    expect(theme.settings().fontFamily).toBe('readable');
+  });
+
+  it('flattens prose and UI chrome to mono when fontFamily is mono', async () => {
     const theme = TestBed.inject(ChatTheme);
     await theme.update({ fontFamily: 'mono' });
     TestBed.flushEffects?.();
     expect(
       document.documentElement.style.getPropertyValue('--rv-font-sans'),
     ).toContain('--rv-font-mono');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-ui'),
+    ).toContain('--rv-font-mono');
 
     await theme.update({ fontFamily: 'system' });
     TestBed.flushEffects?.();
     expect(
       document.documentElement.style.getPropertyValue('--rv-font-sans'),
-    ).toBe('');
+    ).toContain('system-ui');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-ui'),
+    ).toContain('system-ui');
   });
 
   it('deep-merges colours on update', async () => {

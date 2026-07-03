@@ -137,6 +137,14 @@ export class ChatStore implements OnDestroy {
   readonly isGenerating = computed(
     () => this.isStreaming() && this._activeSessionStatus() === 'active',
   );
+  /**
+   * Number of characters accumulated in the active turn's streaming text so far.
+   * Useful for progress visibility and live-test stall detection. Returns 0 when
+   * no active turn exists.
+   */
+  readonly streamingCharCount = computed(
+    () => this._projection().activeTurn?.streamingText.length ?? 0,
+  );
   readonly lastCursor = computed(() => this._projection().latestCursor ?? null);
 
   /**

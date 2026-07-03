@@ -26,6 +26,7 @@ import {
   clampFontScale,
   DEFAULT_APPEARANCE,
   densityMultiplier,
+  normalizeFontFamily,
   normalizeThemeId,
 } from './appearance-settings';
 import { CHAT_SETTINGS_STORAGE } from './chat-settings-storage';
@@ -62,6 +63,7 @@ const COLOR_FIELD_TOKENS: Readonly<Record<keyof AppearanceColors, string>> = {
  * document to the `tokens.css` cascade (including any `data-rv-theme` block).
  */
 const MANAGED_TOKENS: readonly string[] = [
+  TYPOGRAPHY_TOKENS.fontFamilyUi,
   TYPOGRAPHY_TOKENS.fontFamilySans,
   TYPOGRAPHY_TOKENS.fontSizeXs,
   TYPOGRAPHY_TOKENS.fontSizeSm,
@@ -75,6 +77,15 @@ const MANAGED_TOKENS: readonly string[] = [
 
 /** The data attribute on the document root used to select a named base theme. */
 const THEME_DATA_ATTRIBUTE = 'data-rv-theme';
+
+const FONT_FAMILY_STACKS: Readonly<Record<AppearanceFontFamily, string>> = {
+  system:
+    "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  readable:
+    "'Atkinson Hyperlegible', Aptos, 'Segoe UI', Verdana, Tahoma, sans-serif",
+  serif: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif",
+  mono: `var(${TYPOGRAPHY_TOKENS.fontFamilyMono})`,
+};
 
 /**
  * Angular Signals service that owns appearance preferences and applies them
@@ -197,13 +208,11 @@ export class ChatTheme {
 
   /** Coerce arbitrary settings into a valid, clamped {@link AppearanceSettings}. */
   private normalize(settings: Partial<AppearanceSettings>): AppearanceSettings {
-    const fontFamily: AppearanceFontFamily =
-      settings.fontFamily === 'mono' ? 'mono' : 'system';
     const density: AppearanceDensity =
       settings.density === 'compact' ? 'compact' : 'normal';
     return {
       themeId: normalizeThemeId(settings.themeId),
-      fontFamily,
+      fontFamily: normalizeFontFamily(settings.fontFamily),
       fontScale: clampFontScale(settings.fontScale ?? 1),
       density,
       colors: normalizeColors(settings.colors),
@@ -231,13 +240,11 @@ export class ChatTheme {
       root.style.removeProperty(token);
     }
 
-    // Font family: mono flattens the prose stack onto the mono stack.
-    if (settings.fontFamily === 'mono') {
-      root.style.setProperty(
-        TYPOGRAPHY_TOKENS.fontFamilySans,
-        `var(${TYPOGRAPHY_TOKENS.fontFamilyMono})`,
-      );
-    }
+    // Font family: app UI and prose follow the selected readable stack. The
+    // mono token remains stable for code, JSON, event ids, and similar detail.
+    const fontStack = FONT_FAMILY_STACKS[settings.fontFamily];
+    root.style.setProperty(TYPOGRAPHY_TOKENS.fontFamilyUi, fontStack);
+    root.style.setProperty(TYPOGRAPHY_TOKENS.fontFamilySans, fontStack);
 
     // Font scale: recompute the size tokens from the base anchors.
     const scale = settings.fontScale;

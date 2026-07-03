@@ -17,7 +17,7 @@
   background: transparent;
   padding: var(--rv-space-xs) var(--rv-space-md);
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-sm);
   cursor: pointer;
   transition:

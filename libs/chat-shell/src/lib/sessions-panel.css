@@ -15,7 +15,7 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
 }
 
 .rv-sessions-panel__header {

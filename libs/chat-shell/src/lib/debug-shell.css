@@ -8,6 +8,7 @@
   flex-direction: column;
   height: 100%;
   background: var(--rv-color-bg);
+  font-family: var(--rv-font-ui);
 }
 
 .rv-debug__header {
@@ -20,7 +21,7 @@
 }
 
 .rv-debug__title {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-sm);
   font-weight: var(--rv-font-weight-bold);
   color: var(--rv-color-text-primary);
@@ -39,7 +40,7 @@
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-xs);
   cursor: pointer;
 }

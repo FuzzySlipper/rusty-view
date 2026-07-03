@@ -211,6 +211,7 @@ export class DebugShellComponent {
       getConnectionStatus: () => this.store.connectionState().status,
       getIsGenerating: () => this.store.isGenerating(),
       getIsStreaming: () => this.store.isStreaming(),
+      getStreamingCharCount: () => this.store.streamingCharCount(),
       getLastCursor: () => this.store.lastCursor(),
       getMessageCount: () => this.store.messages().length,
       getRawEventCount: () => this.store.rawEvents().length,
@@ -249,6 +250,7 @@ interface RustyViewTestApi {
   getConnectionStatus(): string;
   getIsGenerating(): boolean;
   getIsStreaming(): boolean;
+  getStreamingCharCount(): number;
   getLastCursor(): string | null;
   getMessageCount(): number;
   getRawEventCount(): number;

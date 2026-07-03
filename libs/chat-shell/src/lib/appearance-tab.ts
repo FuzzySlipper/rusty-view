@@ -11,6 +11,7 @@ import {
   type AppearanceThemeId,
   type TextRenderMode,
   APPEARANCE_COLOR_FIELDS,
+  APPEARANCE_FONT_FAMILIES,
   APPEARANCE_THEMES,
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
@@ -46,6 +47,8 @@ export class AppearanceTabComponent {
   protected readonly colorFields = APPEARANCE_COLOR_FIELDS;
   /** Named base themes (task #3691). */
   protected readonly themes = APPEARANCE_THEMES;
+  /** App/prose font stacks. */
+  protected readonly fontFamilies = APPEARANCE_FONT_FAMILIES;
 
   /** Status line for the most recent import attempt (task #3691). */
   protected readonly importStatus = signal<string>('');

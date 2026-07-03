@@ -24,6 +24,7 @@ export {
   type AppearanceThemeId,
   type TextRenderMode,
   APPEARANCE_COLOR_FIELDS,
+  APPEARANCE_FONT_FAMILIES,
   APPEARANCE_THEMES,
   DEFAULT_APPEARANCE,
   BASE_FONT_SIZES,
@@ -33,6 +34,7 @@ export {
   FONT_SCALE_STEP,
   clampFontScale,
   densityMultiplier,
+  normalizeFontFamily,
   normalizeThemeId,
 } from './lib/appearance-settings';
 

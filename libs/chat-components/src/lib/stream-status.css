@@ -11,7 +11,7 @@
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface);
   cursor: pointer;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-secondary);
 }

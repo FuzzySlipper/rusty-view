@@ -25,6 +25,12 @@ async function fontMdToken(page: Page): Promise<string> {
   );
 }
 
+async function topMenuFontFamily(page: Page): Promise<string> {
+  return page
+    .locator('.rv-top-menu__item', { hasText: 'Options' })
+    .evaluate((el) => getComputedStyle(el).fontFamily);
+}
+
 test('top menu opens options, applies an appearance change, opens help', async ({
   page,
 }) => {
@@ -59,6 +65,13 @@ test('top menu opens options, applies an appearance change, opens help', async (
   await expect
     .poll(fontMdToken.bind(null, page), { timeout: 5_000 })
     .toBe('20px');
+
+  // Font family changes must reach the menu chrome too, not only transcript
+  // prose. This keeps downstream shells from inheriting a hardcoded mono menu.
+  await page.locator('.rv-appearance__seg', { hasText: 'Serif' }).click();
+  await expect
+    .poll(topMenuFontFamily.bind(null, page), { timeout: 5_000 })
+    .toContain('Georgia');
 
   // 4. Close Options, open Help.
   await page.locator('.rv-options__close').click();

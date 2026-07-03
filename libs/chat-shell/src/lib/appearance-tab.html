@@ -15,24 +15,18 @@
 
   <!-- Font family -->
   <fieldset class="rv-appearance__group">
-    <legend>Chat font family</legend>
+    <legend>App font family</legend>
     <div class="rv-appearance__segmented">
+      @for (option of fontFamilies; track option.id) {
       <button
         type="button"
         class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().fontFamily === 'system'"
-        (click)="setFontFamily('system')"
+        [class.rv-appearance__seg--active]="theme.settings().fontFamily === option.id"
+        (click)="setFontFamily(option.id)"
       >
-        System sans
+        {{ option.label }}
       </button>
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().fontFamily === 'mono'"
-        (click)="setFontFamily('mono')"
-      >
-        Mono
-      </button>
+      }
     </div>
   </fieldset>
 

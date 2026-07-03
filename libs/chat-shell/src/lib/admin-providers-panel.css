@@ -13,6 +13,7 @@
   display: flex;
   flex-direction: column;
   max-height: 82vh;
+  font-family: var(--rv-font-ui);
 }
 
 .rv-admin-providers__header,
@@ -33,7 +34,7 @@
 .rv-admin-providers__title,
 .rv-admin-providers h2 {
   margin: 0;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-sm);
   font-weight: var(--rv-font-weight-bold);
   color: var(--rv-color-text-primary);
@@ -47,7 +48,7 @@
   background: transparent;
   color: var(--rv-color-text-secondary);
   cursor: pointer;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-ui);
   font-size: var(--rv-font-size-xs);
   padding: var(--rv-space-xs) var(--rv-space-sm);
 }

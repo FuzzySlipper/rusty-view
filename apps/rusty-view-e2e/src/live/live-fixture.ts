@@ -96,6 +96,7 @@ interface RustyViewDebugSnapshot {
   readonly connectionStatus: string;
   readonly isGenerating: boolean;
   readonly isStreaming: boolean;
+  readonly streamingCharCount: number;
   readonly lastCursor: string | null;
   readonly messageCount: number;
   readonly rawEventCount: number;
@@ -113,6 +114,7 @@ interface RustyViewTestApi {
   getConnectionStatus(): string;
   getIsGenerating(): boolean;
   getIsStreaming(): boolean;
+  getStreamingCharCount(): number;
   getLastCursor(): string | null;
   getMessageCount(): number;
   getRawEventCount(): number;
@@ -617,6 +619,7 @@ export class LiveConversation {
         connectionStatus: api.getConnectionStatus(),
         isGenerating: api.getIsGenerating(),
         isStreaming: api.getIsStreaming(),
+        streamingCharCount: api.getStreamingCharCount(),
         lastCursor: api.getLastCursor(),
         messageCount: api.getMessageCount(),
         rawEventCount: api.getRawEventCount(),
@@ -660,6 +663,7 @@ export class LiveConversation {
     this.recordTimeline('debug-snapshot:captured', {
       name,
       rawEventCount: snapshot?.rawEventCount,
+      streamingCharCount: snapshot?.streamingCharCount,
       messageCount: snapshot?.messageCount,
       isStreaming: snapshot?.isStreaming,
       isGenerating: snapshot?.isGenerating,
@@ -852,6 +856,7 @@ export class LiveConversation {
         name: entry.name,
         path: entry.path,
         capturedAtMs: entry.capturedAtMs,
+        streamingCharCount: entry.snapshot?.streamingCharCount,
         rawEventCount: entry.snapshot?.rawEventCount,
         messageCount: entry.snapshot?.messageCount,
         isStreaming: entry.snapshot?.isStreaming,

@@ -13,11 +13,22 @@
  */
 
 /**
- * Which typeface the chat stream / app prose renders in. `system` is the
- * default sans stack; `mono` flattens prose to the monospace stack for a
- * terminal/debug feel. Applied by overriding the `--rv-font-sans` token.
+ * Which typeface the app and chat prose render in. Applied by overriding the
+ * `--rv-font-sans` and `--rv-font-ui` tokens while keeping `--rv-font-mono`
+ * available for semantic code, event, and JSON detail surfaces.
  */
-export type AppearanceFontFamily = 'system' | 'mono';
+export type AppearanceFontFamily = 'system' | 'readable' | 'serif' | 'mono';
+
+/** Ordered font-family choices for the Appearance selector. */
+export const APPEARANCE_FONT_FAMILIES: ReadonlyArray<{
+  readonly id: AppearanceFontFamily;
+  readonly label: string;
+}> = [
+  { id: 'system', label: 'System sans' },
+  { id: 'readable', label: 'Readable sans' },
+  { id: 'serif', label: 'Serif' },
+  { id: 'mono', label: 'Mono' },
+];
 
 /**
  * Density of controls and rows. `compact` shrinks the density tokens toward a
@@ -188,6 +199,16 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   colors: {},
   textRenderMode: 'auto',
 };
+
+/** Coerce an arbitrary value into a valid font-family choice. */
+export function normalizeFontFamily(value: unknown): AppearanceFontFamily {
+  return value === 'readable' ||
+    value === 'serif' ||
+    value === 'mono' ||
+    value === 'system'
+    ? value
+    : 'system';
+}
 
 /** Coerce an arbitrary value into a valid named theme id (task #3691). */
 export function normalizeThemeId(value: unknown): AppearanceThemeId {

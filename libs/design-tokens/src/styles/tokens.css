@@ -52,6 +52,7 @@
     Consolas, monospace;
   --rv-font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --rv-font-ui: var(--rv-font-mono);
   --rv-font-size-xs: 11px;
   --rv-font-size-sm: 12px;
   --rv-font-size-md: 13px;
