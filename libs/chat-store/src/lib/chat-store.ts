@@ -434,9 +434,8 @@ export class ChatStore implements OnDestroy {
   private async catchUpAfterWrite(
     sessionId: string,
     cursorBeforeWrite: string | null,
-    latestCursor: string,
+    _latestCursor: string,
   ): Promise<void> {
-    if (cursorBeforeWrite === latestCursor) return;
     const events = await this.transport.replayAllEvents(sessionId, {
       ...(cursorBeforeWrite !== null ? { cursor: cursorBeforeWrite } : {}),
     });

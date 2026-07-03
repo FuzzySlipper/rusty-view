@@ -529,6 +529,92 @@ describe('ChatStore', () => {
     );
   });
 
+  it('sendMessage replays even when POST returns the stale pre-send cursor', async () => {
+    const replayed: ChatEvent[] = [
+      {
+        event_id: 'cur_1',
+        session_id: 'sess_test',
+        sequence_id: 1,
+        created_at: '2026-06-22T10:00:01Z',
+        kind: 'message_created',
+        payload: {
+          message_id: 'msg_1',
+          role: 'user',
+          body: 'long response please',
+        },
+      },
+      {
+        event_id: 'cur_2',
+        session_id: 'sess_test',
+        sequence_id: 2,
+        created_at: '2026-06-22T10:00:02Z',
+        kind: 'assistant_turn_started',
+        payload: {} as ChatEvent['payload'],
+      },
+      {
+        event_id: 'cur_3',
+        session_id: 'sess_test',
+        sequence_id: 3,
+        created_at: '2026-06-22T10:00:03Z',
+        kind: 'assistant_text_delta',
+        payload: { message_id: 'a1', delta: 'streamed text' },
+      },
+      {
+        event_id: 'cur_4',
+        session_id: 'sess_test',
+        sequence_id: 4,
+        created_at: '2026-06-22T10:00:04Z',
+        kind: 'assistant_message_completed',
+        payload: { message_id: 'a1', body: 'streamed text' },
+      },
+      {
+        event_id: 'cur_5',
+        session_id: 'sess_test',
+        sequence_id: 5,
+        created_at: '2026-06-22T10:00:05Z',
+        kind: 'assistant_turn_finished',
+        payload: {} as ChatEvent['payload'],
+      },
+    ];
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        events: [
+          {
+            event_id: 'cur_0',
+            session_id: 'sess_test',
+            sequence_id: 0,
+            created_at: '2026-06-22T10:00:00Z',
+            kind: 'session_snapshot',
+            payload: { session: emptyOpenResult().session },
+          },
+        ],
+      },
+      sendResult: {
+        status: 'accepted',
+        message_id: 'msg_1',
+        latest_cursor: 'cur_0',
+      },
+      replayEvents: replayed,
+      streamEvents: [],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('long response please');
+
+    expect(transport.replayAllEvents).toHaveBeenCalledWith('sess_test', {
+      cursor: 'cur_0',
+    });
+    expect(store.messages().map((message) => message.id)).toEqual([
+      'msg_1',
+      'a1',
+    ]);
+    expect(store.messages().at(-1)?.status).toBe('completed');
+    expect(store.messages().at(-1)?.blocks[0]?.content).toBe('streamed text');
+    expect(store.isStreaming()).toBe(false);
+  });
+
   it('catch-up ingests a full multi-page turn so a terminal event on a later page clears streaming', async () => {
     // replayAllEvents (transport) follows has_more across pages and hands the
     // store the concatenated result — including the terminal turn event that Crew

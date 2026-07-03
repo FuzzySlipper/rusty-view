@@ -70,8 +70,24 @@ Useful environment variables:
 ```bash
 RV_LIVE_BACKEND_URL=http://127.0.0.1:9347
 RV_LIVE_PROFILE=tester
+RV_LIVE_PROFILE_PREFIX=rv-live-custom
+RV_LIVE_PROFILE_ISOLATION=0
 RV_LIVE_MIN_STREAMING_MS=15000
 ```
+
+`RV_LIVE_PROFILE` names the existing source profile whose provider/tool defaults
+should be reused. When `RV_LIVE_RUN=1`, the live fixture isolates by default: it
+creates one fresh Rusty Crew profile/session per Playwright test through
+`POST /v1/admin/control/profiles`, using a generated `rv-live-*` profile id. Set
+`RV_LIVE_PROFILE_PREFIX` only to customize that generated id prefix. Set
+`RV_LIVE_PROFILE_ISOLATION=0` only for deliberate debugging against an existing
+profile transcript.
+
+The isolated profile derives its provider alias and local tool profile from the
+active session for `RV_LIVE_PROFILE`, so `tester` can remain the configured
+cheap-provider source without sharing transcript history. Override those
+defaults with `RV_LIVE_PROVIDER_ALIAS` and `RV_LIVE_LOCAL_TOOL_PROFILE_ID` only
+when a scenario needs a different runtime shape.
 
 Run a focused scenario:
 
@@ -95,7 +111,11 @@ pnpm e2e:live:headed
 ## Artifacts
 
 Each live scenario writes artifacts under Playwright's test output directory in
-a `live-artifacts` folder. Broker-managed runs also provide
+a `live-artifacts` folder. Rusty View's Playwright config defaults this output
+to `/tmp/rusty-view/playwright-output/<playwright-pid>` so artifact writes do
+not trigger Angular/Nx dev-server rebuilds or browser reloads. Override it with
+`RV_PLAYWRIGHT_OUTPUT_DIR` only when the chosen path is outside watched
+workspace build/source directories. Broker-managed runs also provide
 `PLAYWRIGHT_BROKER_ARTIFACT_ROOT`, `PLAYWRIGHT_BROKER_EVIDENCE_PATH`, and a
 `run-index.json` that links the test run, server allocation, Den task metadata,
 and artifact paths. The broker marks live UI runs as requiring human/agent
@@ -146,11 +166,23 @@ Live scenarios should:
 1. Require `RV_LIVE_RUN=1`.
 2. Open the real app and select a real profile.
 3. Send prompts through the real message composer.
-4. Wait for assistant start/completion through the rendered transcript.
-5. Capture screenshots at meaningful milestones.
-6. Use visual-impact checks for controls.
-7. Capture debug snapshots at meaningful milestones.
-8. Leave a short note describing what a human/agent inspected.
+4. Correlate the turn to the user message that was just rendered.
+5. Wait for assistant start/completion after that user message, through the
+   rendered transcript.
+6. Capture screenshots at meaningful milestones.
+7. Use visual-impact checks for controls.
+8. Capture debug snapshots at meaningful milestones.
+9. Leave a short note describing what a human/agent inspected.
+
+The live fixture anchors each turn to the exact user prompt it just sent before
+looking for the assistant response. This lets the suite run against a profile
+with old transcript history without generic "latest assistant" waits passing on
+stale rows. When adding scenarios, keep prompts unique and substantive enough
+that the rendered response can be inspected as the response to that turn.
+Profile-prefix isolation is stronger and should be the default for full
+`@live-agent` certification; prompt correlation remains a guardrail inside each
+isolated profile, for deliberate non-isolated reruns, and for refresh-in-test
+flows.
 
 Useful timeline milestones to check in the evidence packet:
 

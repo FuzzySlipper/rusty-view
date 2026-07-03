@@ -63,7 +63,9 @@ interface LiveTurnEvidence {
   readonly promptPreview: string;
   readonly promptLength: number;
   beforeAssistantCount: number;
+  beforeUserCount?: number;
   userSentAtMs?: number;
+  userMessageId?: string;
   assistantStateAtMs?: number;
   assistantVisibleAtMs?: number;
   assistantContentVisibleAtMs?: number;
@@ -91,7 +93,41 @@ interface VisualImpactEvidence {
   readonly capturedAtMs: number;
 }
 
-interface RustyViewDebugSnapshot {
+interface LiveProfileIsolation {
+  readonly enabled: boolean;
+  readonly sourceProfile: string;
+  readonly profilePrefix?: string;
+  providerAlias?: string;
+  localToolProfileId?: string;
+  createRequest?: LiveProfileCreateRequest;
+  createdAtMs?: number;
+  createdSessionId?: string;
+}
+
+export interface IsolatedProfileIdInput {
+  readonly prefix: string;
+  readonly title: string;
+  readonly workerIndex: number;
+  readonly retry: number;
+  readonly startedAtMs: number;
+}
+
+export interface LiveProfileIsolationPrefixInput {
+  readonly liveRun?: string;
+  readonly profilePrefix?: string;
+  readonly profileIsolation?: string;
+}
+
+export interface LiveProfileCreateRequest {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly providerAlias: string;
+  readonly kind: 'full';
+  readonly localToolProfileId: string;
+  readonly reason: string;
+}
+
+export interface RustyViewDebugSnapshot {
   readonly activeSessionId: string | null;
   readonly connectionStatus: string;
   readonly isGenerating: boolean;
@@ -141,7 +177,8 @@ export const test = base.extend<{ live: LiveConversation }>({
 
 export class LiveConversation {
   readonly backendUrl = env('RV_LIVE_BACKEND_URL') ?? 'http://127.0.0.1:9347';
-  readonly targetProfile = env('RV_LIVE_PROFILE') ?? 'tester';
+  readonly sourceProfile = env('RV_LIVE_PROFILE') ?? 'tester';
+  readonly targetProfile: string;
 
   private readonly consoleEntries: ConsoleEntry[] = [];
   private readonly pageErrors: PageErrorEntry[] = [];
@@ -152,12 +189,45 @@ export class LiveConversation {
   private readonly turns: LiveTurnEvidence[] = [];
   private readonly visualChecks: VisualImpactEvidence[] = [];
   private readonly startedAt = Date.now();
+  private readonly profileIsolation: LiveProfileIsolation;
+  private profilePrepared = false;
   private traceStarted = false;
 
   constructor(
     readonly page: Page,
     private readonly testInfo: TestInfo,
-  ) {}
+  ) {
+    const profilePrefix = liveProfileIsolationPrefix({
+      liveRun: env('RV_LIVE_RUN'),
+      profilePrefix: env('RV_LIVE_PROFILE_PREFIX'),
+      profileIsolation: env('RV_LIVE_PROFILE_ISOLATION'),
+    });
+    if (profilePrefix !== undefined && profilePrefix.length > 0) {
+      const profileId = isolatedLiveProfileId({
+        prefix: profilePrefix,
+        title: testInfo.title,
+        workerIndex: testInfo.workerIndex,
+        retry: testInfo.retry,
+        startedAtMs: this.startedAt,
+      });
+      this.targetProfile = profileId;
+      this.profileIsolation = {
+        enabled: true,
+        sourceProfile: this.sourceProfile,
+        profilePrefix,
+        providerAlias:
+          env('RV_LIVE_PROVIDER_ALIAS') ??
+          env('RV_LIVE_PROFILE_PROVIDER_ALIAS'),
+        localToolProfileId: env('RV_LIVE_LOCAL_TOOL_PROFILE_ID'),
+      };
+    } else {
+      this.targetProfile = this.sourceProfile;
+      this.profileIsolation = {
+        enabled: false,
+        sourceProfile: this.sourceProfile,
+      };
+    }
+  }
 
   get artifactDir(): string {
     return this.testInfo.outputPath('live-artifacts');
@@ -244,6 +314,7 @@ export class LiveConversation {
   }
 
   async openAppAndSelectProfile(): Promise<void> {
+    await this.ensureLiveProfileReady();
     await this.page.goto('/');
     this.recordTimeline('app:navigated', { url: this.page.url() });
     await expect(this.page.getByTestId('debug-shell')).toBeVisible({
@@ -289,7 +360,9 @@ export class LiveConversation {
       turn.messageCountAtStart = beforeSnapshot.messageCount;
     }
     const beforeAssistantCount = (await this.assistantMessageStates()).length;
+    const beforeUserCount = (await this.userMessageStates()).length;
     turn.beforeAssistantCount = beforeAssistantCount;
+    turn.beforeUserCount = beforeUserCount;
 
     await this.sendPrompt(options.prompt);
     turn.userSentAtMs = Date.now();
@@ -297,12 +370,24 @@ export class LiveConversation {
       turn: turn.index,
       promptLength: turn.promptLength,
       beforeAssistantCount,
+      beforeUserCount,
     });
     await this.screenshot(this.nextArtifactName('prompt-sent'));
     await this.captureDebugSnapshot(`turn-${turn.index}-prompt-sent`);
 
-    const assistant = await this.waitForNextAssistantMessage(
-      beforeAssistantCount,
+    const sentUser = await this.waitForSentUserMessage(
+      options.prompt,
+      beforeUserCount,
+      options.assistantStartedTimeoutMs ?? 120_000,
+    );
+    turn.userMessageId = sentUser.id;
+    this.recordTimeline('turn:user-message-correlated', {
+      turn: turn.index,
+      messageId: sentUser.id,
+    });
+
+    const assistant = await this.waitForNextAssistantMessageAfterUser(
+      sentUser.id,
       options.assistantStartedTimeoutMs ?? 120_000,
     );
     turn.assistantStateAtMs = Date.now();
@@ -342,8 +427,8 @@ export class LiveConversation {
       await this.captureDebugSnapshot(`turn-${turn.index}-streaming-window`);
     }
 
-    const completedAssistant = await this.waitForAssistantCompletedAfter(
-      beforeAssistantCount,
+    const completedAssistant = await this.waitForAssistantCompletedAfterUser(
+      sentUser.id,
       options.assistantCompletedTimeoutMs ?? 180_000,
     );
     turn.assistantCompletedAtMs = Date.now();
@@ -414,6 +499,60 @@ export class LiveConversation {
     if (assistantState === undefined) {
       throw new Error(
         'Assistant message state appeared but could not be read.',
+      );
+    }
+
+    const assistant = this.messageById(assistantState.id);
+    await this.ensureMessageRowVisible(assistantState.id, 10_000);
+    return assistant;
+  }
+
+  async waitForSentUserMessage(
+    prompt: string,
+    previousCount: number,
+    timeoutMs: number,
+  ): Promise<RustyViewDebugSnapshot['messages'][number]> {
+    await expect
+      .poll(
+        async () =>
+          findSentUserMessage(
+            await this.userMessageStates(),
+            prompt,
+            previousCount,
+          ) !== undefined,
+        { timeout: timeoutMs },
+      )
+      .toBe(true);
+
+    const userState = findSentUserMessage(
+      await this.userMessageStates(),
+      prompt,
+      previousCount,
+    );
+    if (userState === undefined) {
+      throw new Error('Sent user message appeared but could not be read.');
+    }
+    return userState;
+  }
+
+  async waitForNextAssistantMessageAfterUser(
+    userMessageId: string,
+    timeoutMs: number,
+  ): Promise<Locator> {
+    await expect
+      .poll(
+        async () =>
+          (await this.assistantMessageStatesAfterUser(userMessageId)).length,
+        { timeout: timeoutMs },
+      )
+      .toBeGreaterThan(0);
+
+    const assistantState = (
+      await this.assistantMessageStatesAfterUser(userMessageId)
+    ).at(0);
+    if (assistantState === undefined) {
+      throw new Error(
+        'Assistant message after the sent user message appeared but could not be read.',
       );
     }
 
@@ -502,6 +641,35 @@ export class LiveConversation {
       .at(-1);
     if (completedState === undefined) {
       throw new Error('Assistant completed but its message state disappeared.');
+    }
+
+    const assistant = this.messageById(completedState.id);
+    await this.ensureMessageRowVisible(completedState.id, 10_000);
+    await expect(assistant).toHaveAttribute('data-message-status', 'completed');
+    return assistant;
+  }
+
+  async waitForAssistantCompletedAfterUser(
+    userMessageId: string,
+    timeoutMs: number,
+  ): Promise<Locator> {
+    await expect
+      .poll(
+        async () =>
+          (await this.assistantMessageStatesAfterUser(userMessageId)).find(
+            (message) => message.status === 'completed',
+          )?.id ?? null,
+        { timeout: timeoutMs },
+      )
+      .not.toBeNull();
+
+    const completedState = (
+      await this.assistantMessageStatesAfterUser(userMessageId)
+    ).find((message) => message.status === 'completed');
+    if (completedState === undefined) {
+      throw new Error(
+        'Assistant completed after the sent user message but its message state disappeared.',
+      );
     }
 
     const assistant = this.messageById(completedState.id);
@@ -754,6 +922,162 @@ export class LiveConversation {
     }
   }
 
+  private async ensureLiveProfileReady(): Promise<void> {
+    if (this.profilePrepared) {
+      return;
+    }
+
+    if (!this.profileIsolation.enabled) {
+      this.profilePrepared = true;
+      this.recordTimeline('profile:isolation-disabled', {
+        targetProfile: this.targetProfile,
+      });
+      return;
+    }
+
+    const defaults = await this.resolveLiveProfileDefaults();
+    const request = liveProfileCreateRequest({
+      profileId: this.targetProfile,
+      displayName: `Live ${this.testInfo.title}`,
+      providerAlias: defaults.providerAlias,
+      localToolProfileId: defaults.localToolProfileId,
+      reason: `rusty-view live test isolation for ${this.testInfo.title}`,
+    });
+    this.profileIsolation.providerAlias = defaults.providerAlias;
+    this.profileIsolation.localToolProfileId = defaults.localToolProfileId;
+    this.profileIsolation.createRequest = request;
+
+    this.recordTimeline('profile:create:start', {
+      profileId: request.profileId,
+      providerAlias: request.providerAlias,
+      localToolProfileId: request.localToolProfileId,
+    });
+    const response = await fetch(
+      `${this.backendUrl}/v1/admin/control/profiles`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(
+        `Failed to create isolated live profile ${request.profileId}: HTTP ${response.status} ${text}`,
+      );
+    }
+
+    const payload = parseJsonObject(text);
+    const control = adminControlPayload(payload);
+    const outcome = recordValue(control, 'outcome');
+    const status = stringValue(outcome, 'status');
+    if (status !== undefined && status !== 'completed') {
+      const summary = stringValue(outcome, 'summary');
+      const reasonCode = stringValue(outcome, 'reasonCode');
+      throw new Error(
+        `Failed to create isolated live profile ${request.profileId}: control status ${status}${
+          reasonCode !== undefined ? ` (${reasonCode})` : ''
+        }${summary !== undefined ? `: ${summary}` : ''}`,
+      );
+    }
+
+    const result = recordValue(outcome, 'result');
+    const sessionId = stringValue(result, 'sessionId');
+    this.profileIsolation.createdAtMs = Date.now();
+    if (sessionId !== undefined) {
+      this.profileIsolation.createdSessionId = sessionId;
+    }
+    this.profilePrepared = true;
+    this.recordTimeline('profile:create:complete', {
+      profileId: request.profileId,
+      sessionId,
+    });
+    this.note(
+      `Created isolated live profile ${request.profileId} using provider ${request.providerAlias} and local tool profile ${request.localToolProfileId}.`,
+    );
+  }
+
+  private async resolveLiveProfileDefaults(): Promise<{
+    readonly providerAlias: string;
+    readonly localToolProfileId: string;
+  }> {
+    if (
+      this.profileIsolation.providerAlias !== undefined &&
+      this.profileIsolation.localToolProfileId !== undefined
+    ) {
+      return {
+        providerAlias: this.profileIsolation.providerAlias,
+        localToolProfileId: this.profileIsolation.localToolProfileId,
+      };
+    }
+
+    const sessionId = await this.sourceProfileSessionId();
+    if (sessionId !== undefined) {
+      const context = await this.fetchJson(
+        `/v1/chat/sessions/${encodeURIComponent(sessionId)}/context`,
+      );
+      const data = adminControlPayload(context);
+      const provider = recordValue(data, 'provider');
+      const tools = recordValue(data, 'tools');
+      const providerAlias =
+        this.profileIsolation.providerAlias ?? stringValue(provider, 'alias');
+      const localToolProfileId =
+        this.profileIsolation.localToolProfileId ??
+        stringValue(tools, 'local_tool_profile_id') ??
+        stringValue(tools, 'localToolProfileId');
+      if (providerAlias !== undefined && localToolProfileId !== undefined) {
+        this.recordTimeline('profile:create:defaults-derived', {
+          sourceProfile: this.sourceProfile,
+          sessionId,
+          providerAlias,
+          localToolProfileId,
+        });
+        return { providerAlias, localToolProfileId };
+      }
+    }
+
+    const providerAlias = this.profileIsolation.providerAlias ?? 'default';
+    const localToolProfileId =
+      this.profileIsolation.localToolProfileId ?? 'full_agent';
+    this.recordTimeline('profile:create:defaults-fallback', {
+      sourceProfile: this.sourceProfile,
+      providerAlias,
+      localToolProfileId,
+    });
+    return { providerAlias, localToolProfileId };
+  }
+
+  private async sourceProfileSessionId(): Promise<string | undefined> {
+    const payload = await this.fetchJson('/v1/chat/sessions');
+    const data = adminControlPayload(payload);
+    const items = data['items'];
+    if (!Array.isArray(items)) {
+      return undefined;
+    }
+    const matching = items.find((item) => {
+      if (!isRecord(item)) return false;
+      return (
+        stringValue(item, 'profile_id') === this.sourceProfile &&
+        stringValue(item, 'status') !== 'archived'
+      );
+    });
+    return isRecord(matching) ? stringValue(matching, 'session_id') : undefined;
+  }
+
+  private async fetchJson(path: string): Promise<Record<string, unknown>> {
+    const response = await fetch(`${this.backendUrl}${path}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(
+        `Rusty Crew request failed for ${path}: HTTP ${response.status} ${text}`,
+      );
+    }
+    return parseJsonObject(text);
+  }
+
   private async assistantMessageStates(): Promise<
     RustyViewDebugSnapshot['messages']
   > {
@@ -762,6 +1086,26 @@ export class LiveConversation {
       return [];
     }
     return snapshot.messages.filter((message) => message.role === 'assistant');
+  }
+
+  private async userMessageStates(): Promise<
+    RustyViewDebugSnapshot['messages']
+  > {
+    const snapshot = await this.debugSnapshot();
+    if (snapshot === null) {
+      return [];
+    }
+    return snapshot.messages.filter((message) => message.role === 'user');
+  }
+
+  private async assistantMessageStatesAfterUser(
+    userMessageId: string,
+  ): Promise<RustyViewDebugSnapshot['messages']> {
+    const snapshot = await this.debugSnapshot();
+    if (snapshot === null) {
+      return [];
+    }
+    return assistantMessageStatesAfterUser(snapshot.messages, userMessageId);
   }
 
   private async resolveTargetProfile(
@@ -844,7 +1188,9 @@ export class LiveConversation {
       environment: {
         baseUrl: env('BASE_URL') ?? null,
         backendUrl: this.backendUrl,
+        sourceProfile: this.sourceProfile,
         targetProfile: this.targetProfile,
+        profileIsolation: this.profileIsolation,
         currentUrl: this.page.url(),
       },
       startedAtMs: this.startedAt,
@@ -886,7 +1232,11 @@ export class LiveConversation {
       '# Rusty View Live Scenario Summary',
       '',
       `- Backend: ${this.backendUrl}`,
-      `- Requested profile: ${this.targetProfile ?? '<first non-archived>'}`,
+      `- Source profile: ${this.sourceProfile}`,
+      `- Requested profile: ${this.targetProfile}`,
+      `- Profile isolation: ${
+        this.profileIsolation.enabled ? 'enabled' : 'disabled'
+      }`,
       `- Console entries: ${this.consoleEntries.length}`,
       `- Page errors: ${this.pageErrors.length}`,
       `- Screenshots: ${this.screenshots.length}`,
@@ -906,8 +1256,129 @@ function env(name: string): string | undefined {
   return process.env[name];
 }
 
+export function isolatedLiveProfileId(input: IsolatedProfileIdInput): string {
+  const prefix = sanitizeProfileId(input.prefix) || 'live';
+  const title = sanitizeProfileId(input.title).slice(0, 48) || 'scenario';
+  const nonce = input.startedAtMs.toString(36);
+  return sanitizeProfileId(
+    `${prefix}-${title}-w${input.workerIndex}-r${input.retry}-${nonce}`,
+  ).slice(0, 96);
+}
+
+export function liveProfileIsolationPrefix(
+  input: LiveProfileIsolationPrefixInput,
+): string | undefined {
+  if (isDisabledFlag(input.profileIsolation)) {
+    return undefined;
+  }
+  const explicit = input.profilePrefix?.trim();
+  if (explicit !== undefined && explicit.length > 0) {
+    return explicit;
+  }
+  if (input.liveRun === '1') {
+    return 'rv-live';
+  }
+  return undefined;
+}
+
+export function liveProfileCreateRequest(input: {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly providerAlias: string;
+  readonly localToolProfileId: string;
+  readonly reason: string;
+}): LiveProfileCreateRequest {
+  return {
+    profileId: input.profileId,
+    displayName: input.displayName.slice(0, 120),
+    providerAlias: input.providerAlias,
+    kind: 'full',
+    localToolProfileId: input.localToolProfileId,
+    reason: input.reason,
+  };
+}
+
+export function findSentUserMessage(
+  messages: RustyViewDebugSnapshot['messages'],
+  prompt: string,
+  previousUserCount: number,
+): RustyViewDebugSnapshot['messages'][number] | undefined {
+  return messages
+    .filter((message) => message.role === 'user')
+    .slice(previousUserCount)
+    .find((message) => message.text.trim() === prompt.trim());
+}
+
+export function assistantMessageStatesAfterUser(
+  messages: RustyViewDebugSnapshot['messages'],
+  userMessageId: string,
+): RustyViewDebugSnapshot['messages'] {
+  const userIndex = messages.findIndex(
+    (message) => message.id === userMessageId,
+  );
+  if (userIndex === -1) {
+    return [];
+  }
+  return messages
+    .slice(userIndex + 1)
+    .filter((message) => message.role === 'assistant');
+}
+
 function sanitizeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function sanitizeProfileId(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+}
+
+function isDisabledFlag(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return (
+    normalized === '0' ||
+    normalized === 'false' ||
+    normalized === 'off' ||
+    normalized === 'disabled'
+  );
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+  const parsed = JSON.parse(value) as unknown;
+  if (!isRecord(parsed)) {
+    throw new Error('Expected JSON object response from Rusty Crew admin API.');
+  }
+  return parsed;
+}
+
+function adminControlPayload(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const data = recordValue(value, 'data');
+  return data ?? value;
+}
+
+function recordValue(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const child = value?.[key];
+  return isRecord(child) ? child : undefined;
+}
+
+function stringValue(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const child = value?.[key];
+  return typeof child === 'string' ? child : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function cssString(value: string): string {

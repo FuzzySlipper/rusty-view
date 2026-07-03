@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { workspaceRoot } from '@nx/devkit';
+import { join } from 'node:path';
 
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
@@ -8,6 +9,9 @@ const devServerUrl = new URL(baseURL);
 const devServerPort =
   devServerUrl.port || (devServerUrl.protocol === 'https:' ? '443' : '80');
 const devServerHost = devServerUrl.hostname || 'localhost';
+const outputDir =
+  process.env['RV_PLAYWRIGHT_OUTPUT_DIR'] ??
+  join('/tmp', 'rusty-view', 'playwright-output', String(process.pid));
 
 /**
  * Read environment variables from file.
@@ -27,6 +31,9 @@ const devServerHost = devServerUrl.hostname || 'localhost';
  */
 export default defineConfig({
   ...nxE2EPreset(import.meta.dirname, { testDir: './src' }),
+  // Keep screenshots/traces outside the workspace so Angular/Nx dev servers do
+  // not rebuild or reload the browser while live scenarios are writing evidence.
+  outputDir,
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL,
