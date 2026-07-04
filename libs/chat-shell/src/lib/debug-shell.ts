@@ -15,7 +15,10 @@ import {
 } from '@rusty-view/chat-components';
 import type { StreamStatusKind } from '@rusty-view/chat-components';
 import type { ChatCommandDescriptor } from '@rusty-view/protocol';
-import { TranscriptViewportComponent } from '@rusty-view/transcript-renderer';
+import {
+  TOOL_CALL_DEBUG_DETAIL_LOADER,
+  TranscriptViewportComponent,
+} from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
 import { ProfilePanelComponent } from './profile-panel';
 import { TopMenuComponent } from './top-menu';
@@ -53,6 +56,14 @@ import {
   templateUrl: './debug-shell.html',
   styleUrl: './debug-shell.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [
+    {
+      provide: TOOL_CALL_DEBUG_DETAIL_LOADER,
+      useFactory: (store: ChatStore) =>
+        store.loadToolCallDebugDetail.bind(store),
+      deps: [ChatStore],
+    },
+  ],
 })
 export class DebugShellComponent {
   protected readonly store = inject(ChatStore);
@@ -62,6 +73,8 @@ export class DebugShellComponent {
   private readonly transcriptViewport = viewChild(TranscriptViewportComponent);
 
   protected readonly showInspector = signal(true);
+  protected readonly showProfiles = signal(true);
+  protected readonly showTranscriptSearch = signal(false);
   /** Which inspector tab is shown: the raw event log or context diagnostics. */
   protected readonly inspectorTab = signal<'events' | 'context'>('events');
   protected readonly selectedEventId = signal<string | undefined>(undefined);
@@ -125,6 +138,14 @@ export class DebugShellComponent {
 
   protected toggleInspector(): void {
     this.showInspector.update((v) => !v);
+  }
+
+  protected toggleProfiles(): void {
+    this.showProfiles.update((v) => !v);
+  }
+
+  protected toggleTranscriptSearch(): void {
+    this.showTranscriptSearch.update((v) => !v);
   }
 
   protected selectEvent(eventId: string): void {

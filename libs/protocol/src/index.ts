@@ -66,6 +66,8 @@ export type AssistantReasoningDeltaPayload =
 export type AssistantMessageCompletedPayload =
   Schemas['AssistantMessageCompletedPayload'];
 export type ToolCallPayload = Schemas['ToolCallPayload'];
+export type ToolCallDebugValue = Schemas['ToolCallDebugValue'];
+export type ToolCallDebugDetail = Schemas['ToolCallDebugDetail'];
 export type CommandPayload = Schemas['CommandPayload'];
 export type StreamErrorPayload = Schemas['StreamErrorPayload'];
 export type UnknownEventPayload = Schemas['UnknownEventPayload'];
@@ -105,6 +107,8 @@ export type ListChatCommandsResponse =
   operations['listChatCommands']['responses'][200]['content']['application/json'];
 export type ExecuteChatCommandResponse =
   operations['executeChatCommand']['responses'][200]['content']['application/json'];
+export type GetChatToolCallDebugDetailResponse =
+  operations['getChatToolCallDebugDetail']['responses'][200]['content']['application/json'];
 
 // ---- context usage diagnostics (tasks #3788/#3847) ----
 //

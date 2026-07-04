@@ -118,6 +118,19 @@ npx nx run-many --target=test --all
 npx nx graph
 ```
 
+## Standard Change Procedure
+
+After making repo changes, run the appropriate validation for the touched
+surface and then run:
+
+```bash
+./scripts/deploy-local.sh
+```
+
+The local deploy updates the running Rusty View static site used by Rusty Crew
+and is expected to be non-disruptive. Prefer keeping the running instance fresh
+instead of waiting for a separate deploy request.
+
 ## Design Principles
 
 - **Boring architecture**: Libraries you call > frameworks that call you.

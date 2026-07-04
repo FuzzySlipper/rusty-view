@@ -320,6 +320,113 @@
   visibility: hidden;
 }
 
+.rv-block__debug-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--rv-space-md) var(--rv-space-xs);
+}
+
+.rv-block__debug-button {
+  padding: 2px var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-block__debug-button:hover,
+.rv-block__debug-button:focus-visible {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-block__debug-panel {
+  display: grid;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
+  background: var(--rv-color-bg);
+}
+
+.rv-block__debug-status {
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-block__debug-status--error {
+  color: var(--rv-color-danger);
+}
+
+.rv-block__debug-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--rv-space-xs) var(--rv-space-md);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-block__debug-grid span:nth-child(odd),
+.rv-block__debug-label {
+  color: var(--rv-color-text-muted);
+  font-weight: var(--rv-font-weight-bold);
+  text-transform: uppercase;
+}
+
+.rv-block__debug-section,
+.rv-block__debug-subsection {
+  display: grid;
+  gap: var(--rv-space-xs);
+  min-width: 0;
+}
+
+.rv-block__debug-subsection {
+  padding-top: var(--rv-space-xs);
+  border-top: 1px dashed var(--rv-color-border);
+}
+
+.rv-block__debug-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-xs);
+}
+
+.rv-block__debug-badge {
+  padding: 1px var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: 3px;
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-block__debug-muted {
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-block__debug-json {
+  max-height: 260px;
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  padding: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  line-height: var(--rv-line-height-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- reasoning / think blocks (task #3867) ---- */
 
 .rv-block--reasoning {

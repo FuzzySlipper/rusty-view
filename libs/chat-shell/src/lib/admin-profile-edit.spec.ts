@@ -134,8 +134,9 @@ describe('AdminProfileEditComponent', () => {
       }),
     });
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Overview (read-only)');
-    expect(text).toContain('Brains');
+    expect(text).toContain('Profile status');
+    expect(text).toContain('Technical setup details');
+    expect(text).toContain('Agent runtime');
     expect(text).toContain('graph-prime-brain');
     expect(text).toContain('graph-prime-session (idle)');
     expect(text).toContain('soul_md');

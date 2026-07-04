@@ -13,6 +13,24 @@
     <button
       type="button"
       class="rv-debug__toggle"
+      data-testid="transcript-search-toggle"
+      [attr.aria-pressed]="showTranscriptSearch()"
+      (click)="toggleTranscriptSearch()"
+    >
+      {{ showTranscriptSearch() ? 'Hide Search' : 'Search' }}
+    </button>
+    <button
+      type="button"
+      class="rv-debug__toggle"
+      data-testid="profiles-toggle"
+      [attr.aria-pressed]="showProfiles()"
+      (click)="toggleProfiles()"
+    >
+      {{ showProfiles() ? 'Hide Profiles' : 'Show Profiles' }}
+    </button>
+    <button
+      type="button"
+      class="rv-debug__toggle"
       data-testid="inspector-toggle"
       (click)="toggleInspector()"
     >
@@ -23,9 +41,11 @@
   <!-- Body: profile sidebar + transcript + inspector -->
   <div class="rv-debug__body">
     <!-- Profile sidebar -->
+    @if (showProfiles()) {
     <aside class="rv-debug__sidebar">
       <rv-profile-panel />
     </aside>
+    }
 
     <!-- Central: transcript + input -->
     <main class="rv-debug__main">
@@ -50,7 +70,10 @@
       </div>
       } @if (store.activeSessionId()) {
       <div class="rv-debug__transcript" data-testid="transcript-shell">
-        <rv-transcript-viewport [messages]="store.messages()" />
+        <rv-transcript-viewport
+          [messages]="store.messages()"
+          [searchEnabled]="showTranscriptSearch()"
+        />
       </div>
       @if (!isViewingHistorical()) {
       <rv-message-input

@@ -9,6 +9,7 @@ import type {
   SendChatMessageRequest,
   SendChatMessageResult,
   SessionContextUsageResult,
+  ToolCallDebugDetail,
 } from '@rusty-view/protocol';
 
 import { ChatHttpTransport } from './chat-http-transport';
@@ -169,6 +170,13 @@ export class ChatTransport {
 
   sessionContext(sessionId: string): Promise<SessionContextUsageResult> {
     return this.http.sessionContext(sessionId);
+  }
+
+  toolCallDebugDetail(
+    sessionId: string,
+    debugDetailId: string,
+  ): Promise<ToolCallDebugDetail> {
+    return this.http.toolCallDebugDetail(sessionId, debugDetailId);
   }
 
   listCommands(): Promise<ChatCommandRegistry> {

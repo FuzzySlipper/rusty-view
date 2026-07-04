@@ -5,6 +5,7 @@ import type {
   ChatSessionOpenResult,
   SendChatMessageResult,
   ChatCommandRegistry,
+  ToolCallDebugDetail,
 } from '@rusty-view/protocol';
 import { describe, expect, it } from 'vitest';
 
@@ -373,6 +374,47 @@ describe('ChatHttpTransport', () => {
       expect(result.provider.alias).toBe('main');
       expect(result.context_strategy.strategy_id).toBe('sliding-window');
       expect(lastRequest().url).toContain('/v1/chat/sessions/sess_1/context');
+      expect(lastRequest().method).toBe('GET');
+    });
+  });
+
+  describe('toolCallDebugDetail', () => {
+    it('sends GET to /v1/chat/sessions/{id}/tool-calls/{debug_detail_id}', async () => {
+      const detail: ToolCallDebugDetail = {
+        debug_detail_id: 'dbg_1',
+        tool_call_id: 'tc_1',
+        session_id: 'sess_1',
+        wake_id: 'wake_1',
+        tool_name: 'search',
+        status: 'completed',
+        arguments: {
+          value: { q: 'debug' },
+          truncated: false,
+          redacted: false,
+        },
+        partial_updates: [],
+        final_result: {
+          value: { ok: true },
+          truncated: true,
+          redacted: false,
+          sha256: 'abc123',
+          originalJsonChars: 1200,
+        },
+        source_metadata: { source: 'mcp' },
+        started_at: '2026-07-03T22:00:00Z',
+        updated_at: '2026-07-03T22:00:01Z',
+        expires_at: '2026-07-03T23:00:00Z',
+        limits: { max_chars: 1024 },
+      };
+      const { fetch, lastRequest } = capturingFetch(jsonOk(detail));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const result = await transport.toolCallDebugDetail('sess_1', 'dbg_1');
+
+      expect(result.final_result?.truncated).toBe(true);
+      expect(lastRequest().url).toContain(
+        '/v1/chat/sessions/sess_1/tool-calls/dbg_1',
+      );
       expect(lastRequest().method).toBe('GET');
     });
   });

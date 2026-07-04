@@ -1,4 +1,9 @@
-import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
+import type {
+  ChatEvent,
+  ChatSessionSummary,
+  ToolCallDebugDetail as ProtocolToolCallDebugDetail,
+  ToolCallDebugValue as ProtocolToolCallDebugValue,
+} from '@rusty-view/protocol';
 
 /**
  * @rusty-view/chat-domain domain types.
@@ -79,6 +84,7 @@ export interface ToolBlockMeta {
   readonly status: ToolBlockStatus;
   readonly summary: string;
   readonly reasonCode: string | undefined;
+  readonly debugDetailId: string | undefined;
 }
 
 /**
@@ -168,9 +174,13 @@ export interface ToolCallProjection {
   readonly status: ToolCallStatus;
   readonly resultRef: Readonly<Record<string, unknown>> | undefined;
   readonly reasonCode: string | undefined;
+  readonly debugDetailId: string | undefined;
   readonly eventId: string;
   readonly createdAt: string;
 }
+
+export type ToolCallDebugDetail = ProtocolToolCallDebugDetail;
+export type ToolCallDebugValue = ProtocolToolCallDebugValue;
 
 // ---- commands ----
 

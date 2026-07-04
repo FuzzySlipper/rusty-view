@@ -1,5 +1,9 @@
 import { InjectionToken, type Type } from '@angular/core';
-import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
+import type {
+  ChatMessage,
+  MessageBlock,
+  ToolCallDebugDetail,
+} from '@rusty-view/chat-domain';
 
 export interface ChatContentRenderContext {
   /** Parent message when the block is rendered through MessageItemComponent. */
@@ -26,3 +30,13 @@ export interface ChatContentRenderer {
 export const CHAT_CONTENT_RENDERERS = new InjectionToken<
   readonly ChatContentRenderer[]
 >('CHAT_CONTENT_RENDERERS');
+
+export type ToolCallDebugDetailLoader = (
+  sessionId: string,
+  debugDetailId: string,
+) => Promise<ToolCallDebugDetail>;
+
+export const TOOL_CALL_DEBUG_DETAIL_LOADER =
+  new InjectionToken<ToolCallDebugDetailLoader>(
+    'TOOL_CALL_DEBUG_DETAIL_LOADER',
+  );

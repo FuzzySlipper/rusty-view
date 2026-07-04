@@ -46,7 +46,134 @@
     block().content
   }}</pre
   >
-  }
+  } @if (canInspectToolDebug()) {
+  <div class="rv-block__debug-actions">
+    <button
+      type="button"
+      class="rv-block__debug-button"
+      data-testid="tool-call-debug-toggle"
+      (click)="toggleToolDebug()"
+      [attr.aria-expanded]="toolDebugOpen()"
+    >
+      {{ toolDebugOpen() ? 'Hide raw debug' : 'Raw debug' }}
+    </button>
+  </div>
+  @if (toolDebugOpen()) {
+  <section class="rv-block__debug-panel" data-testid="tool-call-debug-panel">
+    @if (toolDebugState(); as debugState) { @if (debugState.status ===
+    'loading') {
+    <div class="rv-block__debug-status">Loading raw tool-call details…</div>
+    } @else if (debugState.status === 'missing') {
+    <div class="rv-block__debug-status">{{ debugState.message }}</div>
+    } @else if (debugState.status === 'error') {
+    <div class="rv-block__debug-status rv-block__debug-status--error">
+      {{ debugState.message }}
+      <button
+        type="button"
+        class="rv-block__debug-button"
+        data-testid="tool-call-debug-retry"
+        (click)="retryToolDebug()"
+      >
+        Retry
+      </button>
+    </div>
+    } @else if (debugState.status === 'loaded') {
+    <div class="rv-block__debug-grid">
+      <span>tool</span>
+      <span>{{ debugState.detail.tool_name }}</span>
+      <span>status</span>
+      <span>{{ debugState.detail.status }}</span>
+      <span>tool call id</span>
+      <span>{{ debugState.detail.tool_call_id }}</span>
+      <span>wake id</span>
+      <span>{{ debugState.detail.wake_id }}</span>
+      <span>started</span>
+      <span>{{ debugState.detail.started_at }}</span>
+      <span>updated</span>
+      <span>{{ debugState.detail.updated_at }}</span>
+      <span>expires</span>
+      <span>{{ debugState.detail.expires_at }}</span>
+    </div>
+
+    <div class="rv-block__debug-section">
+      <span class="rv-block__debug-label">Arguments</span>
+      <div class="rv-block__debug-badges">
+        @for (label of debugValueLabels(debugState.detail.arguments); track
+        label) {
+        <span class="rv-block__debug-badge">{{ label }}</span>
+        }
+      </div>
+      <pre class="rv-block__debug-json">
+{{
+        formatDebugValue(debugState.detail.arguments)
+      }}</pre
+      >
+    </div>
+
+    @if (debugState.detail.partial_updates.length > 0) {
+    <div class="rv-block__debug-section">
+      <span class="rv-block__debug-label">Partial updates</span>
+      @for (update of debugState.detail.partial_updates; track
+      update.recorded_at) {
+      <div class="rv-block__debug-subsection">
+        <span class="rv-block__debug-muted">{{ update.recorded_at }}</span>
+        <div class="rv-block__debug-badges">
+          @for (label of debugValueLabels(update.partial_result); track label) {
+          <span class="rv-block__debug-badge">{{ label }}</span>
+          }
+        </div>
+        <pre class="rv-block__debug-json">
+{{
+          formatDebugValue(update.partial_result)
+        }}</pre
+        >
+      </div>
+      }
+    </div>
+    } @if (debugState.detail.final_result; as finalResult) {
+    <div class="rv-block__debug-section">
+      <span class="rv-block__debug-label">Final result</span>
+      <div class="rv-block__debug-badges">
+        @for (label of debugValueLabels(finalResult); track label) {
+        <span class="rv-block__debug-badge">{{ label }}</span>
+        }
+      </div>
+      <pre class="rv-block__debug-json">
+{{
+        formatDebugValue(finalResult)
+      }}</pre
+      >
+    </div>
+    } @if (debugState.detail.error) {
+    <div class="rv-block__debug-section">
+      <span class="rv-block__debug-label">Error</span>
+      <pre class="rv-block__debug-json">
+{{
+        formatDebugJson(debugState.detail.error)
+      }}</pre
+      >
+    </div>
+    }
+
+    <div class="rv-block__debug-section">
+      <span class="rv-block__debug-label">Source metadata</span>
+      <pre class="rv-block__debug-json">
+{{
+        formatDebugJson(debugState.detail.source_metadata)
+      }}</pre
+      >
+    </div>
+    <div class="rv-block__debug-section">
+      <span class="rv-block__debug-label">Limits</span>
+      <pre class="rv-block__debug-json">
+{{
+        formatDebugJson(debugState.detail.limits)
+      }}</pre
+      >
+    </div>
+    } }
+  </section>
+  } }
 </div>
 } @else if (isReasoning()) {
 <div

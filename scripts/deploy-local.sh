@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# Build the rusty-view app and copy it to the rusty-crew static site directory.
+# Build the rusty-view app and copy it to both local rusty-crew static site
+# directories.
 # Usage: ./scripts/deploy-local.sh
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEST_DIR="/home/system/rusty-crew/site"
+DEST_DIRS=(
+  "/home/system/rusty-crew/site"
+  "/home/system/rusty-crew-debug/site"
+)
 
 echo "Building rusty-view..."
 cd "$REPO_ROOT"
 pnpm exec nx build rusty-view
 
-echo "Cleaning $DEST_DIR..."
-rm -rf "$DEST_DIR"/*
+for dest_dir in "${DEST_DIRS[@]}"; do
+  echo "Cleaning $dest_dir..."
+  mkdir -p "$dest_dir"
+  rm -rf "$dest_dir"/*
 
-echo "Copying build output..."
-cp -r dist/apps/rusty-view/browser/* "$DEST_DIR"/
+  echo "Copying build output to $dest_dir..."
+  cp -r dist/apps/rusty-view/browser/* "$dest_dir"/
 
-echo "Done. $(find "$DEST_DIR" -type f | wc -l) files deployed to $DEST_DIR"
+  echo "Done. $(find "$dest_dir" -type f | wc -l) files deployed to $dest_dir"
+done

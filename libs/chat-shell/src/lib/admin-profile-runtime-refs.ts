@@ -18,8 +18,8 @@ const RUNTIME_REF_KIND_ORDER: readonly string[] = [
 
 /**
  * Group a profile's derived runtime refs by `refKind` for the runtime-graph
- * preview. Returns groups in a stable order (brains, sessions, jobs, channel
- * bindings, MCP bindings, then any other kinds). Shared by the create and edit
+ * preview. Returns groups in a stable order (runtime agents, sessions, jobs,
+ * channel bindings, MCP bindings, then any other kinds). Shared by the create and edit
  * profile windows (#3690).
  */
 export function groupRuntimeRefs(
@@ -51,16 +51,16 @@ export function groupRuntimeRefs(
 function runtimeRefKindLabel(refKind: string): string {
   switch (refKind) {
     case 'brain':
-      return 'Brains';
+      return 'Agent runtime';
     case 'session':
-      return 'Sessions';
+      return 'Conversation sessions';
     case 'scheduled_job':
       return 'Scheduled jobs';
     case 'channel_binding':
       return 'Channel bindings';
     case 'mcp_binding':
     case 'profile_mcp_config':
-      return 'MCP bindings';
+      return 'Tool connections';
     default:
       return refKind;
   }

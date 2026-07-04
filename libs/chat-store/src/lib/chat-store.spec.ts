@@ -67,6 +67,8 @@ function createMockTransport(opts: {
   commandError?: unknown;
   contextUsage?: SessionContextUsageResult;
   contextUsageError?: boolean;
+  toolCallDebugDetail?: unknown;
+  toolCallDebugDetailError?: unknown;
 }): ChatTransport {
   const mock = {
     getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
@@ -85,6 +87,12 @@ function createMockTransport(opts: {
         throw new Error('context route unavailable');
       }
       return opts.contextUsage ?? defaultContextUsage();
+    }),
+    toolCallDebugDetail: vi.fn(async () => {
+      if (opts.toolCallDebugDetailError !== undefined) {
+        throw opts.toolCallDebugDetailError;
+      }
+      return opts.toolCallDebugDetail;
     }),
     listCommands: vi.fn(
       async () => ({ commands: [] }) satisfies ChatCommandRegistry,

@@ -33,6 +33,7 @@ const SESSION_SUMMARY = {
 const USER_BODY = 'The door creaks open.';
 const ASSISTANT_BODY =
   'A figure steps through the doorway, into the amber light.';
+const TOOL_DEBUG_DETAIL_ID = 'debug_tc1';
 const LIVE_SCROLL_SESSION_ID = 'render-live-scroll-session';
 const LIVE_SCROLL_ASSISTANT_ID = 'msg_live_scroll_asst';
 
@@ -71,6 +72,7 @@ const MESSAGE_EVENTS = [
       tool_call_id: 'tc1',
       tool_name: 'search_lore',
       summary: 'Searching lore for "amber lantern"',
+      debug_detail_id: TOOL_DEBUG_DETAIL_ID,
     },
   },
   {
@@ -83,6 +85,7 @@ const MESSAGE_EVENTS = [
       tool_call_id: 'tc1',
       tool_name: 'search_lore',
       summary: 'Searching lore for "amber lantern"',
+      metadata: { debugDetailId: TOOL_DEBUG_DETAIL_ID },
       result_ref: { hits: 3 },
     },
   },
@@ -146,6 +149,42 @@ function fulfillJson(route: Route, data: unknown): Promise<void> {
   });
 }
 
+const TOOL_DEBUG_DETAIL = {
+  debug_detail_id: TOOL_DEBUG_DETAIL_ID,
+  tool_call_id: 'tc1',
+  session_id: SESSION_ID,
+  wake_id: 'wake_tc1',
+  tool_name: 'search_lore',
+  status: 'completed',
+  arguments: {
+    value: { query: 'amber lantern' },
+    truncated: false,
+    redacted: true,
+    sha256: 'sha256:debug-args',
+  },
+  partial_updates: [
+    {
+      recorded_at: '2026-06-22T10:00:03Z',
+      partial_result: {
+        value: { progress: 'searching' },
+        truncated: true,
+        redacted: false,
+        originalJsonChars: 2048,
+      },
+    },
+  ],
+  final_result: {
+    value: { hits: 3 },
+    truncated: false,
+    redacted: false,
+  },
+  source_metadata: { adapter: 'fixture' },
+  started_at: '2026-06-22T10:00:03Z',
+  updated_at: '2026-06-22T10:00:04Z',
+  expires_at: '2026-06-22T11:00:04Z',
+  limits: { max_chars: 1024 },
+};
+
 test('selecting a session renders message rows in the transcript', async ({
   page,
 }) => {
@@ -176,6 +215,9 @@ test('selecting a session renders message rows in the transcript', async ({
   );
   await page.route('**/v1/chat/sessions/*', (route) =>
     fulfillJson(route, { session: SESSION_SUMMARY, events: MESSAGE_EVENTS }),
+  );
+  await page.route('**/v1/chat/sessions/*/tool-calls/*', (route) =>
+    fulfillJson(route, TOOL_DEBUG_DETAIL),
   );
 
   await page.goto('/');
@@ -215,6 +257,16 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(toolBlock.locator('.rv-block__content')).toContainText('hits');
   await toolBlock.locator('.rv-block__tool-header').click();
   await expect(toolBlock.locator('.rv-block__content')).toHaveCount(0);
+
+  const rawDebug = toolBlock.locator('[data-testid="tool-call-debug-toggle"]');
+  await expect(rawDebug).toBeVisible();
+  await rawDebug.click();
+  const debugPanel = toolBlock.locator('[data-testid="tool-call-debug-panel"]');
+  await expect(debugPanel).toContainText('redacted');
+  await expect(debugPanel).toContainText('truncated');
+  await expect(debugPanel).toContainText('sha256:debug-args');
+  await expect(debugPanel).toContainText('2048 original JSON chars');
+  await expect(debugPanel).toContainText('"query": "amber lantern"');
 });
 
 test('scrollToMessageId materializes a live assistant row after tall history', async ({

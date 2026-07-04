@@ -8,7 +8,12 @@ import {
   signal,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
-import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
+import type {
+  ChatMessage,
+  MessageBlock,
+  ToolCallDebugDetail,
+  ToolCallDebugValue,
+} from '@rusty-view/chat-domain';
 
 import { AttachmentBlockComponent } from './attachment-block';
 import { WorkerManager } from './worker-manager';
@@ -21,11 +26,18 @@ import {
 } from './render-mode-token';
 import {
   CHAT_CONTENT_RENDERERS,
+  TOOL_CALL_DEBUG_DETAIL_LOADER,
   type ChatContentRenderContext,
 } from './content-renderers';
 
 type FormattedTextRenderMode = 'markdown' | 'sanitized-html';
 type ResolvedTextRenderMode = 'raw' | FormattedTextRenderMode;
+type ToolDebugState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading' }
+  | { readonly status: 'loaded'; readonly detail: ToolCallDebugDetail }
+  | { readonly status: 'missing'; readonly message: string }
+  | { readonly status: 'error'; readonly message: string };
 
 const HTML_VOID_TAGS = new Set(['br', 'hr', 'img']);
 const AUTO_HTML_TAGS = new Set([
@@ -102,8 +114,12 @@ export class MessageBlockComponent {
   private readonly workerManager = inject(WorkerManager);
   private readonly contentRenderers =
     inject(CHAT_CONTENT_RENDERERS, { optional: true }) ?? [];
+  private readonly toolDebugLoader = inject(TOOL_CALL_DEBUG_DETAIL_LOADER, {
+    optional: true,
+  });
   protected readonly renderMode = inject(TRANSCRIPT_TEXT_RENDER_MODE);
   protected readonly markdownPolicy = inject(TRANSCRIPT_MARKDOWN_POLICY);
+  private lastToolDebugKey: string | undefined;
 
   readonly block = input.required<MessageBlock>();
   readonly message = input<ChatMessage | undefined>(undefined);
@@ -116,6 +132,10 @@ export class MessageBlockComponent {
   protected readonly expanded = signal(false);
   /** Per-block override: when true, show raw text regardless of global mode. */
   protected readonly showRaw = signal(false);
+  protected readonly toolDebugOpen = signal(false);
+  protected readonly toolDebugState = signal<ToolDebugState>({
+    status: 'idle',
+  });
 
   /** Rendered HTML for text blocks (markdown-parsed or sanitized). */
   protected readonly renderedHtml = signal<string>('');
@@ -141,7 +161,7 @@ export class MessageBlockComponent {
   protected readonly highlightedSegments = computed(() => {
     const query = this.searchQuery().trim();
     const content = this.block().content;
-    if (query.length === 0 || content.length === 0) {
+    if (!this.searchMatched() || query.length === 0 || content.length === 0) {
       return [{ text: content, matched: false }];
     }
 
@@ -184,6 +204,17 @@ export class MessageBlockComponent {
   /** Tool/command metadata, when this block represents inline tool activity. */
   protected readonly tool = computed(() => this.block().tool);
 
+  protected readonly toolDebugDetailId = computed(
+    () => this.tool()?.debugDetailId,
+  );
+
+  protected readonly canInspectToolDebug = computed(
+    () =>
+      this.toolDebugLoader !== null &&
+      this.message()?.sessionId !== undefined &&
+      this.toolDebugDetailId() !== undefined,
+  );
+
   /** Attachment metadata, when this block represents an inline uploaded file. */
   protected readonly attachment = computed(() => this.block().attachment);
 
@@ -197,7 +228,8 @@ export class MessageBlockComponent {
    * collapsed by default, kept visually distinct from the assistant's answer.
    */
   protected readonly isReasoning = computed(
-    () => this.customRenderer() === undefined && this.block().kind === 'reasoning',
+    () =>
+      this.customRenderer() === undefined && this.block().kind === 'reasoning',
   );
 
   protected readonly isCollapsible = computed(
@@ -253,6 +285,19 @@ export class MessageBlockComponent {
       }
       void this.renderFormatted(content, resolvedMode, mode);
     });
+
+    effect(() => {
+      const sessionId = this.message()?.sessionId;
+      const debugDetailId = this.toolDebugDetailId();
+      const nextKey =
+        sessionId !== undefined && debugDetailId !== undefined
+          ? `${sessionId}\u0000${debugDetailId}`
+          : undefined;
+      if (nextKey === this.lastToolDebugKey) return;
+      this.lastToolDebugKey = nextKey;
+      this.toolDebugState.set({ status: 'idle' });
+      this.toolDebugOpen.set(false);
+    });
   }
 
   protected toggleExpand(): void {
@@ -261,6 +306,73 @@ export class MessageBlockComponent {
 
   protected toggleRaw(): void {
     this.showRaw.update((v) => !v);
+  }
+
+  protected toggleToolDebug(): void {
+    if (!this.canInspectToolDebug()) return;
+    const nextOpen = !this.toolDebugOpen();
+    this.toolDebugOpen.set(nextOpen);
+    if (nextOpen && this.toolDebugState().status === 'idle') {
+      void this.loadToolDebugDetail();
+    }
+  }
+
+  protected retryToolDebug(): void {
+    if (!this.canInspectToolDebug()) return;
+    this.toolDebugState.set({ status: 'idle' });
+    void this.loadToolDebugDetail();
+  }
+
+  private async loadToolDebugDetail(): Promise<void> {
+    const sessionId = this.message()?.sessionId;
+    const debugDetailId = this.toolDebugDetailId();
+    const loader = this.toolDebugLoader;
+    if (
+      sessionId === undefined ||
+      debugDetailId === undefined ||
+      loader === null
+    ) {
+      return;
+    }
+
+    this.toolDebugState.set({ status: 'loading' });
+    try {
+      const detail = await loader(sessionId, debugDetailId);
+      this.toolDebugState.set({ status: 'loaded', detail });
+    } catch (error) {
+      if (isMissingDebugDetailError(error)) {
+        this.toolDebugState.set({
+          status: 'missing',
+          message: 'Raw tool-call details expired or are no longer available.',
+        });
+        return;
+      }
+      this.toolDebugState.set({
+        status: 'error',
+        message: errorMessage(error),
+      });
+    }
+  }
+
+  protected formatDebugValue(value: ToolCallDebugValue): string {
+    return stringifyDebugJson(value.value);
+  }
+
+  protected debugValueLabels(value: ToolCallDebugValue): readonly string[] {
+    const labels: string[] = [];
+    if (value.redacted) labels.push('redacted');
+    if (value.truncated) labels.push('truncated');
+    if (value.originalJsonChars !== undefined) {
+      labels.push(`${value.originalJsonChars} original JSON chars`);
+    }
+    if (value.sha256 !== undefined) {
+      labels.push(`sha256 ${value.sha256}`);
+    }
+    return labels;
+  }
+
+  protected formatDebugJson(value: unknown): string {
+    return stringifyDebugJson(value);
   }
 
   protected onMarkdownInteraction(event: Event): void {
@@ -357,6 +469,35 @@ async function copyText(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function stringifyDebugJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? 'null';
+  } catch {
+    return String(value);
+  }
+}
+
+function isMissingDebugDetailError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { readonly statusCode?: unknown }).statusCode === 404
+  );
+}
+
+function errorMessage(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { readonly message?: unknown }).message === 'string'
+  ) {
+    return (error as { readonly message: string }).message;
+  }
+  return 'Could not load raw tool-call details.';
 }
 
 function hasBalancedAllowedHtml(content: string): boolean {

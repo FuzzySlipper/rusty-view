@@ -156,13 +156,14 @@ export class TranscriptViewportComponent {
     };
   });
 
-  protected readonly searchResults = computed(() =>
-    searchConversationMessages(
+  protected readonly searchResults = computed(() => {
+    if (!this.searchEnabled()) return [];
+    return searchConversationMessages(
       this.renderMessages(),
       this.searchQuery(),
       this.searchFilters(),
-    ),
-  );
+    );
+  });
 
   protected readonly activeSearchResult = computed(() => {
     const results = this.searchResults();

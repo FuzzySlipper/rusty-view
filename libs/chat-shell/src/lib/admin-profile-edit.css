@@ -1,5 +1,25 @@
 /*
  * Edit Profile window (#3690). Window frame, fields, list, prompt, export, and
  * MCP binding styles are shared via admin-profile-shared.css; this file holds
- * only edit-window-specific overrides (currently none).
+ * only edit-window-specific overrides.
  */
+
+.rv-admin-profiles__details {
+  display: grid;
+  gap: var(--rv-space-sm);
+  border-top: 1px dashed var(--rv-color-border);
+  padding-top: var(--rv-space-xs);
+}
+
+.rv-admin-profiles__details-summary {
+  width: fit-content;
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+  font-family: var(--rv-font-ui);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-admin-profiles__details[open] {
+  padding-bottom: var(--rv-space-xs);
+}

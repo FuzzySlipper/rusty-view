@@ -28,6 +28,9 @@ export const SESSION_STREAM_PATH =
 export const SESSION_CONTEXT_PATH =
   '/v1/chat/sessions/{session_id}/context' as const satisfies ChatPath;
 
+export const SESSION_TOOL_CALL_DEBUG_DETAIL_PATH =
+  '/v1/chat/sessions/{session_id}/tool-calls/{debug_detail_id}' as const satisfies ChatPath;
+
 export const SESSION_MESSAGES_PATH =
   '/v1/chat/sessions/{session_id}/messages' as const satisfies ChatPath;
 

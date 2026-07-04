@@ -54,6 +54,8 @@ export type {
   MessageAlternateSlot,
   ToolCallStatus,
   ToolCallProjection,
+  ToolCallDebugDetail,
+  ToolCallDebugValue,
   CommandStatus,
   CommandProjection,
   ContextEstimateQuality,

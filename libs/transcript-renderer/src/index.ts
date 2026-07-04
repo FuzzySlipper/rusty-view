@@ -41,10 +41,14 @@ export type {
   MarkdownRenderPolicy,
   HtmlSanitizerPolicy,
 } from './lib/render-mode-token';
-export { CHAT_CONTENT_RENDERERS } from './lib/content-renderers';
+export {
+  CHAT_CONTENT_RENDERERS,
+  TOOL_CALL_DEBUG_DETAIL_LOADER,
+} from './lib/content-renderers';
 export type {
   ChatContentRenderer,
   ChatContentRenderContext,
+  ToolCallDebugDetailLoader,
 } from './lib/content-renderers';
 
 export const TRANSCRIPT_RENDERER_VERSION = '0.0.0' as const;

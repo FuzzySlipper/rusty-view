@@ -2,6 +2,7 @@ import type {
   ChatAttachment,
   ChatMessage,
   MessageBlock,
+  ToolCallDebugDetail,
 } from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
 import { Component, input, signal } from '@angular/core';
@@ -17,6 +18,7 @@ import {
 } from './render-mode-token';
 import {
   CHAT_CONTENT_RENDERERS,
+  TOOL_CALL_DEBUG_DETAIL_LOADER,
   type ChatContentRenderContext,
 } from './content-renderers';
 
@@ -122,6 +124,20 @@ describe('MessageBlockComponent', () => {
     expect(mark?.textContent).toBe('brass');
   });
 
+  it('does not mark raw text when the block is not a filtered search match', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'Find the brass key.' }),
+    );
+    fixture.componentRef.setInput('searchQuery', 'brass');
+    fixture.componentRef.setInput('searchMatched', false);
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-block--search-match')).toBeNull();
+    expect(host.querySelector('.rv-block__search-mark')).toBeNull();
+    expect(host.textContent).toContain('Find the brass key.');
+  });
+
   it('renders tool_call blocks as collapsible', async () => {
     const fixture = await createBlock(
       makeBlock({
@@ -133,6 +149,121 @@ describe('MessageBlockComponent', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('.rv-block--collapsible')).not.toBeNull();
     expect(host.textContent).toContain('tool_call');
+  });
+
+  it('lazily loads raw tool-call debug details when opened', async () => {
+    const detail: ToolCallDebugDetail = {
+      debug_detail_id: 'dbg_1',
+      tool_call_id: 'tc_1',
+      session_id: 's1',
+      wake_id: 'wake_1',
+      tool_name: 'search_lore',
+      status: 'completed',
+      arguments: {
+        value: { query: 'amber' },
+        truncated: false,
+        redacted: true,
+        sha256: 'hash_args',
+      },
+      partial_updates: [
+        {
+          recorded_at: '2026-07-03T22:00:01Z',
+          partial_result: {
+            value: ['one'],
+            truncated: true,
+            redacted: false,
+            originalJsonChars: 2048,
+          },
+        },
+      ],
+      final_result: {
+        value: { count: 1 },
+        truncated: false,
+        redacted: false,
+      },
+      source_metadata: { adapter: 'mcp' },
+      started_at: '2026-07-03T22:00:00Z',
+      updated_at: '2026-07-03T22:00:02Z',
+      expires_at: '2026-07-03T23:00:00Z',
+      limits: { max_chars: 1024 },
+    };
+    const load = vi.fn(async () => detail);
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'tool_call',
+        content: '',
+        renderPolicy: 'collapsed',
+        tool: {
+          name: 'search_lore',
+          status: 'completed',
+          summary: 'Found lore',
+          reasonCode: undefined,
+          debugDetailId: 'dbg_1',
+        },
+      }),
+      [{ provide: TOOL_CALL_DEBUG_DETAIL_LOADER, useValue: load }],
+    );
+    fixture.componentRef.setInput('message', makeMessage({ sessionId: 's1' }));
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(
+      host.querySelector('[data-testid="tool-call-debug-panel"]'),
+    ).toBeNull();
+
+    (
+      host.querySelector(
+        '[data-testid="tool-call-debug-toggle"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(load).toHaveBeenCalledWith('s1', 'dbg_1');
+    expect(host.textContent).toContain('redacted');
+    expect(host.textContent).toContain('truncated');
+    expect(host.textContent).toContain('hash_args');
+    expect(host.textContent).toContain('2048 original JSON chars');
+    expect(host.textContent).toContain('"query": "amber"');
+  });
+
+  it('shows a calm message when raw tool-call debug details are missing', async () => {
+    const load = vi.fn(async () => {
+      throw { statusCode: 404, message: 'not found' };
+    });
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'tool_call',
+        content: '',
+        renderPolicy: 'collapsed',
+        tool: {
+          name: 'search_lore',
+          status: 'failed',
+          summary: 'Debug detail expired',
+          reasonCode: 'not_found',
+          debugDetailId: 'dbg_missing',
+        },
+      }),
+      [{ provide: TOOL_CALL_DEBUG_DETAIL_LOADER, useValue: load }],
+    );
+    fixture.componentRef.setInput('message', makeMessage({ sessionId: 's1' }));
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    (
+      host.querySelector(
+        '[data-testid="tool-call-debug-toggle"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(host.textContent).toContain(
+      'Raw tool-call details expired or are no longer available.',
+    );
+    expect(host.textContent).not.toContain('not found');
   });
 
   it('renders reasoning blocks folded by default, revealing content on expand', async () => {
@@ -156,7 +287,9 @@ describe('MessageBlockComponent', () => {
     header.click();
     fixture.detectChanges();
 
-    expect(host.textContent).toContain('Weighing the options before answering.');
+    expect(host.textContent).toContain(
+      'Weighing the options before answering.',
+    );
   });
 
   it('truncates long collapsible content and expands on click', async () => {

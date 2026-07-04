@@ -328,6 +328,38 @@ describe('projectConversation', () => {
     expect(projection.toolCalls[0]?.toolName).toBe('search_lore');
   });
 
+  it('carries tool debug detail ids from payload or metadata into projections and blocks', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { message_id: 'a1', delta: 'x' }),
+      makeEvent(
+        'tool_call_started',
+        {
+          tool_call_id: 'tc1',
+          tool_name: 'search_lore',
+          summary: 'Searched for amber',
+          debug_detail_id: 'dbg_top',
+          metadata: { debugDetailId: 'dbg_meta' },
+        },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'tool_call_completed',
+        {
+          tool_call_id: 'tc1',
+          tool_name: 'search_lore',
+          summary: 'Found 3 entries',
+          metadata: { debugDetailId: 'dbg_meta' },
+        },
+        { event_id: 'e2' },
+      ),
+    ]);
+    const toolBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'tool_call',
+    );
+    expect(projection.toolCalls[0]?.debugDetailId).toBe('dbg_meta');
+    expect(toolBlock?.tool?.debugDetailId).toBe('dbg_meta');
+  });
+
   it('tool_call_failed sets status to failed', () => {
     const projection = projectConversation([
       makeEvent(

@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/tool-calls/{debug_detail_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded raw tool-call debug detail */
+        get: operations["getChatToolCallDebugDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -661,10 +678,52 @@ export interface components {
             summary: string;
             /** @enum {string} */
             status?: "started" | "completed" | "failed";
+            debug_detail_id?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
             result_ref?: {
                 [key: string]: unknown;
             };
             reason_code?: string;
+        };
+        ToolCallDebugValue: {
+            value: unknown;
+            truncated: boolean;
+            redacted: boolean;
+            sha256?: string;
+            originalJsonChars?: number;
+        };
+        ToolCallDebugDetail: {
+            debug_detail_id: string;
+            tool_call_id: string;
+            session_id: string;
+            wake_id: string;
+            tool_name: string;
+            /** @enum {string} */
+            status: "running" | "completed" | "failed";
+            arguments: components["schemas"]["ToolCallDebugValue"];
+            partial_updates: {
+                /** Format: date-time */
+                recorded_at: string;
+                partial_result: components["schemas"]["ToolCallDebugValue"];
+            }[];
+            final_result?: components["schemas"]["ToolCallDebugValue"];
+            error?: {
+                [key: string]: unknown;
+            };
+            source_metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            limits: {
+                [key: string]: unknown;
+            };
         };
         CommandPayload: {
             command_name: string;
@@ -1408,6 +1467,39 @@ export interface operations {
                 content: {
                     "text/event-stream": string;
                 };
+            };
+        };
+    };
+    getChatToolCallDebugDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                /** @description Debug detail id from a tool lifecycle event payload or metadata.debugDetailId. */
+                debug_detail_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Debug-only bounded/redacted tool-call detail for the session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ToolCallDebugDetail"];
+                    };
+                };
+            };
+            /** @description The session or debug detail id was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

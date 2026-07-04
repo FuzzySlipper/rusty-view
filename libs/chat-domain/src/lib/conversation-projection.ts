@@ -382,6 +382,7 @@ function applyToolCall(
   const reasonCode =
     readOptionalString(payload, 'reason_code') ??
     (effectiveStatus === 'failed' ? 'error' : undefined);
+  const debugDetailId = readToolCallDebugDetailId(payload);
 
   const resultRef = payload['result_ref'];
   const entry: ToolCallProjection = {
@@ -391,6 +392,7 @@ function applyToolCall(
     status: effectiveStatus,
     resultRef: isPayloadObject(resultRef) ? resultRef : undefined,
     reasonCode,
+    debugDetailId,
     eventId: event.event_id,
     createdAt: event.created_at,
   };
@@ -412,6 +414,7 @@ function applyToolCall(
     status: effectiveStatus === 'started' ? 'running' : effectiveStatus,
     summary,
     reasonCode,
+    debugDetailId,
   };
   const messages = upsertActivityBlock(
     { ...projection, toolCalls },
@@ -463,6 +466,7 @@ function applyCommand(
     status: status === 'started' ? 'running' : status,
     summary: entry.summary,
     reasonCode: entry.reasonCode,
+    debugDetailId: undefined,
   };
   const messages = upsertActivityBlock(
     { ...projection, commands },
@@ -538,6 +542,17 @@ function readPayloadBoolean(
   field: string,
 ): boolean {
   return payload[field] === true;
+}
+
+function readToolCallDebugDetailId(
+  payload: Record<string, unknown>,
+): string | undefined {
+  const direct = readOptionalString(payload, 'debug_detail_id');
+  if (direct !== undefined) return direct;
+
+  const metadata = payload['metadata'];
+  if (!isPayloadObject(metadata)) return undefined;
+  return readOptionalString(metadata, 'debugDetailId');
 }
 
 function isPayloadObject(value: unknown): value is Record<string, unknown> {

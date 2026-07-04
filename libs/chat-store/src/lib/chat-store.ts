@@ -22,6 +22,7 @@ import type {
   ChatSessionStatus,
   ChatSessionSummary,
   SessionContextUsageResult,
+  ToolCallDebugDetail,
 } from '@rusty-view/protocol';
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
@@ -161,7 +162,7 @@ export class ChatStore implements OnDestroy {
   );
 
   // ---- profile / historical-session view state ----
-  /** Brain profiles derived from the session list, ordered by recent activity. */
+  /** Profiles derived from the session list, ordered by recent activity. */
   readonly profiles = computed<readonly BrainProfile[]>(() =>
     projectProfiles(this._sessions()),
   );
@@ -370,6 +371,13 @@ export class ChatStore implements OnDestroy {
     } catch {
       // Diagnostics are optional; keep the current (or null) value.
     }
+  }
+
+  loadToolCallDebugDetail(
+    sessionId: string,
+    debugDetailId: string,
+  ): Promise<ToolCallDebugDetail> {
+    return this.transport.toolCallDebugDetail(sessionId, debugDetailId);
   }
 
   /** Drop a stale `activeTurn` left by an incomplete (terminal-less) turn record. */

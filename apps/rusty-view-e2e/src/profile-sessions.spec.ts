@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
  * Profile panel + sessions menu smoke test (task #3255).
  *
  * Covers the acceptance path end-to-end in a real browser:
- *   1. The sidebar shows brain profiles (not a raw session list).
+ *   1. The sidebar shows profiles (not a raw session list).
  *   2. Clicking a profile selects it and opens the active session.
  *   3. The top-menu Sessions entry opens a panel listing historical sessions.
  *   4. Opening a historical session shows the banner and disables the input.
@@ -22,7 +22,7 @@ test('profile sidebar, active session, and sessions menu historical flow', async
     timeout: 10_000,
   });
 
-  // 1. Sidebar shows brain profiles, not the raw session list.
+  // 1. Sidebar shows profiles, not the raw session list.
   await expect(page.locator('rv-profile-panel')).toBeVisible();
   await expect(page.locator('rv-session-list')).toHaveCount(0);
 

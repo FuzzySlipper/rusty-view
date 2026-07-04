@@ -10,8 +10,9 @@ import type {
   ExecuteChatCommandRequest,
   ExecuteChatCommandResult,
   ExecuteChatCommandResponse,
-  ListChatCommandsResponse,
   GetChatSessionContextUsageResponse,
+  GetChatToolCallDebugDetailResponse,
+  ListChatCommandsResponse,
   ListChatSessionsResponse,
   OpenChatSessionResponse,
   ReplayChatSessionEventsResponse,
@@ -19,6 +20,7 @@ import type {
   SendChatMessageResponse,
   SendChatMessageResult,
   SessionContextUsageResult,
+  ToolCallDebugDetail,
 } from '@rusty-view/protocol';
 
 import {
@@ -27,6 +29,7 @@ import {
   SESSION_PATH,
   SESSION_EVENTS_PATH,
   SESSION_CONTEXT_PATH,
+  SESSION_TOOL_CALL_DEBUG_DETAIL_PATH,
   SESSION_MESSAGES_PATH,
   COMMANDS_PATH,
   SESSION_COMMANDS_PATH,
@@ -231,6 +234,28 @@ export class ChatHttpTransport {
       'GET',
       SESSION_CONTEXT_PATH,
       { pathParams: { session_id: sessionId } },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  /**
+   * Read bounded/redacted raw tool-call debug detail on demand. Normal chat
+   * events only carry the debug detail id; this route fetches the heavier raw
+   * inspection payload lazily when the UI drilldown is opened.
+   */
+  async toolCallDebugDetail(
+    sessionId: string,
+    debugDetailId: string,
+  ): Promise<ToolCallDebugDetail> {
+    const body = await this.requestJson<GetChatToolCallDebugDetailResponse>(
+      'GET',
+      SESSION_TOOL_CALL_DEBUG_DETAIL_PATH,
+      {
+        pathParams: {
+          session_id: sessionId,
+          debug_detail_id: debugDetailId,
+        },
+      },
     );
     return unwrapEnvelope(body);
   }

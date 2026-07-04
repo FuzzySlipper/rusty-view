@@ -57,66 +57,77 @@
     </div>
 
     <section class="rv-admin-profiles__section">
-      <h2>Overview (read-only)</h2>
+      <h2>Profile status</h2>
       <div class="rv-admin-profiles__meta">
-        <span>source {{ planSourceLabel(record.source) }}</span>
-        <span>lifecycle {{ record.lifecycleStatus }}</span>
-        <span>revision {{ record.revision ?? '-' }}</span>
-        <span>kind {{ record.defaultSessionKind ?? '-' }}</span>
-        <span>agent {{ record.agentId ?? '-' }}</span>
-        <span>owner {{ record.ownerId ?? '-' }}</span>
+        <span>Status {{ record.lifecycleStatus }}</span>
+        <span>Storage {{ planSourceLabel(record.source) }}</span>
+        <span>Revision {{ record.revision ?? '-' }}</span>
+        <span>Session type {{ record.defaultSessionKind ?? '-' }}</span>
+        <span>Agent {{ record.agentId ?? '-' }}</span>
+        <span>Owner {{ record.ownerId ?? '-' }}</span>
       </div>
-      <div class="rv-admin-profiles__registry-group rv-admin-profiles__preview">
-        <span class="rv-admin-profiles__group-label"
-          >Runtime graph impact (read-only)</span
+      <details
+        class="rv-admin-profiles__details"
+        data-testid="profile-technical-details"
+      >
+        <summary class="rv-admin-profiles__details-summary">
+          Technical setup details
+        </summary>
+        <p class="rv-admin-profiles__hint">
+          Generated Crew runtime wiring and imported profile file bookkeeping.
+        </p>
+        <div
+          class="rv-admin-profiles__registry-group rv-admin-profiles__preview"
         >
-        @if (runtimeRefGroups().length > 0) {
-        <div class="rv-admin-profiles__preview-groups">
-          @for (group of runtimeRefGroups(); track group.refKind) {
-          <div class="rv-admin-profiles__preview-group">
-            <span class="rv-admin-profiles__preview-group-label"
-              >{{ group.label }}</span
-            >
-            <div class="rv-admin-profiles__runtime-refs">
-              @for (ref of group.refs; track ref.refId) {
-              <span>{{ ref.refId }} ({{ ref.status }})</span>
-              }
+          <span class="rv-admin-profiles__group-label"
+            >Generated runtime wiring</span
+          >
+          @if (runtimeRefGroups().length > 0) {
+          <div class="rv-admin-profiles__preview-groups">
+            @for (group of runtimeRefGroups(); track group.refKind) {
+            <div class="rv-admin-profiles__preview-group">
+              <span class="rv-admin-profiles__preview-group-label"
+                >{{ group.label }}</span
+              >
+              <div class="rv-admin-profiles__runtime-refs">
+                @for (ref of group.refs; track ref.refId) {
+                <span>{{ ref.refId }} ({{ ref.status }})</span>
+                }
+              </div>
             </div>
+            }
+          </div>
+          } @else {
+          <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
+            no generated runtime wiring
           </div>
           }
         </div>
-        } @else {
-        <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
-          no derived runtime refs
-        </div>
-        }
-      </div>
-      <div class="rv-admin-profiles__registry-group">
-        <span class="rv-admin-profiles__group-label"
-          >File assets (soul.md / memory.md / templates)</span
-        >
-        @if (record.sourceAssetStatuses.length === 0) {
-        <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
-          no referenced file assets
-        </div>
-        } @else {
-        <div class="rv-admin-profiles__asset-list">
-          @for (asset of record.sourceAssetStatuses; track asset.path) {
-          <span
-            class="rv-admin-profiles__asset"
-            [class.rv-admin-profiles__asset--tracked]="asset.status === 'tracked'"
-            [class.rv-admin-profiles__asset--changed]="asset.status === 'changed'"
-            [class.rv-admin-profiles__asset--missing]="asset.status === 'missing'"
-          >
-            {{ asset.assetKind }} · {{ asset.status }}
-          </span>
+        <div class="rv-admin-profiles__registry-group">
+          <span class="rv-admin-profiles__group-label">Profile files</span>
+          @if (record.sourceAssetStatuses.length === 0) {
+          <div class="rv-admin-profiles__runtime-refs rv-admin-profiles__muted">
+            no referenced profile files
+          </div>
+          } @else {
+          <div class="rv-admin-profiles__asset-list">
+            @for (asset of record.sourceAssetStatuses; track asset.path) {
+            <span
+              class="rv-admin-profiles__asset"
+              [class.rv-admin-profiles__asset--tracked]="asset.status === 'tracked'"
+              [class.rv-admin-profiles__asset--changed]="asset.status === 'changed'"
+              [class.rv-admin-profiles__asset--missing]="asset.status === 'missing'"
+            >
+              {{ asset.assetKind }} · {{ asset.status }}
+            </span>
+            }
+          </div>
           }
         </div>
-        }
-      </div>
+      </details>
       @if (record.diagnostics.length > 0) {
       <div class="rv-admin-profiles__registry-group">
-        <span class="rv-admin-profiles__group-label">Diagnostics</span>
+        <span class="rv-admin-profiles__group-label">Validation messages</span>
         <div class="rv-admin-profiles__runtime-refs">
           @for (diag of record.diagnostics; track diag.code) {
           <span
