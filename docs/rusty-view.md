@@ -80,6 +80,22 @@ message toolbar action contracts, and theme defaults.
 
 See [plugin-api.md](plugin-api.md).
 
+## Session Metadata And Lifecycle
+
+Rusty View's generic chat session contract is intentionally product-agnostic.
+Downstream packages may attach meaning to opaque session metadata, but
+Rusty View does not define product fields such as character ids, lore layer ids,
+or roleplay phase labels.
+
+The current Rusty Crew chat OpenAPI exposes list/open/replay/stream/send-command
+flows for sessions. It does not yet expose browser-safe session
+create/update/archive/restore routes or first-class session metadata fields on
+`ChatSessionSummary`. Until Crew promotes those fields/routes into the generic
+contract, `@rusty-view/transport` and `ChatStore` do not provide fake lifecycle
+methods. Consumers can use the type-only
+`ChatSessionSummaryWithOpaqueMetadata` helper for compatible backend extensions,
+but backend data remains the source of truth.
+
 ## Theming
 
 Visual styling flows through `libs/design-tokens` CSS custom properties and the

@@ -73,6 +73,16 @@ export const assistantReasoningDeltaEvent: ChatEvent = makeEvent(
   },
 );
 
+export const phaseChangeEvent: ChatEvent = makeEvent('phase_change', {
+  phase: 'exploring',
+  message: 'Gathering context',
+} as ChatEvent['payload']);
+
+export const providerStatusEvent: ChatEvent = makeEvent('provider_status', {
+  level: 'info',
+  message: 'provider stream connected',
+} as ChatEvent['payload']);
+
 export const assistantMessageCompletedEvent: ChatEvent = makeEvent(
   'assistant_message_completed',
   {
@@ -154,6 +164,8 @@ export const allKindEvents: readonly ChatEvent[] = Object.freeze([
   assistantTurnStartedEvent,
   assistantDeltaEvent,
   assistantReasoningDeltaEvent,
+  phaseChangeEvent,
+  providerStatusEvent,
   assistantMessageCompletedEvent,
   assistantTurnFinishedEvent,
   toolCallStartedEvent,

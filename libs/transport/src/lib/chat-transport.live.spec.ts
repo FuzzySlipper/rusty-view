@@ -87,6 +87,10 @@ describeLive('ChatTransport LIVE against rusty-crew', () => {
     });
 
     const events: ChatEvent[] = [];
+    let sawConnected = false;
+    const unsubscribe = stream.onStateChange((state) => {
+      if (state.status === 'connected') sawConnected = true;
+    });
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3_000));
 
     await Promise.race([
@@ -98,11 +102,15 @@ describeLive('ChatTransport LIVE against rusty-crew', () => {
       })(),
       timeout,
     ]);
+    const stateBeforeClose = stream.getState();
+    unsubscribe();
     stream.close();
 
     // Either we got events, or the stream connected and idled (both valid).
-    expect(stream.getState().status === 'connected' || events.length > 0).toBe(
-      true,
-    );
+    expect(
+      sawConnected ||
+        stateBeforeClose.status === 'connected' ||
+        events.length > 0,
+    ).toBe(true);
   });
 });

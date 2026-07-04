@@ -54,6 +54,21 @@ export type ChatSessionPage = Schemas['ChatSessionPage'];
 export type ChatSessionOpenResult = Schemas['ChatSessionOpenResult'];
 export type ChatEventPage = Schemas['ChatEventPage'];
 
+/**
+ * Opaque downstream-owned session metadata. The current Rusty Crew chat
+ * OpenAPI does not expose a first-class metadata field on
+ * {@link ChatSessionSummary}; this helper type gives product packages a
+ * roleplay-agnostic cast target if a compatible backend sends browser-safe
+ * metadata before the generated contract grows a dedicated field.
+ */
+export type ChatSessionOpaqueMetadata = Record<string, unknown>;
+
+export type ChatSessionSummaryWithOpaqueMetadata = ChatSessionSummary & {
+  readonly metadata?: ChatSessionOpaqueMetadata;
+  readonly metadata_json?: unknown;
+  readonly extensions?: ChatSessionOpaqueMetadata;
+};
+
 // ---- events ----
 export type ChatEvent = Schemas['ChatEvent'];
 export type ChatEventKind = Schemas['ChatEventKind'];
@@ -65,6 +80,28 @@ export type AssistantReasoningDeltaPayload =
   Schemas['AssistantReasoningDeltaPayload'];
 export type AssistantMessageCompletedPayload =
   Schemas['AssistantMessageCompletedPayload'];
+
+/**
+ * Browser-safe agent phase event payload. The current OpenAPI enum includes
+ * `phase_change`, but the contract artifact has not yet promoted this payload
+ * into `ChatEventPayload.oneOf`; keep the shape deliberately generic and
+ * label-free. Downstream packages own any user-facing labels.
+ */
+export interface PhaseChangePayload {
+  readonly wake_id?: string;
+  readonly phase: string;
+  readonly message?: string;
+  readonly [key: string]: unknown;
+}
+
+export interface ProviderStatusPayload {
+  readonly wake_id?: string;
+  readonly level: 'info' | 'degraded' | 'error' | string;
+  readonly message: string;
+  readonly metadata_json?: unknown;
+  readonly [key: string]: unknown;
+}
+
 export type ToolCallPayload = Schemas['ToolCallPayload'];
 export type ToolCallDebugValue = Schemas['ToolCallDebugValue'];
 export type ToolCallDebugDetail = Schemas['ToolCallDebugDetail'];

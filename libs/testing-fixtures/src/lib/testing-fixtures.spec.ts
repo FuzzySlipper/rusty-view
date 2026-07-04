@@ -25,9 +25,11 @@ describe('@rusty-view/testing-fixtures package version', () => {
 describe('event fixtures', () => {
   it('allKindEvents covers every known kind', () => {
     const kinds = new Set(allKindEvents.map((e) => e.kind));
-    expect(kinds.size).toBe(15);
+    expect(kinds.size).toBe(17);
     expect(kinds.has('session_snapshot')).toBe(true);
     expect(kinds.has('assistant_reasoning_delta')).toBe(true);
+    expect(kinds.has('phase_change')).toBe(true);
+    expect(kinds.has('provider_status')).toBe(true);
     expect(kinds.has('unknown')).toBe(true);
   });
 

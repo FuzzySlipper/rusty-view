@@ -20,7 +20,10 @@ import {
   type ChatCommandDescriptor,
   type ChatEvent,
   type ChatSessionSummary,
+  type ChatSessionSummaryWithOpaqueMetadata,
   type ExecuteChatCommandResult,
+  type PhaseChangePayload,
+  type ProviderStatusPayload,
   type SendChatMessageRequest,
 } from '../index';
 
@@ -63,6 +66,32 @@ const toolCallEventJson = `{
     "tool_name": "search_lore",
     "summary": "Searched lore for 'amber lantern'",
     "status": "started"
+  }
+}`;
+
+const phaseChangeEventJson = `{
+  "event_id": "evt_phase",
+  "session_id": "sess_1",
+  "sequence_id": 102,
+  "created_at": "2026-06-22T10:05:02Z",
+  "kind": "phase_change",
+  "payload": {
+    "wake_id": "wake_1",
+    "phase": "exploring",
+    "message": "Gathering context"
+  }
+}`;
+
+const providerStatusEventJson = `{
+  "event_id": "evt_provider",
+  "session_id": "sess_1",
+  "sequence_id": 103,
+  "created_at": "2026-06-22T10:05:03Z",
+  "kind": "provider_status",
+  "payload": {
+    "wake_id": "wake_1",
+    "level": "info",
+    "message": "provider stream connected"
   }
 }`;
 
@@ -127,6 +156,23 @@ describe('@rusty-view/protocol wire types parse representative envelopes', () =>
     expect(summary.latest_cursor).toBe('cur_42');
   });
 
+  it('allows downstream-owned opaque session metadata without roleplay types', () => {
+    const summary: ChatSessionSummaryWithOpaqueMetadata = {
+      ...JSON.parse(sessionSummaryJson),
+      metadata_json: {
+        downstream: { package: 'example-consumer' },
+      },
+      extensions: {
+        'example.consumer': { value: 1 },
+      },
+    };
+
+    expect(summary.metadata_json).toEqual({
+      downstream: { package: 'example-consumer' },
+    });
+    expect(summary.extensions?.['example.consumer']).toEqual({ value: 1 });
+  });
+
   it('parses a message_created ChatEvent and reads its payload', () => {
     const event: ChatEvent = JSON.parse(messageCreatedEventJson);
     expect(event.kind).toBe('message_created');
@@ -145,6 +191,19 @@ describe('@rusty-view/protocol wire types parse representative envelopes', () =>
       expect(event.payload.tool_name).toBe('search_lore');
       expect(event.payload.status).toBe('started');
     }
+  });
+
+  it('parses phase_change and provider_status events with generic payload aliases', () => {
+    const phaseEvent: ChatEvent = JSON.parse(phaseChangeEventJson);
+    const phasePayload = phaseEvent.payload as PhaseChangePayload;
+    expect(phaseEvent.kind).toBe('phase_change');
+    expect(phasePayload.phase).toBe('exploring');
+
+    const providerEvent: ChatEvent = JSON.parse(providerStatusEventJson);
+    const providerPayload = providerEvent.payload as ProviderStatusPayload;
+    expect(providerEvent.kind).toBe('provider_status');
+    expect(providerPayload.level).toBe('info');
+    expect(providerPayload.message).toContain('provider');
   });
 
   it('keeps the unknown event kind representable for debug display', () => {

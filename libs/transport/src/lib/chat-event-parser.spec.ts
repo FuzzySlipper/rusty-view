@@ -67,6 +67,26 @@ describe('parseChatEvent', () => {
     }
   });
 
+  it('recognizes phase_change and provider_status events as known events', () => {
+    const phase = parseChatEvent(
+      chatEventJson('phase_change', {
+        wake_id: 'wake_1',
+        phase: 'exploring',
+        message: 'Gathering context',
+      }),
+    );
+    const provider = parseChatEvent(
+      chatEventJson('provider_status', {
+        wake_id: 'wake_1',
+        level: 'info',
+        message: 'provider stream connected',
+      }),
+    );
+
+    expect(phase.kind).toBe('phase_change');
+    expect(provider.kind).toBe('provider_status');
+  });
+
   it('passes through an explicit unknown kind event without double-coercing', () => {
     const event = parseChatEvent(
       chatEventJson('unknown', {

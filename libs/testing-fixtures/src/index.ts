@@ -19,6 +19,8 @@ export {
   assistantTurnStartedEvent,
   assistantDeltaEvent,
   assistantReasoningDeltaEvent,
+  phaseChangeEvent,
+  providerStatusEvent,
   assistantMessageCompletedEvent,
   assistantTurnFinishedEvent,
   toolCallStartedEvent,

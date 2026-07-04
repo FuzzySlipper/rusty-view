@@ -64,6 +64,25 @@ describe('projectConversation', () => {
     expect(projection.latestCursor).toBe('cur_5');
   });
 
+  it('keeps phase_change and provider_status known but transcript-neutral', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'phase_change',
+        { phase: 'exploring', message: 'Gathering context' },
+        { event_id: 'phase_1' },
+      ),
+      makeEvent(
+        'provider_status',
+        { level: 'info', message: 'provider stream connected' },
+        { event_id: 'provider_1' },
+      ),
+    ]);
+
+    expect(projection.latestCursor).toBe('provider_1');
+    expect(projection.messages).toHaveLength(0);
+    expect(projection.unknownEvents).toHaveLength(0);
+  });
+
   it('session_snapshot sets sessionMetadata', () => {
     const session = {
       session_id: 'sess_1',

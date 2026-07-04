@@ -637,7 +637,7 @@ export interface components {
             payload: components["schemas"]["ChatEventPayload"];
         };
         /** @enum {string} */
-        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
+        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
         ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantReasoningDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
         SessionSnapshotPayload: {
             session: components["schemas"]["ChatSessionSummary"];
@@ -782,6 +782,7 @@ export interface components {
             wake_id?: string;
             correlation_id?: string;
             latest_cursor: string;
+            summary?: string;
             reason_code?: string;
         };
         MessageBlockRecord: {

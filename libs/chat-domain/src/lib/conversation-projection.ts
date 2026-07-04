@@ -69,6 +69,9 @@ function applyEvent(
       return applyAssistantTextDelta(withCursor, event);
     case 'assistant_reasoning_delta':
       return applyAssistantReasoningDelta(withCursor, event);
+    case 'phase_change':
+    case 'provider_status':
+      return withCursor;
     case 'assistant_message_completed':
       return applyAssistantMessageCompleted(withCursor, event);
     case 'assistant_turn_finished':
