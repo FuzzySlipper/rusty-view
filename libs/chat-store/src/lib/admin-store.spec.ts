@@ -36,6 +36,8 @@ import {
   type RuntimePauseControlResult,
   type RuntimePauseScope,
   type RuntimeResumeNoopResult,
+  type ProfileDeleteRequest,
+  type ProfileDeleteResult,
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryWriteApplyResult,
   type ProfileRegistryWritePlan,
@@ -119,6 +121,14 @@ interface AdminTransportMock {
       (request: {
         readonly profileId: string;
       }) => Promise<AdminControlResponse<CreatedServiceProfile>>
+    >
+  >;
+  readonly deleteAdminProfile: ReturnType<
+    typeof vi.fn<
+      (
+        profileId: string,
+        request: ProfileDeleteRequest,
+      ) => Promise<AdminControlResponse<ProfileDeleteResult>>
     >
   >;
   readonly createAdminModelProvider: ReturnType<
@@ -278,6 +288,23 @@ function createdProfile(profileId: string): CreatedServiceProfile {
     profilePath: `/profiles/${profileId}`,
     runtimeConfigPath: `/profiles/${profileId}/runtime.json`,
     applyResult: applyResult(),
+  };
+}
+
+function deletedProfile(profileId: string): ProfileDeleteResult {
+  return {
+    profileId,
+    confirmProfileId: profileId,
+    profileDirectoryDeleted: true,
+    runtimeConfigReloaded: true,
+    storagePurge: {
+      profileId,
+      profileRegistryDeleted: true,
+      sessionIds: [`session-${profileId}`],
+      agentIds: [`agent-${profileId}`],
+      tableCounts: [{ table: 'profile_registry', rowsDeleted: 1 }],
+      rowsDeleted: 9,
+    },
   };
 }
 
@@ -500,6 +527,9 @@ function createTransport(
     createAdminProfile: vi.fn(async (request: { readonly profileId: string }) =>
       controlResponse('create-profile', createdProfile(request.profileId)),
     ),
+    deleteAdminProfile: vi.fn(async (profileId: string) =>
+      controlResponse('delete-profile', deletedProfile(profileId)),
+    ),
     createAdminModelProvider: vi.fn(async () => providerWriteResponse('main')),
     updateAdminModelProvider: vi.fn(async (alias: string) =>
       providerWriteResponse(alias),
@@ -685,6 +715,30 @@ describe('AdminStore behavior', () => {
       profileId: 'new-profile',
     });
     expect(store.createResult()?.outcome.result?.profileId).toBe('new-profile');
+    expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
+    expect(store.saving()).toBe(false);
+  });
+
+  it('deleteProfile stores purge details and refreshes admin data', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    await store.deleteProfile('old-profile', {
+      confirmProfileId: 'old-profile',
+      reason: 'operator confirmed hard delete',
+    });
+
+    expect(transport.deleteAdminProfile).toHaveBeenCalledWith('old-profile', {
+      confirmProfileId: 'old-profile',
+      reason: 'operator confirmed hard delete',
+    });
+    expect(
+      store.profileDeleteResult()?.outcome.result?.storagePurge,
+    ).toMatchObject({
+      profileId: 'old-profile',
+      profileRegistryDeleted: true,
+      rowsDeleted: 9,
+    });
     expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
     expect(store.saving()).toBe(false);
   });

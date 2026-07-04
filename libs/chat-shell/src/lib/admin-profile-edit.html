@@ -763,12 +763,15 @@
 
       <div class="rv-admin-profiles__registry-group">
         <span class="rv-admin-profiles__group-label">Brain rebuild</span>
+        <div class="rv-admin-profiles__runtime-refs">
+          <span>capability {{ brainRebuildCapabilityStatus() }}</span>
+        </div>
         <div class="rv-admin-profiles__actions">
           <button
             type="button"
             class="rv-admin-profiles__button"
             (click)="planBrainRebuild(record)"
-            [disabled]="admin.saving()"
+            [disabled]="admin.saving() || !canPlanBrainRebuild()"
           >
             Plan rebuild
           </button>
@@ -776,7 +779,7 @@
             type="button"
             class="rv-admin-profiles__button rv-admin-profiles__button--primary"
             (click)="applyBrainRebuild(record)"
-            [disabled]="admin.saving()"
+            [disabled]="admin.saving() || !canApplyBrainRebuild()"
           >
             Apply rebuild
           </button>
@@ -872,6 +875,60 @@
       }
     </section>
 
+    <section
+      class="rv-admin-profiles__section rv-admin-profiles__section--danger"
+      data-testid="profile-hard-delete"
+    >
+      <h2>Hard Delete</h2>
+      <p class="rv-admin-profiles__hint">
+        Permanently removes this profile's registry entry, generated runtime
+        wiring, sessions, and profile-owned stored data. Use lifecycle archive
+        when the profile should remain recoverable.
+      </p>
+      <div class="rv-admin-profiles__result rv-admin-profiles__result--danger">
+        <span>capability {{ deleteCapabilityStatus() }}</span>
+        <span>target {{ record.profileId }}</span>
+      </div>
+      <label class="rv-admin-profiles__field">
+        <span>Type profile id to confirm</span>
+        <input
+          type="text"
+          autocomplete="off"
+          [value]="deleteConfirmation()"
+          (input)="updateDeleteConfirmation($event)"
+        />
+      </label>
+      <div class="rv-admin-profiles__actions">
+        <button
+          type="button"
+          class="rv-admin-profiles__button"
+          (click)="cancelDelete()"
+          [disabled]="admin.saving() || deleteConfirmation() === ''"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="rv-admin-profiles__button rv-admin-profiles__button--danger"
+          (click)="deleteProfile(record)"
+          [disabled]="admin.saving() || !canDeleteProfile() || !deleteConfirmed()"
+        >
+          Delete profile
+        </button>
+      </div>
+      @if (profileDeleteResult(); as deletion) {
+      <div class="rv-admin-profiles__result" role="status">
+        <span>profile hard-delete {{ deletion.outcome.status }}</span>
+        <span>{{ deletion.outcome.summary }}</span>
+        @for (detail of deleteOutcomeDetails(deletion); track detail) {
+        <span>{{ detail }}</span>
+        }
+      </div>
+      @if (deleteResultJson(deletion); as resultJson) {
+      <pre class="rv-admin-profiles__json">{{ resultJson }}</pre>
+      } }
+    </section>
+
     <section class="rv-admin-profiles__section">
       <h2>MCP Binding Resolution</h2>
       <p class="rv-admin-profiles__hint">
@@ -922,12 +979,29 @@
       </div>
       } }
     </section>
+    } @else { @if (profileDeleteResult(); as deletion) {
+    <section
+      class="rv-admin-profiles__section rv-admin-profiles__section--danger"
+      data-testid="profile-hard-delete-result"
+    >
+      <h2>Hard Delete</h2>
+      <div class="rv-admin-profiles__result" role="status">
+        <span>profile hard-delete {{ deletion.outcome.status }}</span>
+        <span>{{ deletion.outcome.summary }}</span>
+        @for (detail of deleteOutcomeDetails(deletion); track detail) {
+        <span>{{ detail }}</span>
+        }
+      </div>
+      @if (deleteResultJson(deletion); as resultJson) {
+      <pre class="rv-admin-profiles__json">{{ resultJson }}</pre>
+      }
+    </section>
     } @else {
     <section class="rv-admin-profiles__section">
       <div class="rv-admin-profiles__empty">
         Profile {{ profileId() }} is no longer available.
       </div>
     </section>
-    }
+    } }
   </div>
 </div>

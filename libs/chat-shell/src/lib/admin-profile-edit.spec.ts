@@ -2,9 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { AdminStore } from '@rusty-view/chat-store';
+import { CHAT_STORAGE_ADAPTER, ChatStore } from '@rusty-view/chat-store';
+import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 import {
   ChatTransport,
   type AdminProfileRegistryRecord,
+  type ProfileDeleteRequest,
   type ProfileRegistryRuntimeConfigRequest,
 } from '@rusty-view/transport';
 
@@ -15,6 +18,34 @@ type RuntimeConfigSpy = {
 type RebuildSpy = {
   mock: { calls: [string, { readonly reason?: string }][] };
 };
+
+type DeleteSpy = {
+  mock: { calls: [string, ProfileDeleteRequest][] };
+};
+
+class InMemStorage implements ChatStorageAdapter {
+  async putSession(): Promise<void> {
+    /* noop */
+  }
+  async putEvents(): Promise<void> {
+    /* noop */
+  }
+  async getEvents(): Promise<never[]> {
+    return [];
+  }
+  async getSessions(): Promise<never[]> {
+    return [];
+  }
+  async clearSession(): Promise<void> {
+    /* noop */
+  }
+  async getUiState(): Promise<ChatUiState | null> {
+    return null;
+  }
+  async setUiState(): Promise<void> {
+    /* noop */
+  }
+}
 
 import { AdminProfileEditComponent } from './admin-profile-edit';
 import {
@@ -32,6 +63,8 @@ async function editWindow(profileId: string, options: TransportOptions = {}) {
     imports: [AdminProfileEditComponent],
     providers: [
       AdminStore,
+      ChatStore,
+      { provide: CHAT_STORAGE_ADAPTER, useClass: InMemStorage },
       { provide: ChatTransport, useValue: makeTransport(options) },
     ],
   }).compileComponents();
@@ -92,6 +125,9 @@ interface EditComponentApi {
   planPromptEdit(record: AdminProfileRegistryRecord): void;
   applyPromptEdit(record: AdminProfileRegistryRecord): void;
   requestExportPlan(): void;
+  updateDeleteConfirmation(event: { target: { value: string } }): void;
+  cancelDelete(): void;
+  deleteProfile(record: AdminProfileRegistryRecord): Promise<void>;
 }
 
 function recordFor(profileId: string): AdminProfileRegistryRecord {
@@ -100,6 +136,19 @@ function recordFor(profileId: string): AdminProfileRegistryRecord {
     .find((entry) => entry.profileId === profileId);
   if (record === undefined) throw new Error(`${profileId} record not found`);
   return record;
+}
+
+function buttonByText(
+  fixture: { nativeElement: HTMLElement },
+  label: string,
+): HTMLButtonElement {
+  const button = Array.from(
+    fixture.nativeElement.querySelectorAll('button'),
+  ).find((candidate) => candidate.textContent?.trim() === label);
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found`);
+  }
+  return button;
 }
 
 describe('AdminProfileEditComponent', () => {
@@ -552,6 +601,9 @@ describe('AdminProfileEditComponent', () => {
     };
     const record = recordFor('rt-prime');
 
+    expect(buttonByText(fixture, 'Plan rebuild').disabled).toBe(false);
+    expect(buttonByText(fixture, 'Apply rebuild').disabled).toBe(false);
+
     component.planBrainRebuild(record);
     await fixture.whenStable();
     fixture.detectChanges();
@@ -576,6 +628,162 @@ describe('AdminProfileEditComponent', () => {
     html = (fixture.nativeElement as HTMLElement).innerHTML;
     expect(html).toContain('profile brain rebuild applied');
     expect(html).toContain('affected sessions session-1');
+  });
+
+  it('disables profile brain rebuild controls when Crew capabilities are unavailable', async () => {
+    const fixture = await editWindow('rt-prime', {
+      capabilityIds: [],
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'rt-prime',
+        revision: 5,
+      }),
+      mcpCatalog: mcpCatalog(),
+      toolCatalog: toolCatalog(),
+      localToolProfiles: localToolProfiles(),
+    });
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileBrainRebuild: RebuildSpy;
+      applyAdminProfileBrainRebuild: RebuildSpy;
+    };
+
+    component.showSection('runtime');
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'capability missing',
+    );
+    expect(buttonByText(fixture, 'Plan rebuild').disabled).toBe(true);
+    expect(buttonByText(fixture, 'Apply rebuild').disabled).toBe(true);
+
+    component.planBrainRebuild(recordFor('rt-prime'));
+    component.applyBrainRebuild(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    expect(transport.planAdminProfileBrainRebuild.mock.calls).toHaveLength(0);
+    expect(transport.applyAdminProfileBrainRebuild.mock.calls).toHaveLength(0);
+  });
+
+  it('shows partial profile brain rebuild capability when only plan is available', async () => {
+    const fixture = await editWindow('rt-prime', {
+      capabilityIds: ['admin.control.profiles.rebuild_brain.plan'],
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'rt-prime',
+        revision: 5,
+      }),
+      mcpCatalog: mcpCatalog(),
+      toolCatalog: toolCatalog(),
+      localToolProfiles: localToolProfiles(),
+    });
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+
+    component.showSection('runtime');
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'capability partial',
+    );
+    expect(buttonByText(fixture, 'Plan rebuild').disabled).toBe(false);
+    expect(buttonByText(fixture, 'Apply rebuild').disabled).toBe(true);
+  });
+
+  it('requires exact profile id confirmation before hard delete', async () => {
+    const fixture = await editWindow('delete-prime', {
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'delete-prime',
+        revision: 5,
+      }),
+    });
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+
+    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+
+    component.updateDeleteConfirmation({ target: { value: 'wrong' } });
+    fixture.detectChanges();
+    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+
+    component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
+    fixture.detectChanges();
+    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(false);
+  });
+
+  it('cancels hard-delete confirmation without calling Crew', async () => {
+    const fixture = await editWindow('delete-prime', {
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'delete-prime',
+        revision: 5,
+      }),
+    });
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      deleteAdminProfile: DeleteSpy;
+    };
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+
+    component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
+    fixture.detectChanges();
+    component.cancelDelete();
+    fixture.detectChanges();
+
+    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+    expect(transport.deleteAdminProfile.mock.calls).toHaveLength(0);
+  });
+
+  it('hard-deletes a profile and surfaces purge counts', async () => {
+    const fixture = await editWindow('delete-prime', {
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'delete-prime',
+        revision: 5,
+      }),
+    });
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      deleteAdminProfile: DeleteSpy;
+    };
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+
+    component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
+    fixture.detectChanges();
+    await component.deleteProfile(recordFor('delete-prime'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(transport.deleteAdminProfile.mock.calls[0]).toEqual([
+      'delete-prime',
+      {
+        reason: 'profile hard-deleted from Rusty View',
+        confirmProfileId: 'delete-prime',
+      },
+    ]);
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('profile hard-delete completed');
+    expect(html).toContain('rows deleted 7');
+    expect(html).toContain('profile registry deleted true');
+    expect(html).toContain('sessions delete-prime-session');
+    expect(html).toContain('profile_registry');
+  });
+
+  it('disables hard delete when Crew capability is unavailable', async () => {
+    const fixture = await editWindow('delete-prime', {
+      capabilityIds: [],
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'delete-prime',
+        revision: 5,
+      }),
+    });
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      deleteAdminProfile: DeleteSpy;
+    };
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+
+    component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'capability missing',
+    );
+    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+
+    await component.deleteProfile(recordFor('delete-prime'));
+    await fixture.whenStable();
+    expect(transport.deleteAdminProfile.mock.calls).toHaveLength(0);
   });
 
   // ---- context strategy policy edit (#3849) -------------------------------

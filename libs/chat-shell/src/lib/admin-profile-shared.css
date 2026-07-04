@@ -67,6 +67,17 @@
   color: var(--rv-color-accent-text);
 }
 
+.rv-admin-profiles__button--danger {
+  border-color: var(--rv-color-danger);
+  color: var(--rv-color-danger);
+}
+
+.rv-admin-profiles__button--danger:not(:disabled):hover,
+.rv-admin-profiles__button--danger:not(:disabled):focus-visible {
+  background: var(--rv-color-danger);
+  color: var(--rv-color-accent-text);
+}
+
 .rv-admin-profiles__button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -95,6 +106,15 @@
   gap: var(--rv-space-sm);
   padding: var(--rv-space-md);
   border-bottom: 1px solid var(--rv-color-border);
+}
+
+.rv-admin-profiles__section--danger {
+  border-color: var(--rv-color-danger);
+  background: color-mix(
+    in srgb,
+    var(--rv-color-danger) 8%,
+    var(--rv-color-surface)
+  );
 }
 
 .rv-admin-profiles__form-grid {
@@ -131,6 +151,25 @@
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
+}
+
+.rv-admin-profiles__result--danger {
+  border-color: var(--rv-color-danger);
+}
+
+.rv-admin-profiles__json {
+  max-height: 12rem;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  padding: var(--rv-space-sm);
 }
 
 .rv-admin-profiles__list {

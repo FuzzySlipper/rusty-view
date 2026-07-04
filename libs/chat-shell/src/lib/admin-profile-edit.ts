@@ -8,7 +8,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { AdminStore } from '@rusty-view/chat-store';
+import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type {
   AdminControlResponse,
   AdminLocalToolProfile,
@@ -23,6 +23,7 @@ import type {
   CreateProfileMcpBinding,
   ProfileBrainRebuildResult,
   ProfileBundleExportEntry,
+  ProfileDeleteResult,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryLifecycleStatus,
@@ -100,6 +101,19 @@ const CONTEXT_DEBUG_VISIBILITIES: readonly ContextDebugVisibility[] = [
   'verbose',
 ];
 
+type CapabilityStatus = 'available' | 'partial' | 'checking' | 'missing';
+
+const PROFILE_BRAIN_REBUILD_PLAN_CAPABILITY_ID =
+  'admin.control.profiles.rebuild_brain.plan';
+const PROFILE_BRAIN_REBUILD_APPLY_CAPABILITY_ID =
+  'admin.control.profiles.rebuild_brain.apply';
+const PROFILE_BRAIN_REBUILD_CAPABILITY_IDS = [
+  PROFILE_BRAIN_REBUILD_PLAN_CAPABILITY_ID,
+  PROFILE_BRAIN_REBUILD_APPLY_CAPABILITY_ID,
+] as const;
+const PROFILE_DELETE_CAPABILITY_ID = 'admin.control.profiles.delete';
+const PROFILE_DELETE_REASON = 'profile hard-deleted from Rusty View';
+
 /**
  * Editable view of a {@link ContextStrategyPolicy} (task #3849). Mirrors the
  * wire policy minus `strategyConfig`, which the form preserves verbatim from the
@@ -144,6 +158,7 @@ const FALLBACK_CONTEXT_POLICY: ContextPolicyDraft = {
 })
 export class AdminProfileEditComponent {
   protected readonly admin = inject(AdminStore);
+  private readonly chat = inject(ChatStore);
 
   /** The profile this window edits. */
   readonly profileId = input.required<string>();
@@ -159,6 +174,7 @@ export class AdminProfileEditComponent {
     signal<PromptEditFormState>(INITIAL_PROMPT_EDIT);
   protected readonly lifecycleTargetStatus =
     signal<ProfileRegistryLifecycleStatus>('paused');
+  protected readonly deleteConfirmation = signal('');
   /** Which sub-form is active in the edit window: registry fields by default. */
   protected readonly section = signal<
     'fields' | 'lifecycle' | 'prompts' | 'runtime'
@@ -249,6 +265,46 @@ export class AdminProfileEditComponent {
         ? result
         : null;
     });
+  protected readonly profileDeleteResult =
+    computed<AdminControlResponse<ProfileDeleteResult> | null>(() => {
+      const result = this.admin.profileDeleteResult();
+      if (result === null) return null;
+      const target = result.command.target;
+      const targetProfile =
+        target['profile_id'] ?? target['profileId'] ?? target['profile'];
+      const resultProfile = result.outcome.result?.profileId;
+      return targetProfile === undefined ||
+        targetProfile === this.profileId() ||
+        resultProfile === this.profileId()
+        ? result
+        : null;
+    });
+  protected readonly brainRebuildCapabilityStatus = computed<CapabilityStatus>(
+    () => this.capabilityStatusFor(PROFILE_BRAIN_REBUILD_CAPABILITY_IDS),
+  );
+  protected readonly deleteCapabilityStatus = computed<CapabilityStatus>(() =>
+    this.capabilityStatusFor([PROFILE_DELETE_CAPABILITY_ID]),
+  );
+  protected readonly canPlanBrainRebuild = computed(
+    () =>
+      this.admin.controlCapabilityState(
+        PROFILE_BRAIN_REBUILD_PLAN_CAPABILITY_ID,
+      ) === 'available',
+  );
+  protected readonly canApplyBrainRebuild = computed(
+    () =>
+      this.admin.controlCapabilityState(
+        PROFILE_BRAIN_REBUILD_APPLY_CAPABILITY_ID,
+      ) === 'available',
+  );
+  protected readonly canDeleteProfile = computed(
+    () =>
+      this.admin.controlCapabilityState(PROFILE_DELETE_CAPABILITY_ID) ===
+      'available',
+  );
+  protected readonly deleteConfirmed = computed(
+    () => this.deleteConfirmation() === this.profileId(),
+  );
 
   /** Seed the registry-fields form from the record once it resolves. */
   private seeded = false;
@@ -875,15 +931,52 @@ export class AdminProfileEditComponent {
   }
 
   protected planBrainRebuild(record: AdminProfileRegistryRecord): void {
+    if (!this.canPlanBrainRebuild()) return;
     void this.admin.planProfileBrainRebuild(record.profileId, {
       reason: 'profile runtime config changed from Rusty View',
     });
   }
 
   protected applyBrainRebuild(record: AdminProfileRegistryRecord): void {
+    if (!this.canApplyBrainRebuild()) return;
     void this.admin.applyProfileBrainRebuild(record.profileId, {
       reason: 'profile runtime config changed from Rusty View',
     });
+  }
+
+  protected updateDeleteConfirmation(event: Event): void {
+    this.deleteConfirmation.set((event.target as HTMLInputElement).value);
+  }
+
+  protected cancelDelete(): void {
+    this.deleteConfirmation.set('');
+  }
+
+  protected async deleteProfile(
+    record: AdminProfileRegistryRecord,
+  ): Promise<void> {
+    if (!this.canDeleteProfile() || !this.deleteConfirmed()) return;
+    await this.admin.deleteProfile(record.profileId, {
+      reason: PROFILE_DELETE_REASON,
+      confirmProfileId: this.deleteConfirmation(),
+    });
+    const result = this.profileDeleteResult();
+    if (result?.outcome.status === 'completed') {
+      this.chat.clearProfileSelection(record.profileId);
+      await this.chat.refreshSessions().catch(() => undefined);
+    }
+  }
+
+  private capabilityStatusFor(
+    capabilityIds: readonly string[],
+  ): CapabilityStatus {
+    const states = capabilityIds.map((id) =>
+      this.admin.controlCapabilityState(id),
+    );
+    if (states.every((state) => state === 'available')) return 'available';
+    if (states.some((state) => state === 'unknown')) return 'checking';
+    if (states.some((state) => state === 'available')) return 'partial';
+    return 'missing';
   }
 
   protected rebuildOutcomeDetails(
@@ -921,6 +1014,56 @@ export class AdminProfileEditComponent {
 
   protected rebuildResultJson(
     response: AdminControlResponse<ProfileBrainRebuildResult>,
+  ): string {
+    const result = response.outcome.result;
+    if (result === undefined) return '';
+    try {
+      return JSON.stringify(result, null, 2);
+    } catch {
+      return String(result);
+    }
+  }
+
+  protected deleteOutcomeDetails(
+    response: AdminControlResponse<ProfileDeleteResult>,
+  ): readonly string[] {
+    const details: string[] = [];
+    const affected = response.outcome.affectedIds;
+    if (affected !== undefined) {
+      for (const [key, value] of Object.entries(affected)) {
+        details.push(`${key} ${value}`);
+      }
+    }
+    const result = response.outcome.result;
+    if (result === undefined) return details;
+    if (result.confirmProfileId !== undefined) {
+      details.push(`confirmed ${result.confirmProfileId}`);
+    }
+    if (result.profileDirectoryDeleted !== undefined) {
+      details.push(
+        `profile directory deleted ${result.profileDirectoryDeleted}`,
+      );
+    }
+    if (result.runtimeConfigReloaded !== undefined) {
+      details.push(`runtime config reloaded ${result.runtimeConfigReloaded}`);
+    }
+    const storage = result.storagePurge;
+    if (storage !== undefined) {
+      details.push(
+        `profile registry deleted ${storage.profileRegistryDeleted}`,
+      );
+      details.push(`rows deleted ${storage.rowsDeleted}`);
+      details.push(...labeledList('sessions', storage.sessionIds));
+      details.push(...labeledList('agents', storage.agentIds));
+      for (const count of storage.tableCounts) {
+        details.push(`${count.table} rows ${count.rowsDeleted}`);
+      }
+    }
+    return details;
+  }
+
+  protected deleteResultJson(
+    response: AdminControlResponse<ProfileDeleteResult>,
   ): string {
     const result = response.outcome.result;
     if (result === undefined) return '';

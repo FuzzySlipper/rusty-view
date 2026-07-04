@@ -58,6 +58,18 @@ export class MessageItemComponent {
     return msg.author.role;
   });
 
+  protected readonly timestampLabel = computed(() => {
+    const createdAt = this.message().createdAt;
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return createdAt;
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  });
+
   protected readonly statusIndicator = computed(() => {
     const status = this.message().status;
     if (status === 'streaming') {

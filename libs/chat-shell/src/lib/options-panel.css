@@ -1,8 +1,8 @@
 :host {
   display: block;
-  width: 420px;
-  max-width: 92vw;
-  max-height: 80vh;
+  width: min(960px, 96vw);
+  max-width: 96vw;
+  max-height: 88vh;
   background: var(--rv-color-surface);
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
@@ -23,14 +23,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--rv-space-sm) var(--rv-space-md);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
   border-bottom: 1px solid var(--rv-color-border);
   background: var(--rv-color-surface-raised);
 }
 
 .rv-options__title {
   font-family: var(--rv-font-ui);
-  font-size: var(--rv-font-size-sm);
+  font-size: var(--rv-font-size-lg);
   font-weight: var(--rv-font-weight-bold);
   color: var(--rv-color-text-primary);
 }

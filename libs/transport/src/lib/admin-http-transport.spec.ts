@@ -224,6 +224,60 @@ describe('AdminHttpTransport', () => {
     );
   });
 
+  it('hard-deletes a profile through the guarded control route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        command: {
+          name: 'delete_profile',
+          target: { profileId: 'field prime' },
+          requestId: 'req',
+          reason: 'operator hard-deleted profile',
+        },
+        outcome: {
+          status: 'completed',
+          summary: 'profile hard-deleted',
+          result: {
+            profileId: 'field prime',
+            confirmProfileId: 'field prime',
+            profileDirectoryDeleted: true,
+            runtimeConfigReloaded: true,
+            storagePurge: {
+              profileId: 'field prime',
+              profileRegistryDeleted: true,
+              sessionIds: ['field-prime-session'],
+              agentIds: ['field-prime-agent'],
+              tableCounts: [
+                { table: 'profile_registry', rowsDeleted: 1 },
+                { table: 'session_events', rowsDeleted: 6 },
+              ],
+              rowsDeleted: 7,
+            },
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.deleteProfile('field prime', {
+      reason: 'operator hard-deleted profile',
+      confirmProfileId: 'field prime',
+    });
+
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/control/profiles/field%20prime/delete',
+    );
+    expect(JSON.parse(req.body ?? '{}')).toEqual({
+      reason: 'operator hard-deleted profile',
+      confirmProfileId: 'field prime',
+    });
+    expect(result.outcome.result?.profileDirectoryDeleted).toBe(true);
+    expect(result.outcome.result?.storagePurge?.rowsDeleted).toBe(7);
+  });
+
   it('reloads runtime config through the control route', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

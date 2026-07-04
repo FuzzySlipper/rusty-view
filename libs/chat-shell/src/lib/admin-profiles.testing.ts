@@ -12,8 +12,11 @@ import type {
   CreatedServiceProfile,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
+  ProfileDeleteRequest,
+  ProfileDeleteResult,
   ProfileBundleExportPlan,
   ProfileRegistryRuntimeConfigRequest,
+  RuntimeConfigApplyResult,
 } from '@rusty-view/transport';
 
 /** Recording stub: a callable that records its call arguments like a vi.fn(). */
@@ -51,6 +54,7 @@ export const LANDED_PROFILE_CONTROL_CAPABILITY_IDS = [
   'admin.control.sessions.rebuild_runtime.apply',
   'admin.control.profiles.rebuild_brain.plan',
   'admin.control.profiles.rebuild_brain.apply',
+  'admin.control.profiles.delete',
 ] as const;
 
 export function capability(id: string): ApiCapabilityDescriptor {
@@ -81,6 +85,7 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
   const capabilityIds =
     options.capabilityIds ?? LANDED_PROFILE_CONTROL_CAPABILITY_IDS;
   return {
+    listSessions: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
     adminDiagnostics: async () => ({
       overview: {
         generatedAt: '2026-06-25T00:00:00Z',
@@ -234,7 +239,38 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
       async (profileId: string, _request: ProfileBrainRebuildRequest = {}) =>
         brainRebuildResponse(profileId, 'completed'),
     ),
+    deleteAdminProfile: recordingFn(
+      async (profileId: string, request: ProfileDeleteRequest) =>
+        profileDeleteResponse(profileId, request),
+    ),
+    reloadAdminConfig: recordingFn(async () => configReloadResponse()),
   } as unknown as ChatTransport;
+}
+
+function configReloadResponse(): AdminControlResponse<RuntimeConfigApplyResult> {
+  return {
+    command: {
+      name: 'reload_config',
+      target: {},
+      requestId: 'req-reload',
+      reason: 'rusty-view service config reload',
+    },
+    outcome: {
+      status: 'completed',
+      summary: 'runtime config reloaded',
+      result: {
+        brainsRegistered: 0,
+        brainsAlreadyPresent: 1,
+        sessionsCreated: 0,
+        sessionsAlreadyPresent: 1,
+        sessionsReactivated: 0,
+        sessionsMissing: 0,
+        scheduledJobsRegistered: 0,
+      },
+    },
+    audit: { started: true, terminal: true },
+    observation: {},
+  };
 }
 
 function brainRebuildResponse(
@@ -262,6 +298,43 @@ function brainRebuildResponse(
         sessionIdsPreserved: true,
         sessionHistoryPreserved: true,
         mcpRefresh: { status: 'completed' },
+      },
+    },
+    audit: { started: true, terminal: true },
+    observation: {},
+  };
+}
+
+function profileDeleteResponse(
+  profileId: string,
+  request: ProfileDeleteRequest,
+): AdminControlResponse<ProfileDeleteResult> {
+  return {
+    command: {
+      name: 'delete_profile',
+      target: { profileId },
+      requestId: 'req-delete',
+      ...(request.reason !== undefined ? { reason: request.reason } : {}),
+    },
+    outcome: {
+      status: 'completed',
+      summary: `profile ${profileId} hard-deleted`,
+      result: {
+        profileId,
+        confirmProfileId: request.confirmProfileId,
+        profileDirectoryDeleted: true,
+        runtimeConfigReloaded: true,
+        storagePurge: {
+          profileId,
+          profileRegistryDeleted: true,
+          sessionIds: [`${profileId}-session`],
+          agentIds: [`${profileId}-agent`],
+          tableCounts: [
+            { table: 'profile_registry', rowsDeleted: 1 },
+            { table: 'session_events', rowsDeleted: 6 },
+          ],
+          rowsDeleted: 7,
+        },
       },
     },
     audit: { started: true, terminal: true },

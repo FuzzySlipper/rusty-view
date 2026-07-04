@@ -37,6 +37,8 @@ import {
   type ProfileBundleExportPlan,
   type ProfileBrainRebuildRequest,
   type ProfileBrainRebuildResult,
+  type ProfileDeleteRequest,
+  type ProfileDeleteResult,
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryLifecycleRequest,
   type ProfileRegistryPromptRequest,
@@ -146,6 +148,8 @@ export class AdminStore {
     signal<AdminControlResponse<RuntimeConfigApplyResult> | null>(null);
   private readonly _profileBrainRebuildResult =
     signal<AdminControlResponse<ProfileBrainRebuildResult> | null>(null);
+  private readonly _profileDeleteResult =
+    signal<AdminControlResponse<ProfileDeleteResult> | null>(null);
   private readonly _runtimePauseResult =
     signal<AdminControlResponse<RuntimePauseControlResult> | null>(null);
   private readonly _runtimeResumeResult = signal<AdminControlResponse<
@@ -190,6 +194,7 @@ export class AdminStore {
   readonly reloadResult = this._reloadResult.asReadonly();
   readonly profileBrainRebuildResult =
     this._profileBrainRebuildResult.asReadonly();
+  readonly profileDeleteResult = this._profileDeleteResult.asReadonly();
   readonly runtimePauseResult = this._runtimePauseResult.asReadonly();
   readonly runtimeResumeResult = this._runtimeResumeResult.asReadonly();
 
@@ -744,6 +749,25 @@ export class AdminStore {
     }
   }
 
+  async deleteProfile(
+    profileId: string,
+    request: ProfileDeleteRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._profileDeleteResult.set(null);
+    try {
+      this._profileDeleteResult.set(
+        await this.transport.deleteAdminProfile(profileId, request),
+      );
+      await this.refresh();
+    } catch (error) {
+      this._error.set(storeErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
   /** Clear the current registry write plan/result (e.g. after dismissing). */
   clearRegistryWrite(): void {
     this._registryWritePlan.set(null);
@@ -751,6 +775,7 @@ export class AdminStore {
     this._runtimeConfigPlan.set(null);
     this._runtimeConfigResult.set(null);
     this._profileBrainRebuildResult.set(null);
+    this._profileDeleteResult.set(null);
   }
 
   /**

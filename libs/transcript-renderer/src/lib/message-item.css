@@ -3,7 +3,7 @@
 }
 
 .rv-message {
-  padding: var(--rv-space-sm) var(--rv-space-lg);
+  padding: var(--rv-message-padding-y, var(--rv-space-sm)) var(--rv-space-lg);
   border-bottom: 1px solid var(--rv-color-border);
 }
 
@@ -50,6 +50,19 @@
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-stream);
+}
+
+.rv-message__timestamp,
+.rv-message__id {
+  display: none;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+}
+
+:root[data-rv-show-timestamps='true'] .rv-message__timestamp,
+:root[data-rv-show-message-ids='true'] .rv-message__id {
+  display: inline;
 }
 
 .rv-message__blocks {

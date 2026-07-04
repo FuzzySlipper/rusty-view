@@ -32,6 +32,7 @@ export interface RustyViewConfig {
 
 /** Default rusty-crew HTTP port, used when deriving the URL from the page host. */
 const DEFAULT_API_PORT = 9347;
+const CREW_SERVICE_PORTS = new Set(['9347', '9348']);
 
 /**
  * Optional deploy-time config injected on `window` (e.g. via a `<script>` in
@@ -55,7 +56,9 @@ declare global {
  *
  *   1. `?api=<url>` query param — explicit, ephemeral; handy for testing.
  *   2. `window.__RUSTY_VIEW_CONFIG__.baseUrl` — injected at deploy time.
- *   3. Same host that served the page, on the default API port — e.g. the view
+ *   3. Same origin when served by a known rusty-crew service port (`9347` live
+ *      or `9348` debug/test).
+ *   4. Same host that served the page, on the default API port — e.g. the view
  *      loaded from `http://den-k8:4321` talks to `http://den-k8:9347`.
  *
  * The previous hardcoded `http://127.0.0.1:9347` only worked when the browser
@@ -84,9 +87,16 @@ export function resolveRustyViewConfig(): RustyViewConfig {
   };
 }
 
-/** Derive `http(s)://<page-host>:<api-port>` from the serving origin. */
+/** Derive the backend URL from the serving origin. */
 function deriveBaseUrlFromLocation(): string {
-  const { protocol, hostname } = window.location;
+  return deriveBaseUrlFromLocationParts(window.location);
+}
+
+export function deriveBaseUrlFromLocationParts(
+  location: Pick<Location, 'origin' | 'port' | 'protocol' | 'hostname'>,
+): string {
+  const { origin, port, protocol, hostname } = location;
+  if (CREW_SERVICE_PORTS.has(port)) return origin;
   return `${protocol}//${hostname}:${DEFAULT_API_PORT}`;
 }
 

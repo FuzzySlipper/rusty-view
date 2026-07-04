@@ -41,6 +41,8 @@ import type {
   ProfileBundleExportPlan,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
+  ProfileDeleteRequest,
+  ProfileDeleteResult,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
@@ -493,6 +495,15 @@ export class AdminHttpTransport {
     });
   }
 
+  deleteProfile(
+    profileId: string,
+    request: ProfileDeleteRequest,
+  ): Promise<AdminControlResponse<ProfileDeleteResult>> {
+    return this.request('POST', profileDeletePath(profileId), {
+      body: compactRecord(request),
+    });
+  }
+
   reloadConfig(
     reason = 'rusty-view service config reload',
   ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
@@ -674,6 +685,10 @@ function profileBrainRebuildPath(
   mode: 'plan' | 'apply',
 ): string {
   return `/v1/admin/control/profiles/${encodeURIComponent(profileId)}/rebuild-brain/${mode}`;
+}
+
+function profileDeletePath(profileId: string): string {
+  return `/v1/admin/control/profiles/${encodeURIComponent(profileId)}/delete`;
 }
 
 /**

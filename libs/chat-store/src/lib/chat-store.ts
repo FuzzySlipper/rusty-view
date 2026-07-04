@@ -301,6 +301,30 @@ export class ChatStore implements OnDestroy {
     }
   }
 
+  /**
+   * Clear the selected profile and transcript state after an external admin
+   * action removes that profile/session graph.
+   */
+  clearProfileSelection(profileId?: string): void {
+    if (
+      profileId !== undefined &&
+      this._selectedProfileId() !== null &&
+      this._selectedProfileId() !== profileId
+    ) {
+      return;
+    }
+    this.closeStream();
+    this.seenEventIds.clear();
+    this._selectedProfileId.set(null);
+    this._viewingHistoricalSessionId.set(null);
+    this._activeSessionId.set(null);
+    this._projection.set(emptyProjection());
+    this._rawEvents.set([]);
+    this._activeSessionStatus.set(null);
+    this._contextUsage.set(null);
+    this.persistUiState();
+  }
+
   /** Load commands from the backend. */
   async loadCommands(): Promise<void> {
     const registry = await this.transport.listCommands();

@@ -1,166 +1,188 @@
 <div class="rv-appearance">
-  <!-- Base theme -->
-  <fieldset class="rv-appearance__group">
-    <legend>Base theme</legend>
-    <select
-      class="rv-appearance__select"
-      [value]="theme.settings().themeId"
-      (change)="onSelectTheme($event)"
-    >
-      @for (option of themes; track option.id) {
-      <option [value]="option.id">{{ option.label }}</option>
-      }
-    </select>
-  </fieldset>
+  <div class="rv-appearance__grid">
+    <fieldset class="rv-appearance__group">
+      <legend>UI Theme</legend>
+      <label class="rv-appearance__row">
+        <span>Theme</span>
+        <select
+          class="rv-appearance__select"
+          [value]="theme.settings().themeId"
+          (change)="onSelectTheme($event)"
+        >
+          @for (option of themes; track option.id) {
+          <option [value]="option.id">{{ option.label }}</option>
+          }
+        </select>
+      </label>
 
-  <!-- Font family -->
-  <fieldset class="rv-appearance__group">
-    <legend>App font family</legend>
-    <div class="rv-appearance__segmented">
-      @for (option of fontFamilies; track option.id) {
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().fontFamily === option.id"
-        (click)="setFontFamily(option.id)"
-      >
-        {{ option.label }}
-      </button>
-      }
-    </div>
-  </fieldset>
-
-  <!-- Font scale -->
-  <fieldset class="rv-appearance__group">
-    <legend>Font scale · {{ theme.settings().fontScale.toFixed(2) }}×</legend>
-    <input
-      type="range"
-      class="rv-appearance__range"
-      [min]="fontScaleMin"
-      [max]="fontScaleMax"
-      [step]="fontScaleStep"
-      [value]="theme.settings().fontScale"
-      (input)="onScale($event)"
-    />
-  </fieldset>
-
-  <!-- Density -->
-  <fieldset class="rv-appearance__group">
-    <legend>Density</legend>
-    <div class="rv-appearance__segmented">
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().density === 'normal'"
-        (click)="setDensity('normal')"
-      >
-        Normal
-      </button>
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().density === 'compact'"
-        (click)="setDensity('compact')"
-      >
-        Compact
-      </button>
-    </div>
-  </fieldset>
-
-  <!-- Text render mode -->
-  <fieldset class="rv-appearance__group">
-    <legend>Text render mode</legend>
-    <div class="rv-appearance__segmented">
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'auto'"
-        (click)="setTextRenderMode('auto')"
-      >
-        Auto
-      </button>
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'markdown'"
-        (click)="setTextRenderMode('markdown')"
-      >
-        Markdown
-      </button>
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'sanitized-html'"
-        (click)="setTextRenderMode('sanitized-html')"
-      >
-        HTML
-      </button>
-      <button
-        type="button"
-        class="rv-appearance__seg"
-        [class.rv-appearance__seg--active]="theme.settings().textRenderMode === 'raw'"
-        (click)="setTextRenderMode('raw')"
-      >
-        Raw
-      </button>
-    </div>
-  </fieldset>
-
-  <!-- Colours -->
-  <fieldset class="rv-appearance__group">
-    <legend>Colours</legend>
-    <ul class="rv-appearance__colors">
-      @for (field of colorFields; track field.key) {
-      <li class="rv-appearance__color">
-        <span class="rv-appearance__color-label">{{ field.label }}</span>
-        <input
-          type="color"
-          class="rv-appearance__color-input"
-          [value]="colorValue(field.key)"
-          (input)="onColor(field.key, $event)"
-        />
+      <div class="rv-appearance__label">Font family</div>
+      <div class="rv-appearance__segmented rv-appearance__segmented--wrap">
+        @for (option of fontFamilies; track option.id) {
         <button
           type="button"
-          class="rv-appearance__color-default"
-          [class.rv-appearance__color-default--off]="!isColorOverridden(field.key)"
-          (click)="clearColor(field.key)"
+          class="rv-appearance__seg"
+          [class.rv-appearance__seg--active]="theme.settings().fontFamily === option.id"
+          (click)="setFontFamily(option.id)"
         >
-          default
+          {{ option.label }}
         </button>
-      </li>
+        }
+      </div>
+
+      <label class="rv-appearance__range-row">
+        <span>Font Scale</span>
+        <input
+          type="range"
+          class="rv-appearance__range"
+          [min]="fontScaleMin"
+          [max]="fontScaleMax"
+          [step]="fontScaleStep"
+          [value]="theme.settings().fontScale"
+          (input)="onScale($event)"
+        />
+        <strong>{{ theme.settings().fontScale.toFixed(2) }}x</strong>
+      </label>
+
+      <label class="rv-appearance__range-row">
+        <span>Chat Width</span>
+        <input
+          type="range"
+          class="rv-appearance__slider"
+          [min]="chatWidthMin"
+          [max]="chatWidthMax"
+          [step]="chatWidthStep"
+          [value]="theme.settings().chatWidthPercent"
+          (input)="onChatWidth($event)"
+        />
+        <strong>{{ theme.settings().chatWidthPercent }}%</strong>
+      </label>
+    </fieldset>
+
+    <fieldset class="rv-appearance__group">
+      <legend>Chat / Message Handling</legend>
+      <label class="rv-appearance__row">
+        <span>Text Render Mode</span>
+        <select
+          class="rv-appearance__select"
+          [value]="theme.settings().textRenderMode"
+          (change)="setTextRenderMode($any($event.target).value)"
+        >
+          <option value="auto">Auto</option>
+          <option value="markdown">Markdown</option>
+          <option value="sanitized-html">HTML</option>
+          <option value="raw">Raw</option>
+        </select>
+      </label>
+
+      <label class="rv-appearance__row">
+        <span>Density</span>
+        <select
+          class="rv-appearance__select"
+          [value]="theme.settings().density"
+          (change)="setDensity($any($event.target).value)"
+        >
+          <option value="normal">Normal</option>
+          <option value="compact">Compact</option>
+        </select>
+      </label>
+
+      <label class="rv-appearance__row">
+        <span>Message Spacing</span>
+        <select
+          class="rv-appearance__select"
+          [value]="theme.settings().messageSpacing"
+          (change)="setMessageSpacing($any($event.target).value)"
+        >
+          @for (option of messageSpacingOptions; track option.id) {
+          <option [value]="option.id">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
+          [checked]="theme.settings().showTimestamps"
+          (change)="toggleShowTimestamps($event)"
+        />
+        <span>Chat Timestamps</span>
+      </label>
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
+          [checked]="theme.settings().showMessageIds"
+          (change)="toggleShowMessageIds($event)"
+        />
+        <span>Message IDs</span>
+      </label>
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
+          [checked]="theme.settings().reducedMotion"
+          (change)="toggleReducedMotion($event)"
+        />
+        <span>Reduced Motion</span>
+      </label>
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
+          [checked]="theme.settings().disableShadows"
+          (change)="toggleDisableShadows($event)"
+        />
+        <span>No Shadows</span>
+      </label>
+    </fieldset>
+
+    <fieldset class="rv-appearance__group rv-appearance__group--colors">
+      <legend>Theme Colors</legend>
+      <ul class="rv-appearance__colors">
+        @for (field of colorFields; track field.key) {
+        <li class="rv-appearance__color">
+          <input
+            type="color"
+            class="rv-appearance__color-input"
+            [value]="colorValue(field.key)"
+            (input)="onColor(field.key, $event)"
+            [attr.aria-label]="field.label"
+          />
+          <span class="rv-appearance__color-label">{{ field.label }}</span>
+          <button
+            type="button"
+            class="rv-appearance__color-default"
+            [class.rv-appearance__color-default--off]="!isColorOverridden(field.key)"
+            (click)="clearColor(field.key)"
+          >
+            default
+          </button>
+        </li>
+        }
+      </ul>
+    </fieldset>
+
+    <fieldset class="rv-appearance__group rv-appearance__group--json">
+      <legend>Custom Theme JSON</legend>
+      <textarea
+        class="rv-appearance__io"
+        rows="7"
+        spellcheck="false"
+        readonly
+        [value]="exportTheme()"
+      ></textarea>
+      <textarea
+        class="rv-appearance__io"
+        rows="5"
+        spellcheck="false"
+        placeholder="Paste theme JSON"
+        (change)="onImport($event)"
+      ></textarea>
+      @if (importStatus() !== '') {
+      <span class="rv-appearance__hint">{{ importStatus() }}</span>
       }
-    </ul>
-  </fieldset>
-
-  <!-- Import / export full theme -->
-  <fieldset class="rv-appearance__group">
-    <legend>Share theme</legend>
-    <p class="rv-appearance__hint">
-      Export copies the full theme (base theme, fonts, density, and every colour
-      override) as JSON. Paste JSON below to import a complete theme.
-    </p>
-    <textarea
-      class="rv-appearance__io"
-      rows="4"
-      spellcheck="false"
-      readonly
-      [value]="exportTheme()"
-    ></textarea>
-    <textarea
-      class="rv-appearance__io"
-      rows="4"
-      spellcheck="false"
-      placeholder="Paste theme JSON to import…"
-      (change)="onImport($event)"
-    ></textarea>
-    @if (importStatus() !== '') {
-    <span class="rv-appearance__hint">{{ importStatus() }}</span>
-    }
-  </fieldset>
-
-  <div class="rv-appearance__actions">
-    <button type="button" class="rv-appearance__reset" (click)="resetAll()">
-      Reset to defaults
-    </button>
+      <div class="rv-appearance__actions">
+        <button type="button" class="rv-appearance__reset" (click)="resetAll()">
+          Reset
+        </button>
+      </div>
+    </fieldset>
   </div>
 </div>

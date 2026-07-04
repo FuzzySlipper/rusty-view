@@ -11,6 +11,8 @@ import {
 import {
   COLOR_TOKENS,
   DENSITY_TOKENS,
+  MOTION_TOKENS,
+  SHADOW_TOKENS,
   TYPOGRAPHY_TOKENS,
 } from '@rusty-view/design-tokens';
 
@@ -23,10 +25,13 @@ import {
   APPEARANCE_COLOR_FIELDS,
   BASE_DENSITY,
   BASE_FONT_SIZES,
+  clampChatWidthPercent,
   clampFontScale,
   DEFAULT_APPEARANCE,
   densityMultiplier,
+  MESSAGE_SPACING_Y,
   normalizeFontFamily,
+  normalizeMessageSpacing,
   normalizeThemeId,
 } from './appearance-settings';
 import { CHAT_SETTINGS_STORAGE } from './chat-settings-storage';
@@ -72,19 +77,34 @@ const MANAGED_TOKENS: readonly string[] = [
   DENSITY_TOKENS.controlHeightSm,
   DENSITY_TOKENS.controlHeightMd,
   DENSITY_TOKENS.rowHeight,
+  SHADOW_TOKENS.sm,
+  SHADOW_TOKENS.overlay,
+  MOTION_TOKENS.fast,
+  MOTION_TOKENS.base,
+  '--rv-chat-width',
+  '--rv-message-padding-y',
   ...Object.values(COLOR_FIELD_TOKENS),
 ];
 
 /** The data attribute on the document root used to select a named base theme. */
 const THEME_DATA_ATTRIBUTE = 'data-rv-theme';
+const SHOW_TIMESTAMPS_ATTRIBUTE = 'data-rv-show-timestamps';
+const SHOW_MESSAGE_IDS_ATTRIBUTE = 'data-rv-show-message-ids';
+const REDUCED_MOTION_ATTRIBUTE = 'data-rv-reduced-motion';
+const DISABLE_SHADOWS_ATTRIBUTE = 'data-rv-disable-shadows';
 
 const FONT_FAMILY_STACKS: Readonly<Record<AppearanceFontFamily, string>> = {
   system:
     "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   readable:
     "'Atkinson Hyperlegible', Aptos, 'Segoe UI', Verdana, Tahoma, sans-serif",
+  verdana: "Verdana, Geneva, 'Segoe UI', sans-serif",
+  arial: "Arial, Helvetica, 'Segoe UI', sans-serif",
   serif: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif",
+  'classic-serif': "'Times New Roman', Times, Georgia, serif",
   mono: `var(${TYPOGRAPHY_TOKENS.fontFamilyMono})`,
+  dyslexic:
+    "'OpenDyslexic', 'Atkinson Hyperlegible', Verdana, Tahoma, sans-serif",
 };
 
 /**
@@ -215,6 +235,12 @@ export class ChatTheme {
       fontFamily: normalizeFontFamily(settings.fontFamily),
       fontScale: clampFontScale(settings.fontScale ?? 1),
       density,
+      messageSpacing: normalizeMessageSpacing(settings.messageSpacing),
+      chatWidthPercent: clampChatWidthPercent(settings.chatWidthPercent ?? 100),
+      reducedMotion: settings.reducedMotion === true,
+      disableShadows: settings.disableShadows === true,
+      showTimestamps: settings.showTimestamps === true,
+      showMessageIds: settings.showMessageIds === true,
       colors: normalizeColors(settings.colors),
       textRenderMode: normalizeTextRenderMode(settings.textRenderMode),
     };
@@ -234,6 +260,26 @@ export class ChatTheme {
     } else {
       root.setAttribute(THEME_DATA_ATTRIBUTE, settings.themeId);
     }
+    this.setBooleanAttribute(
+      root,
+      SHOW_TIMESTAMPS_ATTRIBUTE,
+      settings.showTimestamps,
+    );
+    this.setBooleanAttribute(
+      root,
+      SHOW_MESSAGE_IDS_ATTRIBUTE,
+      settings.showMessageIds,
+    );
+    this.setBooleanAttribute(
+      root,
+      REDUCED_MOTION_ATTRIBUTE,
+      settings.reducedMotion,
+    );
+    this.setBooleanAttribute(
+      root,
+      DISABLE_SHADOWS_ATTRIBUTE,
+      settings.disableShadows,
+    );
 
     // Clear all managed overrides so defaults cascade cleanly.
     for (const token of MANAGED_TOKENS) {
@@ -279,6 +325,20 @@ export class ChatTheme {
       DENSITY_TOKENS.rowHeight,
       `${Math.round(BASE_DENSITY.row * mult)}px`,
     );
+    root.style.setProperty(
+      '--rv-message-padding-y',
+      `${MESSAGE_SPACING_Y[settings.messageSpacing]}px`,
+    );
+    root.style.setProperty('--rv-chat-width', `${settings.chatWidthPercent}%`);
+
+    if (settings.reducedMotion) {
+      root.style.setProperty(MOTION_TOKENS.fast, '0ms');
+      root.style.setProperty(MOTION_TOKENS.base, '0ms');
+    }
+    if (settings.disableShadows) {
+      root.style.setProperty(SHADOW_TOKENS.sm, 'none');
+      root.style.setProperty(SHADOW_TOKENS.overlay, 'none');
+    }
 
     // Colours: set each provided override; unset ones were already removed.
     // Iterating the full field map keeps every semantic colour theme-able.
@@ -294,6 +354,18 @@ export class ChatTheme {
   ): void {
     if (value !== undefined && value.trim() !== '') {
       root.style.setProperty(token, value);
+    }
+  }
+
+  private setBooleanAttribute(
+    root: HTMLElement,
+    attribute: string,
+    enabled: boolean,
+  ): void {
+    if (enabled) {
+      root.setAttribute(attribute, 'true');
+    } else {
+      root.removeAttribute(attribute);
     }
   }
 }

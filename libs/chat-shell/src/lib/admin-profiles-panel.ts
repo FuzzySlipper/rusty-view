@@ -171,6 +171,6 @@ export class AdminProfilesPanelComponent {
     }
     if (states.some((state) => state === 'unknown')) return 'checking';
     if (states.some((state) => state === 'available')) return 'partial';
-    return 'backend API needed';
+    return 'missing';
   }
 }

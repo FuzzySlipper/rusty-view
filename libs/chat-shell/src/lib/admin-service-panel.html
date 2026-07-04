@@ -16,7 +16,7 @@
       type="button"
       class="rv-admin-service__button"
       disabled
-      title="Backend config mutation API required"
+      title="Service config draft editing is not exposed in this panel"
     >
       Save
     </button>
@@ -32,7 +32,8 @@
       type="button"
       class="rv-admin-service__button rv-admin-service__button--primary"
       (click)="reload()"
-      [disabled]="admin.saving()"
+      [disabled]="reloadDisabled()"
+      [title]="reloadTitle()"
     >
       Reload
     </button>
@@ -123,11 +124,9 @@
   <section class="rv-admin-service__section">
     <h2>Apply Semantics</h2>
     <div class="rv-admin-service__summary">
-      <span>service reload</span><strong>live</strong>
-      <span>session creation</span><strong>explicit</strong>
-      <span>channel joins</span><strong>explicit</strong>
-      <span>config save</span><strong>backend API needed</strong>
-      <span>brain hot swap</span><strong>backend API needed</strong>
+      @for (row of applySemanticsRows; track row.label) {
+      <span>{{ row.label }}</span><strong>{{ capabilityStatus(row) }}</strong>
+      }
     </div>
   </section>
 </div>

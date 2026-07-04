@@ -63,6 +63,8 @@ import type {
   ProfileBundleExportPlan,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
+  ProfileDeleteRequest,
+  ProfileDeleteResult,
   ProfileRegistryFieldUpdateRequest,
   ProfileRegistryLifecycleRequest,
   ProfileRegistryPromptRequest,
@@ -402,6 +404,13 @@ export class ChatTransport {
     request?: ProfileBrainRebuildRequest,
   ): Promise<AdminControlResponse<ProfileBrainRebuildResult>> {
     return this.adminHttp.applyProfileBrainRebuild(profileId, request);
+  }
+
+  deleteAdminProfile(
+    profileId: string,
+    request: ProfileDeleteRequest,
+  ): Promise<AdminControlResponse<ProfileDeleteResult>> {
+    return this.adminHttp.deleteProfile(profileId, request);
   }
 
   reloadAdminConfig(

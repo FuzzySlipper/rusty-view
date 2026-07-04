@@ -152,6 +152,48 @@ describe('ChatTheme', () => {
     expect(theme.settings().textRenderMode).toBe('auto');
   });
 
+  it('applies chat layout and transcript metadata preferences', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({
+      chatWidthPercent: 55,
+      messageSpacing: 'roomy',
+      showTimestamps: true,
+      showMessageIds: true,
+    });
+    TestBed.flushEffects?.();
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--rv-chat-width')).toBe('55%');
+    expect(root.style.getPropertyValue('--rv-message-padding-y')).toBe('8px');
+    expect(root.getAttribute('data-rv-show-timestamps')).toBe('true');
+    expect(root.getAttribute('data-rv-show-message-ids')).toBe('true');
+
+    const stored = await storage.load();
+    expect(stored?.chatWidthPercent).toBe(55);
+    expect(stored?.messageSpacing).toBe('roomy');
+  });
+
+  it('applies reduced motion and shadow preferences', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({ reducedMotion: true, disableShadows: true });
+    TestBed.flushEffects?.();
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--rv-motion-fast')).toBe('0ms');
+    expect(root.style.getPropertyValue('--rv-motion-base')).toBe('0ms');
+    expect(root.style.getPropertyValue('--rv-shadow-sm')).toBe('none');
+    expect(root.style.getPropertyValue('--rv-shadow-overlay')).toBe('none');
+    expect(root.getAttribute('data-rv-reduced-motion')).toBe('true');
+    expect(root.getAttribute('data-rv-disable-shadows')).toBe('true');
+
+    await theme.reset();
+    TestBed.flushEffects?.();
+    expect(root.style.getPropertyValue('--rv-motion-fast')).toBe('');
+    expect(root.style.getPropertyValue('--rv-shadow-sm')).toBe('');
+    expect(root.hasAttribute('data-rv-reduced-motion')).toBe(false);
+    expect(root.hasAttribute('data-rv-disable-shadows')).toBe(false);
+  });
+
   it('selects a named base theme via the data-rv-theme attribute (#3691)', async () => {
     const theme = TestBed.inject(ChatTheme);
     TestBed.flushEffects?.();

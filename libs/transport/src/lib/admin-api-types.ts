@@ -512,6 +512,11 @@ export interface ProfileBrainRebuildRequest {
   readonly reason?: string;
 }
 
+export interface ProfileDeleteRequest {
+  readonly reason?: string;
+  readonly confirmProfileId: string;
+}
+
 export interface ProfileBrainRebuildResult {
   readonly profileId?: string;
   readonly status?: 'planned' | 'completed' | 'blocked' | 'failed';
@@ -526,6 +531,30 @@ export interface ProfileBrainRebuildResult {
   readonly sessionHistoryPreserved?: boolean;
   readonly mcpRefresh?: unknown;
   readonly reasonCode?: string;
+  readonly [key: string]: unknown;
+}
+
+export interface ProfilePurgeTableCount {
+  readonly table: string;
+  readonly rowsDeleted: number;
+}
+
+export interface ProfilePurgeReport {
+  readonly profileId: string;
+  readonly profileRegistryDeleted: boolean;
+  readonly sessionIds: readonly string[];
+  readonly agentIds: readonly string[];
+  readonly tableCounts: readonly ProfilePurgeTableCount[];
+  readonly rowsDeleted: number;
+}
+
+export interface ProfileDeleteResult {
+  readonly profileId?: string;
+  readonly confirmProfileId?: string;
+  readonly profilePath?: string;
+  readonly profileDirectoryDeleted?: boolean;
+  readonly runtimeConfigReloaded?: boolean;
+  readonly storagePurge?: ProfilePurgeReport;
   readonly [key: string]: unknown;
 }
 

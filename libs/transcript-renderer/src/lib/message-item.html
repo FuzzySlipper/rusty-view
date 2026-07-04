@@ -13,6 +13,15 @@
     <span class="rv-message__author" data-testid="message-author"
       >{{ authorLabel() }}</span
     >
+    <time
+      class="rv-message__timestamp"
+      data-testid="message-timestamp"
+      [attr.datetime]="message().createdAt"
+      >{{ timestampLabel() }}</time
+    >
+    <span class="rv-message__id" data-testid="message-id"
+      >{{ message().id }}</span
+    >
     @if (statusIndicator()) {
     <span class="rv-message__status" data-testid="message-status"
       >{{ statusIndicator() }}</span

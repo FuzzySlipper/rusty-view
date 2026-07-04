@@ -35,15 +35,38 @@ describe('OptionsPanelComponent', () => {
   it('renders the built-in Appearance tab', async () => {
     const fixture = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
+    expect(host.textContent).toContain('User Settings');
     expect(host.textContent).toContain('Appearance');
     // The appearance tab component is rendered by default.
     expect(host.querySelector('rv-appearance-tab')).not.toBeNull();
   });
 
+  it('renders dense reusable chat preferences and applies toggles', async () => {
+    const fixture = await createOptions();
+    const host: HTMLElement = fixture.nativeElement;
+    const theme = TestBed.inject(ChatTheme);
+
+    expect(host.textContent).toContain('UI Theme');
+    expect(host.textContent).toContain('Theme Colors');
+    expect(host.textContent).toContain('Chat / Message Handling');
+    expect(host.textContent).toContain('Chat Width');
+    expect(host.textContent).toContain('Message IDs');
+
+    const messageIds = Array.from(host.querySelectorAll('label')).find(
+      (label) => label.textContent?.includes('Message IDs') ?? false,
+    );
+    const checkbox = messageIds?.querySelector('input');
+    checkbox?.click();
+    fixture.detectChanges();
+
+    expect(theme.settings().showMessageIds).toBe(true);
+  });
+
   it('keeps the appearance tab active by default', async () => {
     const fixture = await createOptions();
-    const activeTab: HTMLElement | null =
-      fixture.nativeElement.querySelector('.rv-tab-strip__tab--active');
+    const activeTab: HTMLElement | null = fixture.nativeElement.querySelector(
+      '.rv-tab-strip__tab--active',
+    );
     expect(activeTab?.textContent?.trim()).toBe('Appearance');
   });
 

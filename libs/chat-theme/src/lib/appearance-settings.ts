@@ -17,17 +17,29 @@
  * `--rv-font-sans` and `--rv-font-ui` tokens while keeping `--rv-font-mono`
  * available for semantic code, event, and JSON detail surfaces.
  */
-export type AppearanceFontFamily = 'system' | 'readable' | 'serif' | 'mono';
+export type AppearanceFontFamily =
+  | 'system'
+  | 'readable'
+  | 'verdana'
+  | 'arial'
+  | 'serif'
+  | 'classic-serif'
+  | 'mono'
+  | 'dyslexic';
 
 /** Ordered font-family choices for the Appearance selector. */
 export const APPEARANCE_FONT_FAMILIES: ReadonlyArray<{
   readonly id: AppearanceFontFamily;
   readonly label: string;
 }> = [
-  { id: 'system', label: 'System sans' },
-  { id: 'readable', label: 'Readable sans' },
+  { id: 'system', label: 'System' },
+  { id: 'readable', label: 'Readable' },
+  { id: 'verdana', label: 'Verdana' },
+  { id: 'arial', label: 'Arial' },
   { id: 'serif', label: 'Serif' },
+  { id: 'classic-serif', label: 'Times' },
   { id: 'mono', label: 'Mono' },
+  { id: 'dyslexic', label: 'Dyslexic' },
 ];
 
 /**
@@ -35,6 +47,19 @@ export const APPEARANCE_FONT_FAMILIES: ReadonlyArray<{
  * tighter workbench feel; `normal` is the token default.
  */
 export type AppearanceDensity = 'compact' | 'normal';
+
+/** Vertical space inside transcript message rows. */
+export type AppearanceMessageSpacing = 'compact' | 'normal' | 'roomy';
+
+/** Ordered message spacing choices for the Appearance selector. */
+export const APPEARANCE_MESSAGE_SPACING: ReadonlyArray<{
+  readonly id: AppearanceMessageSpacing;
+  readonly label: string;
+}> = [
+  { id: 'normal', label: 'Normal' },
+  { id: 'compact', label: 'Compact' },
+  { id: 'roomy', label: 'Roomy' },
+];
 
 /**
  * Per-token colour overrides for the full semantic colour palette (task #3691).
@@ -146,6 +171,12 @@ export interface AppearanceSettings {
    */
   readonly fontScale: number;
   readonly density: AppearanceDensity;
+  readonly messageSpacing: AppearanceMessageSpacing;
+  readonly chatWidthPercent: number;
+  readonly reducedMotion: boolean;
+  readonly disableShadows: boolean;
+  readonly showTimestamps: boolean;
+  readonly showMessageIds: boolean;
   readonly colors: AppearanceColors;
   /**
    * How chat message text is rendered: `auto` (detect Markdown/HTML per block),
@@ -161,6 +192,11 @@ export const FONT_SCALE_MIN = 0.8;
 export const FONT_SCALE_MAX = 1.5;
 /** Step used by the Appearance tab slider. */
 export const FONT_SCALE_STEP = 0.05;
+
+/** Inclusive bounds for {@link AppearanceSettings.chatWidthPercent}. */
+export const CHAT_WIDTH_MIN = 45;
+export const CHAT_WIDTH_MAX = 100;
+export const CHAT_WIDTH_STEP = 5;
 
 /**
  * Base font-size pixel values. These mirror `libs/design-tokens/src/styles/
@@ -190,12 +226,27 @@ const DENSITY_MULTIPLIERS: Readonly<Record<AppearanceDensity, number>> = {
   normal: 1,
 };
 
+/** Vertical padding per message row, in pixels. */
+export const MESSAGE_SPACING_Y: Readonly<
+  Record<AppearanceMessageSpacing, number>
+> = {
+  compact: 2,
+  normal: 4,
+  roomy: 8,
+};
+
 /** Default, debug-appropriate appearance. */
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   themeId: 'auto',
   fontFamily: 'system',
   fontScale: 1,
   density: 'normal',
+  messageSpacing: 'normal',
+  chatWidthPercent: 100,
+  reducedMotion: false,
+  disableShadows: false,
+  showTimestamps: false,
+  showMessageIds: false,
   colors: {},
   textRenderMode: 'auto',
 };
@@ -203,11 +254,24 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
 /** Coerce an arbitrary value into a valid font-family choice. */
 export function normalizeFontFamily(value: unknown): AppearanceFontFamily {
   return value === 'readable' ||
+    value === 'verdana' ||
+    value === 'arial' ||
     value === 'serif' ||
+    value === 'classic-serif' ||
     value === 'mono' ||
+    value === 'dyslexic' ||
     value === 'system'
     ? value
     : 'system';
+}
+
+/** Coerce an arbitrary value into a valid message spacing choice. */
+export function normalizeMessageSpacing(
+  value: unknown,
+): AppearanceMessageSpacing {
+  return value === 'compact' || value === 'roomy' || value === 'normal'
+    ? value
+    : 'normal';
 }
 
 /** Coerce an arbitrary value into a valid named theme id (task #3691). */
@@ -225,6 +289,13 @@ export function clampFontScale(value: number): number {
   if (Number.isNaN(value)) return 1;
   const clamped = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, value));
   return Math.round(clamped * 100) / 100;
+}
+
+/** Clamp transcript width into the allowed range and round for persistence. */
+export function clampChatWidthPercent(value: number): number {
+  if (Number.isNaN(value)) return 100;
+  const clamped = Math.min(CHAT_WIDTH_MAX, Math.max(CHAT_WIDTH_MIN, value));
+  return Math.round(clamped);
 }
 
 /** Density multiplier for a given preference (1 for normal). */
