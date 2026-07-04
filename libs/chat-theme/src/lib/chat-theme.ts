@@ -11,6 +11,7 @@ import {
 import {
   COLOR_TOKENS,
   DENSITY_TOKENS,
+  LAYOUT_TOKENS,
   MOTION_TOKENS,
   SHADOW_TOKENS,
   TYPOGRAPHY_TOKENS,
@@ -81,8 +82,8 @@ const MANAGED_TOKENS: readonly string[] = [
   SHADOW_TOKENS.overlay,
   MOTION_TOKENS.fast,
   MOTION_TOKENS.base,
-  '--rv-chat-width',
-  '--rv-message-padding-y',
+  LAYOUT_TOKENS.chatWidth,
+  LAYOUT_TOKENS.messagePaddingY,
   ...Object.values(COLOR_FIELD_TOKENS),
 ];
 
@@ -326,10 +327,13 @@ export class ChatTheme {
       `${Math.round(BASE_DENSITY.row * mult)}px`,
     );
     root.style.setProperty(
-      '--rv-message-padding-y',
+      LAYOUT_TOKENS.messagePaddingY,
       `${MESSAGE_SPACING_Y[settings.messageSpacing]}px`,
     );
-    root.style.setProperty('--rv-chat-width', `${settings.chatWidthPercent}%`);
+    root.style.setProperty(
+      LAYOUT_TOKENS.chatWidth,
+      `${settings.chatWidthPercent}%`,
+    );
 
     if (settings.reducedMotion) {
       root.style.setProperty(MOTION_TOKENS.fast, '0ms');

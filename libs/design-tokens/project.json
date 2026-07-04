@@ -12,7 +12,22 @@
         "outputPath": "dist/libs/design-tokens",
         "main": "libs/design-tokens/src/index.ts",
         "tsConfig": "libs/design-tokens/tsconfig.lib.json",
-        "assets": []
+        "assets": [
+          {
+            "input": "libs/design-tokens/src/styles",
+            "glob": "tokens.css",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "package-smoke": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": true,
+      "inputs": ["production", "^production"],
+      "options": {
+        "command": "node tools/check-design-token-package-assets.mjs"
       }
     },
     "typecheck": {

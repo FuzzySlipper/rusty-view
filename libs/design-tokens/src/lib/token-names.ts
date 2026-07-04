@@ -64,6 +64,11 @@ export const DENSITY_TOKENS = {
   borderRadius: '--rv-radius',
 } as const;
 
+export const LAYOUT_TOKENS = {
+  chatWidth: '--rv-chat-width',
+  messagePaddingY: '--rv-message-padding-y',
+} as const;
+
 export const Z_INDEX_TOKENS = {
   base: '--rv-z-base',
   sticky: '--rv-z-sticky',
@@ -85,6 +90,7 @@ export type DesignTokenName =
   | (typeof SPACING_TOKENS)[keyof typeof SPACING_TOKENS]
   | (typeof TYPOGRAPHY_TOKENS)[keyof typeof TYPOGRAPHY_TOKENS]
   | (typeof DENSITY_TOKENS)[keyof typeof DENSITY_TOKENS]
+  | (typeof LAYOUT_TOKENS)[keyof typeof LAYOUT_TOKENS]
   | (typeof Z_INDEX_TOKENS)[keyof typeof Z_INDEX_TOKENS]
   | (typeof MOTION_TOKENS)[keyof typeof MOTION_TOKENS];
 
@@ -99,6 +105,7 @@ export const ALL_DESIGN_TOKEN_NAMES: readonly DesignTokenName[] = [
   ...Object.values(SPACING_TOKENS),
   ...Object.values(TYPOGRAPHY_TOKENS),
   ...Object.values(DENSITY_TOKENS),
+  ...Object.values(LAYOUT_TOKENS),
   ...Object.values(Z_INDEX_TOKENS),
   ...Object.values(MOTION_TOKENS),
 ] as const;

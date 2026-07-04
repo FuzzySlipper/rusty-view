@@ -62,6 +62,10 @@ Published set: `protocol`, `transport`, `chat-domain`, `design-tokens`,
 `testing-fixtures` (test-only) and `workspace-generators` (internal) are not
 published.
 
+`@rusty-view/design-tokens` publishes the base CSS token definitions at
+`@rusty-view/design-tokens/tokens.css`. The `design-tokens:package-smoke`
+target verifies the built package contains and exports that file.
+
 ## Consume (in another repo)
 
 Point the `@rusty-view` scope at the registry and install:
@@ -74,6 +78,16 @@ Point the `@rusty-view` scope at the registry and install:
 ```jsonc
 // package.json — use the published version
 "@rusty-view/transcript-renderer": "^0.0.3"
+```
+
+Include the token CSS once, before app styles:
+
+```jsonc
+// angular.json or project.json
+"styles": [
+  "node_modules/@rusty-view/design-tokens/tokens.css",
+  "src/styles.css"
+]
 ```
 
 The consuming app's Angular version should be **>=** the version the libs were

@@ -15,7 +15,7 @@
 
 .rv-transcript__item {
   contain: content;
-  width: min(100%, var(--rv-chat-width, 100%));
+  width: min(100%, var(--rv-chat-width));
   margin-inline: auto;
 }
 

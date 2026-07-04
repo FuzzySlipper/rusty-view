@@ -44,6 +44,8 @@ interface ProfileFormState {
    * model override. '' means no alias; the backend then applies defaults.
    */
   readonly providerAlias: string;
+  /** Optional DB-backed profile soul prompt seeded during create. */
+  readonly soulMarkdown: string;
   /**
    * Legacy free-form MCP tool profile string. Superseded by `mcpBindings`
    * selected from the backend MCP catalog (#3648); retained only as an
@@ -60,6 +62,7 @@ const INITIAL_FORM: ProfileFormState = {
   implementationId: '',
   kind: '',
   providerAlias: '',
+  soulMarkdown: '',
   mcpToolProfile: '',
 };
 
@@ -334,6 +337,7 @@ function buildCreateProfileRequest(
     ...optionalString('implementationId', form.implementationId),
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
     ...optionalString('providerAlias', form.providerAlias),
+    ...optionalMultilineString('soulMarkdown', form.soulMarkdown),
     ...optionalKind(form.kind),
     ...(mcpBindings.length === 0 ? {} : { mcpBindings }),
     ...toolSelectionFields(selection),
@@ -358,4 +362,11 @@ function optionalString<TKey extends string>(
 ): Record<TKey, string> | Record<string, never> {
   const trimmed = value.trim();
   return trimmed === '' ? {} : ({ [key]: trimmed } as Record<TKey, string>);
+}
+
+function optionalMultilineString<TKey extends string>(
+  key: TKey,
+  value: string,
+): Record<TKey, string> | Record<string, never> {
+  return value.trim() === '' ? {} : ({ [key]: value } as Record<TKey, string>);
 }

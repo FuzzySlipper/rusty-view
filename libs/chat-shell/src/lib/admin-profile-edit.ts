@@ -175,6 +175,7 @@ export class AdminProfileEditComponent {
   protected readonly lifecycleTargetStatus =
     signal<ProfileRegistryLifecycleStatus>('paused');
   protected readonly deleteConfirmation = signal('');
+  protected readonly deleteConfirmOpen = signal(false);
   /** Which sub-form is active in the edit window: registry fields by default. */
   protected readonly section = signal<
     'fields' | 'lifecycle' | 'prompts' | 'runtime'
@@ -330,6 +331,7 @@ export class AdminProfileEditComponent {
     section: 'fields' | 'lifecycle' | 'prompts' | 'runtime',
   ): void {
     this.admin.clearRegistryWrite();
+    this.closeDeleteConfirmationBox();
     this.section.set(section);
     const record = this.record();
     if (record === undefined) return;
@@ -948,8 +950,18 @@ export class AdminProfileEditComponent {
     this.deleteConfirmation.set((event.target as HTMLInputElement).value);
   }
 
-  protected cancelDelete(): void {
+  protected openDeleteConfirmationBox(): void {
     this.deleteConfirmation.set('');
+    this.deleteConfirmOpen.set(true);
+  }
+
+  private closeDeleteConfirmationBox(): void {
+    this.deleteConfirmation.set('');
+    this.deleteConfirmOpen.set(false);
+  }
+
+  protected cancelDelete(): void {
+    this.closeDeleteConfirmationBox();
   }
 
   protected async deleteProfile(
@@ -962,6 +974,7 @@ export class AdminProfileEditComponent {
     });
     const result = this.profileDeleteResult();
     if (result?.outcome.status === 'completed') {
+      this.closeDeleteConfirmationBox();
       this.chat.clearProfileSelection(record.profileId);
       await this.chat.refreshSessions().catch(() => undefined);
     }

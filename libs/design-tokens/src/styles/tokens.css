@@ -68,6 +68,10 @@
   --rv-density-row: 28px;
   --rv-radius: 4px;
 
+  /* ---- transcript layout ---- */
+  --rv-chat-width: 100%;
+  --rv-message-padding-y: var(--rv-space-sm);
+
   /* ---- z-index ---- */
   --rv-z-base: 1;
   --rv-z-sticky: 100;

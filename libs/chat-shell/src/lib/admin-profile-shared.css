@@ -157,6 +157,19 @@
   border-color: var(--rv-color-danger);
 }
 
+.rv-admin-profiles__confirm-box {
+  display: grid;
+  gap: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  padding: var(--rv-space-sm);
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-admin-profiles__confirm-box--danger {
+  border-color: var(--rv-color-danger);
+}
+
 .rv-admin-profiles__json {
   max-height: 12rem;
   margin: 0;

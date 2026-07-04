@@ -3,7 +3,7 @@
 }
 
 .rv-message {
-  padding: var(--rv-message-padding-y, var(--rv-space-sm)) var(--rv-space-lg);
+  padding: var(--rv-message-padding-y) var(--rv-space-lg);
   border-bottom: 1px solid var(--rv-color-border);
 }
 

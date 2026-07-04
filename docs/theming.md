@@ -13,7 +13,8 @@ share complete themes.
    The single source of truth for values. Holds the dark default palette, the
    `prefers-color-scheme: light` palette, and the named-theme blocks
    (`[data-rv-theme='dark' | 'light' | 'high-contrast']`). **This is the only
-   file allowed to contain raw colour/shadow literals.**
+   file allowed to contain raw colour/shadow literals.** Published packages
+   expose the same file as `@rusty-view/design-tokens/tokens.css`.
 
 2. **Token names** — `libs/design-tokens/src/lib/token-names.ts`
    Typed `--rv-*` names (`COLOR_TOKENS`, `SHADOW_TOKENS`, …) plus
@@ -56,3 +57,28 @@ component stylesheet and fails on:
   tokens).
 
 The allowlist is read from `tokens.css` itself, so it never goes stale.
+
+## Downstream apps
+
+Apps that consume published `@rusty-view/*` components must include the base
+token CSS before their own app styles. Without it, component styles still refer
+to `--rv-*` variables but the browser has no package-level definitions.
+
+For Angular apps, add the package CSS to the global styles list:
+
+```jsonc
+// angular.json or project.json
+"styles": [
+  "node_modules/@rusty-view/design-tokens/tokens.css",
+  "src/styles.css"
+]
+```
+
+CSS bundlers that resolve package exports can also import it directly:
+
+```css
+@import '@rusty-view/design-tokens/tokens.css';
+```
+
+Downstream apps may override tokens after that import by setting
+`[data-rv-theme]` or writing later `--rv-*` custom properties.

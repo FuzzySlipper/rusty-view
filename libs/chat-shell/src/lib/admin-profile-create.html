@@ -73,6 +73,21 @@
         </p>
       </div>
 
+      <div class="rv-admin-profiles__prompt-edit-grid">
+        <label class="rv-admin-profiles__prompt-edit-field">
+          <span class="rv-admin-profiles__prompt-edit-label"
+            >soul.md (optional)</span
+          >
+          <textarea
+            class="rv-admin-profiles__prompt-edit-textarea"
+            rows="10"
+            [value]="form().soulMarkdown"
+            (input)="updateText('soulMarkdown', $event)"
+            placeholder="Seed this profile's soul prompt during create"
+          ></textarea>
+        </label>
+      </div>
+
       <div class="rv-admin-profiles__mcp-select">
         <span class="rv-admin-profiles__group-label"
           >MCP servers (optional)</span

@@ -127,7 +127,7 @@
 
 .rv-debug__inspector-tab--active {
   background: var(--rv-color-surface-raised);
-  color: var(--rv-color-text);
+  color: var(--rv-color-text-primary);
   font-weight: var(--rv-font-weight-bold);
 }
 

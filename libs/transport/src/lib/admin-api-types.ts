@@ -441,6 +441,17 @@ export interface CreateAdminProfileRequest {
    * omits inline `modelConfig` from the created profile.
    */
   readonly providerAlias?: string;
+  /**
+   * Optional DB-backed profile soul prompt. Omit to let the backend default or
+   * imported profile data stand; send a non-empty string to seed prompt.soul at
+   * create time.
+   */
+  readonly soulMarkdown?: string;
+  /**
+   * Optional DB-backed profile memory prompt. Currently not surfaced in the
+   * create UI, but accepted by Crew and exposed for generated/template flows.
+   */
+  readonly memoryMarkdown?: string;
   readonly modelConfig?: {
     readonly provider: string;
     readonly modelName: string;

@@ -21,6 +21,7 @@ export {
   SPACING_TOKENS,
   TYPOGRAPHY_TOKENS,
   DENSITY_TOKENS,
+  LAYOUT_TOKENS,
   Z_INDEX_TOKENS,
   MOTION_TOKENS,
 } from './lib/token-names';

@@ -177,6 +177,6 @@
 }
 
 .rv-context-timeline__detail {
-  color: var(--rv-color-text);
+  color: var(--rv-color-text-secondary);
   overflow-wrap: anywhere;
 }

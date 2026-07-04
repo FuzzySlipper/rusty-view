@@ -5,6 +5,17 @@
   "type": "commonjs",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./tokens.css": "./tokens.css"
+  },
+  "files": [
+    "src",
+    "tokens.css"
+  ],
   "dependencies": {
     "tslib": "^2.3.0"
   }

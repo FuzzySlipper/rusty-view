@@ -125,6 +125,7 @@ interface EditComponentApi {
   planPromptEdit(record: AdminProfileRegistryRecord): void;
   applyPromptEdit(record: AdminProfileRegistryRecord): void;
   requestExportPlan(): void;
+  openDeleteConfirmationBox(): void;
   updateDeleteConfirmation(event: { target: { value: string } }): void;
   cancelDelete(): void;
   deleteProfile(record: AdminProfileRegistryRecord): Promise<void>;
@@ -696,15 +697,26 @@ describe('AdminProfileEditComponent', () => {
     });
     const component = fixture.componentInstance as unknown as EditComponentApi;
 
-    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+    component.showSection('lifecycle');
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="profile-hard-delete"]',
+      ),
+    ).toBeNull();
+
+    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(false);
+    component.openDeleteConfirmationBox();
+    fixture.detectChanges();
+    expect(buttonByText(fixture, 'Confirm delete').disabled).toBe(true);
 
     component.updateDeleteConfirmation({ target: { value: 'wrong' } });
     fixture.detectChanges();
-    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+    expect(buttonByText(fixture, 'Confirm delete').disabled).toBe(true);
 
     component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
     fixture.detectChanges();
-    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(false);
+    expect(buttonByText(fixture, 'Confirm delete').disabled).toBe(false);
   });
 
   it('cancels hard-delete confirmation without calling Crew', async () => {
@@ -719,12 +731,18 @@ describe('AdminProfileEditComponent', () => {
     };
     const component = fixture.componentInstance as unknown as EditComponentApi;
 
+    component.showSection('lifecycle');
+    component.openDeleteConfirmationBox();
     component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
     fixture.detectChanges();
     component.cancelDelete();
     fixture.detectChanges();
 
-    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="profile-hard-delete"]',
+      ),
+    ).toBeNull();
     expect(transport.deleteAdminProfile.mock.calls).toHaveLength(0);
   });
 
@@ -740,6 +758,8 @@ describe('AdminProfileEditComponent', () => {
     };
     const component = fixture.componentInstance as unknown as EditComponentApi;
 
+    component.showSection('lifecycle');
+    component.openDeleteConfirmationBox();
     component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
     fixture.detectChanges();
     await component.deleteProfile(recordFor('delete-prime'));
@@ -774,12 +794,14 @@ describe('AdminProfileEditComponent', () => {
     };
     const component = fixture.componentInstance as unknown as EditComponentApi;
 
+    component.showSection('lifecycle');
+    component.openDeleteConfirmationBox();
     component.updateDeleteConfirmation({ target: { value: 'delete-prime' } });
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain(
       'capability missing',
     );
-    expect(buttonByText(fixture, 'Delete profile').disabled).toBe(true);
+    expect(buttonByText(fixture, 'Confirm delete').disabled).toBe(true);
 
     await component.deleteProfile(recordFor('delete-prime'));
     await fixture.whenStable();

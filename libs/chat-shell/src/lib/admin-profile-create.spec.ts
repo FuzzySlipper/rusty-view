@@ -35,7 +35,12 @@ async function createWindow(options: TransportOptions = {}) {
 
 interface CreateComponentApi {
   updateText(
-    field: 'profileId' | 'sessionId' | 'implementationId' | 'providerAlias',
+    field:
+      | 'profileId'
+      | 'sessionId'
+      | 'implementationId'
+      | 'providerAlias'
+      | 'soulMarkdown',
     event: { target: { value: string } },
   ): void;
   updateKind(event: { target: { value: string } }): void;
@@ -115,6 +120,26 @@ describe('AdminProfileCreateComponent', () => {
     await fixture.whenStable();
 
     expect(lastCreateRequest(transport.createAdminProfile).kind).toBe('worker');
+  });
+
+  it('seeds soul.md when provided during create', async () => {
+    const fixture = await createWindow();
+    const transport = transportSpy();
+    const component =
+      fixture.componentInstance as unknown as CreateComponentApi;
+
+    component.updateText('profileId', { target: { value: 'soul-prime' } });
+    component.updateText('soulMarkdown', {
+      target: { value: 'You are Soul Prime.\nKeep the line breaks.' },
+    });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.soulMarkdown).toBe(
+      'You are Soul Prime.\nKeep the line breaks.',
+    );
   });
 
   it('preserves advanced session/implementation overrides when set', async () => {
