@@ -448,6 +448,33 @@ describe('ChatStore', () => {
     );
   });
 
+  it('sendMessage shows an immediate assistant typing placeholder while the send is in flight', async () => {
+    const transport = createMockTransport({});
+    let resolveSend!: (value: SendChatMessageResult) => void;
+    const sendPromise = new Promise<SendChatMessageResult>((resolve) => {
+      resolveSend = resolve;
+    });
+    (
+      transport as unknown as {
+        sendMessage: ReturnType<typeof vi.fn>;
+      }
+    ).sendMessage = vi.fn(() => sendPromise);
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    const submitted = store.sendMessage('slow response please');
+
+    const placeholder = store.messages().at(-1);
+    expect(placeholder?.id).toMatch(/^pending-assistant-pending_/);
+    expect(placeholder?.author.role).toBe('assistant');
+    expect(placeholder?.status).toBe('streaming');
+
+    resolveSend(acceptedResult());
+    await submitted;
+
+    expect(store.messages()).toHaveLength(0);
+  });
+
   it('sendMessage clears pending send on success', async () => {
     const transport = createMockTransport({});
     const store = setupStore(transport, new InMemoryChatStorage());
@@ -456,6 +483,29 @@ describe('ChatStore', () => {
     await store.sendMessage('test message');
 
     expect(store.pendingSends()).toHaveLength(0);
+  });
+
+  it('shows an assistant typing placeholder when a real turn starts before text arrives', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    store.ingestEvents([
+      {
+        event_id: 'turn_1',
+        session_id: 'sess_test',
+        sequence_id: 1,
+        created_at: '2026-06-22T10:00:01Z',
+        kind: 'assistant_turn_started',
+        payload: {} as ChatEvent['payload'],
+      },
+    ]);
+
+    const placeholder = store.messages().at(-1);
+    expect(placeholder?.id).toBe('assistant-turn-turn_1');
+    expect(placeholder?.author.role).toBe('assistant');
+    expect(placeholder?.status).toBe('streaming');
+    expect(placeholder?.createdAt).toBe('2026-06-22T10:00:01Z');
   });
 
   it('sendMessage preserves structured transport error details on failure', async () => {

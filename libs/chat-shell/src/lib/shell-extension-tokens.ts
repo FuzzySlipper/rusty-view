@@ -18,7 +18,9 @@ import { InjectionToken, type Type } from '@angular/core';
  *   - `action`: invoke {@link onActivate} and close any open panel. Use for
  *     one-shot actions (e.g. "Reconnect").
  *   - `panel`: open {@link panelId} as a modal panel. Use for surfaces that
- *     need their own chrome (Options, Help).
+ *     need their own chrome (Options, Help). Built-in panel ids are rendered by
+ *     the shell; downstream panel ids can be rendered by providing
+ *     {@link CHAT_TOP_MENU_PANELS}.
  *
  * `order` controls render order (ascending; ties break by id). The shell
  * always reserves the ids `options` and `help` for its built-in panels.
@@ -40,6 +42,35 @@ export interface ChatTopMenuItem {
 export const CHAT_TOP_MENU_ITEMS = new InjectionToken<
   readonly ChatTopMenuItem[]
 >('CHAT_TOP_MENU_ITEMS');
+
+export type ChatTopMenuPanelWidth = 'default' | 'wide';
+
+/**
+ * A top-menu overlay panel supplied by a downstream shell/plugin. The panel is
+ * rendered with the same overlay, close button, and dismiss behavior as built-in
+ * panels. Providing a panel also contributes a top-level menu item unless an
+ * explicit {@link ChatTopMenuItem} with the same id overrides it; built-in panel
+ * ids remain reserved and always win.
+ */
+export interface ChatTopMenuPanel {
+  readonly id: string;
+  /** Top-level menu label. Defaults to `title`. */
+  readonly label?: string;
+  /** Dialog title shown in the top-menu panel chrome. */
+  readonly title: string;
+  readonly order?: number;
+  readonly width?: ChatTopMenuPanelWidth;
+  readonly component: Type<unknown>;
+}
+
+/**
+ * DI token providing downstream-owned top-menu overlay panels. The shell turns
+ * each panel into a menu item and renders the component via NgComponentOutlet
+ * when that item opens.
+ */
+export const CHAT_TOP_MENU_PANELS = new InjectionToken<
+  readonly ChatTopMenuPanel[]
+>('CHAT_TOP_MENU_PANELS');
 
 /**
  * A tab in the Options panel. `component` is a standalone component rendered

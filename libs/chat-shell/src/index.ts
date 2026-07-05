@@ -27,6 +27,7 @@ export { AdminProvidersPanelComponent } from './lib/admin-providers-panel';
 export { AdminServicePanelComponent } from './lib/admin-service-panel';
 export {
   CHAT_TOP_MENU_ITEMS,
+  CHAT_TOP_MENU_PANELS,
   CHAT_OPTIONS_TABS,
   OPTIONS_PANEL_ID,
   HELP_PANEL_ID,
@@ -37,6 +38,8 @@ export {
 } from './lib/shell-extension-tokens';
 export type {
   ChatTopMenuItem,
+  ChatTopMenuPanel,
+  ChatTopMenuPanelWidth,
   ChatOptionsTab,
 } from './lib/shell-extension-tokens';
 export {

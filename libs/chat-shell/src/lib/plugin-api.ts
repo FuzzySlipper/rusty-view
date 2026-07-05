@@ -14,8 +14,10 @@ import {
 import {
   CHAT_OPTIONS_TABS,
   CHAT_TOP_MENU_ITEMS,
+  CHAT_TOP_MENU_PANELS,
   type ChatOptionsTab,
   type ChatTopMenuItem,
+  type ChatTopMenuPanel,
 } from './shell-extension-tokens';
 
 export { CHAT_CONTENT_RENDERERS } from '@rusty-view/transcript-renderer';
@@ -205,6 +207,7 @@ export interface ChatPlugin {
   readonly description?: string;
   readonly providers?: readonly Provider[];
   readonly topMenuItems?: readonly ChatTopMenuItem[];
+  readonly topMenuPanels?: readonly ChatTopMenuPanel[];
   readonly settingsPanels?: readonly ChatSettingsPanel[];
   readonly contentRenderers?: readonly ChatContentRenderer[];
   readonly slashCommands?: readonly ChatPluginSlashCommand[];
@@ -249,6 +252,7 @@ export function provideChatPlugins(
 ): EnvironmentProviders {
   const providers: Provider[] = [];
   const topMenuItems = flatMapPluginValues(plugins, (p) => p.topMenuItems);
+  const topMenuPanels = flatMapPluginValues(plugins, (p) => p.topMenuPanels);
   const settingsPanels = flatMapPluginValues(plugins, (p) => p.settingsPanels);
   const contentRenderers = flatMapPluginValues(
     plugins,
@@ -275,6 +279,7 @@ export function provideChatPlugins(
 
   providers.push({ provide: CHAT_PLUGINS, useValue: plugins });
   provideIfNonEmpty(providers, CHAT_TOP_MENU_ITEMS, topMenuItems);
+  provideIfNonEmpty(providers, CHAT_TOP_MENU_PANELS, topMenuPanels);
   provideIfNonEmpty(providers, CHAT_OPTIONS_TABS, settingsPanels);
   provideIfNonEmpty(providers, CHAT_CONTENT_RENDERERS, contentRenderers);
   provideIfNonEmpty(providers, CHAT_SLASH_COMMANDS, slashCommands);

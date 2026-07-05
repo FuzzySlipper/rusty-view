@@ -2,25 +2,34 @@ import { TestBed } from '@angular/core/testing';
 
 import {
   CHAT_SETTINGS_STORAGE,
+  CHAT_THEME,
   ChatTheme,
   DEFAULT_APPEARANCE,
   InMemoryChatSettingsStorage,
+  type AppearanceSettings,
 } from '../index';
 
 describe('ChatTheme', () => {
   let storage: InMemoryChatSettingsStorage;
 
-  beforeEach(() => {
+  function configure(defaults?: Partial<AppearanceSettings>): void {
     storage = new InMemoryChatSettingsStorage();
     TestBed.configureTestingModule({
       providers: [
         ChatTheme,
         { provide: CHAT_SETTINGS_STORAGE, useValue: storage },
+        ...(defaults === undefined
+          ? []
+          : [{ provide: CHAT_THEME, useValue: defaults }]),
       ],
     });
     // Clean any token overrides left by previous tests on the real document.
     document.documentElement.style.cssText = '';
     document.documentElement.removeAttribute('data-rv-theme');
+  }
+
+  beforeEach(() => {
+    configure();
   });
 
   it('applies default font sizes to the document root', () => {
@@ -31,6 +40,70 @@ describe('ChatTheme', () => {
     expect(style.getPropertyValue('--rv-font-size-md')).toBe('13px');
     expect(style.getPropertyValue('--rv-color-bg')).toBe('');
     expect(theme.settings()).toEqual(DEFAULT_APPEARANCE);
+  });
+
+  it('honors provideChatTheme defaults before persisted settings load', () => {
+    TestBed.resetTestingModule();
+    configure({
+      themeId: 'dark',
+      fontScale: 1.25,
+      colors: { accent: '#00aaff' },
+    });
+
+    const theme = TestBed.inject(ChatTheme);
+    TestBed.flushEffects?.();
+
+    const root = document.documentElement;
+    expect(theme.settings().themeId).toBe('dark');
+    expect(root.getAttribute('data-rv-theme')).toBe('dark');
+    expect(root.style.getPropertyValue('--rv-font-size-md')).toBe('16px');
+    expect(root.style.getPropertyValue('--rv-color-accent')).toBe('#00aaff');
+  });
+
+  it('lets persisted settings win over provideChatTheme defaults', async () => {
+    TestBed.resetTestingModule();
+    storage = new InMemoryChatSettingsStorage();
+    await storage.save({ ...DEFAULT_APPEARANCE, themeId: 'light' });
+    TestBed.configureTestingModule({
+      providers: [
+        ChatTheme,
+        { provide: CHAT_SETTINGS_STORAGE, useValue: storage },
+        { provide: CHAT_THEME, useValue: { themeId: 'dark' } },
+      ],
+    });
+    document.documentElement.style.cssText = '';
+    document.documentElement.removeAttribute('data-rv-theme');
+
+    const theme = TestBed.inject(ChatTheme);
+    await TestBed.inject(CHAT_SETTINGS_STORAGE).load();
+    await fixtureStabilize();
+    TestBed.flushEffects?.();
+
+    expect(theme.settings().themeId).toBe('light');
+    expect(document.documentElement.getAttribute('data-rv-theme')).toBe(
+      'light',
+    );
+  });
+
+  it('reset restores host-provided defaults and persists that baseline', async () => {
+    TestBed.resetTestingModule();
+    configure({ themeId: 'dark', messageSpacing: 'roomy' });
+    const theme = TestBed.inject(ChatTheme);
+
+    await theme.update({ themeId: 'light', messageSpacing: 'compact' });
+    await theme.reset();
+    TestBed.flushEffects?.();
+
+    expect(theme.settings().themeId).toBe('dark');
+    expect(theme.settings().messageSpacing).toBe('roomy');
+    expect(document.documentElement.getAttribute('data-rv-theme')).toBe('dark');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-message-padding-y'),
+    ).toBe('8px');
+    expect(await storage.load()).toMatchObject({
+      themeId: 'dark',
+      messageSpacing: 'roomy',
+    });
   });
 
   it('scales font sizes and persists the change', async () => {
@@ -263,3 +336,7 @@ describe('ChatTheme', () => {
     expect('danger' in theme.settings().colors).toBe(false);
   });
 });
+
+async function fixtureStabilize(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}

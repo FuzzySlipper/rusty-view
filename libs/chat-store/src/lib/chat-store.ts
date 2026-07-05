@@ -118,7 +118,7 @@ export class ChatStore implements OnDestroy {
 
   // ---- computed signals ----
   readonly messages = computed(
-    () => this._projection().messages as readonly ChatStoreMessage[],
+    () => this.messagesWithAssistantPlaceholder(),
   );
   readonly activeSession = computed<ChatSessionSummary | null>(() => {
     const id = this._activeSessionId();
@@ -411,6 +411,50 @@ export class ChatStore implements OnDestroy {
     );
   }
 
+  /**
+   * Render a transient assistant row while a send is being accepted, or while a
+   * real assistant turn has started but has not produced a visible block yet.
+   * This is UI-only state: the raw event log remains backend truth.
+   */
+  private messagesWithAssistantPlaceholder(): readonly ChatStoreMessage[] {
+    const projection = this._projection();
+    const messages = projection.messages as readonly ChatStoreMessage[];
+    const activeTurn = projection.activeTurn;
+
+    if (activeTurn !== undefined) {
+      const messageId =
+        activeTurn.messageId ??
+        `assistant-turn-${projection.latestCursor ?? this._activeSessionId()}`;
+      if (messages.some((message) => message.id === messageId)) {
+        return messages;
+      }
+      return [
+        ...messages,
+        createAssistantPlaceholderMessage({
+          id: messageId,
+          sessionId: this._activeSessionId(),
+          createdAt: activeTurn.startedAt,
+        }),
+      ];
+    }
+
+    const pendingSend = this._pendingSends().find(
+      (send) => send.status === 'sending',
+    );
+    if (pendingSend === undefined) {
+      return messages;
+    }
+
+    return [
+      ...messages,
+      createAssistantPlaceholderMessage({
+        id: `pending-assistant-${pendingSend.id}`,
+        sessionId: this._activeSessionId(),
+        createdAt: pendingCreatedAt(pendingSend.id),
+      }),
+    ];
+  }
+
   /** Send a user message to the active session. */
   async sendMessage(text: string): Promise<void> {
     const sessionId = this._activeSessionId();
@@ -621,3 +665,26 @@ export class ChatStore implements OnDestroy {
 
 /** Type alias for message list (avoids importing domain Message type name conflicts). */
 type ChatStoreMessage = ConversationProjection['messages'][number];
+
+function createAssistantPlaceholderMessage(input: {
+  readonly id: string;
+  readonly sessionId: string | null;
+  readonly createdAt: string;
+}): ChatStoreMessage {
+  return {
+    id: input.id,
+    sessionId: input.sessionId ?? 'pending-session',
+    author: { role: 'assistant', displayName: undefined },
+    createdAt: input.createdAt,
+    status: 'streaming',
+    blocks: [],
+  };
+}
+
+function pendingCreatedAt(pendingId: string): string {
+  const timestamp = Number(pendingId.replace(/^pending_/, ''));
+  if (Number.isFinite(timestamp) && timestamp > 0) {
+    return new Date(timestamp).toISOString();
+  }
+  return new Date().toISOString();
+}

@@ -1,15 +1,16 @@
 import {
   type EnvironmentProviders,
   inject,
-  InjectionToken,
   makeEnvironmentProviders,
   provideAppInitializer,
 } from '@angular/core';
 
 import type { AppearanceSettings } from './lib/appearance-settings';
 import { ChatTheme } from './lib/chat-theme';
+import { CHAT_THEME } from './lib/chat-theme-token';
 
 export { ChatTheme } from './lib/chat-theme';
+export { CHAT_THEME } from './lib/chat-theme-token';
 export {
   CHAT_SETTINGS_STORAGE,
   IndexedDbChatSettingsStorage,
@@ -45,19 +46,6 @@ export {
   normalizeMessageSpacing,
   normalizeThemeId,
 } from './lib/appearance-settings';
-
-/**
- * Extension token for overriding the *default* appearance that rusty-view
- * ships with. Downstream consumers provide a partial
- * {@link AppearanceSettings} here to bias the debug defaults toward their house
- * theme without reimplementing the application logic.
- *
- * The merged value is applied on top of {@link DEFAULT_APPEARANCE}; persisted
- * user preferences (from {@link CHAT_SETTINGS_STORAGE}) still win once loaded.
- */
-export const CHAT_THEME = new InjectionToken<Partial<AppearanceSettings>>(
-  'CHAT_THEME',
-);
 
 /**
  * Provide the {@link ChatTheme} service and force its construction on startup

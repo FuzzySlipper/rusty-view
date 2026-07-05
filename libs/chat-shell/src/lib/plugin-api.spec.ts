@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CHAT_OPTIONS_TABS,
   CHAT_TOP_MENU_ITEMS,
+  CHAT_TOP_MENU_PANELS,
 } from './shell-extension-tokens';
 import {
   CHAT_CONTENT_RENDERERS,
@@ -27,14 +28,25 @@ describe('provideChatPlugins', () => {
     const pluginA: ChatPlugin = {
       id: 'agent-workbench',
       topMenuItems: [
-        { id: 'runs', label: 'Runs', kind: 'panel', panelId: 'runs', order: 40 },
+        {
+          id: 'runs',
+          label: 'Runs',
+          kind: 'panel',
+          panelId: 'runs',
+          order: 40,
+        },
+      ],
+      topMenuPanels: [
+        {
+          id: 'run-detail',
+          title: 'Run Detail',
+          component: DummyComponent,
+        },
       ],
       settingsPanels: [
         { id: 'agent-settings', label: 'Agent', component: DummyComponent },
       ],
-      contentRenderers: [
-        { type: 'diagnostic', component: DummyComponent },
-      ],
+      contentRenderers: [{ type: 'diagnostic', component: DummyComponent }],
       slashCommands: [
         {
           name: 'inspect',
@@ -74,6 +86,9 @@ describe('provideChatPlugins', () => {
     expect(TestBed.inject(CHAT_TOP_MENU_ITEMS).map((i) => i.id)).toEqual([
       'runs',
     ]);
+    expect(TestBed.inject(CHAT_TOP_MENU_PANELS).map((p) => p.id)).toEqual([
+      'run-detail',
+    ]);
     expect(TestBed.inject(CHAT_OPTIONS_TABS).map((t) => t.id)).toEqual([
       'agent-settings',
     ]);
@@ -89,9 +104,9 @@ describe('provideChatPlugins', () => {
     expect(TestBed.inject(CHAT_SIDEBAR_PANELS).map((p) => p.id)).toEqual([
       'overview',
     ]);
-    expect(TestBed.inject(CHAT_MESSAGE_TOOLBAR_ACTIONS).map((a) => a.id)).toEqual([
-      'copy-id',
-    ]);
+    expect(
+      TestBed.inject(CHAT_MESSAGE_TOOLBAR_ACTIONS).map((a) => a.id),
+    ).toEqual(['copy-id']);
   });
 
   it('exposes user data actions with side-effect and confirmation metadata', () => {

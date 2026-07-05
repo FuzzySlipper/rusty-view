@@ -1,3 +1,4 @@
+import { Component, type Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -9,6 +10,16 @@ import {
 } from '@rusty-view/chat-theme';
 
 import { TopMenuComponent } from './top-menu';
+import {
+  CHAT_TOP_MENU_PANELS,
+  OPTIONS_PANEL_ID,
+} from './shell-extension-tokens';
+
+@Component({
+  selector: 'rv-test-roleplay-panel',
+  template: '<div data-testid="roleplay-panel">Roleplay panel body</div>',
+})
+class TestRoleplayPanelComponent {}
 
 /** Query all menu item buttons and return their trimmed labels. */
 function menuItemLabels(host: HTMLElement): string[] {
@@ -33,7 +44,7 @@ describe('TopMenuComponent', () => {
     document.documentElement.style.cssText = '';
   });
 
-  async function createMenu() {
+  async function createMenu(extraProviders: Provider[] = []) {
     await TestBed.configureTestingModule({
       imports: [TopMenuComponent],
       providers: [
@@ -44,7 +55,13 @@ describe('TopMenuComponent', () => {
         },
         {
           provide: ChatStore,
-          useValue: { commands: () => [] } as unknown as ChatStore,
+          useValue: {
+            commands: () => [],
+            allSessions: () => [],
+            activeSessionId: () => null,
+            viewHistoricalSession: async () => undefined,
+            refreshSessions: async () => undefined,
+          } as unknown as ChatStore,
         },
         {
           provide: AdminStore,
@@ -53,6 +70,11 @@ describe('TopMenuComponent', () => {
             loading: () => false,
             saving: () => false,
             error: () => null,
+            runtimePauseResult: () => null,
+            runtimeResumeResult: () => null,
+            pauseForSession: () => undefined,
+            pauseRuntime: async () => undefined,
+            resumeRuntime: async () => undefined,
             profiles: () => [],
             registryRecords: () => [],
             profileDiagnostics: () => null,
@@ -66,10 +88,16 @@ describe('TopMenuComponent', () => {
             loadExportPlan: async () => undefined,
             providerAliases: () => [],
             modelProviders: () => null,
+            providerLoadError: () => null,
             providerWriteResult: () => null,
             createModelProvider: async () => undefined,
             updateModelProvider: async () => undefined,
             clearProviderWriteResult: () => undefined,
+            loadOpenAiOauthStatus: async () => undefined,
+            openAiOauthStatus: () => null,
+            openAiOauthStartResult: () => null,
+            completeOpenAiOauthLogin: async () => undefined,
+            clearOpenAiOauthCredential: async () => undefined,
             overview: () => null,
             configValidation: () => null,
             createResult: () => null,
@@ -77,6 +105,7 @@ describe('TopMenuComponent', () => {
             controlCapabilityState: () => 'unknown',
           } as unknown as AdminStore,
         },
+        ...extraProviders,
       ],
     }).compileComponents();
 
@@ -104,6 +133,16 @@ describe('TopMenuComponent', () => {
     expect(host.querySelector('rv-admin-profiles-panel')).not.toBeNull();
   });
 
+  it('opens the Sessions panel when Sessions is clicked', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Sessions')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-sessions-panel')).not.toBeNull();
+  });
+
   it('opens the Service panel when Service is clicked', async () => {
     const fixture = await createMenu();
     const host = fixture.nativeElement as HTMLElement;
@@ -112,6 +151,16 @@ describe('TopMenuComponent', () => {
     fixture.detectChanges();
 
     expect(host.querySelector('rv-admin-service-panel')).not.toBeNull();
+  });
+
+  it('opens the Providers panel when Providers is clicked', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Providers')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-admin-providers-panel')).not.toBeNull();
   });
 
   it('opens the Options panel when Options is clicked', async () => {
@@ -146,5 +195,78 @@ describe('TopMenuComponent', () => {
     findMenuButton(host, 'Help')?.click();
     fixture.detectChanges();
     expect(host.querySelector('rv-help-panel')).toBeNull();
+  });
+
+  it('renders and dismisses a downstream custom top-menu panel', async () => {
+    const fixture = await createMenu([
+      {
+        provide: CHAT_TOP_MENU_PANELS,
+        useValue: [
+          {
+            id: 'roleplay-lore',
+            label: 'Lore',
+            title: 'Lore',
+            order: 35,
+            width: 'wide',
+            component: TestRoleplayPanelComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(menuItemLabels(host)).toContain('Lore');
+    findMenuButton(host, 'Lore')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="roleplay-panel"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-testid="top-menu-panel-custom"]'),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('Roleplay panel body');
+
+    (
+      host.querySelector(
+        '[data-testid="top-menu-panel-close"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="roleplay-panel"]')).toBeNull();
+
+    findMenuButton(host, 'Lore')?.click();
+    fixture.detectChanges();
+    (
+      host.querySelector(
+        '[data-testid="top-menu-overlay-custom"]',
+      ) as HTMLElement
+    ).click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-testid="roleplay-panel"]')).toBeNull();
+  });
+
+  it('keeps built-in reserved panel ids stable over custom panels', async () => {
+    const fixture = await createMenu([
+      {
+        provide: CHAT_TOP_MENU_PANELS,
+        useValue: [
+          {
+            id: OPTIONS_PANEL_ID,
+            label: 'Roleplay Options',
+            title: 'Roleplay Options',
+            component: TestRoleplayPanelComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(menuItemLabels(host)).toContain('Options');
+    expect(menuItemLabels(host)).not.toContain('Roleplay Options');
+
+    findMenuButton(host, 'Options')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-options-panel')).not.toBeNull();
+    expect(host.querySelector('[data-testid="roleplay-panel"]')).toBeNull();
   });
 });

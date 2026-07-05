@@ -144,5 +144,39 @@
       <rv-admin-providers-panel (dismissed)="closePanel()" />
     </div>
   </div>
+  } @if (activeCustomPanel(); as customPanel) {
+  <div
+    class="rv-top-menu__overlay"
+    data-testid="top-menu-overlay-custom"
+    role="button"
+    tabindex="0"
+    [attr.aria-label]="'Close ' + customPanel.title"
+    (click)="closePanel()"
+    (keydown.enter)="closePanel()"
+    (keydown.space)="closePanel()"
+  >
+    <div
+      class="rv-top-menu__panel rv-top-menu__panel--custom"
+      [class.rv-top-menu__panel--wide]="customPanel.width === 'wide'"
+      data-testid="top-menu-panel-custom"
+      role="dialog"
+      [attr.aria-label]="customPanel.title"
+      (click)="$event.stopPropagation()"
+      (keydown)="$event.stopPropagation()"
+    >
+      <header class="rv-top-menu__panel-header">
+        <span>{{ customPanel.title }}</span>
+        <button
+          type="button"
+          class="rv-top-menu__panel-close"
+          data-testid="top-menu-panel-close"
+          (click)="closePanel()"
+        >
+          ✕
+        </button>
+      </header>
+      <ng-container *ngComponentOutlet="customPanel.component" />
+    </div>
+  </div>
   }
 </div>

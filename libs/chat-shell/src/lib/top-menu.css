@@ -37,6 +37,11 @@
   max-height: 80vh;
 }
 
+.rv-top-menu__panel--custom {
+  width: min(640px, 92vw);
+  max-height: 80vh;
+}
+
 .rv-top-menu__panel-header {
   display: flex;
   align-items: center;

@@ -160,6 +160,7 @@ renderer contracts re-exported from `@rusty-view/transcript-renderer`. The
 debug shell renders these contribution points today:
 
 - `CHAT_TOP_MENU_ITEMS`
+- `CHAT_TOP_MENU_PANELS`
 - `CHAT_OPTIONS_TABS`
 - `CHAT_CONTENT_RENDERERS`
 - `CHAT_SLASH_COMMANDS`

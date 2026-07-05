@@ -36,6 +36,7 @@ import {
   normalizeThemeId,
 } from './appearance-settings';
 import { CHAT_SETTINGS_STORAGE } from './chat-settings-storage';
+import { CHAT_THEME } from './chat-theme-token';
 
 /**
  * Maps every colour preference field to the token name it overrides (task
@@ -127,8 +128,14 @@ export class ChatTheme {
   private readonly document = inject(DOCUMENT);
   private readonly storage = inject(CHAT_SETTINGS_STORAGE, { optional: true });
   private readonly injector = inject(Injector);
+  private readonly themeDefaults = inject(CHAT_THEME, { optional: true }) ?? {};
+  private readonly defaultSettings = this.normalize({
+    ...DEFAULT_APPEARANCE,
+    ...this.themeDefaults,
+    colors: { ...DEFAULT_APPEARANCE.colors, ...this.themeDefaults.colors },
+  });
 
-  private readonly _settings = signal<AppearanceSettings>(DEFAULT_APPEARANCE);
+  private readonly _settings = signal<AppearanceSettings>(this.defaultSettings);
 
   /** Current appearance preferences (readonly). */
   readonly settings = this._settings.asReadonly();
@@ -180,10 +187,10 @@ export class ChatTheme {
     await this.update({ themeId });
   }
 
-  /** Reset to defaults, apply live, and persist. */
+  /** Reset to the host-provided default baseline, apply live, and persist. */
   async reset(): Promise<void> {
-    this._settings.set(DEFAULT_APPEARANCE);
-    await this.persist(DEFAULT_APPEARANCE);
+    this._settings.set(this.defaultSettings);
+    await this.persist(this.defaultSettings);
   }
 
   // ---- internals ----
