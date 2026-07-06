@@ -19,12 +19,14 @@ export {
 export type { ChatSettingsStorage } from './lib/chat-settings-storage';
 export {
   type AppearanceSettings,
+  type AppearanceBackgroundPreset,
   type AppearanceColors,
   type AppearanceFontFamily,
   type AppearanceDensity,
   type AppearanceMessageSpacing,
   type AppearanceThemeId,
   type TextRenderMode,
+  APPEARANCE_BACKGROUND_PRESETS,
   APPEARANCE_COLOR_FIELDS,
   APPEARANCE_FONT_FAMILIES,
   APPEARANCE_MESSAGE_SPACING,
@@ -43,6 +45,7 @@ export {
   clampFontScale,
   densityMultiplier,
   normalizeFontFamily,
+  normalizeBackgroundPreset,
   normalizeMessageSpacing,
   normalizeThemeId,
 } from './lib/appearance-settings';

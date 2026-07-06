@@ -1,0 +1,116 @@
+<div class="rv-revision" data-testid="message-revision-controls">
+  @if (variants().length > 1) {
+  <div class="rv-revision__variants" aria-label="Message variants">
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="variant-previous"
+      title="Previous variant"
+      [disabled]="!canPrevious()"
+      (click)="selectOffset(-1)"
+    >
+      Prev
+    </button>
+    <span class="rv-revision__count" data-testid="variant-count">
+      {{ variantLabel() }}
+    </span>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="variant-next"
+      title="Next variant"
+      [disabled]="!canNext()"
+      (click)="selectOffset(1)"
+    >
+      Next
+    </button>
+    <select
+      class="rv-revision__select"
+      data-testid="variant-select"
+      [value]="activeVariant()?.id ?? ''"
+      (change)="selectActiveVariant($event)"
+      aria-label="Select message variant"
+    >
+      @for (variant of variants(); track variant.id) {
+      <option [value]="variant.id">
+        {{ variant.source === 'primary' ? 'Primary' : 'Alt ' + variant.ordinal
+        }}
+      </option>
+      }
+    </select>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="variant-delete"
+      title="Delete active alternate"
+      [disabled]="!canDeleteVariant()"
+      (click)="emit('delete_variant')"
+    >
+      Delete Alt
+    </button>
+  </div>
+  }
+
+  <div class="rv-revision__actions" aria-label="Message actions">
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="message-regenerate"
+      title="Regenerate from here"
+      [disabled]="capabilities().regenerate !== true"
+      (click)="emit('regenerate')"
+    >
+      Regenerate
+    </button>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="message-continue"
+      title="Continue this response"
+      [disabled]="capabilities().continue !== true"
+      (click)="emit('continue')"
+    >
+      Continue
+    </button>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="message-edit"
+      title="Edit message"
+      [disabled]="capabilities().edit !== true"
+      (click)="emit('edit')"
+    >
+      Edit
+    </button>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="message-delete"
+      title="Delete message"
+      [disabled]="capabilities().delete !== true"
+      (click)="emit('delete')"
+    >
+      Delete
+    </button>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="message-branch"
+      title="Create or switch branch"
+      [disabled]="capabilities().branch !== true"
+      (click)="emit('branch')"
+    >
+      Branch
+    </button>
+    <button
+      type="button"
+      class="rv-revision__button"
+      data-testid="message-bookmark"
+      title="Bookmark snapshot"
+      [disabled]="capabilities().bookmark !== true"
+      (click)="emit('bookmark')"
+    >
+      Bookmark
+    </button>
+  </div>
+</div>

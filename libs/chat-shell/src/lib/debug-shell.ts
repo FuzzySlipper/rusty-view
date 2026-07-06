@@ -12,12 +12,15 @@ import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
   StreamStatusComponent,
+  TooltipDirective,
 } from '@rusty-view/chat-components';
 import type { StreamStatusKind } from '@rusty-view/chat-components';
 import type { ChatCommandDescriptor } from '@rusty-view/protocol';
 import {
   TOOL_CALL_DEBUG_DETAIL_LOADER,
   TranscriptViewportComponent,
+  type MessageRevisionAction,
+  type MessageRevisionCapabilities,
 } from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
 import { ProfilePanelComponent } from './profile-panel';
@@ -52,6 +55,7 @@ import {
     EventInspectorComponent,
     ContextDiagnosticsComponent,
     TopMenuComponent,
+    TooltipDirective,
   ],
   templateUrl: './debug-shell.html',
   styleUrl: './debug-shell.css',
@@ -114,6 +118,9 @@ export class DebugShellComponent {
   protected readonly viewingSessionId = computed(() =>
     this.store.viewingHistoricalSessionId(),
   );
+  protected readonly revisionCapabilities: MessageRevisionCapabilities = {
+    deleteVariant: true,
+  };
 
   constructor() {
     this.installTestSnapshotApi();
@@ -167,6 +174,30 @@ export class DebugShellComponent {
 
   protected onReturnToActive(): void {
     void this.store.returnToActiveSession();
+  }
+
+  protected onActiveBranchSelected(branchId: string): void {
+    void this.store.selectActiveConversationBranch(branchId);
+  }
+
+  protected onRevisionRequested(action: MessageRevisionAction): void {
+    const slot = action.slot;
+    if (slot === undefined) return;
+    if (
+      action.kind === 'select_variant' ||
+      action.kind === 'previous_variant' ||
+      action.kind === 'next_variant'
+    ) {
+      const variant = action.variant;
+      if (variant === undefined) return;
+      const activeVariantId =
+        variant.source === 'primary' ? undefined : variant.id;
+      void this.store.selectActiveMessageVariant(slot.id, activeVariantId);
+      return;
+    }
+    if (action.kind === 'delete_variant' && action.variant !== undefined) {
+      void this.store.deleteMessageVariant(slot.id, action.variant.id);
+    }
   }
 
   private hasPluginCommand(text: string): boolean {

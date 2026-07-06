@@ -1,10 +1,12 @@
 import type {
   ChatMessage,
   ConversationBranch,
+  ConversationBranchBreadcrumb,
+  ConversationNavigationTarget,
   ConversationSnapshot,
 } from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { TranscriptViewportComponent } from './transcript-viewport';
 import { MessageItemComponent } from './message-item';
@@ -156,6 +158,63 @@ describe('TranscriptViewportComponent scale', () => {
     expect(fixture.componentInstance.branches()).toHaveLength(2);
     expect(fixture.componentInstance.snapshots()).toHaveLength(1);
     expect(fixture.componentInstance.activeBranchId()).toBe('alternate');
+  });
+
+  it('emits branch and snapshot navigation requests', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TranscriptViewportComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TranscriptViewportComponent);
+    const component = fixture.componentInstance as unknown as {
+      navigationRequested: {
+        subscribe: (fn: (target: ConversationNavigationTarget) => void) => void;
+      };
+      activeBranchSelected: {
+        subscribe: (fn: (branchId: string) => void) => void;
+      };
+      scrollToMessageId: (messageId: string) => void;
+      jumpToBranch: (crumb: ConversationBranchBreadcrumb) => void;
+      jumpToSnapshot: (target: ConversationNavigationTarget) => void;
+    };
+    const targets: ConversationNavigationTarget[] = [];
+    const selectedBranches: string[] = [];
+    component.navigationRequested.subscribe((target) => targets.push(target));
+    component.activeBranchSelected.subscribe((branchId) =>
+      selectedBranches.push(branchId),
+    );
+    component.scrollToMessageId = vi.fn();
+
+    const branchTarget: ConversationNavigationTarget = {
+      id: 'branch_leaf',
+      kind: 'branch',
+      messageId: 'msg_3',
+      label: 'leaf',
+    };
+    component.jumpToBranch({
+      branch: {
+        id: 'branch_leaf',
+        parentMessageId: 'msg_1',
+        headMessageId: 'msg_3',
+        label: 'leaf',
+        createdAt: '2026-06-24T10:05:00Z',
+      },
+      target: branchTarget,
+      depth: 0,
+    });
+
+    const snapshotTarget: ConversationNavigationTarget = {
+      id: 'snap_1',
+      kind: 'snapshot',
+      messageId: 'msg_2',
+      label: 'snap_1',
+    };
+    component.jumpToSnapshot(snapshotTarget);
+
+    expect(selectedBranches).toEqual(['branch_leaf']);
+    expect(targets).toEqual([branchTarget, snapshotTarget]);
+    expect(component.scrollToMessageId).toHaveBeenCalledWith('msg_3');
+    expect(component.scrollToMessageId).toHaveBeenCalledWith('msg_2');
   });
 });
 

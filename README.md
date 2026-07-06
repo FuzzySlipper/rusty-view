@@ -104,4 +104,5 @@ Generated files are not hand-edited. Frontend domain/view-model types live in
 - [docs/live-testing.md](docs/live-testing.md) - real LLM/front-end testing
 - [docs/plugin-api.md](docs/plugin-api.md) - plugin and contribution contracts
 - [docs/theming.md](docs/theming.md) - design tokens and appearance settings
+- [docs/tooltips.md](docs/tooltips.md) - reusable tooltip API and guidance
 - [docs/publishing.md](docs/publishing.md) - package publishing notes

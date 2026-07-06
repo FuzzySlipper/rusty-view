@@ -41,6 +41,8 @@ import {
   type ProfileRegistryFieldUpdateRequest,
   type ProfileRegistryWriteApplyResult,
   type ProfileRegistryWritePlan,
+  type StorageQueryCatalog,
+  type StorageQueryResult,
 } from '@rusty-view/transport';
 
 import { AdminStore } from './admin-store';
@@ -81,6 +83,17 @@ interface AdminTransportMock {
   >;
   readonly adminModelProviders: ReturnType<
     typeof vi.fn<() => Promise<ModelProviderPage>>
+  >;
+  readonly adminStorageQueryCatalog: ReturnType<
+    typeof vi.fn<() => Promise<StorageQueryCatalog>>
+  >;
+  readonly adminStorageQuery: ReturnType<
+    typeof vi.fn<
+      (
+        queryId: string,
+        input?: Record<string, unknown>,
+      ) => Promise<StorageQueryResult>
+    >
   >;
   readonly adminCreateLocalToolProfile: ReturnType<
     typeof vi.fn<
@@ -501,6 +514,19 @@ function createTransport(
         }) satisfies ContextStrategyCatalog,
     ),
     adminModelProviders: vi.fn(async () => emptyPage()),
+    adminStorageQueryCatalog: vi.fn(async () => ({
+      schema_version: 1,
+      source: 'rust_bridge_read_model',
+      items: [],
+      total: 0,
+    })),
+    adminStorageQuery: vi.fn(async (queryId: string) => ({
+      query_id: queryId,
+      read_only: true,
+      source: 'rust_bridge_read_model',
+      items: [],
+      total: 0,
+    })),
     adminCreateLocalToolProfile: vi.fn(async () => ({
       id: 'tools-default',
       enabled: true,
@@ -703,6 +729,49 @@ describe('AdminStore behavior', () => {
     expect(store.profiles()[0]?.idleSessions).toBe(1);
     expect(store.profiles()[0]?.brainModules).toHaveLength(1);
     expect(store.profiles()[0]?.mcpSurfaces).toHaveLength(1);
+  });
+
+  it('loads and executes storage query catalog entries', async () => {
+    const transport = createTransport({
+      adminStorageQueryCatalog: vi.fn(async () => ({
+        schema_version: 1,
+        source: 'rust_bridge_read_model',
+        items: [
+          {
+            id: 'runtime.search',
+            title: 'Runtime search',
+            description: 'Search runtime storage.',
+            owner: 'rust_coordination',
+            readOnly: true,
+            backendAgnostic: true,
+            resultShape: 'runtime.search_result.v1',
+            parameters: [],
+          },
+        ],
+        total: 1,
+      })),
+      adminStorageQuery: vi.fn(async (queryId: string) => ({
+        query_id: queryId,
+        read_only: true,
+        source: 'rust_bridge_read_model',
+        items: [{ snippet: 'hello' }],
+        total: 1,
+      })),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.loadStorageQueryCatalog();
+    const ok = await store.executeStorageQuery('runtime.search', {
+      query: 'hello',
+    });
+
+    expect(ok).toBe(true);
+    expect(store.storageQueryCatalog()?.items[0]?.id).toBe('runtime.search');
+    expect(store.storageQueryResult()?.total).toBe(1);
+    expect(transport.adminStorageQuery).toHaveBeenCalledWith('runtime.search', {
+      query: 'hello',
+    });
+    expect(store.storageQueryError()).toBeNull();
   });
 
   it('createProfile stores the control result and refreshes admin data', async () => {

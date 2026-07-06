@@ -1,0 +1,19 @@
+:host {
+  display: block;
+  pointer-events: none;
+  z-index: calc(var(--rv-z-overlay) + 50);
+}
+
+.rv-tooltip {
+  max-width: min(280px, calc(100vw - 32px));
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border: 1px solid var(--rv-color-border-strong);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  box-shadow: var(--rv-shadow-overlay);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-ui);
+  font-size: var(--rv-font-size-xs);
+  line-height: var(--rv-line-height-normal);
+  white-space: normal;
+}

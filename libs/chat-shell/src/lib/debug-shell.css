@@ -11,6 +11,22 @@
   font-family: var(--rv-font-ui);
 }
 
+:host-context([data-rv-background-preset='grid']) .rv-debug {
+  background-image:
+    linear-gradient(var(--rv-color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rv-color-border) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+:host-context([data-rv-background-preset='scanlines']) .rv-debug {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 7px,
+    var(--rv-color-border) 8px
+  );
+}
+
 .rv-debug__header {
   display: flex;
   align-items: center;

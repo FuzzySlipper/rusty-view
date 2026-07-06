@@ -7,11 +7,13 @@ import {
 } from '@angular/core';
 import {
   type AppearanceColors,
+  type AppearanceBackgroundPreset,
   type AppearanceDensity,
   type AppearanceFontFamily,
   type AppearanceMessageSpacing,
   type AppearanceThemeId,
   type TextRenderMode,
+  APPEARANCE_BACKGROUND_PRESETS,
   APPEARANCE_COLOR_FIELDS,
   APPEARANCE_FONT_FAMILIES,
   APPEARANCE_MESSAGE_SPACING,
@@ -82,6 +84,8 @@ export class AppearanceTabComponent {
   protected readonly fontFamilies = APPEARANCE_FONT_FAMILIES;
   /** Message row spacing choices. */
   protected readonly messageSpacingOptions = APPEARANCE_MESSAGE_SPACING;
+  /** Reusable shell background treatments. */
+  protected readonly backgroundPresets = APPEARANCE_BACKGROUND_PRESETS;
 
   /** Status line for the most recent import attempt (task #3691). */
   protected readonly importStatus = signal<string>('');
@@ -127,6 +131,10 @@ export class AppearanceTabComponent {
 
   protected setTextRenderMode(value: TextRenderMode): void {
     void this.theme.update({ textRenderMode: value });
+  }
+
+  protected setBackgroundPreset(value: AppearanceBackgroundPreset): void {
+    void this.theme.update({ backgroundPreset: value });
   }
 
   protected onScale(event: Event): void {

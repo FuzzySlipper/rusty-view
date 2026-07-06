@@ -19,10 +19,12 @@ import {
 
 import {
   type AppearanceColors,
+  type AppearanceBackgroundPreset,
   type AppearanceDensity,
   type AppearanceFontFamily,
   type AppearanceSettings,
   type TextRenderMode,
+  APPEARANCE_BACKGROUND_PRESETS,
   APPEARANCE_COLOR_FIELDS,
   BASE_DENSITY,
   BASE_FONT_SIZES,
@@ -31,6 +33,7 @@ import {
   DEFAULT_APPEARANCE,
   densityMultiplier,
   MESSAGE_SPACING_Y,
+  normalizeBackgroundPreset,
   normalizeFontFamily,
   normalizeMessageSpacing,
   normalizeThemeId,
@@ -94,6 +97,7 @@ const SHOW_TIMESTAMPS_ATTRIBUTE = 'data-rv-show-timestamps';
 const SHOW_MESSAGE_IDS_ATTRIBUTE = 'data-rv-show-message-ids';
 const REDUCED_MOTION_ATTRIBUTE = 'data-rv-reduced-motion';
 const DISABLE_SHADOWS_ATTRIBUTE = 'data-rv-disable-shadows';
+const BACKGROUND_PRESET_ATTRIBUTE = 'data-rv-background-preset';
 
 const FONT_FAMILY_STACKS: Readonly<Record<AppearanceFontFamily, string>> = {
   system:
@@ -108,6 +112,10 @@ const FONT_FAMILY_STACKS: Readonly<Record<AppearanceFontFamily, string>> = {
   dyslexic:
     "'OpenDyslexic', 'Atkinson Hyperlegible', Verdana, Tahoma, sans-serif",
 };
+
+const BACKGROUND_PRESETS = new Set<AppearanceBackgroundPreset>(
+  APPEARANCE_BACKGROUND_PRESETS.map((preset) => preset.id),
+);
 
 /**
  * Angular Signals service that owns appearance preferences and applies them
@@ -249,6 +257,7 @@ export class ChatTheme {
       disableShadows: settings.disableShadows === true,
       showTimestamps: settings.showTimestamps === true,
       showMessageIds: settings.showMessageIds === true,
+      backgroundPreset: normalizeBackgroundPreset(settings.backgroundPreset),
       colors: normalizeColors(settings.colors),
       textRenderMode: normalizeTextRenderMode(settings.textRenderMode),
     };
@@ -288,6 +297,14 @@ export class ChatTheme {
       DISABLE_SHADOWS_ATTRIBUTE,
       settings.disableShadows,
     );
+    if (
+      settings.backgroundPreset === 'none' ||
+      !BACKGROUND_PRESETS.has(settings.backgroundPreset)
+    ) {
+      root.removeAttribute(BACKGROUND_PRESET_ATTRIBUTE);
+    } else {
+      root.setAttribute(BACKGROUND_PRESET_ATTRIBUTE, settings.backgroundPreset);
+    }
 
     // Clear all managed overrides so defaults cascade cleanly.
     for (const token of MANAGED_TOKENS) {

@@ -363,13 +363,10 @@ function applyToolCall(
 ): ConversationProjection {
   const payload = payloadRecord(event.payload);
 
-  // The OpenAPI contract specifies `tool_call_id`, `tool_name`, `summary` (and
-  // `result_ref`/`reason_code`). The live backend instead keys tool calls by
-  // `wake_id`, omits `summary`, and signals failure via `is_error` on the
-  // completed event (no separate tool_call_failed/result_ref). Accept both.
-  const toolCallId =
-    readOptionalString(payload, 'tool_call_id') ??
-    readOptionalString(payload, 'wake_id');
+  // Prefer the stable tool identity when present. Older live Crew events did
+  // not carry `tool_call_id` but did carry per-call debug detail ids; using
+  // `wake_id` too early collapsed every tool in a wake into one block.
+  const toolCallId = readToolCallIdentity(payload);
   const toolName = readOptionalString(payload, 'tool_name');
   if (toolCallId === undefined || toolName === undefined) {
     return projection;
@@ -556,6 +553,16 @@ function readToolCallDebugDetailId(
   const metadata = payload['metadata'];
   if (!isPayloadObject(metadata)) return undefined;
   return readOptionalString(metadata, 'debugDetailId');
+}
+
+function readToolCallIdentity(
+  payload: Record<string, unknown>,
+): string | undefined {
+  return (
+    readOptionalString(payload, 'tool_call_id') ??
+    readToolCallDebugDetailId(payload) ??
+    readOptionalString(payload, 'wake_id')
+  );
 }
 
 function isPayloadObject(value: unknown): value is Record<string, unknown> {

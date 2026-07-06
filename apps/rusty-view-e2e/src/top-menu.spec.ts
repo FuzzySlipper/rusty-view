@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import path from 'node:path';
 
 /**
  * Top menu / Options / Help smoke test (task #3252).
@@ -31,6 +32,18 @@ async function topMenuFontFamily(page: Page): Promise<string> {
     .evaluate((el) => getComputedStyle(el).fontFamily);
 }
 
+async function captureBrokerScreenshot(
+  page: Page,
+  name: string,
+): Promise<void> {
+  const artifactRoot = process.env['PLAYWRIGHT_BROKER_ARTIFACT_ROOT'];
+  if (artifactRoot === undefined || artifactRoot.length === 0) return;
+  await page.screenshot({
+    path: path.join(artifactRoot, `${name}.png`),
+    fullPage: true,
+  });
+}
+
 test('top menu opens options, applies an appearance change, opens help', async ({
   page,
 }) => {
@@ -49,6 +62,30 @@ test('top menu opens options, applies an appearance change, opens help', async (
   await expect(
     page.locator('.rv-top-menu__item', { hasText: 'Help' }),
   ).toBeVisible();
+  await expect(
+    page.locator('.rv-top-menu__item', { hasText: 'Debug' }),
+  ).toBeVisible();
+  await page.locator('.rv-top-menu__item', { hasText: 'Debug' }).hover();
+  await expect(page.locator('.rv-tooltip')).toContainText(
+    'Inspect runtime diagnostics',
+  );
+  await captureBrokerScreenshot(page, 'top-menu-debug-tooltip');
+  await page.mouse.move(0, 0);
+  await expect(page.locator('.rv-tooltip')).toHaveCount(0);
+
+  // Debug is an operator panel; this smoke only verifies the real topbar exposes
+  // it and renders the shell surface. API behavior is covered by component and
+  // transport tests with mocked Crew responses.
+  await page.locator('.rv-top-menu__item', { hasText: 'Debug' }).click();
+  await expect(page.locator('rv-debug-panel')).toBeVisible();
+  await expect(page.locator('rv-debug-panel')).toContainText(
+    'read-only runtime diagnostics',
+  );
+  await captureBrokerScreenshot(page, 'top-menu-debug-panel');
+  await page.getByTestId('top-menu-overlay-debug').click({
+    position: { x: 8, y: 8 },
+  });
+  await expect(page.locator('rv-debug-panel')).toHaveCount(0);
 
   // 2. Open Options → Appearance tab is active and rendered.
   await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();

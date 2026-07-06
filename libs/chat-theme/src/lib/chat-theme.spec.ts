@@ -26,6 +26,7 @@ describe('ChatTheme', () => {
     // Clean any token overrides left by previous tests on the real document.
     document.documentElement.style.cssText = '';
     document.documentElement.removeAttribute('data-rv-theme');
+    document.documentElement.removeAttribute('data-rv-background-preset');
   }
 
   beforeEach(() => {
@@ -265,6 +266,21 @@ describe('ChatTheme', () => {
     expect(root.style.getPropertyValue('--rv-shadow-sm')).toBe('');
     expect(root.hasAttribute('data-rv-reduced-motion')).toBe(false);
     expect(root.hasAttribute('data-rv-disable-shadows')).toBe(false);
+  });
+
+  it('applies and persists background presets', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({ backgroundPreset: 'grid' });
+    TestBed.flushEffects?.();
+
+    const root = document.documentElement;
+    expect(root.getAttribute('data-rv-background-preset')).toBe('grid');
+    expect(theme.settings().backgroundPreset).toBe('grid');
+    expect((await storage.load())?.backgroundPreset).toBe('grid');
+
+    await theme.update({ backgroundPreset: 'none' });
+    TestBed.flushEffects?.();
+    expect(root.hasAttribute('data-rv-background-preset')).toBe(false);
   });
 
   it('selects a named base theme via the data-rv-theme attribute (#3691)', async () => {

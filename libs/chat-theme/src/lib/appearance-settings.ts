@@ -151,6 +151,19 @@ export const APPEARANCE_THEMES: ReadonlyArray<{
   { id: 'high-contrast', label: 'High contrast' },
 ];
 
+/** App-level background treatment applied behind the reusable chat shell. */
+export type AppearanceBackgroundPreset = 'none' | 'grid' | 'scanlines';
+
+/** Ordered background choices for the Appearance selector. */
+export const APPEARANCE_BACKGROUND_PRESETS: ReadonlyArray<{
+  readonly id: AppearanceBackgroundPreset;
+  readonly label: string;
+}> = [
+  { id: 'none', label: 'None' },
+  { id: 'grid', label: 'Subtle grid' },
+  { id: 'scanlines', label: 'Scanlines' },
+];
+
 /**
  * How text blocks in the transcript are rendered. See {@link AppearanceSettings.textRenderMode}.
  */
@@ -177,6 +190,7 @@ export interface AppearanceSettings {
   readonly disableShadows: boolean;
   readonly showTimestamps: boolean;
   readonly showMessageIds: boolean;
+  readonly backgroundPreset: AppearanceBackgroundPreset;
   readonly colors: AppearanceColors;
   /**
    * How chat message text is rendered: `auto` (detect Markdown/HTML per block),
@@ -247,6 +261,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   disableShadows: false,
   showTimestamps: false,
   showMessageIds: false,
+  backgroundPreset: 'none',
   colors: {},
   textRenderMode: 'auto',
 };
@@ -282,6 +297,15 @@ export function normalizeThemeId(value: unknown): AppearanceThemeId {
     value === 'auto'
     ? value
     : 'auto';
+}
+
+/** Coerce an arbitrary value into a valid background preset. */
+export function normalizeBackgroundPreset(
+  value: unknown,
+): AppearanceBackgroundPreset {
+  return value === 'grid' || value === 'scanlines' || value === 'none'
+    ? value
+    : 'none';
 }
 
 /** Clamp a font scale into the allowed range and round to a sane precision. */

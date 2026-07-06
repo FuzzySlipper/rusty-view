@@ -1,0 +1,61 @@
+:host {
+  display: block;
+}
+
+.rv-revision {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-xs);
+  margin-top: var(--rv-space-xs);
+  font-family: var(--rv-font-ui);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-revision__variants,
+.rv-revision__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rv-space-xs);
+}
+
+.rv-revision__button,
+.rv-revision__select {
+  min-height: var(--rv-density-control-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font: inherit;
+}
+
+.rv-revision__button {
+  padding: 0 var(--rv-space-sm);
+  cursor: pointer;
+}
+
+.rv-revision__select {
+  padding: 0 var(--rv-space-xs);
+}
+
+.rv-revision__button:not(:disabled):hover,
+.rv-revision__button:not(:disabled):focus-visible,
+.rv-revision__select:focus-visible {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-text-primary);
+  outline: none;
+}
+
+.rv-revision__button:disabled {
+  background: var(--rv-color-surface-disabled);
+  color: var(--rv-color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.rv-revision__count {
+  min-width: 2.75rem;
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  text-align: center;
+}

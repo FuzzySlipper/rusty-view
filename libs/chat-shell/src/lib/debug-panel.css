@@ -1,0 +1,247 @@
+:host {
+  display: block;
+  width: min(1180px, 94vw);
+  max-height: 82vh;
+  background: var(--rv-color-surface);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  box-shadow: var(--rv-shadow-overlay);
+  overflow: hidden;
+}
+
+.rv-debug-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh;
+  font-family: var(--rv-font-ui);
+}
+
+.rv-debug-panel__header,
+.rv-debug-panel__tabs,
+.rv-debug-panel__storage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-bottom: 1px solid var(--rv-color-border);
+}
+
+.rv-debug-panel__header {
+  justify-content: space-between;
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  font-size: var(--rv-font-size-sm);
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-debug-panel__subtle,
+.rv-debug-panel__note,
+.rv-debug-panel__empty,
+.rv-debug-panel__row small,
+.rv-debug-panel__params small {
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-regular);
+}
+
+.rv-debug-panel__tabs {
+  background: var(--rv-color-surface);
+}
+
+.rv-debug-panel__tabs button,
+.rv-debug-panel__button,
+.rv-debug-panel__row {
+  appearance: none;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: transparent;
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+  font-family: var(--rv-font-ui);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug-panel__tabs button,
+.rv-debug-panel__button {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+}
+
+.rv-debug-panel__tabs button:hover,
+.rv-debug-panel__button:hover,
+.rv-debug-panel__row:hover {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-accent);
+}
+
+.rv-debug-panel__tab--active,
+.rv-debug-panel__button--primary {
+  background: var(--rv-color-accent) !important;
+  border-color: var(--rv-color-accent) !important;
+  color: var(--rv-color-accent-text) !important;
+}
+
+.rv-debug-panel__body {
+  display: grid;
+  gap: var(--rv-space-sm);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--rv-space-md);
+}
+
+.rv-debug-panel__note {
+  margin: 0;
+}
+
+.rv-debug-panel__split,
+.rv-debug-panel__storage {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.4fr);
+  gap: var(--rv-space-md);
+  min-height: 0;
+}
+
+.rv-debug-panel__list,
+.rv-debug-panel__detail,
+.rv-debug-panel__query-card {
+  min-height: 0;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+}
+
+.rv-debug-panel__list {
+  display: grid;
+  align-content: start;
+  max-height: 58vh;
+  overflow: auto;
+}
+
+.rv-debug-panel__row {
+  display: grid;
+  gap: 2px;
+  padding: var(--rv-space-sm);
+  text-align: left;
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+
+.rv-debug-panel__row strong {
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.rv-debug-panel__detail {
+  display: grid;
+  align-content: start;
+  gap: var(--rv-space-sm);
+  max-height: 58vh;
+  overflow: auto;
+  padding: var(--rv-space-sm);
+}
+
+.rv-debug-panel__meta {
+  display: grid;
+  grid-template-columns: minmax(90px, max-content) minmax(0, 1fr);
+  gap: var(--rv-space-xs) var(--rv-space-sm);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-muted);
+}
+
+.rv-debug-panel__meta strong {
+  color: var(--rv-color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.rv-debug-panel__error,
+.rv-debug-panel__empty {
+  padding: var(--rv-space-sm);
+}
+
+.rv-debug-panel__error {
+  border: 1px solid var(--rv-color-danger);
+  border-radius: var(--rv-radius);
+  color: var(--rv-color-danger);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug-panel__select,
+.rv-debug-panel__params input,
+.rv-debug-panel__params select {
+  min-width: 0;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  padding: var(--rv-space-xs);
+}
+
+.rv-debug-panel__query-card {
+  display: grid;
+  align-content: start;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-sm);
+}
+
+.rv-debug-panel__query-card h3,
+.rv-debug-panel__query-card p {
+  margin: 0;
+}
+
+.rv-debug-panel__query-card h3 {
+  font-size: var(--rv-font-size-sm);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-debug-panel__query-card p {
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug-panel__params {
+  display: grid;
+  gap: var(--rv-space-sm);
+}
+
+.rv-debug-panel__params label {
+  display: grid;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug-panel__table th,
+.rv-debug-panel__table td {
+  max-width: 260px;
+  padding: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  color: var(--rv-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-debug-panel__table th {
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  text-align: left;
+}
+
+@media (max-width: 760px) {
+  .rv-debug-panel__split,
+  .rv-debug-panel__storage {
+    grid-template-columns: 1fr;
+  }
+}

@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { AdminHttpTransport } from './admin-http-transport';
 import type { ChatTransportConfig, FetchImpl } from './chat-transport-config';
 import { resolveChatTransportConfig } from './chat-transport-config';
-import type { AdminProfileRegistryDiagnostics } from './admin-api-types';
+import type {
+  AdminProfileRegistryDiagnostics,
+  StorageQueryCatalog,
+  StorageQueryResult,
+} from './admin-api-types';
 
 interface CapturedRequest {
   readonly url: string;
@@ -101,6 +105,64 @@ describe('AdminHttpTransport', () => {
     expect(lastRequest().headers.get('Authorization')).toBe(
       'Bearer admin-token',
     );
+  });
+
+  it('loads the read-only storage query catalog', async () => {
+    const catalog: StorageQueryCatalog = {
+      schema_version: 1,
+      source: 'rust_bridge_read_model',
+      items: [
+        {
+          id: 'runtime.search',
+          title: 'Runtime search',
+          description: 'Search runtime storage.',
+          owner: 'rust_coordination',
+          readOnly: true,
+          backendAgnostic: true,
+          resultShape: 'runtime.search_result.v1',
+          parameters: [
+            {
+              name: 'query',
+              type: 'string',
+              required: true,
+              description: 'Search text.',
+            },
+          ],
+        },
+      ],
+      total: 1,
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(catalog));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.storageQueryCatalog();
+
+    expect(result.items[0]?.id).toBe('runtime.search');
+    expect(lastRequest().method).toBe('GET');
+    expect(lastRequest().url).toContain('/v1/admin/storage/query-catalog');
+  });
+
+  it('executes a curated read-only storage query by id', async () => {
+    const queryResult: StorageQueryResult = {
+      query_id: 'runtime.search',
+      read_only: true,
+      source: 'rust_bridge_read_model',
+      items: [{ rowType: 'message', snippet: 'hello' }],
+      total: 1,
+      limit: 25,
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(queryResult));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.storageQuery('runtime.search', {
+      query: 'hello',
+    });
+
+    expect(result.total).toBe(1);
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain('/v1/admin/storage/query/runtime.search');
+    expect(req.body).toContain('hello');
   });
 
   it('creates a profile through the control route', async () => {

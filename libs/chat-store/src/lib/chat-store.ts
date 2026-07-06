@@ -14,7 +14,9 @@ import {
   type BrainProfile,
   type ChatStorageAdapter,
   type ContextTimelineEntry,
+  type ConversationBranch,
   type ConversationProjection,
+  type ConversationSnapshot,
 } from '@rusty-view/chat-domain';
 import type {
   ChatCommandDescriptor,
@@ -23,6 +25,7 @@ import type {
   ChatSessionSummary,
   SessionContextUsageResult,
   ToolCallDebugDetail,
+  ProviderRequestDebugDetail,
 } from '@rusty-view/protocol';
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
@@ -117,9 +120,7 @@ export class ChatStore implements OnDestroy {
   );
 
   // ---- computed signals ----
-  readonly messages = computed(
-    () => this.messagesWithAssistantPlaceholder(),
-  );
+  readonly messages = computed(() => this.messagesWithAssistantPlaceholder());
   readonly activeSession = computed<ChatSessionSummary | null>(() => {
     const id = this._activeSessionId();
     if (id === null) return null;
@@ -160,6 +161,22 @@ export class ChatStore implements OnDestroy {
   readonly contextStatus = computed<ContextTimelineEntry | null>(
     () => this._projection().contextStatus ?? null,
   );
+  readonly branches = computed<readonly ConversationBranch[]>(
+    () => this._projection().branches,
+  );
+  readonly snapshots = computed<readonly ConversationSnapshot[]>(
+    () => this._projection().snapshots,
+  );
+  readonly activeBranchId = computed<string | undefined>(() => {
+    const messages = this._projection().messages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const branchId = messages[i]?.tree?.branchId;
+      if (branchId !== undefined) return branchId;
+    }
+    return this._projection().branches.length === 1
+      ? this._projection().branches[0]?.id
+      : undefined;
+  });
 
   // ---- profile / historical-session view state ----
   /** Profiles derived from the session list, ordered by recent activity. */
@@ -402,6 +419,51 @@ export class ChatStore implements OnDestroy {
     debugDetailId: string,
   ): Promise<ToolCallDebugDetail> {
     return this.transport.toolCallDebugDetail(sessionId, debugDetailId);
+  }
+
+  loadProviderRequestDebugDetail(
+    sessionId: string,
+    debugDetailId: string,
+  ): Promise<ProviderRequestDebugDetail> {
+    return this.transport.providerRequestDebugDetail(sessionId, debugDetailId);
+  }
+
+  async selectActiveMessageVariant(
+    slotId: string,
+    activeVariantId: string | undefined,
+  ): Promise<void> {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) {
+      throw new Error('No active session — call selectSession first.');
+    }
+    await this.transport.selectActiveMessageVariant(sessionId, slotId, {
+      ...(activeVariantId !== undefined
+        ? { active_variant_id: activeVariantId }
+        : {}),
+      expected: { type: 'any' },
+    });
+    await this.selectSession(sessionId);
+  }
+
+  async deleteMessageVariant(slotId: string, variantId: string): Promise<void> {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) {
+      throw new Error('No active session — call selectSession first.');
+    }
+    await this.transport.deleteMessageVariant(sessionId, slotId, variantId);
+    await this.selectSession(sessionId);
+  }
+
+  async selectActiveConversationBranch(branchId: string): Promise<void> {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) {
+      throw new Error('No active session — call selectSession first.');
+    }
+    await this.transport.selectActiveConversationBranch(sessionId, {
+      active_branch_id: branchId,
+      expected: { type: 'any' },
+    });
+    await this.selectSession(sessionId);
   }
 
   /** Drop a stale `activeTurn` left by an incomplete (terminal-less) turn record. */

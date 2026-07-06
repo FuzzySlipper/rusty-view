@@ -67,7 +67,8 @@
       class="rv-input__attachment"
       data-testid="message-attachment-chip"
       (click)="removeAttachment(item)"
-      [title]="item.attachment.name"
+      [rvTooltip]="item.attachment.name"
+      rvTooltipPlacement="top"
     >
       <span class="rv-input__attachment-kind">{{ item.attachment.kind }}</span>
       <span class="rv-input__attachment-name">{{ item.attachment.name }}</span>

@@ -11,6 +11,7 @@ import {
   type ChatAttachment,
   type ChatAttachmentScope,
 } from '@rusty-view/chat-domain';
+import { TooltipDirective } from './tooltip';
 
 export type MessageInputAttachmentSource = 'picker' | 'paste' | 'drop';
 
@@ -36,6 +37,7 @@ const TEXT_PREVIEW_LIMIT = 2_000;
  */
 @Component({
   selector: 'rv-message-input',
+  imports: [TooltipDirective],
   templateUrl: './message-input.html',
   styleUrl: './message-input.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

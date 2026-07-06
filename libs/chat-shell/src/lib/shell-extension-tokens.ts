@@ -28,6 +28,8 @@ import { InjectionToken, type Type } from '@angular/core';
 export interface ChatTopMenuItem {
   readonly id: string;
   readonly label: string;
+  /** Optional short help text for the reusable `rvTooltip` topbar affordance. */
+  readonly tooltip?: string;
   readonly kind: 'action' | 'panel';
   readonly panelId?: string;
   readonly order?: number;
@@ -96,6 +98,7 @@ export const CHAT_OPTIONS_TABS = new InjectionToken<readonly ChatOptionsTab[]>(
 /** Built-in panel ids reserved by the shell. */
 export const PROFILES_PANEL_ID = 'profiles' as const;
 export const SERVICE_PANEL_ID = 'service' as const;
+export const DEBUG_PANEL_ID = 'debug' as const;
 export const OPTIONS_PANEL_ID = 'options' as const;
 export const HELP_PANEL_ID = 'help' as const;
 export const SESSIONS_PANEL_ID = 'sessions' as const;

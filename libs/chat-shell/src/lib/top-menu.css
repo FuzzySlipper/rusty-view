@@ -9,6 +9,11 @@
   height: 100%;
 }
 
+rv-top-menu-bar {
+  position: relative;
+  z-index: calc(var(--rv-z-overlay) + 1);
+}
+
 .rv-top-menu__overlay {
   position: fixed;
   inset: 0;

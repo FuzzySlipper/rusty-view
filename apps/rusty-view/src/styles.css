@@ -1,11 +1,13 @@
 /*
  * Global stylesheet for the rusty-view app. Per the design policy
- * (docs/rusty-view.md), the ONLY global CSS allowed is a reset plus design
- * tokens. All other styling is component-scoped and token-driven.
+ * (docs/rusty-view.md), the ONLY global CSS allowed is a reset, design tokens,
+ * and third-party infrastructure CSS required by overlay primitives. All other
+ * styling is component-scoped and token-driven.
  *
  * Design tokens (the --rv-* custom properties) are loaded from
  * @rusty-view/design-tokens; see the `styles` array in project.json, which
- * pulls in `libs/design-tokens/src/styles/tokens.css` before this file.
+ * pulls in Angular CDK overlay positioning CSS and
+ * `libs/design-tokens/src/styles/tokens.css` before this file.
  */
 
 *,

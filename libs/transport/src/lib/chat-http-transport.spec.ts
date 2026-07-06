@@ -6,6 +6,7 @@ import type {
   SendChatMessageResult,
   ChatCommandRegistry,
   ToolCallDebugDetail,
+  ProviderRequestDebugDetail,
 } from '@rusty-view/protocol';
 import { describe, expect, it } from 'vitest';
 
@@ -416,6 +417,177 @@ describe('ChatHttpTransport', () => {
         '/v1/chat/sessions/sess_1/tool-calls/dbg_1',
       );
       expect(lastRequest().method).toBe('GET');
+    });
+  });
+
+  describe('providerRequestDebugDetail', () => {
+    it('sends GET to /v1/chat/sessions/{id}/provider-requests/{debug_detail_id}', async () => {
+      const detail: ProviderRequestDebugDetail = {
+        debug_detail_id: 'prd_1',
+        session_id: 'sess_1',
+        wake_id: 'wake_1',
+        provider: {
+          brain_module: 'openai-responses',
+          provider_alias: 'main',
+          model: 'gpt-test',
+          protocol: 'responses',
+          provider_kind: 'openai',
+        },
+        request: {
+          value: { model: 'gpt-test', input: [{ role: 'user' }] },
+          truncated: false,
+          redacted: true,
+        },
+        request_sha256: 'abc123',
+        request_json_chars: 420,
+        recorded_at: '2026-07-05T00:00:00Z',
+        expires_at: '2026-07-05T01:00:00Z',
+        limits: { max_chars: 4096 },
+      };
+      const { fetch, lastRequest } = capturingFetch(jsonOk(detail));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const result = await transport.providerRequestDebugDetail(
+        'sess_1',
+        'prd_1',
+      );
+
+      expect(result.provider.protocol).toBe('responses');
+      expect(lastRequest().url).toContain(
+        '/v1/chat/sessions/sess_1/provider-requests/prd_1',
+      );
+      expect(lastRequest().method).toBe('GET');
+    });
+  });
+
+  describe('message variants and conversation tree', () => {
+    it('lists message slots with alternates query params', async () => {
+      const { fetch, lastRequest } = capturingFetch(
+        jsonOk({ items: [], total: 0, limit: 10, offset: 5 }),
+      );
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const result = await transport.listMessageSlots('sess_1', {
+        limit: 10,
+        offset: 5,
+        include_alternates: true,
+      });
+
+      const url = new URL(lastRequest().url);
+      expect(result.total).toBe(0);
+      expect(lastRequest().method).toBe('GET');
+      expect(url.pathname).toBe('/v1/chat/sessions/sess_1/slots');
+      expect(url.searchParams.get('include_alternates')).toBe('true');
+    });
+
+    it('selects and deletes message variants through slot routes', async () => {
+      const { fetch, lastRequest } = capturingFetch(
+        jsonOk({
+          status: 'selected',
+          latest_cursor: 'cur_2',
+          slot: {
+            slot_id: 'slot_1',
+            session_id: 'sess_1',
+            primary_message_id: 'msg_1',
+            active_variant_id: 'variant_2',
+            variant_count: 2,
+            updated_at: '2026-07-05T00:00:00Z',
+          },
+        }),
+      );
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      await transport.selectActiveMessageVariant('sess_1', 'slot_1', {
+        active_variant_id: 'variant_2',
+        expected: { type: 'any' },
+      });
+
+      expect(lastRequest().method).toBe('POST');
+      expect(new URL(lastRequest().url).pathname).toBe(
+        '/v1/chat/sessions/sess_1/slots/slot_1/active-variant',
+      );
+      expect(lastRequest().body).toContain('variant_2');
+
+      const deleteFetch = capturingFetch(
+        jsonOk({
+          status: 'deleted',
+          latest_cursor: 'cur_3',
+          slot: {
+            slot_id: 'slot_1',
+            session_id: 'sess_1',
+            primary_message_id: 'msg_1',
+            active_variant_id: null,
+            variant_count: 1,
+            updated_at: '2026-07-05T00:00:01Z',
+          },
+        }),
+      );
+      const deleteTransport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: deleteFetch.fetch }),
+      );
+
+      await deleteTransport.deleteMessageVariant(
+        'sess_1',
+        'slot_1',
+        'variant_2',
+      );
+
+      expect(deleteFetch.lastRequest().method).toBe('DELETE');
+      expect(new URL(deleteFetch.lastRequest().url).pathname).toBe(
+        '/v1/chat/sessions/sess_1/slots/slot_1/variants/variant_2',
+      );
+    });
+
+    it('loads tree state and selects an active branch', async () => {
+      const { fetch, lastRequest } = capturingFetch(
+        jsonOk({
+          branches: [],
+          snapshots: [],
+          branch_state: {
+            session_id: 'sess_1',
+            active_branch_id: 'branch_2',
+            updated_at: '2026-07-05T00:00:00Z',
+          },
+          active_branch_id: 'branch_2',
+        }),
+      );
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      await transport.conversationTree('sess_1', {
+        limit: 20,
+        exclude_snapshots: true,
+      });
+
+      const url = new URL(lastRequest().url);
+      expect(lastRequest().method).toBe('GET');
+      expect(url.pathname).toBe('/v1/chat/sessions/sess_1/tree');
+      expect(url.searchParams.get('exclude_snapshots')).toBe('true');
+
+      const branchFetch = capturingFetch(
+        jsonOk({
+          status: 'selected',
+          latest_cursor: 'cur_4',
+          state: {
+            session_id: 'sess_1',
+            active_branch_id: 'branch_2',
+            updated_at: '2026-07-05T00:00:01Z',
+          },
+        }),
+      );
+      const branchTransport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: branchFetch.fetch }),
+      );
+
+      await branchTransport.selectActiveConversationBranch('sess_1', {
+        active_branch_id: 'branch_2',
+        expected: { type: 'any' },
+      });
+
+      expect(branchFetch.lastRequest().method).toBe('POST');
+      expect(new URL(branchFetch.lastRequest().url).pathname).toBe(
+        '/v1/chat/sessions/sess_1/branches/active',
+      );
+      expect(branchFetch.lastRequest().body).toContain('branch_2');
     });
   });
 

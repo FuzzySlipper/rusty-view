@@ -4,12 +4,21 @@ import {
   computed,
   inject,
   input,
+  output,
 } from '@angular/core';
-import type { ChatMessage } from '@rusty-view/chat-domain';
+import type {
+  ChatMessage,
+  MessageAlternateSlot,
+} from '@rusty-view/chat-domain';
 
 import { CHAT_MESSAGE_DECORATORS } from './transcript-decorators';
 import type { ChatMessageDecoration } from './transcript-decorators';
 import { MessageBlockComponent } from './message-block';
+import {
+  MessageRevisionControlsComponent,
+  type MessageRevisionAction,
+  type MessageRevisionCapabilities,
+} from './message-revision-controls';
 
 /**
  * Renders a single {@link ChatMessage} with its author header and blocks.
@@ -20,7 +29,7 @@ import { MessageBlockComponent } from './message-block';
  */
 @Component({
   selector: 'rv-message-item',
-  imports: [MessageBlockComponent],
+  imports: [MessageBlockComponent, MessageRevisionControlsComponent],
   templateUrl: './message-item.html',
   styleUrl: './message-item.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +42,9 @@ export class MessageItemComponent {
   readonly matchedBlockIds = input<ReadonlySet<string>>(new Set<string>());
   readonly searchMatched = input<boolean>(false);
   readonly searchActive = input<boolean>(false);
+  readonly alternateSlot = input<MessageAlternateSlot | undefined>(undefined);
+  readonly revisionCapabilities = input<MessageRevisionCapabilities>({});
+  readonly revisionAction = output<MessageRevisionAction>();
 
   protected readonly decoration = computed<ChatMessageDecoration>(() => {
     const message = this.message();
@@ -80,4 +92,8 @@ export class MessageItemComponent {
     }
     return '';
   });
+
+  protected onRevisionAction(action: MessageRevisionAction): void {
+    this.revisionAction.emit(action);
+  }
 }

@@ -1,0 +1,254 @@
+<div class="rv-debug-panel">
+  <header class="rv-debug-panel__header">
+    <span>Debug</span>
+    <span class="rv-debug-panel__subtle">read-only runtime diagnostics</span>
+  </header>
+
+  <nav class="rv-debug-panel__tabs" aria-label="Debug views">
+    <button
+      type="button"
+      [class.rv-debug-panel__tab--active]="activeTab() === 'providers'"
+      (click)="selectTab('providers')"
+    >
+      Provider Requests
+    </button>
+    <button
+      type="button"
+      [class.rv-debug-panel__tab--active]="activeTab() === 'tools'"
+      (click)="selectTab('tools')"
+    >
+      Tool Calls
+    </button>
+    <button
+      type="button"
+      [class.rv-debug-panel__tab--active]="activeTab() === 'storage'"
+      (click)="selectTab('storage')"
+    >
+      Storage Queries
+    </button>
+  </nav>
+
+  @if (activeTab() === 'providers') {
+  <section class="rv-debug-panel__body">
+    <p class="rv-debug-panel__note">
+      Provider request snapshots are temporary, bounded, and redacted runtime
+      cache entries.
+    </p>
+    @if (providerEntries().length === 0) {
+    <div class="rv-debug-panel__empty">
+      No provider request debug ids found in this session.
+    </div>
+    } @else {
+    <div class="rv-debug-panel__split">
+      <div class="rv-debug-panel__list">
+        @for (entry of providerEntries(); track entry.eventId) {
+        <button
+          type="button"
+          class="rv-debug-panel__row"
+          (click)="loadProviderDetail(entry)"
+        >
+          <strong>{{ entry.debugDetailId }}</strong>
+          <span>{{ entry.message ?? 'provider status' }}</span>
+          <small>wake {{ entry.wakeId ?? '-' }}</small>
+          <small>expires {{ expiredLabel(entry.expiresAt) }}</small>
+        </button>
+        }
+      </div>
+      <div class="rv-debug-panel__detail">
+        @if (providerLoadingId()) {
+        <div class="rv-debug-panel__empty">Loading provider request…</div>
+        } @if (providerError()) {
+        <div class="rv-debug-panel__error" role="alert">
+          {{ providerError() }}
+        </div>
+        } @if (providerDetail(); as detail) {
+        <div class="rv-debug-panel__meta">
+          <span>brain</span><strong>{{ detail.provider.brain_module }}</strong>
+          <span>provider</span
+          ><strong>{{ detail.provider.provider_alias ?? '-' }}</strong>
+          <span>model</span><strong>{{ detail.provider.model ?? '-' }}</strong>
+          <span>protocol</span
+          ><strong>{{ detail.provider.protocol ?? '-' }}</strong>
+          <span>wake</span><strong>{{ detail.wake_id }}</strong>
+          <span>sha256</span><strong>{{ detail.request_sha256 }}</strong>
+          <span>chars</span><strong>{{ detail.request_json_chars }}</strong>
+          <span>redacted</span
+          ><strong>{{ detail.request.redacted ? 'yes' : 'no' }}</strong>
+          <span>truncated</span
+          ><strong>{{ detail.request.truncated ? 'yes' : 'no' }}</strong>
+          <span>expires</span
+          ><strong>{{ expiredLabel(detail.expires_at) }}</strong>
+        </div>
+        <rv-json-inspector [data]="detail.request.value" />
+        }
+      </div>
+    </div>
+    }
+  </section>
+  } @else if (activeTab() === 'tools') {
+  <section class="rv-debug-panel__body">
+    <p class="rv-debug-panel__note">
+      Tool-call details are loaded lazily from the session debug cache.
+    </p>
+    @if (toolEntries().length === 0) {
+    <div class="rv-debug-panel__empty">
+      No tool-call debug ids found in the projected timeline.
+    </div>
+    } @else {
+    <div class="rv-debug-panel__split">
+      <div class="rv-debug-panel__list">
+        @for (entry of toolEntries(); track entry.debugDetailId) {
+        <button
+          type="button"
+          class="rv-debug-panel__row"
+          (click)="loadToolDetail(entry)"
+        >
+          <strong>{{ entry.toolName }}</strong>
+          <span>{{ entry.status }} · {{ entry.summary }}</span>
+          <small>{{ entry.debugDetailId }}</small>
+        </button>
+        }
+      </div>
+      <div class="rv-debug-panel__detail">
+        @if (toolLoadingId()) {
+        <div class="rv-debug-panel__empty">Loading tool call…</div>
+        } @if (toolError()) {
+        <div class="rv-debug-panel__error" role="alert">{{ toolError() }}</div>
+        } @if (toolDetail(); as detail) {
+        <div class="rv-debug-panel__meta">
+          <span>tool</span><strong>{{ detail.tool_name }}</strong>
+          <span>status</span><strong>{{ detail.status }}</strong>
+          <span>wake</span><strong>{{ detail.wake_id }}</strong>
+          <span>expires</span
+          ><strong>{{ expiredLabel(detail.expires_at) }}</strong>
+        </div>
+        <rv-json-inspector [data]="detail" />
+        }
+      </div>
+    </div>
+    }
+  </section>
+  } @else {
+  <section class="rv-debug-panel__body">
+    <p class="rv-debug-panel__note">
+      Storage queries are curated read-only backend diagnostics. Raw SQL is not
+      available from this UI.
+    </p>
+    <div class="rv-debug-panel__storage-toolbar">
+      <button
+        type="button"
+        class="rv-debug-panel__button"
+        (click)="admin.loadStorageQueryCatalog()"
+        [disabled]="admin.storageQueryLoading()"
+      >
+        Refresh Catalog
+      </button>
+      @if (storageQueries().length > 0) {
+      <select
+        class="rv-debug-panel__select"
+        [value]="selectedStorageQuery()?.id"
+        (change)="selectStorageQuery($event)"
+      >
+        @for (query of storageQueries(); track query.id) {
+        <option [value]="query.id">{{ query.title }}</option>
+        }
+      </select>
+      }
+    </div>
+    @if (admin.storageQueryError()) {
+    <div class="rv-debug-panel__error" role="alert">
+      {{ admin.storageQueryError() }}
+    </div>
+    } @if (selectedStorageQuery(); as query) {
+    <div class="rv-debug-panel__storage">
+      <div class="rv-debug-panel__query-card">
+        <h3>{{ query.title }}</h3>
+        <p>{{ query.description }}</p>
+        <div class="rv-debug-panel__meta">
+          <span>id</span><strong>{{ query.id }}</strong> <span>shape</span
+          ><strong>{{ query.resultShape }}</strong> <span>read only</span
+          ><strong>{{ query.readOnly ? 'yes' : 'no' }}</strong>
+        </div>
+        @if (query.parameters.length > 0) {
+        <div class="rv-debug-panel__params">
+          @for (parameter of query.parameters; track parameter.name) {
+          <label [attr.for]="storageInputId(parameter)">
+            <span>
+              {{ parameter.name }}{{ parameter.required ? ' *' : '' }}
+            </span>
+          </label>
+          @if (parameter.type === 'enum') {
+          <select
+            [id]="storageInputId(parameter)"
+            [value]="storageInputValue(parameter)"
+            (change)="updateStorageInput(parameter, $event)"
+          >
+            <option value="">-</option>
+            @for (option of parameter.enumValues ?? []; track option) {
+            <option [value]="option">{{ option }}</option>
+            }
+          </select>
+          } @else if (parameter.type === 'boolean') {
+          <select
+            [id]="storageInputId(parameter)"
+            [value]="storageInputValue(parameter)"
+            (change)="updateStorageInput(parameter, $event)"
+          >
+            <option value="">-</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+          } @else {
+          <input
+            [id]="storageInputId(parameter)"
+            [type]="parameter.type === 'integer' ? 'number' : 'text'"
+            [value]="storageInputValue(parameter)"
+            (input)="updateStorageInput(parameter, $event)"
+          />
+          }
+          <small>{{ parameter.description }}</small>
+          }
+        </div>
+        }
+        <button
+          type="button"
+          class="rv-debug-panel__button rv-debug-panel__button--primary"
+          (click)="runStorageQuery()"
+          [disabled]="admin.storageQueryLoading()"
+        >
+          Run Read-only Query
+        </button>
+      </div>
+      <div class="rv-debug-panel__detail">
+        @if (storageRows().length > 0) {
+        <table class="rv-debug-panel__table">
+          <thead>
+            <tr>
+              @for (column of storageColumns(); track column) {
+              <th>{{ column }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of storageRows(); track $index) {
+            <tr>
+              @for (column of storageColumns(); track column) {
+              <td>{{ valueLabel(row[column]) }}</td>
+              }
+            </tr>
+            }
+          </tbody>
+        </table>
+        } @if (storageResult(); as result) {
+        <rv-json-inspector [data]="result" />
+        } @else {
+        <div class="rv-debug-panel__empty">No query result yet.</div>
+        }
+      </div>
+    </div>
+    } @else {
+    <div class="rv-debug-panel__empty">Storage query catalog unavailable.</div>
+    }
+  </section>
+  }
+</div>

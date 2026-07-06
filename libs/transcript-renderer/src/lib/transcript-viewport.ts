@@ -28,9 +28,14 @@ import {
   type ConversationNavigationTarget,
   type ConversationSearchFilters,
   type ConversationSnapshot,
+  type MessageAlternateSlot,
 } from '@rusty-view/chat-domain';
 
 import { MessageItemComponent } from './message-item';
+import type {
+  MessageRevisionAction,
+  MessageRevisionCapabilities,
+} from './message-revision-controls';
 
 const EMPTY_BLOCK_SET = new Set<string>();
 
@@ -93,8 +98,16 @@ export class TranscriptViewportComponent {
   /** Snapshot targets available for optional jump navigation. */
   readonly snapshots = input<readonly ConversationSnapshot[]>([]);
 
+  /** Optional message alternate slots keyed by stable slot id. */
+  readonly alternateSlots = input<readonly MessageAlternateSlot[]>([]);
+
+  /** Supported revision actions for the host/backend. Unsupported buttons stay disabled. */
+  readonly revisionCapabilities = input<MessageRevisionCapabilities>({});
+
   /** Emits when the user asks the transcript to jump to a tree target. */
   readonly navigationRequested = output<ConversationNavigationTarget>();
+  readonly activeBranchSelected = output<string>();
+  readonly revisionRequested = output<MessageRevisionAction>();
 
   /** Pixel threshold from bottom to consider "at bottom" for tail-follow. */
   private static readonly BOTTOM_THRESHOLD_PX = 80;
@@ -140,6 +153,18 @@ export class TranscriptViewportComponent {
         return target !== undefined;
       }),
   );
+
+  protected readonly alternateSlotsByMessageId = computed(() => {
+    const map = new Map<string, MessageAlternateSlot>();
+    for (const slot of this.alternateSlots()) {
+      map.set(slot.id, slot);
+      map.set(slot.primary.message.id, slot);
+      for (const alternate of slot.alternates) {
+        map.set(alternate.message.id, slot);
+      }
+    }
+    return map;
+  });
 
   protected readonly hasNavigation = computed(() => {
     return (
@@ -389,6 +414,7 @@ export class TranscriptViewportComponent {
     const target = crumb.target ?? branchJumpTarget(crumb.branch);
     if (target === undefined) return;
 
+    this.activeBranchSelected.emit(crumb.branch.id);
     this.navigationRequested.emit(target);
     this.scrollToMessageId(target.messageId);
   }
@@ -403,6 +429,16 @@ export class TranscriptViewportComponent {
     fallback: string,
   ): string {
     return target?.label ?? fallback;
+  }
+
+  protected alternateSlotFor(
+    messageId: string,
+  ): MessageAlternateSlot | undefined {
+    return this.alternateSlotsByMessageId().get(messageId);
+  }
+
+  protected onRevisionAction(action: MessageRevisionAction): void {
+    this.revisionRequested.emit(action);
   }
 
   private seekMessageIntoView(

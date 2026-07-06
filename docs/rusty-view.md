@@ -104,6 +104,15 @@ tokens and avoid hardcoded colors or fallback values.
 
 See [theming.md](theming.md).
 
+## Tooltips
+
+Use the exported `rvTooltip` directive from `@rusty-view/chat-components` for
+short supplemental hints on compact controls. Avoid native `title` attributes on
+app chrome, and keep required instructions visible in the UI instead of hiding
+them in a tooltip.
+
+See [tooltips.md](tooltips.md).
+
 ## Live Testing
 
 For bugs that depend on real streaming, controls, or rendered transcript output,

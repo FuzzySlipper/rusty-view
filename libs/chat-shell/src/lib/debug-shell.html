@@ -14,6 +14,8 @@
       type="button"
       class="rv-debug__toggle"
       data-testid="transcript-search-toggle"
+      rvTooltip="Toggle transcript search"
+      rvTooltipPlacement="bottom"
       [attr.aria-pressed]="showTranscriptSearch()"
       (click)="toggleTranscriptSearch()"
     >
@@ -23,6 +25,8 @@
       type="button"
       class="rv-debug__toggle"
       data-testid="profiles-toggle"
+      rvTooltip="Show or hide the profiles sidebar"
+      rvTooltipPlacement="bottom"
       [attr.aria-pressed]="showProfiles()"
       (click)="toggleProfiles()"
     >
@@ -32,6 +36,8 @@
       type="button"
       class="rv-debug__toggle"
       data-testid="inspector-toggle"
+      rvTooltip="Show or hide the event inspector"
+      rvTooltipPlacement="bottom"
       (click)="toggleInspector()"
     >
       {{ showInspector() ? 'Hide Inspector' : 'Show Inspector' }}
@@ -73,6 +79,12 @@
         <rv-transcript-viewport
           [messages]="store.messages()"
           [searchEnabled]="showTranscriptSearch()"
+          [branches]="store.branches()"
+          [activeBranchId]="store.activeBranchId()"
+          [snapshots]="store.snapshots()"
+          [revisionCapabilities]="revisionCapabilities"
+          (activeBranchSelected)="onActiveBranchSelected($event)"
+          (revisionRequested)="onRevisionRequested($event)"
         />
       </div>
       @if (!isViewingHistorical()) {

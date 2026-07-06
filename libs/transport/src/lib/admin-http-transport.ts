@@ -58,6 +58,9 @@ import type {
   RuntimeConfigValidationReport,
   RuntimePauseScope,
   RuntimeSessionDiagnostics,
+  StorageQueryCatalog,
+  StorageQueryInput,
+  StorageQueryResult,
 } from './admin-api-types';
 
 interface RequestOptions {
@@ -191,6 +194,33 @@ export class AdminHttpTransport {
 
   capabilities(): Promise<ApiCapabilityRegistry> {
     return this.request('GET', '/v1/admin/capabilities');
+  }
+
+  /** List curated read-only Rusty Crew storage queries. */
+  storageQueryCatalog(): Promise<StorageQueryCatalog> {
+    return this.request('GET', '/v1/admin/storage/query-catalog');
+  }
+
+  /** Execute one curated read-only storage query by id. Raw SQL is not exposed. */
+  storageQuery(
+    queryId: string,
+    input: StorageQueryInput = {},
+  ): Promise<StorageQueryResult> {
+    return this.request(
+      'POST',
+      `/v1/admin/storage/query/${encodeURIComponent(queryId)}`,
+      { body: input },
+    );
+  }
+
+  /** Read Rusty Crew storage schema diagnostics. */
+  storageSchema(): Promise<unknown> {
+    return this.request('GET', '/v1/admin/storage/schema');
+  }
+
+  /** Read Rusty Crew storage backend diagnostics/capability projection. */
+  storageDiagnostics(): Promise<unknown> {
+    return this.request('GET', '/v1/admin/diagnostics/storage');
   }
 
   /**

@@ -13,6 +13,7 @@ DEST_DIRS=(
 echo "Building rusty-view..."
 cd "$REPO_ROOT"
 pnpm exec nx build rusty-view
+node tools/fix-package-esm-specifiers.mjs --write
 
 for dest_dir in "${DEST_DIRS[@]}"; do
   echo "Cleaning $dest_dir..."

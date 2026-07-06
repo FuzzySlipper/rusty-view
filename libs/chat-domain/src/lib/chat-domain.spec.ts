@@ -503,6 +503,68 @@ describe('inline tool/command blocks', () => {
     expect(toolBlocks[0]?.content).toContain('hits');
   });
 
+  it('uses debug_detail_id as a stable identity for legacy Crew tool events', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { wake_id: 'w1', text: 'working ' }),
+      makeEvent('tool_call_started', {
+        wake_id: 'w1',
+        debug_detail_id: 'dbg_terminal',
+        tool_name: 'terminal',
+      }),
+      makeEvent('tool_call_completed', {
+        wake_id: 'w1',
+        debug_detail_id: 'dbg_terminal',
+        tool_name: 'terminal',
+        is_error: false,
+      }),
+      makeEvent('tool_call_started', {
+        wake_id: 'w1',
+        debug_detail_id: 'dbg_read_file',
+        tool_name: 'read_file',
+      }),
+      makeEvent('tool_call_completed', {
+        wake_id: 'w1',
+        debug_detail_id: 'dbg_read_file',
+        tool_name: 'read_file',
+        is_error: false,
+      }),
+    ]);
+
+    expect(projection.toolCalls.map((call) => call.toolCallId)).toEqual([
+      'dbg_terminal',
+      'dbg_read_file',
+    ]);
+    const toolBlocks =
+      projection.messages[0]?.blocks.filter((b) => b.kind === 'tool_call') ??
+      [];
+    expect(toolBlocks.map((block) => block.id)).toEqual([
+      'tool-dbg_terminal',
+      'tool-dbg_read_file',
+    ]);
+    expect(toolBlocks.map((block) => block.tool?.status)).toEqual([
+      'completed',
+      'completed',
+    ]);
+  });
+
+  it('uses metadata.debugDetailId before wake_id when tool_call_id is absent', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_text_delta', { wake_id: 'w1', text: 'working ' }),
+      makeEvent('tool_call_started', {
+        wake_id: 'w1',
+        metadata: { debugDetailId: 'dbg_meta' },
+        tool_name: 'read_file',
+      }),
+    ]);
+
+    expect(projection.toolCalls[0]?.toolCallId).toBe('dbg_meta');
+    const toolBlock = projection.messages[0]?.blocks.find(
+      (b) => b.kind === 'tool_call',
+    );
+    expect(toolBlock?.id).toBe('tool-dbg_meta');
+    expect(toolBlock?.tool?.debugDetailId).toBe('dbg_meta');
+  });
+
   it('interleaves text and tool blocks in chronological order', () => {
     const projection = projectConversation([
       makeEvent('assistant_text_delta', { message_id: 'a1', delta: 'before ' }),

@@ -12,6 +12,12 @@
 export { TranscriptViewportComponent } from './lib/transcript-viewport';
 export { MessageItemComponent } from './lib/message-item';
 export { MessageBlockComponent } from './lib/message-block';
+export { MessageRevisionControlsComponent } from './lib/message-revision-controls';
+export type {
+  MessageRevisionAction,
+  MessageRevisionActionKind,
+  MessageRevisionCapabilities,
+} from './lib/message-revision-controls';
 export { AttachmentBlockComponent } from './lib/attachment-block';
 export { CHAT_MESSAGE_DECORATORS } from './lib/transcript-decorators';
 export type {

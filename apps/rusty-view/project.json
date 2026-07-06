@@ -21,6 +21,7 @@
           }
         ],
         "styles": [
+          "node_modules/@angular/cdk/overlay-prebuilt.css",
           "libs/design-tokens/src/styles/tokens.css",
           "apps/rusty-view/src/styles.css"
         ]

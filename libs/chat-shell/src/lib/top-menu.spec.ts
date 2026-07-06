@@ -10,6 +10,7 @@ import {
 } from '@rusty-view/chat-theme';
 
 import { TopMenuComponent } from './top-menu';
+import { TopMenuController } from './top-menu-controller';
 import {
   CHAT_TOP_MENU_PANELS,
   OPTIONS_PANEL_ID,
@@ -42,6 +43,7 @@ function findMenuButton(
 describe('TopMenuComponent', () => {
   beforeEach(() => {
     document.documentElement.style.cssText = '';
+    TestBed.resetTestingModule();
   });
 
   async function createMenu(extraProviders: Provider[] = []) {
@@ -59,6 +61,10 @@ describe('TopMenuComponent', () => {
             commands: () => [],
             allSessions: () => [],
             activeSessionId: () => null,
+            rawEvents: () => [],
+            projection: () => ({ toolCalls: [] }),
+            loadProviderRequestDebugDetail: async () => undefined,
+            loadToolCallDebugDetail: async () => undefined,
             viewHistoricalSession: async () => undefined,
             refreshSessions: async () => undefined,
           } as unknown as ChatStore,
@@ -90,6 +96,12 @@ describe('TopMenuComponent', () => {
             modelProviders: () => null,
             providerLoadError: () => null,
             providerWriteResult: () => null,
+            loadStorageQueryCatalog: async () => undefined,
+            executeStorageQuery: async () => true,
+            storageQueryCatalog: () => null,
+            storageQueryResult: () => null,
+            storageQueryLoading: () => false,
+            storageQueryError: () => null,
             createModelProvider: async () => undefined,
             updateModelProvider: async () => undefined,
             clearProviderWriteResult: () => undefined,
@@ -119,6 +131,7 @@ describe('TopMenuComponent', () => {
     const labels = menuItemLabels(fixture.nativeElement as HTMLElement);
     expect(labels).toContain('Profiles');
     expect(labels).toContain('Service');
+    expect(labels).toContain('Debug');
     expect(labels).toContain('Options');
     expect(labels).toContain('Help');
   });
@@ -131,6 +144,43 @@ describe('TopMenuComponent', () => {
     fixture.detectChanges();
 
     expect(host.querySelector('rv-admin-profiles-panel')).not.toBeNull();
+  });
+
+  it('opens and closes a built-in panel through the public controller', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+    const controller = TestBed.inject(TopMenuController);
+
+    controller.openPanel('sessions');
+    fixture.detectChanges();
+    expect(host.querySelector('rv-sessions-panel')).not.toBeNull();
+
+    controller.closePanel();
+    fixture.detectChanges();
+    expect(host.querySelector('rv-sessions-panel')).toBeNull();
+  });
+
+  it('opens a custom registered panel through the public controller', async () => {
+    const fixture = await createMenu([
+      {
+        provide: CHAT_TOP_MENU_PANELS,
+        multi: true,
+        useValue: [
+          {
+            id: 'rp-sessions',
+            title: 'Roleplay Sessions',
+            component: TestRoleplayPanelComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+    const controller = TestBed.inject(TopMenuController);
+
+    controller.openPanel('rp-sessions');
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-testid="roleplay-panel"]')).not.toBeNull();
   });
 
   it('opens the Sessions panel when Sessions is clicked', async () => {
@@ -161,6 +211,16 @@ describe('TopMenuComponent', () => {
     fixture.detectChanges();
 
     expect(host.querySelector('rv-admin-providers-panel')).not.toBeNull();
+  });
+
+  it('opens the Debug panel when Debug is clicked', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Debug')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-debug-panel')).not.toBeNull();
   });
 
   it('opens the Options panel when Options is clicked', async () => {
@@ -195,6 +255,37 @@ describe('TopMenuComponent', () => {
     findMenuButton(host, 'Help')?.click();
     fixture.detectChanges();
     expect(host.querySelector('rv-help-panel')).toBeNull();
+  });
+
+  it('switches directly from Options to Providers when another top-menu item is clicked', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Options')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector('rv-options-panel')).not.toBeNull();
+
+    findMenuButton(host, 'Providers')?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-options-panel')).toBeNull();
+    expect(host.querySelector('rv-admin-providers-panel')).not.toBeNull();
+  });
+
+  it('closes the open top-menu panel on Escape', async () => {
+    const fixture = await createMenu();
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Options')?.click();
+    fixture.detectChanges();
+    expect(host.querySelector('rv-options-panel')).not.toBeNull();
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-options-panel')).toBeNull();
   });
 
   it('renders and dismisses a downstream custom top-menu panel', async () => {

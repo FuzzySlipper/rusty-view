@@ -4,12 +4,14 @@ import type {
   MessageBlock,
   ToolCallDebugDetail,
 } from '@rusty-view/chat-domain';
+import { messageAlternateSlot } from '@rusty-view/chat-domain';
 import { TestBed } from '@angular/core/testing';
 import { Component, input, signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
+import { MessageRevisionControlsComponent } from './message-revision-controls';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
 import {
   TRANSCRIPT_MARKDOWN_POLICY,
@@ -599,6 +601,106 @@ describe('MessageItemComponent', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('text part');
     expect(host.textContent).toContain('tool data');
+  });
+});
+
+describe('MessageRevisionControlsComponent', () => {
+  async function createRevisionControls() {
+    await TestBed.configureTestingModule({
+      imports: [MessageRevisionControlsComponent],
+    }).compileComponents();
+
+    const primary = makeMessage({
+      id: 'msg_primary',
+      author: { role: 'assistant', displayName: 'Assistant' },
+      blocks: [makeBlock({ id: 'primary_b1', content: 'Primary answer' })],
+    });
+    const alternate = makeMessage({
+      id: 'msg_alt',
+      author: { role: 'assistant', displayName: 'Assistant' },
+      blocks: [makeBlock({ id: 'alt_b1', content: 'Alternate answer' })],
+    });
+    const slot = messageAlternateSlot(primary, {
+      slotId: 'slot_1',
+      activeVariantId: 'msg_alt',
+      alternates: [
+        {
+          id: 'msg_alt',
+          slotId: 'slot_1',
+          source: 'alternate',
+          ordinal: 1,
+          message: alternate,
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(MessageRevisionControlsComponent);
+    fixture.componentRef.setInput('message', alternate);
+    fixture.componentRef.setInput('slot', slot);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('shows alternate variant count and emits selection actions', async () => {
+    const fixture = await createRevisionControls();
+    const host: HTMLElement = fixture.nativeElement;
+    const actions: unknown[] = [];
+    fixture.componentInstance.action.subscribe((action) =>
+      actions.push(action),
+    );
+
+    expect(
+      host.querySelector('[data-testid="variant-count"]')?.textContent,
+    ).toContain('2 / 2');
+
+    (
+      host.querySelector(
+        '[data-testid="variant-previous"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(actions).toMatchObject([
+      {
+        kind: 'previous_variant',
+        slot: { id: 'slot_1' },
+        variant: { id: 'msg_primary' },
+      },
+    ]);
+  });
+
+  it('keeps unsupported revision actions disabled', async () => {
+    const fixture = await createRevisionControls();
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(
+      (
+        host.querySelector(
+          '[data-testid="message-regenerate"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (host.querySelector('[data-testid="message-edit"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (
+        host.querySelector(
+          '[data-testid="variant-delete"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+
+    fixture.componentRef.setInput('capabilities', { deleteVariant: true });
+    fixture.detectChanges();
+    expect(
+      (
+        host.querySelector(
+          '[data-testid="variant-delete"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 });
 

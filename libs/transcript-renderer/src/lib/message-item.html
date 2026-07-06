@@ -46,5 +46,12 @@
 
   @if (decoration().suffix) {
   <div class="rv-message__suffix">{{ decoration().suffix }}</div>
+  } @if (message().author.role === 'assistant') {
+  <rv-message-revision-controls
+    [message]="message()"
+    [slot]="alternateSlot()"
+    [capabilities]="revisionCapabilities()"
+    (action)="onRevisionAction($event)"
+  />
   }
 </div>

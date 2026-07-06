@@ -122,6 +122,28 @@
       <rv-admin-service-panel (dismissed)="closePanel()" />
     </div>
   </div>
+  } @if (debugOpen()) {
+  <div
+    class="rv-top-menu__overlay"
+    data-testid="top-menu-overlay-debug"
+    role="button"
+    tabindex="0"
+    aria-label="Close debug"
+    (click)="closePanel()"
+    (keydown.enter)="closePanel()"
+    (keydown.space)="closePanel()"
+  >
+    <div
+      class="rv-top-menu__panel rv-top-menu__panel--debug"
+      data-testid="top-menu-panel-debug"
+      role="dialog"
+      aria-label="Debug"
+      (click)="$event.stopPropagation()"
+      (keydown)="$event.stopPropagation()"
+    >
+      <rv-debug-panel />
+    </div>
+  </div>
   } @if (providersOpen()) {
   <div
     class="rv-top-menu__overlay"

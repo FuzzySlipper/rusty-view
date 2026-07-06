@@ -105,9 +105,28 @@ export interface ProviderStatusPayload {
 export type ToolCallPayload = Schemas['ToolCallPayload'];
 export type ToolCallDebugValue = Schemas['ToolCallDebugValue'];
 export type ToolCallDebugDetail = Schemas['ToolCallDebugDetail'];
+export type ProviderRequestDebugDetail = Schemas['ProviderRequestDebugDetail'];
 export type CommandPayload = Schemas['CommandPayload'];
 export type StreamErrorPayload = Schemas['StreamErrorPayload'];
 export type UnknownEventPayload = Schemas['UnknownEventPayload'];
+
+// ---- message variants / conversation tree ----
+export type MessageSlotRecord = Schemas['MessageSlotRecord'];
+export type MessageSlotPage = Schemas['MessageSlotPage'];
+export type MessageVariantRecord = Schemas['MessageVariantRecord'];
+export type MessageVariantPage = Schemas['MessageVariantPage'];
+export type SelectActiveMessageVariantRequest =
+  Schemas['SelectActiveMessageVariantRequest'];
+export type SelectActiveMessageVariantResult =
+  Schemas['SelectActiveMessageVariantResult'];
+export type MessageSlotMutationResult = Schemas['MessageSlotMutationResult'];
+export type ConversationTreeProjection = Schemas['ConversationTreeProjection'];
+export type ConversationBranchRecord = Schemas['ConversationBranchRecord'];
+export type ConversationSnapshotRecord = Schemas['ConversationSnapshotRecord'];
+export type SelectActiveConversationBranchRequest =
+  Schemas['SelectActiveConversationBranchRequest'];
+export type SelectActiveConversationBranchResult =
+  Schemas['SelectActiveConversationBranchResult'];
 
 // ---- context strategy / compaction diagnostics (tasks #3788/#3846/#3847) ----
 //
@@ -146,6 +165,20 @@ export type ExecuteChatCommandResponse =
   operations['executeChatCommand']['responses'][200]['content']['application/json'];
 export type GetChatToolCallDebugDetailResponse =
   operations['getChatToolCallDebugDetail']['responses'][200]['content']['application/json'];
+export type GetChatProviderRequestDebugDetailResponse =
+  operations['getChatProviderRequestDebugDetail']['responses'][200]['content']['application/json'];
+export type ListMessageSlotsResponse =
+  operations['listMessageSlots']['responses'][200]['content']['application/json'];
+export type ListMessageVariantsResponse =
+  operations['listMessageVariants']['responses'][200]['content']['application/json'];
+export type DeleteMessageVariantResponse =
+  operations['deleteMessageVariant']['responses'][200]['content']['application/json'];
+export type SelectActiveMessageVariantResponse =
+  operations['selectActiveMessageVariant']['responses'][200]['content']['application/json'];
+export type GetConversationTreeResponse =
+  operations['getConversationTree']['responses'][200]['content']['application/json'];
+export type SelectActiveConversationBranchResponse =
+  operations['selectActiveConversationBranch']['responses'][200]['content']['application/json'];
 
 // ---- context usage diagnostics (tasks #3788/#3847) ----
 //

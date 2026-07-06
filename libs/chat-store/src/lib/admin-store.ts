@@ -56,6 +56,9 @@ import {
   type RuntimePauseScope,
   type RuntimeResumeNoopResult,
   type RuntimeSessionDiagnostics,
+  type StorageQueryCatalog,
+  type StorageQueryInput,
+  type StorageQueryResult,
 } from '@rusty-view/transport';
 
 import {
@@ -99,6 +102,14 @@ export class AdminStore {
     signal<AdminLocalToolProfileList | null>(null);
   private readonly _contextStrategyCatalog =
     signal<ContextStrategyCatalog | null>(null);
+  private readonly _storageQueryCatalog = signal<StorageQueryCatalog | null>(
+    null,
+  );
+  private readonly _storageQueryResult = signal<StorageQueryResult | null>(
+    null,
+  );
+  private readonly _storageQueryError = signal<StoreErrorDetail | null>(null);
+  private readonly _storageQueryLoading = signal(false);
   /**
    * Error from the most recent local-tool-profile write (#3689). First-class
    * (unlike the read which degrades to empty) so the editor surfaces failures.
@@ -166,6 +177,14 @@ export class AdminStore {
   readonly mcpCatalog = this._mcpCatalog.asReadonly();
   readonly toolCatalog = this._toolCatalog.asReadonly();
   readonly contextStrategyCatalog = this._contextStrategyCatalog.asReadonly();
+  readonly storageQueryCatalog = this._storageQueryCatalog.asReadonly();
+  readonly storageQueryResult = this._storageQueryResult.asReadonly();
+  readonly storageQueryErrorDetail = this._storageQueryError.asReadonly();
+  readonly storageQueryLoading = this._storageQueryLoading.asReadonly();
+  readonly storageQueryError = computed(() => {
+    const error = this._storageQueryError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly registryWritePlan = this._registryWritePlan.asReadonly();
   readonly registryWriteResult = this._registryWriteResult.asReadonly();
@@ -373,6 +392,39 @@ export class AdminStore {
       this._error.set(storeErrorDetail(error));
     } finally {
       this._loading.set(false);
+    }
+  }
+
+  async loadStorageQueryCatalog(): Promise<void> {
+    this._storageQueryLoading.set(true);
+    this._storageQueryError.set(null);
+    try {
+      this._storageQueryCatalog.set(
+        await this.transport.adminStorageQueryCatalog(),
+      );
+    } catch (error) {
+      this._storageQueryError.set(storeErrorDetail(error));
+    } finally {
+      this._storageQueryLoading.set(false);
+    }
+  }
+
+  async executeStorageQuery(
+    queryId: string,
+    input: StorageQueryInput = {},
+  ): Promise<boolean> {
+    this._storageQueryLoading.set(true);
+    this._storageQueryError.set(null);
+    try {
+      this._storageQueryResult.set(
+        await this.transport.adminStorageQuery(queryId, input),
+      );
+      return true;
+    } catch (error) {
+      this._storageQueryError.set(storeErrorDetail(error));
+      return false;
+    } finally {
+      this._storageQueryLoading.set(false);
     }
   }
 

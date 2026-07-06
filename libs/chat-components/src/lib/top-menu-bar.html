@@ -5,6 +5,8 @@
     class="rv-top-menu__item"
     data-testid="top-menu-item"
     [attr.data-menu-id]="item.id"
+    [rvTooltip]="item.tooltip"
+    rvTooltipPlacement="bottom"
     (click)="onSelect(item.id)"
   >
     {{ item.label }}

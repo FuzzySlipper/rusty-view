@@ -127,6 +127,13 @@ export type {
   RuntimePauseScope,
   RuntimeResumeNoopResult,
   RuntimeSessionDiagnostics,
+  StorageQueryCatalog,
+  StorageQueryDescriptor,
+  StorageQueryInput,
+  StorageQueryModuleMetadata,
+  StorageQueryParameter,
+  StorageQueryParameterType,
+  StorageQueryResult,
 } from './lib/admin-api-types';
 
 export { ChatEventStream } from './lib/chat-event-stream';

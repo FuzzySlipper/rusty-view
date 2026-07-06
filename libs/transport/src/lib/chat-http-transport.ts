@@ -10,17 +10,33 @@ import type {
   ExecuteChatCommandRequest,
   ExecuteChatCommandResult,
   ExecuteChatCommandResponse,
+  ConversationTreeProjection,
+  GetConversationTreeResponse,
   GetChatSessionContextUsageResponse,
+  GetChatProviderRequestDebugDetailResponse,
   GetChatToolCallDebugDetailResponse,
   ListChatCommandsResponse,
   ListChatSessionsResponse,
+  ListMessageSlotsResponse,
+  ListMessageVariantsResponse,
+  MessageSlotMutationResult,
+  MessageSlotPage,
+  MessageVariantPage,
   OpenChatSessionResponse,
+  ProviderRequestDebugDetail,
   ReplayChatSessionEventsResponse,
   SendChatMessageRequest,
   SendChatMessageResponse,
   SendChatMessageResult,
+  SelectActiveConversationBranchRequest,
+  SelectActiveConversationBranchResponse,
+  SelectActiveConversationBranchResult,
+  SelectActiveMessageVariantRequest,
+  SelectActiveMessageVariantResponse,
+  SelectActiveMessageVariantResult,
   SessionContextUsageResult,
   ToolCallDebugDetail,
+  DeleteMessageVariantResponse,
 } from '@rusty-view/protocol';
 
 import {
@@ -29,8 +45,15 @@ import {
   SESSION_PATH,
   SESSION_EVENTS_PATH,
   SESSION_CONTEXT_PATH,
+  SESSION_PROVIDER_REQUEST_DEBUG_DETAIL_PATH,
   SESSION_TOOL_CALL_DEBUG_DETAIL_PATH,
   SESSION_MESSAGES_PATH,
+  SESSION_ACTIVE_BRANCH_PATH,
+  SESSION_SLOT_ACTIVE_VARIANT_PATH,
+  SESSION_SLOT_VARIANT_PATH,
+  SESSION_SLOT_VARIANTS_PATH,
+  SESSION_SLOTS_PATH,
+  SESSION_TREE_PATH,
   COMMANDS_PATH,
   SESSION_COMMANDS_PATH,
 } from './chat-routes';
@@ -255,6 +278,124 @@ export class ChatHttpTransport {
           session_id: sessionId,
           debug_detail_id: debugDetailId,
         },
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  /**
+   * Read bounded/redacted provider request debug detail on demand. Normal
+   * provider_status events only carry the debug detail id and metadata.
+   */
+  async providerRequestDebugDetail(
+    sessionId: string,
+    debugDetailId: string,
+  ): Promise<ProviderRequestDebugDetail> {
+    const body =
+      await this.requestJson<GetChatProviderRequestDebugDetailResponse>(
+        'GET',
+        SESSION_PROVIDER_REQUEST_DEBUG_DETAIL_PATH,
+        {
+          pathParams: {
+            session_id: sessionId,
+            debug_detail_id: debugDetailId,
+          },
+        },
+      );
+    return unwrapEnvelope(body);
+  }
+
+  async listMessageSlots(
+    sessionId: string,
+    query?: { limit?: number; offset?: number; include_alternates?: boolean },
+  ): Promise<MessageSlotPage> {
+    const body = await this.requestJson<ListMessageSlotsResponse>(
+      'GET',
+      SESSION_SLOTS_PATH,
+      {
+        pathParams: { session_id: sessionId },
+        ...(query !== undefined ? { query } : {}),
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async listMessageVariants(
+    sessionId: string,
+    slotId: string,
+    query?: { limit?: number; offset?: number },
+  ): Promise<MessageVariantPage> {
+    const body = await this.requestJson<ListMessageVariantsResponse>(
+      'GET',
+      SESSION_SLOT_VARIANTS_PATH,
+      {
+        pathParams: { session_id: sessionId, slot_id: slotId },
+        ...(query !== undefined ? { query } : {}),
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async selectActiveMessageVariant(
+    sessionId: string,
+    slotId: string,
+    request: SelectActiveMessageVariantRequest,
+  ): Promise<SelectActiveMessageVariantResult> {
+    const body = await this.requestJson<SelectActiveMessageVariantResponse>(
+      'POST',
+      SESSION_SLOT_ACTIVE_VARIANT_PATH,
+      {
+        pathParams: { session_id: sessionId, slot_id: slotId },
+        body: request,
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async deleteMessageVariant(
+    sessionId: string,
+    slotId: string,
+    variantId: string,
+  ): Promise<MessageSlotMutationResult> {
+    const body = await this.requestJson<DeleteMessageVariantResponse>(
+      'DELETE',
+      SESSION_SLOT_VARIANT_PATH,
+      {
+        pathParams: {
+          session_id: sessionId,
+          slot_id: slotId,
+          variant_id: variantId,
+        },
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async conversationTree(
+    sessionId: string,
+    query?: { limit?: number; offset?: number; exclude_snapshots?: boolean },
+  ): Promise<ConversationTreeProjection> {
+    const body = await this.requestJson<GetConversationTreeResponse>(
+      'GET',
+      SESSION_TREE_PATH,
+      {
+        pathParams: { session_id: sessionId },
+        ...(query !== undefined ? { query } : {}),
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async selectActiveConversationBranch(
+    sessionId: string,
+    request: SelectActiveConversationBranchRequest,
+  ): Promise<SelectActiveConversationBranchResult> {
+    const body = await this.requestJson<SelectActiveConversationBranchResponse>(
+      'POST',
+      SESSION_ACTIVE_BRANCH_PATH,
+      {
+        pathParams: { session_id: sessionId },
+        body: request,
       },
     );
     return unwrapEnvelope(body);

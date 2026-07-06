@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/provider-requests/{debug_detail_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded raw provider request debug detail */
+        get: operations["getChatProviderRequestDebugDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -719,6 +736,28 @@ export interface components {
             started_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            limits: {
+                [key: string]: unknown;
+            };
+        };
+        ProviderRequestDebugDetail: {
+            debug_detail_id: string;
+            session_id: string;
+            wake_id: string;
+            provider: {
+                brain_module: string;
+                provider_alias?: string;
+                model?: string;
+                protocol?: string;
+                provider_kind?: string;
+            };
+            request: components["schemas"]["ToolCallDebugValue"];
+            request_sha256: string;
+            request_json_chars: number;
+            /** Format: date-time */
+            recorded_at: string;
             /** Format: date-time */
             expires_at: string;
             limits: {
@@ -1492,6 +1531,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope"] & {
                         data?: components["schemas"]["ToolCallDebugDetail"];
+                    };
+                };
+            };
+            /** @description The session or debug detail id was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getChatProviderRequestDebugDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                /** @description Debug detail id from provider_status metadata.provider_request_debug_detail_id. */
+                debug_detail_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Debug-only bounded/redacted provider request detail for the session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ProviderRequestDebugDetail"];
                     };
                 };
             };

@@ -76,6 +76,10 @@ function main() {
       stdio: 'inherit',
     },
   );
+  execSync('node tools/fix-package-esm-specifiers.mjs --write', {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
 
   for (const lib of PUBLISHABLE) {
     const dir = join(repoRoot, 'dist', 'libs', lib);

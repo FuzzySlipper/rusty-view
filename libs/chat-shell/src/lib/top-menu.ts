@@ -2,8 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  HostListener,
   inject,
-  signal,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import {
@@ -14,12 +14,15 @@ import {
 import { AdminProfilesPanelComponent } from './admin-profiles-panel';
 import { AdminProvidersPanelComponent } from './admin-providers-panel';
 import { AdminServicePanelComponent } from './admin-service-panel';
+import { DebugPanelComponent } from './debug-panel';
 import { HelpPanelComponent } from './help-panel';
 import { OptionsPanelComponent } from './options-panel';
 import { SessionsPanelComponent } from './sessions-panel';
+import { TopMenuController } from './top-menu-controller';
 import {
   CHAT_TOP_MENU_ITEMS,
   CHAT_TOP_MENU_PANELS,
+  DEBUG_PANEL_ID,
   HELP_PANEL_ID,
   OPTIONS_PANEL_ID,
   PROFILES_PANEL_ID,
@@ -35,6 +38,7 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
   {
     id: SESSIONS_PANEL_ID,
     label: 'Sessions',
+    tooltip: 'Open recent sessions',
     kind: 'panel',
     panelId: SESSIONS_PANEL_ID,
     order: 10,
@@ -42,6 +46,7 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
   {
     id: PROFILES_PANEL_ID,
     label: 'Profiles',
+    tooltip: 'Manage profiles and local tool profiles',
     kind: 'panel',
     panelId: PROFILES_PANEL_ID,
     order: 20,
@@ -49,6 +54,7 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
   {
     id: PROVIDERS_PANEL_ID,
     label: 'Providers',
+    tooltip: 'Configure model providers',
     kind: 'panel',
     panelId: PROVIDERS_PANEL_ID,
     order: 25,
@@ -56,13 +62,23 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
   {
     id: SERVICE_PANEL_ID,
     label: 'Service',
+    tooltip: 'Open service controls and diagnostics',
     kind: 'panel',
     panelId: SERVICE_PANEL_ID,
     order: 30,
   },
   {
+    id: DEBUG_PANEL_ID,
+    label: 'Debug',
+    tooltip: 'Inspect runtime diagnostics',
+    kind: 'panel',
+    panelId: DEBUG_PANEL_ID,
+    order: 40,
+  },
+  {
     id: OPTIONS_PANEL_ID,
     label: 'Options',
+    tooltip: 'Open appearance and shell settings',
     kind: 'panel',
     panelId: OPTIONS_PANEL_ID,
     order: 90,
@@ -70,6 +86,7 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
   {
     id: HELP_PANEL_ID,
     label: 'Help',
+    tooltip: 'Open command help',
     kind: 'panel',
     panelId: HELP_PANEL_ID,
     order: 100,
@@ -81,6 +98,7 @@ const BUILT_IN_PANEL_IDS = new Set<string>([
   PROFILES_PANEL_ID,
   PROVIDERS_PANEL_ID,
   SERVICE_PANEL_ID,
+  DEBUG_PANEL_ID,
   OPTIONS_PANEL_ID,
   HELP_PANEL_ID,
 ]);
@@ -107,6 +125,7 @@ const BUILT_IN_PANEL_IDS = new Set<string>([
     AdminProfilesPanelComponent,
     AdminProvidersPanelComponent,
     AdminServicePanelComponent,
+    DebugPanelComponent,
   ],
   templateUrl: './top-menu.html',
   styleUrl: './top-menu.css',
@@ -119,13 +138,16 @@ export class TopMenuComponent {
   private readonly providedPanels = inject(CHAT_TOP_MENU_PANELS, {
     optional: true,
   });
+  private readonly controller = inject(TopMenuController);
 
   protected readonly items = computed<readonly ChatTopMenuItem[]>(() => {
     const merged = new Map<string, ChatTopMenuItem>();
     for (const panel of this.customPanels()) {
       merged.set(panel.id, panelMenuItem(panel));
     }
-    for (const item of this.providedItems ?? []) {
+    for (const item of flattenTopMenuProviders<ChatTopMenuItem>(
+      this.providedItems,
+    )) {
       merged.set(item.id, item);
     }
     for (const item of BUILT_IN_ITEMS) {
@@ -137,13 +159,13 @@ export class TopMenuComponent {
   });
 
   protected readonly entries = computed<readonly TopMenuEntry[]>(() =>
-    this.items().map((i) => ({ id: i.id, label: i.label })),
+    this.items().map((i) => menuEntry(i)),
   );
 
-  protected readonly openPanelId = signal<string | null>(null);
+  protected readonly openPanelId = this.controller.openPanelId;
 
   protected readonly customPanels = computed<readonly ChatTopMenuPanel[]>(() =>
-    (this.providedPanels ?? [])
+    flattenTopMenuProviders<ChatTopMenuPanel>(this.providedPanels)
       .filter((panel) => !BUILT_IN_PANEL_IDS.has(panel.id))
       .sort(
         (a, b) =>
@@ -179,6 +201,9 @@ export class TopMenuComponent {
   protected readonly serviceOpen = computed(
     () => this.openPanelId() === SERVICE_PANEL_ID,
   );
+  protected readonly debugOpen = computed(
+    () => this.openPanelId() === DEBUG_PANEL_ID,
+  );
 
   protected onSelect(id: string): void {
     const item = this.items().find((i) => i.id === id);
@@ -191,13 +216,18 @@ export class TopMenuComponent {
 
     // Panel kind: toggle the panel.
     const panelId = item.panelId ?? item.id;
-    this.openPanelId.update((current) =>
-      current === panelId ? null : panelId,
-    );
+    this.controller.togglePanel(panelId);
   }
 
   protected closePanel(): void {
-    this.openPanelId.set(null);
+    this.controller.closePanel();
+  }
+
+  @HostListener('document:keydown.escape', ['$event'])
+  protected onEscape(event: Event): void {
+    if (this.openPanelId() === null) return;
+    event.preventDefault();
+    this.closePanel();
   }
 }
 
@@ -205,8 +235,33 @@ function panelMenuItem(panel: ChatTopMenuPanel): ChatTopMenuItem {
   const item: ChatTopMenuItem = {
     id: panel.id,
     label: panel.label ?? panel.title,
+    tooltip: `Open ${panel.title}`,
     kind: 'panel',
     panelId: panel.id,
   };
   return panel.order === undefined ? item : { ...item, order: panel.order };
+}
+
+function menuEntry(item: ChatTopMenuItem): TopMenuEntry {
+  const entry: TopMenuEntry = {
+    id: item.id,
+    label: item.label,
+  };
+  return item.tooltip === undefined
+    ? entry
+    : { ...entry, tooltip: item.tooltip };
+}
+
+function flattenTopMenuProviders<T>(
+  provided: readonly T[] | null,
+): readonly T[] {
+  const flattened: T[] = [];
+  for (const entry of (provided ?? []) as readonly unknown[]) {
+    if (Array.isArray(entry)) {
+      flattened.push(...(entry as readonly T[]));
+    } else {
+      flattened.push(entry as T);
+    }
+  }
+  return flattened;
 }

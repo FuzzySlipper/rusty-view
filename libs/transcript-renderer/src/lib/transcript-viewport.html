@@ -150,6 +150,9 @@
       [matchedBlockIds]="matchedBlocksFor(message.id)"
       [searchMatched]="matchedMessageIds().has(message.id)"
       [searchActive]="activeSearchMessageId() === message.id"
+      [alternateSlot]="alternateSlotFor(message.id)"
+      [revisionCapabilities]="revisionCapabilities()"
+      (revisionAction)="onRevisionAction($event)"
     />
   </div>
 </cdk-virtual-scroll-viewport>

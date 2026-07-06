@@ -31,8 +31,29 @@ export const SESSION_CONTEXT_PATH =
 export const SESSION_TOOL_CALL_DEBUG_DETAIL_PATH =
   '/v1/chat/sessions/{session_id}/tool-calls/{debug_detail_id}' as const satisfies ChatPath;
 
+export const SESSION_PROVIDER_REQUEST_DEBUG_DETAIL_PATH =
+  '/v1/chat/sessions/{session_id}/provider-requests/{debug_detail_id}' as const satisfies ChatPath;
+
 export const SESSION_MESSAGES_PATH =
   '/v1/chat/sessions/{session_id}/messages' as const satisfies ChatPath;
+
+export const SESSION_SLOTS_PATH =
+  '/v1/chat/sessions/{session_id}/slots' as const satisfies ChatPath;
+
+export const SESSION_SLOT_VARIANTS_PATH =
+  '/v1/chat/sessions/{session_id}/slots/{slot_id}/variants' as const satisfies ChatPath;
+
+export const SESSION_SLOT_VARIANT_PATH =
+  '/v1/chat/sessions/{session_id}/slots/{slot_id}/variants/{variant_id}' as const satisfies ChatPath;
+
+export const SESSION_SLOT_ACTIVE_VARIANT_PATH =
+  '/v1/chat/sessions/{session_id}/slots/{slot_id}/active-variant' as const satisfies ChatPath;
+
+export const SESSION_TREE_PATH =
+  '/v1/chat/sessions/{session_id}/tree' as const satisfies ChatPath;
+
+export const SESSION_ACTIVE_BRANCH_PATH =
+  '/v1/chat/sessions/{session_id}/branches/active' as const satisfies ChatPath;
 
 export const COMMANDS_PATH = '/v1/chat/commands' as const satisfies ChatPath;
 

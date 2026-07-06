@@ -4,10 +4,19 @@ import type {
   ChatEventPage,
   ChatSessionOpenResult,
   ChatSessionPage,
+  ConversationTreeProjection,
   ExecuteChatCommandRequest,
   ExecuteChatCommandResult,
+  MessageSlotMutationResult,
+  MessageSlotPage,
+  MessageVariantPage,
+  ProviderRequestDebugDetail,
   SendChatMessageRequest,
   SendChatMessageResult,
+  SelectActiveConversationBranchRequest,
+  SelectActiveConversationBranchResult,
+  SelectActiveMessageVariantRequest,
+  SelectActiveMessageVariantResult,
   SessionContextUsageResult,
   ToolCallDebugDetail,
 } from '@rusty-view/protocol';
@@ -80,6 +89,9 @@ import type {
   RuntimePauseScope,
   RuntimeResumeNoopResult,
   RuntimeSessionDiagnostics,
+  StorageQueryCatalog,
+  StorageQueryInput,
+  StorageQueryResult,
 } from './admin-api-types';
 import type { AdminListQuery } from './admin-http-transport';
 
@@ -181,6 +193,58 @@ export class ChatTransport {
     return this.http.toolCallDebugDetail(sessionId, debugDetailId);
   }
 
+  providerRequestDebugDetail(
+    sessionId: string,
+    debugDetailId: string,
+  ): Promise<ProviderRequestDebugDetail> {
+    return this.http.providerRequestDebugDetail(sessionId, debugDetailId);
+  }
+
+  listMessageSlots(
+    sessionId: string,
+    query?: { limit?: number; offset?: number; include_alternates?: boolean },
+  ): Promise<MessageSlotPage> {
+    return this.http.listMessageSlots(sessionId, query);
+  }
+
+  listMessageVariants(
+    sessionId: string,
+    slotId: string,
+    query?: { limit?: number; offset?: number },
+  ): Promise<MessageVariantPage> {
+    return this.http.listMessageVariants(sessionId, slotId, query);
+  }
+
+  selectActiveMessageVariant(
+    sessionId: string,
+    slotId: string,
+    request: SelectActiveMessageVariantRequest,
+  ): Promise<SelectActiveMessageVariantResult> {
+    return this.http.selectActiveMessageVariant(sessionId, slotId, request);
+  }
+
+  deleteMessageVariant(
+    sessionId: string,
+    slotId: string,
+    variantId: string,
+  ): Promise<MessageSlotMutationResult> {
+    return this.http.deleteMessageVariant(sessionId, slotId, variantId);
+  }
+
+  conversationTree(
+    sessionId: string,
+    query?: { limit?: number; offset?: number; exclude_snapshots?: boolean },
+  ): Promise<ConversationTreeProjection> {
+    return this.http.conversationTree(sessionId, query);
+  }
+
+  selectActiveConversationBranch(
+    sessionId: string,
+    request: SelectActiveConversationBranchRequest,
+  ): Promise<SelectActiveConversationBranchResult> {
+    return this.http.selectActiveConversationBranch(sessionId, request);
+  }
+
   listCommands(): Promise<ChatCommandRegistry> {
     return this.http.listCommands();
   }
@@ -256,6 +320,25 @@ export class ChatTransport {
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {
     return this.adminHttp.capabilities();
+  }
+
+  adminStorageQueryCatalog(): Promise<StorageQueryCatalog> {
+    return this.adminHttp.storageQueryCatalog();
+  }
+
+  adminStorageQuery(
+    queryId: string,
+    input?: StorageQueryInput,
+  ): Promise<StorageQueryResult> {
+    return this.adminHttp.storageQuery(queryId, input);
+  }
+
+  adminStorageSchema(): Promise<unknown> {
+    return this.adminHttp.storageSchema();
+  }
+
+  adminStorageDiagnostics(): Promise<unknown> {
+    return this.adminHttp.storageDiagnostics();
   }
 
   adminContextStrategies(): Promise<ContextStrategyCatalog> {

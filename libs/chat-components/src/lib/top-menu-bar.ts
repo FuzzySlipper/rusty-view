@@ -4,6 +4,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { TooltipDirective } from './tooltip';
 
 /**
  * A single entry in a top menu bar: a stable id plus a display label. The
@@ -12,6 +13,7 @@ import {
 export interface TopMenuEntry {
   readonly id: string;
   readonly label: string;
+  readonly tooltip?: string;
 }
 
 /**
@@ -23,6 +25,7 @@ export interface TopMenuEntry {
  */
 @Component({
   selector: 'rv-top-menu-bar',
+  imports: [TooltipDirective],
   templateUrl: './top-menu-bar.html',
   styleUrl: './top-menu-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

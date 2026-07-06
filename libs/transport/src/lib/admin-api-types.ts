@@ -37,6 +37,62 @@ export interface AdminPage<T> {
   readonly nextOffset?: number;
 }
 
+export type StorageQueryParameterType =
+  | 'boolean'
+  | 'enum'
+  | 'integer'
+  | 'string';
+
+export interface StorageQueryParameter {
+  readonly name: string;
+  readonly type: StorageQueryParameterType;
+  readonly required: boolean;
+  readonly description: string;
+  readonly enumValues?: readonly string[];
+  readonly defaultValue?: unknown;
+}
+
+export interface StorageQueryModuleMetadata {
+  readonly moduleId: string;
+  readonly schemaVersion: number;
+  readonly logicalStore: string;
+  readonly ownerCrate: string;
+  readonly ownerModule: string;
+}
+
+export interface StorageQueryDescriptor {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly owner: string;
+  readonly readOnly: true;
+  readonly backendAgnostic: boolean;
+  readonly resultShape: string;
+  readonly parameters: readonly StorageQueryParameter[];
+  readonly module?: StorageQueryModuleMetadata;
+}
+
+export interface StorageQueryCatalog {
+  readonly schema_version: 1;
+  readonly source: string;
+  readonly items: readonly StorageQueryDescriptor[];
+  readonly total: number;
+}
+
+export type StorageQueryInput = Readonly<Record<string, unknown>>;
+
+export interface StorageQueryResult<TItem = unknown, TData = unknown> {
+  readonly query_id: string;
+  readonly read_only: true;
+  readonly source: string;
+  readonly items?: readonly TItem[];
+  readonly total?: number;
+  readonly data?: TData;
+  readonly limit?: number;
+  readonly offset?: number;
+  readonly nextOffset?: number;
+}
+
 export interface AdminDiagnosticsOverview {
   readonly generatedAt: string;
   readonly health: string;
