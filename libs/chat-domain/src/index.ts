@@ -35,10 +35,13 @@ export {
 export type {
   MessageRole,
   MessageAuthor,
+  MessageSpeakerIdentity,
   KnownMessageBlockKind,
   MessageBlockKind,
   RenderPolicy,
   MessageMetadata,
+  TranscriptTextScope,
+  TranscriptTextSpan,
   AttachmentMediaKind,
   AttachmentTextPreview,
   ChatAttachment,

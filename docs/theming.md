@@ -38,6 +38,12 @@ share complete themes.
   `background: var(--rv-color-surface-raised);`,
   `box-shadow: var(--rv-shadow-overlay);`. Browse `tokens.css` /
   `token-names.ts` for the full set.
+- **For transcript semantic text scopes,** override
+  `--rv-text-scope-plain`, `--rv-text-scope-accent`,
+  `--rv-text-scope-muted`, `--rv-text-scope-quote`,
+  `--rv-text-scope-emphasis`, `--rv-text-scope-strong`,
+  `--rv-text-scope-code`, `--rv-text-scope-success`,
+  `--rv-text-scope-warning`, and `--rv-text-scope-danger`.
 - **Never write a raw value** (`#fafafa`, `rgba(0,0,0,.5)`, `0 8px 32px …`) in a
   component stylesheet, and **never use a `var(--rv-…, fallback)` fallback** —
   the fallback hides drift and escapes the theme.

@@ -9,49 +9,70 @@
   [class.rv-message--search-match]="searchMatched()"
   [class.rv-message--search-active]="searchActive()"
 >
-  <header class="rv-message__header">
-    <span class="rv-message__author" data-testid="message-author"
-      >{{ authorLabel() }}</span
-    >
-    <time
-      class="rv-message__timestamp"
-      data-testid="message-timestamp"
-      [attr.datetime]="message().createdAt"
-      >{{ timestampLabel() }}</time
-    >
-    <span class="rv-message__id" data-testid="message-id"
-      >{{ message().id }}</span
-    >
-    @if (statusIndicator()) {
-    <span class="rv-message__status" data-testid="message-status"
-      >{{ statusIndicator() }}</span
-    >
-    }
-  </header>
-
-  @if (decoration().prefix) {
-  <div class="rv-message__prefix">{{ decoration().prefix }}</div>
-  }
-
-  <div class="rv-message__blocks" data-testid="message-blocks">
-    @for (block of message().blocks; track block.id) {
-    <rv-message-block
-      [block]="block"
-      [message]="message()"
-      [searchQuery]="searchQuery()"
-      [searchMatched]="matchedBlockIds().has(block.id)"
+  <div class="rv-message__avatar" data-testid="message-avatar">
+    @if (speaker().avatarUrl) {
+    <img
+      class="rv-message__avatar-img"
+      data-testid="message-avatar-image"
+      [src]="speaker().avatarUrl"
+      [alt]="speaker().avatarAlt"
     />
+    } @else {
+    <span
+      class="rv-message__avatar-fallback"
+      data-testid="message-avatar-fallback"
+      role="img"
+      [attr.aria-label]="speaker().avatarAlt"
+      >{{ speaker().initials }}</span
+    >
     }
   </div>
 
-  @if (decoration().suffix) {
-  <div class="rv-message__suffix">{{ decoration().suffix }}</div>
-  } @if (message().author.role === 'assistant') {
-  <rv-message-revision-controls
-    [message]="message()"
-    [slot]="alternateSlot()"
-    [capabilities]="revisionCapabilities()"
-    (action)="onRevisionAction($event)"
-  />
-  }
+  <div class="rv-message__body">
+    <header class="rv-message__header">
+      <span class="rv-message__author" data-testid="message-author"
+        >{{ authorLabel() }}</span
+      >
+      <time
+        class="rv-message__timestamp"
+        data-testid="message-timestamp"
+        [attr.datetime]="message().createdAt"
+        >{{ timestampLabel() }}</time
+      >
+      <span class="rv-message__id" data-testid="message-id"
+        >{{ message().id }}</span
+      >
+      @if (statusIndicator()) {
+      <span class="rv-message__status" data-testid="message-status"
+        >{{ statusIndicator() }}</span
+      >
+      }
+    </header>
+
+    @if (decoration().prefix) {
+    <div class="rv-message__prefix">{{ decoration().prefix }}</div>
+    }
+
+    <div class="rv-message__blocks" data-testid="message-blocks">
+      @for (block of message().blocks; track block.id) {
+      <rv-message-block
+        [block]="block"
+        [message]="message()"
+        [searchQuery]="searchQuery()"
+        [searchMatched]="matchedBlockIds().has(block.id)"
+      />
+      }
+    </div>
+
+    @if (decoration().suffix) {
+    <div class="rv-message__suffix">{{ decoration().suffix }}</div>
+    } @if (message().author.role === 'assistant') {
+    <rv-message-revision-controls
+      [message]="message()"
+      [slot]="alternateSlot()"
+      [capabilities]="revisionCapabilities()"
+      (action)="onRevisionAction($event)"
+    />
+    }
+  </div>
 </div>

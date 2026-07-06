@@ -17,6 +17,7 @@ export type MessageRevisionActionKind =
   | 'previous_variant'
   | 'next_variant'
   | 'select_variant'
+  | 'request_next_alternative'
   | 'delete_variant'
   | 'regenerate'
   | 'continue'
@@ -31,6 +32,7 @@ export interface MessageRevisionCapabilities {
   readonly edit?: boolean;
   readonly delete?: boolean;
   readonly deleteVariant?: boolean;
+  readonly requestNextAlternative?: boolean;
   readonly branch?: boolean;
   readonly bookmark?: boolean;
 }
@@ -72,8 +74,8 @@ export class MessageRevisionControlsComponent {
 
   protected readonly variantLabel = computed(() => {
     const variants = this.variants();
-    if (variants.length <= 1) return '1 / 1';
-    return `${this.activeVariantIndex() + 1} / ${variants.length}`;
+    if (variants.length <= 1) return '1/1';
+    return `${this.activeVariantIndex() + 1}/${variants.length}`;
   });
 
   protected readonly canPrevious = computed(
@@ -83,6 +85,18 @@ export class MessageRevisionControlsComponent {
     () =>
       this.activeVariantIndex() >= 0 &&
       this.activeVariantIndex() < this.variants().length - 1,
+  );
+  protected readonly canRequestNextAlternative = computed(
+    () =>
+      this.capabilities().requestNextAlternative === true &&
+      this.variants().length > 0 &&
+      this.activeVariantIndex() === this.variants().length - 1,
+  );
+  protected readonly nextButtonLabel = computed(() =>
+    this.canNext() ? 'Next' : 'New',
+  );
+  protected readonly nextButtonTitle = computed(() =>
+    this.canNext() ? 'Next variant' : 'Request next alternative',
   );
   protected readonly canDeleteVariant = computed(
     () =>
@@ -98,6 +112,31 @@ export class MessageRevisionControlsComponent {
     const next = this.variants()[this.activeVariantIndex() + delta];
     if (next === undefined) return;
     this.emitAction(delta === -1 ? 'previous_variant' : 'next_variant', next);
+  }
+
+  protected selectNextOrRequest(): void {
+    if (this.canNext()) {
+      this.selectOffset(1);
+      return;
+    }
+    if (this.canRequestNextAlternative()) {
+      this.emitAction('request_next_alternative', this.activeVariant());
+    }
+  }
+
+  protected onVariantKeydown(event: KeyboardEvent): void {
+    if (event.key === 'ArrowLeft' && this.canPrevious()) {
+      event.preventDefault();
+      this.selectOffset(-1);
+      return;
+    }
+    if (
+      event.key === 'ArrowRight' &&
+      (this.canNext() || this.canRequestNextAlternative())
+    ) {
+      event.preventDefault();
+      this.selectNextOrRequest();
+    }
   }
 
   protected selectActiveVariant(event: Event): void {

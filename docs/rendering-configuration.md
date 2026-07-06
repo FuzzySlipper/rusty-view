@@ -41,6 +41,15 @@ The default policy is conservative:
 - links are protocol-validated;
 - raw HTML is never emitted by the Markdown parser.
 
+## Semantic Text Spans
+
+Text blocks may provide `MessageBlock.textSpans` for semantic styling of plain
+text ranges. These spans are range metadata over the original content, not HTML.
+When spans are present, Rusty View renders through the safe raw-text path and
+applies generic `data-rv-text-scope` attributes to the generated spans.
+
+See [semantic-text-scopes.md](semantic-text-scopes.md).
+
 ## Ownership
 
 Rendering configuration is TypeScript/UI policy. The backend does not need to

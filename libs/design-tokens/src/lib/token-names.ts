@@ -29,6 +29,19 @@ export const COLOR_TOKENS = {
   scrim: '--rv-color-scrim',
 } as const;
 
+export const TEXT_SCOPE_TOKENS = {
+  plain: '--rv-text-scope-plain',
+  accent: '--rv-text-scope-accent',
+  muted: '--rv-text-scope-muted',
+  quote: '--rv-text-scope-quote',
+  emphasis: '--rv-text-scope-emphasis',
+  strong: '--rv-text-scope-strong',
+  code: '--rv-text-scope-code',
+  success: '--rv-text-scope-success',
+  warning: '--rv-text-scope-warning',
+  danger: '--rv-text-scope-danger',
+} as const;
+
 export const SHADOW_TOKENS = {
   sm: '--rv-shadow-sm',
   overlay: '--rv-shadow-overlay',
@@ -86,6 +99,7 @@ export const MOTION_TOKENS = {
  */
 export type DesignTokenName =
   | (typeof COLOR_TOKENS)[keyof typeof COLOR_TOKENS]
+  | (typeof TEXT_SCOPE_TOKENS)[keyof typeof TEXT_SCOPE_TOKENS]
   | (typeof SHADOW_TOKENS)[keyof typeof SHADOW_TOKENS]
   | (typeof SPACING_TOKENS)[keyof typeof SPACING_TOKENS]
   | (typeof TYPOGRAPHY_TOKENS)[keyof typeof TYPOGRAPHY_TOKENS]
@@ -101,6 +115,7 @@ export type DesignTokenName =
  */
 export const ALL_DESIGN_TOKEN_NAMES: readonly DesignTokenName[] = [
   ...Object.values(COLOR_TOKENS),
+  ...Object.values(TEXT_SCOPE_TOKENS),
   ...Object.values(SHADOW_TOKENS),
   ...Object.values(SPACING_TOKENS),
   ...Object.values(TYPOGRAPHY_TOKENS),

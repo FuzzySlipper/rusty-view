@@ -27,6 +27,60 @@
   color: var(--rv-color-text-primary);
 }
 
+.rv-block__scope,
+.rv-block__search-mark {
+  color: var(--rv-text-scope-plain);
+}
+
+.rv-block__scope[data-rv-text-scope='accent'],
+.rv-block__search-mark[data-rv-text-scope='accent'] {
+  color: var(--rv-text-scope-accent);
+}
+
+.rv-block__scope[data-rv-text-scope='muted'],
+.rv-block__search-mark[data-rv-text-scope='muted'] {
+  color: var(--rv-text-scope-muted);
+}
+
+.rv-block__scope[data-rv-text-scope='quote'],
+.rv-block__search-mark[data-rv-text-scope='quote'] {
+  color: var(--rv-text-scope-quote);
+}
+
+.rv-block__scope[data-rv-text-scope='emphasis'],
+.rv-block__search-mark[data-rv-text-scope='emphasis'] {
+  color: var(--rv-text-scope-emphasis);
+  font-style: italic;
+}
+
+.rv-block__scope[data-rv-text-scope='strong'],
+.rv-block__search-mark[data-rv-text-scope='strong'] {
+  color: var(--rv-text-scope-strong);
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-block__scope[data-rv-text-scope='code'],
+.rv-block__search-mark[data-rv-text-scope='code'] {
+  color: var(--rv-text-scope-code);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-block__scope[data-rv-text-scope='success'],
+.rv-block__search-mark[data-rv-text-scope='success'] {
+  color: var(--rv-text-scope-success);
+}
+
+.rv-block__scope[data-rv-text-scope='warning'],
+.rv-block__search-mark[data-rv-text-scope='warning'] {
+  color: var(--rv-text-scope-warning);
+}
+
+.rv-block__scope[data-rv-text-scope='danger'],
+.rv-block__search-mark[data-rv-text-scope='danger'] {
+  color: var(--rv-text-scope-danger);
+}
+
 /*
  * Markdown-rendered text blocks. Mirrors the `.rv-block__content` baseline
  * (same tokens) so the two render paths look identical and BOTH honor the

@@ -9,6 +9,7 @@ import {
 import type {
   ChatMessage,
   MessageAlternateSlot,
+  MessageSpeakerIdentity,
 } from '@rusty-view/chat-domain';
 
 import { CHAT_MESSAGE_DECORATORS } from './transcript-decorators';
@@ -61,13 +62,34 @@ export class MessageItemComponent {
     return `rv-message--${role}`;
   });
 
+  protected readonly speaker = computed<Required<MessageSpeakerIdentity>>(
+    () => {
+      const message = this.message();
+      const decorated = this.decoration().speaker;
+      const base = message.author.speaker;
+      const label =
+        decorated?.label ??
+        base?.label ??
+        message.author.displayName ??
+        message.author.role;
+      const initials =
+        decorated?.initials ?? base?.initials ?? initialsFor(label);
+      const avatarAlt =
+        decorated?.avatarAlt ??
+        base?.avatarAlt ??
+        (label.length === 0 ? 'Speaker avatar' : `Avatar for ${label}`);
+
+      return {
+        label,
+        avatarUrl: decorated?.avatarUrl ?? base?.avatarUrl ?? '',
+        initials,
+        avatarAlt,
+      };
+    },
+  );
+
   protected readonly authorLabel = computed(() => {
-    const msg = this.message();
-    const name = msg.author.displayName;
-    if (name !== undefined) {
-      return name;
-    }
-    return msg.author.role;
+    return this.speaker().label;
   });
 
   protected readonly timestampLabel = computed(() => {
@@ -96,4 +118,16 @@ export class MessageItemComponent {
   protected onRevisionAction(action: MessageRevisionAction): void {
     this.revisionAction.emit(action);
   }
+}
+
+function initialsFor(label: string): string {
+  const words = label
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+  if (words.length === 0) return '?';
+  if (words.length === 1) {
+    return (words[0] ?? '?').slice(0, 2).toUpperCase();
+  }
+  return `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}`.toUpperCase() || '?';
 }

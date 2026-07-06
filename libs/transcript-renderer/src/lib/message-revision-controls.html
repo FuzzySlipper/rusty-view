@@ -1,11 +1,17 @@
 <div class="rv-revision" data-testid="message-revision-controls">
   @if (variants().length > 1) {
-  <div class="rv-revision__variants" aria-label="Message variants">
+  <div
+    class="rv-revision__variants"
+    aria-label="Message variants"
+    tabindex="0"
+    (keydown)="onVariantKeydown($event)"
+  >
     <button
       type="button"
       class="rv-revision__button"
       data-testid="variant-previous"
       title="Previous variant"
+      aria-label="Previous variant"
       [disabled]="!canPrevious()"
       (click)="selectOffset(-1)"
     >
@@ -18,11 +24,12 @@
       type="button"
       class="rv-revision__button"
       data-testid="variant-next"
-      title="Next variant"
-      [disabled]="!canNext()"
-      (click)="selectOffset(1)"
+      [title]="nextButtonTitle()"
+      [attr.aria-label]="nextButtonTitle()"
+      [disabled]="!canNext() && !canRequestNextAlternative()"
+      (click)="selectNextOrRequest()"
     >
-      Next
+      {{ nextButtonLabel() }}
     </button>
     <select
       class="rv-revision__select"

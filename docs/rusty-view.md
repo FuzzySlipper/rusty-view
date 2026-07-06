@@ -63,6 +63,7 @@ The transcript renderer is the core engineering surface. It must support:
 - attachment blocks;
 - configurable text rendering modes;
 - extension-provided content renderers.
+- avatar-capable speaker identity and generic semantic text scopes.
 
 See:
 
@@ -70,6 +71,9 @@ See:
 - [conversation-navigation.md](conversation-navigation.md)
 - [attachments-and-data-bank.md](attachments-and-data-bank.md)
 - [rendering-configuration.md](rendering-configuration.md)
+- [speaker-identity.md](speaker-identity.md)
+- [semantic-text-scopes.md](semantic-text-scopes.md)
+- [message-alternates.md](message-alternates.md)
 
 ## Extension Points
 

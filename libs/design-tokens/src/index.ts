@@ -17,6 +17,7 @@ export type { DesignTokenName } from './lib/token-names';
 export {
   ALL_DESIGN_TOKEN_NAMES,
   COLOR_TOKENS,
+  TEXT_SCOPE_TOKENS,
   SHADOW_TOKENS,
   SPACING_TOKENS,
   TYPOGRAPHY_TOKENS,

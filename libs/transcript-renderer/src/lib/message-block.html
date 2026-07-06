@@ -251,9 +251,15 @@
   <p class="rv-block__content" data-testid="text-block-content">
     @for (segment of highlightedSegments(); track $index) { @if
     (segment.matched) {
-    <mark class="rv-block__search-mark">{{ segment.text }}</mark>
+    <mark
+      class="rv-block__search-mark"
+      [attr.data-rv-text-scope]="segment.scope"
+      >{{ segment.text }}</mark
+    >
     } @else {
-    <span>{{ segment.text }}</span>
+    <span class="rv-block__scope" [attr.data-rv-text-scope]="segment.scope"
+      >{{ segment.text }}</span
+    >
     } }
   </p>
   } @if (showRawToggle()) {

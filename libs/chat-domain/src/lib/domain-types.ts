@@ -17,9 +17,27 @@ import type {
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
+/**
+ * Product-agnostic visible speaker identity for transcript chrome.
+ *
+ * Downstream apps may derive this from users, characters, services, tools, or
+ * any other speaker concept. Rusty View treats it only as display metadata.
+ */
+export interface MessageSpeakerIdentity {
+  /** Visible speaker label. Falls back to MessageAuthor.displayName/role. */
+  readonly label?: string;
+  /** Optional avatar image URL. */
+  readonly avatarUrl?: string;
+  /** Optional fallback initials when no avatar image is present. */
+  readonly initials?: string;
+  /** Accessible label for the avatar image/badge. Falls back to label. */
+  readonly avatarAlt?: string;
+}
+
 export interface MessageAuthor {
   readonly role: MessageRole;
   readonly displayName: string | undefined;
+  readonly speaker?: MessageSpeakerIdentity;
 }
 
 // ---- message blocks ----
@@ -37,6 +55,34 @@ export type MessageBlockKind = KnownMessageBlockKind | (string & {});
 export type RenderPolicy = 'full' | 'collapsed' | 'partial';
 
 export type MessageMetadata = Readonly<Record<string, unknown>>;
+
+/**
+ * Generic semantic text scope for transcript text spans.
+ *
+ * Built-in scopes are intentionally domain-neutral. Downstream apps can map
+ * product concepts such as dialogue or narration onto these generic scopes, or
+ * provide their own scope strings and CSS variables.
+ */
+export type TranscriptTextScope =
+  | 'plain'
+  | 'accent'
+  | 'muted'
+  | 'quote'
+  | 'emphasis'
+  | 'strong'
+  | 'code'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | (string & {});
+
+export interface TranscriptTextSpan {
+  /** UTF-16 string offset into MessageBlock.content. */
+  readonly start: number;
+  /** UTF-16 string offset, exclusive. */
+  readonly end: number;
+  readonly scope: TranscriptTextScope;
+}
 
 // ---- attachments ----
 
@@ -103,6 +149,8 @@ export interface MessageBlock {
   readonly renderPolicy: RenderPolicy;
   /** Present for `tool_call` / `command` blocks; absent for text blocks. */
   readonly tool?: ToolBlockMeta;
+  /** Optional semantic spans for text blocks. Ignored for non-text blocks. */
+  readonly textSpans?: readonly TranscriptTextSpan[];
   readonly attachment?: ChatAttachment;
   readonly metadata?: MessageMetadata;
 }

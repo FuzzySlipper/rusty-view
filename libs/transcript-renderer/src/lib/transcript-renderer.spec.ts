@@ -555,6 +555,78 @@ describe('MessageItemComponent', () => {
     expect(host.textContent).toContain('The door creaks.');
   });
 
+  it('renders speaker avatar images with accessible labels', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        author: {
+          role: 'assistant',
+          displayName: 'Narrator',
+          speaker: {
+            label: 'Archivist',
+            avatarUrl: '/avatars/archivist.png',
+            avatarAlt: 'Archivist portrait',
+          },
+        },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const image = host.querySelector(
+      '[data-testid="message-avatar-image"]',
+    ) as HTMLImageElement;
+
+    expect(
+      host.querySelector('[data-testid="message-author"]')?.textContent,
+    ).toContain('Archivist');
+    expect(image).not.toBeNull();
+    expect(image.getAttribute('src')).toBe('/avatars/archivist.png');
+    expect(image.getAttribute('alt')).toBe('Archivist portrait');
+  });
+
+  it('falls back to speaker initials when no avatar image is supplied', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        author: {
+          role: 'user',
+          displayName: undefined,
+          speaker: { label: 'Rusty Crew', avatarAlt: 'Rusty Crew speaker' },
+        },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const fallback = host.querySelector(
+      '[data-testid="message-avatar-fallback"]',
+    );
+
+    expect(
+      host.querySelector('[data-testid="message-avatar-image"]'),
+    ).toBeNull();
+    expect(fallback?.textContent).toContain('RC');
+    expect(fallback?.getAttribute('aria-label')).toBe('Rusty Crew speaker');
+  });
+
+  it('uses explicit fallback initials when provided', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        author: {
+          role: 'tool',
+          displayName: 'Search Index',
+          speaker: { initials: 'SI' },
+        },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(
+      host.querySelector('[data-testid="message-avatar-fallback"]')
+        ?.textContent,
+    ).toContain('SI');
+    expect(
+      host
+        .querySelector('[data-testid="message-avatar-fallback"]')
+        ?.getAttribute('aria-label'),
+    ).toBe('Avatar for Search Index');
+  });
+
   it('adds search match and active classes to messages', async () => {
     const fixture = await createMessage(
       makeMessage({
@@ -605,7 +677,13 @@ describe('MessageItemComponent', () => {
 });
 
 describe('MessageRevisionControlsComponent', () => {
-  async function createRevisionControls() {
+  async function createRevisionControls(
+    options: {
+      readonly activeVariantId?: string | null;
+      readonly alternateCount?: number;
+      readonly capabilities?: Record<string, boolean>;
+    } = {},
+  ) {
     await TestBed.configureTestingModule({
       imports: [MessageRevisionControlsComponent],
     }).compileComponents();
@@ -615,28 +693,45 @@ describe('MessageRevisionControlsComponent', () => {
       author: { role: 'assistant', displayName: 'Assistant' },
       blocks: [makeBlock({ id: 'primary_b1', content: 'Primary answer' })],
     });
-    const alternate = makeMessage({
-      id: 'msg_alt',
-      author: { role: 'assistant', displayName: 'Assistant' },
-      blocks: [makeBlock({ id: 'alt_b1', content: 'Alternate answer' })],
-    });
+    const alternates = Array.from(
+      { length: options.alternateCount ?? 1 },
+      (_, index) => {
+        const ordinal = index + 1;
+        const message = makeMessage({
+          id: `msg_alt_${ordinal}`,
+          author: { role: 'assistant', displayName: 'Assistant' },
+          blocks: [
+            makeBlock({
+              id: `alt_${ordinal}_b1`,
+              content: `Alternate answer ${ordinal}`,
+            }),
+          ],
+        });
+        return {
+          id: message.id,
+          slotId: 'slot_1',
+          source: 'alternate' as const,
+          ordinal,
+          message,
+        };
+      },
+    );
+    const activeVariantId =
+      options.activeVariantId === null
+        ? undefined
+        : (options.activeVariantId ?? alternates.at(-1)?.id);
     const slot = messageAlternateSlot(primary, {
       slotId: 'slot_1',
-      activeVariantId: 'msg_alt',
-      alternates: [
-        {
-          id: 'msg_alt',
-          slotId: 'slot_1',
-          source: 'alternate',
-          ordinal: 1,
-          message: alternate,
-        },
-      ],
+      ...(activeVariantId === undefined ? {} : { activeVariantId }),
+      alternates,
     });
 
     const fixture = TestBed.createComponent(MessageRevisionControlsComponent);
-    fixture.componentRef.setInput('message', alternate);
+    fixture.componentRef.setInput('message', slot.primary.message);
     fixture.componentRef.setInput('slot', slot);
+    if (options.capabilities !== undefined) {
+      fixture.componentRef.setInput('capabilities', options.capabilities);
+    }
     fixture.detectChanges();
     return fixture;
   }
@@ -651,7 +746,7 @@ describe('MessageRevisionControlsComponent', () => {
 
     expect(
       host.querySelector('[data-testid="variant-count"]')?.textContent,
-    ).toContain('2 / 2');
+    ).toContain('2/2');
 
     (
       host.querySelector(
@@ -701,6 +796,70 @@ describe('MessageRevisionControlsComponent', () => {
         ) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+  });
+
+  it('emits request_next_alternative from the final variant when supported', async () => {
+    const fixture = await createRevisionControls({
+      activeVariantId: 'msg_alt_2',
+      alternateCount: 2,
+      capabilities: { requestNextAlternative: true },
+    });
+    const host: HTMLElement = fixture.nativeElement;
+    const actions: unknown[] = [];
+    fixture.componentInstance.action.subscribe((action) =>
+      actions.push(action),
+    );
+
+    expect(
+      host.querySelector('[data-testid="variant-count"]')?.textContent,
+    ).toContain('3/3');
+    (
+      host.querySelector('[data-testid="variant-next"]') as HTMLButtonElement
+    ).click();
+
+    expect(actions).toMatchObject([
+      { kind: 'request_next_alternative', variant: { id: 'msg_alt_2' } },
+    ]);
+  });
+
+  it('does not render alternate carousel controls for a single variant', async () => {
+    const fixture = await createRevisionControls({ alternateCount: 0 });
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.querySelector('[data-testid="variant-count"]')).toBeNull();
+    expect(host.querySelector('[data-testid="variant-previous"]')).toBeNull();
+    expect(host.querySelector('[data-testid="variant-next"]')).toBeNull();
+  });
+
+  it('supports arrow-key navigation on the variant carousel', async () => {
+    const fixture = await createRevisionControls({
+      activeVariantId: null,
+      alternateCount: 2,
+    });
+    const host: HTMLElement = fixture.nativeElement;
+    const actions: unknown[] = [];
+    fixture.componentInstance.action.subscribe((action) =>
+      actions.push(action),
+    );
+    const carousel = host.querySelector(
+      '.rv-revision__variants',
+    ) as HTMLElement;
+
+    carousel.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+    );
+    fixture.detectChanges();
+
+    expect(actions).toMatchObject([
+      { kind: 'next_variant', variant: { id: 'msg_alt_1' } },
+    ]);
+    expect(
+      (
+        host.querySelector(
+          '[data-testid="variant-previous"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 });
 
@@ -884,6 +1043,73 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(host.querySelector('.rv-block__markdown')).toBeNull();
     expect(host.querySelector('.rv-block__raw-button')).toBeNull();
     expect(host.textContent).toContain('Just a normal chat message.');
+  });
+
+  it('renders mixed semantic text spans without using innerHTML', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: 'Plain quoted strong',
+        textSpans: [
+          { start: 6, end: 12, scope: 'quote' },
+          { start: 13, end: 19, scope: 'strong' },
+        ],
+      }),
+      'auto',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const scoped = host.querySelectorAll('[data-rv-text-scope]');
+
+    expect(host.querySelector('.rv-block__markdown')).toBeNull();
+    expect(
+      host.querySelector('[data-testid="text-block-content"]')?.textContent,
+    ).toContain('Plain quoted strong');
+    expect(scoped.item(0).getAttribute('data-rv-text-scope')).toBe('quote');
+    expect(scoped.item(0).textContent).toBe('quoted');
+    expect(scoped.item(1).getAttribute('data-rv-text-scope')).toBe('strong');
+    expect(scoped.item(1).textContent).toBe('strong');
+  });
+
+  it('renders unstyled text with no semantic scope attributes', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'unstyled text' }),
+      'raw',
+    );
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('[data-rv-text-scope]')).toBeNull();
+    expect(host.textContent).toContain('unstyled text');
+  });
+
+  it('drops overlapping semantic spans without breaking text order', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: 'abcdef',
+        textSpans: [
+          { start: 0, end: 3, scope: 'accent' },
+          { start: 2, end: 5, scope: 'danger' },
+          { start: 5, end: 6, scope: 'code' },
+        ],
+      }),
+      'raw',
+    );
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const content = host.querySelector('[data-testid="text-block-content"]');
+    const scoped = host.querySelectorAll('[data-rv-text-scope]');
+
+    expect(content?.textContent?.replace(/\s+/g, '')).toBe('abcdef');
+    expect(scoped.item(0).getAttribute('data-rv-text-scope')).toBe('accent');
+    expect(scoped.item(0).textContent).toBe('abc');
+    expect(scoped.item(1).getAttribute('data-rv-text-scope')).toBe('code');
+    expect(scoped.item(1).textContent).toBe('f');
   });
 
   it('auto mode leaves partial HTML raw until it is balanced', async () => {

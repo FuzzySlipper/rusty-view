@@ -57,6 +57,29 @@ They return new immutable values and do not call storage or network APIs. Unknow
 variant ids fall back to the primary message, which gives the UI a safe recovery
 path if persisted selection state points at a deleted alternate.
 
+## Transcript Controls
+
+`@rusty-view/transcript-renderer` renders generic carousel controls when a
+message has a `MessageAlternateSlot` with multiple variants:
+
+- previous variant;
+- next variant;
+- active position count such as `1/3`;
+- active variant selector;
+- optional delete-alternate action;
+- optional request-next-alternative action.
+
+The request-next action is distinct from next selection. If the active variant
+is already the final variant and the host enables
+`MessageRevisionCapabilities.requestNextAlternative`, activating the next button
+emits `request_next_alternative`. Downstream apps should handle that event by
+asking their backend or command layer to create another variant for the same
+slot. Rusty View does not invent or persist the new variant locally.
+
+Selected-variant state should come back through `MessageAlternateSlot` data.
+That keeps virtualized rows stable: the slot id remains the transcript position,
+while the active variant changes inside that position.
+
 ## Storage Options
 
 ### Option A: Separate Alternate Records

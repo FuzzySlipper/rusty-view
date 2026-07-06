@@ -13,6 +13,8 @@ import type {
   MessageBlock,
   ToolCallDebugDetail,
   ToolCallDebugValue,
+  TranscriptTextScope,
+  TranscriptTextSpan,
 } from '@rusty-view/chat-domain';
 
 import { AttachmentBlockComponent } from './attachment-block';
@@ -32,6 +34,11 @@ import {
 
 type FormattedTextRenderMode = 'markdown' | 'sanitized-html';
 type ResolvedTextRenderMode = 'raw' | FormattedTextRenderMode;
+interface TextRenderSegment {
+  readonly text: string;
+  readonly matched: boolean;
+  readonly scope: TranscriptTextScope | undefined;
+}
 type ToolDebugState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading' }
@@ -147,7 +154,9 @@ export class MessageBlockComponent {
 
   /** Whether this text block should render formatted content. */
   protected readonly shouldRenderFormatted = computed(
-    () => this.effectiveRenderMode() !== 'raw',
+    () =>
+      this.effectiveRenderMode() !== 'raw' &&
+      this.semanticSegments().length === 0,
   );
 
   protected readonly showRawToggle = computed(
@@ -158,21 +167,25 @@ export class MessageBlockComponent {
         this.renderedHtml() !== ''),
   );
 
-  protected readonly highlightedSegments = computed(() => {
+  protected readonly semanticSegments = computed(() =>
+    semanticTextSegments(this.block().content, this.block().textSpans ?? []),
+  );
+
+  protected readonly highlightedSegments = computed<
+    readonly TextRenderSegment[]
+  >(() => {
     const query = this.searchQuery().trim();
     const content = this.block().content;
+    const baseSegments =
+      this.semanticSegments().length > 0
+        ? this.semanticSegments()
+        : [{ text: content, matched: false, scope: undefined }];
+
     if (!this.searchMatched() || query.length === 0 || content.length === 0) {
-      return [{ text: content, matched: false }];
+      return baseSegments;
     }
 
-    const index = content.toLowerCase().indexOf(query.toLowerCase());
-    if (index < 0) return [{ text: content, matched: false }];
-
-    return [
-      { text: content.slice(0, index), matched: false },
-      { text: content.slice(index, index + query.length), matched: true },
-      { text: content.slice(index + query.length), matched: false },
-    ].filter((segment) => segment.text.length > 0);
+    return splitSegmentsForSearch(baseSegments, query);
   });
 
   protected readonly renderContext = computed<ChatContentRenderContext>(() => ({
@@ -273,7 +286,7 @@ export class MessageBlockComponent {
         return;
       }
       const mode = this.effectiveRenderMode();
-      if (mode === 'raw') {
+      if (mode === 'raw' || this.semanticSegments().length > 0) {
         this.renderedHtml.set('');
         return;
       }
@@ -551,4 +564,91 @@ function hasMeaningfulMarkdown(
 function hasClosedCodeFence(content: string): boolean {
   const matches = content.match(/^ {0,3}(```|~~~)/gm);
   return matches !== null && matches.length >= 2;
+}
+
+function semanticTextSegments(
+  content: string,
+  spans: readonly TranscriptTextSpan[],
+): readonly TextRenderSegment[] {
+  if (content.length === 0 || spans.length === 0) return [];
+
+  const normalized = spans
+    .map((span) => ({
+      start: clampTextOffset(span.start, content.length),
+      end: clampTextOffset(span.end, content.length),
+      scope: span.scope,
+    }))
+    .filter((span) => span.end > span.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const segments: TextRenderSegment[] = [];
+  let cursor = 0;
+  for (const span of normalized) {
+    if (span.start < cursor) continue;
+    if (span.start > cursor) {
+      segments.push({
+        text: content.slice(cursor, span.start),
+        matched: false,
+        scope: undefined,
+      });
+    }
+    segments.push({
+      text: content.slice(span.start, span.end),
+      matched: false,
+      scope: span.scope,
+    });
+    cursor = span.end;
+  }
+
+  if (cursor < content.length) {
+    segments.push({
+      text: content.slice(cursor),
+      matched: false,
+      scope: undefined,
+    });
+  }
+
+  return segments;
+}
+
+function splitSegmentsForSearch(
+  segments: readonly TextRenderSegment[],
+  query: string,
+): readonly TextRenderSegment[] {
+  const needle = query.toLowerCase();
+  const result: TextRenderSegment[] = [];
+  for (const segment of segments) {
+    const source = segment.text;
+    let cursor = 0;
+    let index = source.toLowerCase().indexOf(needle);
+    while (index >= 0) {
+      if (index > cursor) {
+        result.push({
+          text: source.slice(cursor, index),
+          matched: false,
+          scope: segment.scope,
+        });
+      }
+      result.push({
+        text: source.slice(index, index + query.length),
+        matched: true,
+        scope: segment.scope,
+      });
+      cursor = index + query.length;
+      index = source.toLowerCase().indexOf(needle, cursor);
+    }
+    if (cursor < source.length) {
+      result.push({
+        text: source.slice(cursor),
+        matched: false,
+        scope: segment.scope,
+      });
+    }
+  }
+  return result.filter((segment) => segment.text.length > 0);
+}
+
+function clampTextOffset(offset: number, max: number): number {
+  if (!Number.isFinite(offset)) return 0;
+  return Math.max(0, Math.min(max, Math.floor(offset)));
 }

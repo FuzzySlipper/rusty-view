@@ -1,5 +1,8 @@
 import { InjectionToken } from '@angular/core';
-import type { ChatMessage } from '@rusty-view/chat-domain';
+import type {
+  ChatMessage,
+  MessageSpeakerIdentity,
+} from '@rusty-view/chat-domain';
 
 /**
  * Extension token for message decoration.
@@ -24,6 +27,7 @@ export interface ChatMessageDecoration {
   readonly className: string | undefined;
   readonly prefix: string | undefined;
   readonly suffix: string | undefined;
+  readonly speaker?: MessageSpeakerIdentity;
 }
 
 export const CHAT_MESSAGE_DECORATORS = new InjectionToken<
