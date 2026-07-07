@@ -15,8 +15,9 @@
     <button
       type="button"
       class="rv-admin-service__button"
-      disabled
-      title="Service config draft editing is not exposed in this panel"
+      (click)="saveWakeTimeout()"
+      [disabled]="saveDisabled()"
+      [title]="saveTitle()"
     >
       Save
     </button>
@@ -59,6 +60,51 @@
       <span>{{ reason }}</span>
       }
     </div>
+    }
+  </section>
+  <section class="rv-admin-service__section">
+    <h2>Wake Timeout Policy</h2>
+    <div class="rv-admin-service__summary">
+      <span>service policy</span><strong>{{ wakeTimeoutSummary() }}</strong>
+      <span>source</span><strong>{{ wakeTimeoutSource() }}</strong>
+      <span>profile/session overrides</span
+      ><strong>shown on sessions and profiles</strong> <span>editing</span
+      ><strong>{{ wakeTimeoutEditingStatus() }}</strong>
+    </div>
+    <div class="rv-admin-service__wake-editor">
+      <label>
+        <input
+          type="radio"
+          name="rv-wake-timeout-mode"
+          [checked]="draftMode() === 'disabled'"
+          (change)="setDraftMode('disabled')"
+        />
+        <span>Disabled</span>
+      </label>
+      <label>
+        <input
+          type="radio"
+          name="rv-wake-timeout-mode"
+          [checked]="draftMode() === 'default'"
+          (change)="setDraftMode('default')"
+        />
+        <span>Default</span>
+      </label>
+      <label class="rv-admin-service__wake-ms">
+        <span>default ms</span>
+        <input
+          type="number"
+          min="1"
+          step="1000"
+          [value]="draftDefaultMs()"
+          [disabled]="draftMode() !== 'default'"
+          (input)="setDraftDefaultMs($event)"
+        />
+      </label>
+      <span class="rv-admin-service__wake-preview">{{ draftSummary() }}</span>
+    </div>
+    @if (localError(); as error) {
+    <div class="rv-admin-service__error" role="alert">{{ error }}</div>
     }
   </section>
   } @if (admin.configValidation(); as config) {
@@ -118,6 +164,38 @@
       <span>sessions missing</span><strong>{{ result.sessionsMissing }}</strong>
     </div>
     }
+  </section>
+  } @if (admin.runtimeConfigDraftResult()?.outcome; as outcome) {
+  <section class="rv-admin-service__section" role="status">
+    <h2>Last Config Save</h2>
+    <div class="rv-admin-service__result">
+      <span>{{ outcome.status }}</span>
+      <span>{{ outcome.summary }}</span>
+      @if (outcome.reasonCode) {
+      <span>{{ outcome.reasonCode }}</span>
+      }
+    </div>
+    @if (outcome.result; as result) {
+    <div class="rv-admin-service__summary">
+      <span>status</span><strong>{{ result.ok ? 'ok' : 'blocked' }}</strong>
+      <span>errors</span
+      ><strong>{{ diagnosticCount(result.diagnostics, 'error') }}</strong>
+      <span>warnings</span
+      ><strong>{{ diagnosticCount(result.diagnostics, 'warning') }}</strong>
+    </div>
+    @if (result.diagnostics.length > 0) {
+    <ul class="rv-admin-service__diagnostics">
+      @for (diagnostic of result.diagnostics; track diagnostic.code +
+      diagnostic.path + diagnostic.message) {
+      <li>
+        <strong>{{ diagnostic.severity }}</strong>
+        <span>{{ diagnostic.code }}</span>
+        <span>{{ diagnostic.path ?? '-' }}</span>
+        <span>{{ diagnostic.message }}</span>
+      </li>
+      }
+    </ul>
+    } }
   </section>
   }
 

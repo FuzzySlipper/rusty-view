@@ -94,6 +94,40 @@
   font-weight: var(--rv-font-weight-bold);
 }
 
+.rv-admin-service__wake-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-sm);
+  align-items: center;
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-admin-service__wake-editor label {
+  display: inline-flex;
+  gap: var(--rv-space-xs);
+  align-items: center;
+}
+
+.rv-admin-service__wake-ms input {
+  width: 120px;
+  padding: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  font: inherit;
+}
+
+.rv-admin-service__wake-ms input:disabled {
+  opacity: 0.55;
+}
+
+.rv-admin-service__wake-preview {
+  color: var(--rv-color-text-muted);
+}
+
 .rv-admin-service__path,
 .rv-admin-service__result,
 .rv-admin-service__chips,

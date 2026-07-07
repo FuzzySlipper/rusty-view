@@ -190,6 +190,16 @@
   color: var(--rv-color-text-muted);
 }
 
+.rv-sessions-panel__timeout {
+  width: fit-content;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  padding: 1px var(--rv-space-xs);
+}
+
 .rv-sessions-panel__status {
   text-transform: uppercase;
 }

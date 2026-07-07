@@ -203,6 +203,39 @@ describe('projectConversation', () => {
     expect(projection.activeTurn).toBeUndefined();
   });
 
+  it('renders wake timeout completions as service notices without replacing streamed text', () => {
+    const projection = projectConversation([
+      makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'wake-1', text: 'Partial answer before cap.' },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_message_completed',
+        {
+          wake_id: 'wake-1',
+          status: 'failed',
+          reason_code: 'wake_timeout',
+          summary: 'wake wake-1 exceeded service turn cap 45000 ms',
+          timeout_ms: 45_000,
+        } as ChatEvent['payload'],
+        { event_id: 'e3' },
+      ),
+    ]);
+
+    const message = projection.messages[0];
+    expect(message?.status).toBe('error');
+    expect(message?.blocks[0]?.kind).toBe('text');
+    expect(message?.blocks[0]?.content).toBe('Partial answer before cap.');
+    const notice = message?.blocks.find(
+      (block) => block.kind === 'service_notice',
+    );
+    expect(notice?.content).toContain('service turn cap');
+    expect(notice?.metadata?.['reasonCode']).toBe('wake_timeout');
+    expect(notice?.metadata?.['timeoutMs']).toBe(45_000);
+  });
+
   it('assistant_text_delta creates a streaming message if turn not started', () => {
     const projection = projectConversation([
       makeEvent(

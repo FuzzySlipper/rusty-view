@@ -90,6 +90,9 @@ function adminDiagnostics(
           brainTurnCount: 0,
           lastActiveAt: session.updated_at,
           stale: false,
+          ...(session.effective_defaults === undefined
+            ? {}
+            : { effectiveDefaults: session.effective_defaults }),
         })),
         delegatedSessions: [],
         runtimePauses: pauses,
@@ -298,6 +301,25 @@ describe('SessionsPanelComponent', () => {
     const { fixture } = await createPanel([]);
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('No sessions');
+  });
+
+  it('shows effective wake timeout and disabled state per session', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'capped',
+        effective_defaults: { wakeTimeoutMs: 45_000 },
+      }),
+      makeSession({
+        session_id: 'uncapped',
+        effective_defaults: {},
+      }),
+    ]);
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.textContent).toContain('turn cap 45 sec (45,000 ms)');
+    expect(host.textContent).toContain(
+      'turn cap disabled / no service turn cap',
+    );
   });
 
   it('shows active runtime pause state for a paused session', async () => {

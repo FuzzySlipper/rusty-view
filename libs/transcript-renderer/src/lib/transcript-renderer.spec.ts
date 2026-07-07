@@ -153,6 +153,23 @@ describe('MessageBlockComponent', () => {
     expect(host.textContent).toContain('tool_call');
   });
 
+  it('renders service notices as distinct non-collapsible blocks', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'service_notice',
+        content: 'wake wake-1 exceeded service turn cap 45000 ms',
+        metadata: { reasonCode: 'wake_timeout' },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const notice = host.querySelector('[data-testid="service-notice-block"]');
+
+    expect(notice).not.toBeNull();
+    expect(notice?.getAttribute('data-reason-code')).toBe('wake_timeout');
+    expect(host.textContent).toContain('Service turn cap reached');
+    expect(host.querySelector('.rv-block--collapsible')).toBeNull();
+  });
+
   it('lazily loads raw tool-call debug details when opened', async () => {
     const detail: ToolCallDebugDetail = {
       debug_detail_id: 'dbg_1',

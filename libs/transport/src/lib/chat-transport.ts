@@ -83,6 +83,8 @@ import type {
   ProfileRegistryWriteApplyResult,
   ProfileRegistryWritePlan,
   RuntimeConfigApplyResult,
+  RuntimeConfigDraftPlan,
+  RuntimeConfigDraftRequest,
   RuntimeConfigValidationReport,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
@@ -500,6 +502,18 @@ export class ChatTransport {
     reason?: string,
   ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
     return this.adminHttp.reloadConfig(reason);
+  }
+
+  planRuntimeConfigDraft(
+    request: RuntimeConfigDraftRequest,
+  ): Promise<AdminControlResponse<RuntimeConfigDraftPlan>> {
+    return this.adminHttp.planRuntimeConfigDraft(request);
+  }
+
+  applyRuntimeConfigDraft(
+    request: RuntimeConfigDraftRequest,
+  ): Promise<AdminControlResponse<RuntimeConfigDraftPlan>> {
+    return this.adminHttp.applyRuntimeConfigDraft(request);
   }
 
   pauseRuntime(

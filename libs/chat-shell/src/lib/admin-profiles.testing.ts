@@ -17,6 +17,9 @@ import type {
   ProfileBundleExportPlan,
   ProfileRegistryRuntimeConfigRequest,
   RuntimeConfigApplyResult,
+  RuntimeConfigDraftPlan,
+  RuntimeConfigDraftRequest,
+  RuntimeConfigValidationReport,
 } from '@rusty-view/transport';
 
 /** Recording stub: a callable that records its call arguments like a vi.fn(). */
@@ -46,6 +49,8 @@ function recordingFn<A extends unknown[], R>(
 export const LANDED_PROFILE_CONTROL_CAPABILITY_IDS = [
   'admin.control.profiles.create',
   'admin.control.config.reload',
+  'admin.control.config.draft.plan',
+  'admin.control.config.draft.apply',
   'admin.control.mcp.reload',
   'admin.control.profiles.read',
   'admin.control.profiles.update.plan',
@@ -79,6 +84,7 @@ export interface TransportOptions {
   readonly toolCatalog?: AdminToolCatalog | null;
   readonly localToolProfiles?: AdminLocalToolProfileList | null;
   readonly contextStrategyCatalog?: ContextStrategyCatalog | null;
+  readonly configValidation?: RuntimeConfigValidationReport | null;
 }
 
 export function makeTransport(options: TransportOptions = {}): ChatTransport {
@@ -121,7 +127,7 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
       limit: 100,
       offset: 0,
     }),
-    adminConfigValidation: async () => null,
+    adminConfigValidation: async () => options.configValidation ?? null,
     adminCapabilities: async () => ({
       schema_version: 1,
       slash_commands: [],
@@ -244,7 +250,64 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
         profileDeleteResponse(profileId, request),
     ),
     reloadAdminConfig: recordingFn(async () => configReloadResponse()),
+    planRuntimeConfigDraft: recordingFn(
+      async (request: RuntimeConfigDraftRequest) =>
+        runtimeConfigDraftResponse(request, false),
+    ),
+    applyRuntimeConfigDraft: recordingFn(
+      async (request: RuntimeConfigDraftRequest) =>
+        runtimeConfigDraftResponse(request, true),
+    ),
   } as unknown as ChatTransport;
+}
+
+function runtimeConfigDraftResponse(
+  request: RuntimeConfigDraftRequest,
+  applied: boolean,
+): AdminControlResponse<RuntimeConfigDraftPlan> {
+  return {
+    command: {
+      name: applied
+        ? 'apply_runtime_config_update'
+        : 'plan_runtime_config_update',
+      target: {},
+      requestId: 'req-runtime-config-draft',
+      ...(request.reason === undefined ? {} : { reason: request.reason }),
+    },
+    outcome: {
+      status: 'completed',
+      summary: applied
+        ? 'runtime config draft applied'
+        : 'runtime config draft plan is valid',
+      result: {
+        ok: true,
+        configPath: '/tmp/service.json',
+        diagnostics: [],
+        implications: {
+          configReloadRequired: true,
+          createMissingSessions: false,
+          explicitChannelLifecycle: true,
+          explicitSessionLifecycle: true,
+        },
+        ...(applied
+          ? {
+              applyResult: {
+                brainsRegistered: request.runtimeConfig.brains.length,
+                brainsAlreadyPresent: 0,
+                sessionsCreated: request.runtimeConfig.sessions.length,
+                sessionsAlreadyPresent: 0,
+                sessionsReactivated: 0,
+                sessionsMissing: 0,
+                scheduledJobsRegistered:
+                  request.runtimeConfig.scheduledJobs.length,
+              },
+            }
+          : {}),
+      },
+    },
+    audit: { started: true, terminal: true },
+    observation: {},
+  };
 }
 
 function configReloadResponse(): AdminControlResponse<RuntimeConfigApplyResult> {

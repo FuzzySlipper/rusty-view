@@ -2,7 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { AdminStore } from '@rusty-view/chat-store';
-import { ChatTransport } from '@rusty-view/transport';
+import {
+  ChatTransport,
+  type RuntimeConfigValidationReport,
+} from '@rusty-view/transport';
 
 import { AdminServicePanelComponent } from './admin-service-panel';
 import { makeTransport } from './admin-profiles.testing';
@@ -75,6 +78,50 @@ function reloadButton(fixture: {
   return button;
 }
 
+function serviceButton(
+  fixture: { nativeElement: HTMLElement },
+  label: string,
+): HTMLButtonElement {
+  const button = Array.from(
+    fixture.nativeElement.querySelectorAll('button'),
+  ).find((candidate) => candidate.textContent?.trim() === label);
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found`);
+  }
+  return button;
+}
+
+function configValidation(
+  wakeTimeout?: RuntimeConfigValidationReport['wakeTimeout'],
+  runtimeConfig?: RuntimeConfigValidationReport['runtimeConfig'],
+): RuntimeConfigValidationReport {
+  return {
+    ok: true,
+    configPath: '/tmp/rusty-crew/config/service.json',
+    ...(wakeTimeout === undefined ? {} : { wakeTimeout }),
+    ...(runtimeConfig === undefined ? {} : { runtimeConfig }),
+    diagnostics: [],
+    summary: {
+      diagnostics: 0,
+      errors: 0,
+      warnings: 0,
+      brains: 0,
+      sessions: 0,
+      scheduledJobs: 0,
+      channelBindings: 0,
+      mcpBindings: 0,
+      derivedScheduledJobs: 0,
+      derivedMcpBindings: 0,
+      sessionDefaultsApplied: 0,
+    },
+    derived: {
+      scheduledJobs: [],
+      mcpBindings: [],
+      sessionDefaultsApplied: [],
+    },
+  };
+}
+
 describe('AdminServicePanelComponent', () => {
   it('renders available apply semantics from Crew capabilities', async () => {
     const fixture = await createPanel(SERVICE_CONTROL_CAPABILITY_IDS);
@@ -137,6 +184,124 @@ describe('AdminServicePanelComponent', () => {
     expect(semantics.get('session runtime rebuild')).toBe('missing');
     expect(text).not.toContain('backend API needed');
     expect(reloadButton(fixture).disabled).toBe(true);
+  });
+
+  it('renders disabled wake timeout policy without showing zero or unknown', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AdminServicePanelComponent],
+      providers: [
+        AdminStore,
+        {
+          provide: ChatTransport,
+          useValue: makeTransport({
+            configValidation: configValidation({ mode: 'disabled' }),
+          }),
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AdminServicePanelComponent);
+    fixture.detectChanges();
+    await TestBed.inject(AdminStore).refresh();
+    fixture.detectChanges();
+
+    const text = textOf(fixture);
+    expect(text).toContain('Wake Timeout Policy');
+    expect(text).toContain('disabled / no service turn cap');
+    expect(text).toContain('full config draft readback needed');
+    expect(text).not.toContain('0 ms');
+    expect(text).not.toContain('unknown');
+    expect(serviceButton(fixture, 'Save').disabled).toBe(true);
+  });
+
+  it('renders default wake timeout policy with the configured ms', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AdminServicePanelComponent],
+      providers: [
+        AdminStore,
+        {
+          provide: ChatTransport,
+          useValue: makeTransport({
+            configValidation: configValidation({
+              mode: 'default',
+              defaultMs: 600_000,
+            }),
+          }),
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AdminServicePanelComponent);
+    fixture.detectChanges();
+    await TestBed.inject(AdminStore).refresh();
+    fixture.detectChanges();
+
+    expect(textOf(fixture)).toContain('default 10 min (600,000 ms)');
+  });
+
+  it('applies a wake timeout policy using the config draft route when a full draft is available', async () => {
+    const transport = makeTransport({
+      configValidation: configValidation(
+        { mode: 'disabled' },
+        {
+          profilesDir: '/tmp/profiles',
+          wakeTimeout: { mode: 'disabled' },
+          brains: [{ implementationId: 'brain-1', profileId: 'p1' }],
+          sessions: [{ sessionId: 's1', agentId: 'a1', profileId: 'p1' }],
+          scheduledJobs: [],
+          channelBindings: [],
+          mcpBindings: [],
+        },
+      ),
+    });
+    await TestBed.configureTestingModule({
+      imports: [AdminServicePanelComponent],
+      providers: [
+        AdminStore,
+        {
+          provide: ChatTransport,
+          useValue: transport,
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AdminServicePanelComponent);
+    fixture.detectChanges();
+    await TestBed.inject(AdminStore).refresh();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.textContent).toContain('editable');
+    host
+      .querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]
+      ?.dispatchEvent(new Event('change'));
+    const defaultMs = host.querySelector<HTMLInputElement>(
+      '.rv-admin-service__wake-ms input',
+    );
+    if (defaultMs === null) throw new Error('default ms input not found');
+    defaultMs.value = '45000';
+    defaultMs.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    serviceButton(fixture, 'Save').click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const calls = (
+      transport.applyRuntimeConfigDraft as unknown as {
+        mock: { calls: [unknown][] };
+      }
+    ).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toMatchObject({
+      runtimeConfig: {
+        profilesDir: '/tmp/profiles',
+        wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+        brains: [{ implementationId: 'brain-1', profileId: 'p1' }],
+        sessions: [{ sessionId: 's1', agentId: 'a1', profileId: 'p1' }],
+      },
+      reason: 'rusty-view wake timeout policy update',
+    });
+    expect(textOf(fixture)).toContain('Last Config Save');
+    expect(textOf(fixture)).toContain('runtime config draft applied');
   });
 
   it('reloads service config through the store and surfaces the Crew result', async () => {

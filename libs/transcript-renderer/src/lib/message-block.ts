@@ -245,12 +245,24 @@ export class MessageBlockComponent {
       this.customRenderer() === undefined && this.block().kind === 'reasoning',
   );
 
+  protected readonly isServiceNotice = computed(
+    () =>
+      this.customRenderer() === undefined &&
+      this.block().kind === 'service_notice',
+  );
+
+  protected readonly serviceNoticeReasonCode = computed(() => {
+    const reasonCode = this.block().metadata?.['reasonCode'];
+    return typeof reasonCode === 'string' ? reasonCode : undefined;
+  });
+
   protected readonly isCollapsible = computed(
     () =>
       this.customRenderer() === undefined &&
       this.attachment() === undefined &&
       this.block().kind !== 'text' &&
-      this.block().kind !== 'reasoning',
+      this.block().kind !== 'reasoning' &&
+      this.block().kind !== 'service_notice',
   );
 
   protected readonly displayContent = computed(() => {

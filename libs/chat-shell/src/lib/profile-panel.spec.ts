@@ -177,6 +177,25 @@ describe('ProfilePanelComponent', () => {
     expect(rows.length).toBe(2);
   });
 
+  it('shows effective wake timeout summary per profile', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'capped',
+        profile_id: 'p1',
+        effective_defaults: { wakeTimeoutMs: 60_000 },
+      }),
+      makeSession({
+        session_id: 'uncapped',
+        profile_id: 'p2',
+        effective_defaults: {},
+      }),
+    ]);
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).toContain('turn cap 1 min (60,000 ms)');
+    expect(text).toContain('turn cap disabled / no service cap');
+  });
+
   it('marks the selected profile', async () => {
     const { fixture, store } = await createPanel([
       makeSession({

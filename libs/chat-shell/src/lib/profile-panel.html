@@ -32,8 +32,9 @@
         </span>
         @if (profile.activeSessionId) {
         <span class="rv-profile__live">▸ {{ profile.activeSessionId }}</span>
-        } @if (admin.profilePauseCount(profile.profileId, profile.sessions) > 0)
-        {
+        }
+        <span class="rv-profile__timeout">{{ wakeTimeoutLabel(profile) }}</span>
+        @if (admin.profilePauseCount(profile.profileId, profile.sessions) > 0) {
         <span class="rv-profile__paused">runtime paused</span>
         }
       </button>

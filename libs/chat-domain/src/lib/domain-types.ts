@@ -48,7 +48,8 @@ export type KnownMessageBlockKind =
   | 'tool_call'
   | 'tool_result'
   | 'debug'
-  | 'command';
+  | 'command'
+  | 'service_notice';
 
 export type MessageBlockKind = KnownMessageBlockKind | (string & {});
 

@@ -203,6 +203,17 @@
   >
   }
 </div>
+} @else if (isServiceNotice()) {
+<div
+  class="rv-block rv-block--service-notice"
+  data-testid="service-notice-block"
+  [class.rv-block--search-match]="searchMatched()"
+  [attr.data-block-id]="block().id"
+  [attr.data-reason-code]="serviceNoticeReasonCode()"
+>
+  <div class="rv-block__service-notice-heading">Service turn cap reached</div>
+  <p class="rv-block__service-notice-content">{{ block().content }}</p>
+</div>
 } @else if (isCollapsible()) {
 <div
   class="rv-block rv-block--collapsible"

@@ -55,6 +55,8 @@ import type {
   RuntimePauseControlResult,
   RuntimeResumeNoopResult,
   RuntimeConfigApplyResult,
+  RuntimeConfigDraftPlan,
+  RuntimeConfigDraftRequest,
   RuntimeConfigValidationReport,
   RuntimePauseScope,
   RuntimeSessionDiagnostics,
@@ -539,6 +541,22 @@ export class AdminHttpTransport {
   ): Promise<AdminControlResponse<RuntimeConfigApplyResult>> {
     return this.request('POST', '/v1/admin/control/config/reload', {
       body: { reason },
+    });
+  }
+
+  planRuntimeConfigDraft(
+    request: RuntimeConfigDraftRequest,
+  ): Promise<AdminControlResponse<RuntimeConfigDraftPlan>> {
+    return this.request('POST', '/v1/admin/control/config/draft/plan', {
+      body: compactRecord(request),
+    });
+  }
+
+  applyRuntimeConfigDraft(
+    request: RuntimeConfigDraftRequest,
+  ): Promise<AdminControlResponse<RuntimeConfigDraftPlan>> {
+    return this.request('POST', '/v1/admin/control/config/draft/apply', {
+      body: compactRecord(request),
     });
   }
 

@@ -8,6 +8,9 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
+import type { ChatSessionSummary } from '@rusty-view/protocol';
+
+import { effectiveWakeTimeoutLabel } from './wake-timeout-display';
 
 const SESSION_PAUSE_CAPABILITY_ID = 'admin.control.sessions.runtime.pause';
 const SESSION_RESUME_CAPABILITY_ID = 'admin.control.sessions.runtime.resume';
@@ -111,5 +114,12 @@ export class SessionsPanelComponent {
 
   protected closePanel(): void {
     this.dismissed.emit();
+  }
+
+  protected wakeTimeoutLabel(session: ChatSessionSummary): string {
+    return effectiveWakeTimeoutLabel(
+      session,
+      this.admin.runtimeSession(session.session_id),
+    );
   }
 }

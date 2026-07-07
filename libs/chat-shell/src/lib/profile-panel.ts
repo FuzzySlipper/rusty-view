@@ -4,7 +4,10 @@ import {
   computed,
   inject,
 } from '@angular/core';
+import type { BrainProfile } from '@rusty-view/chat-domain';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
+
+import { profileWakeTimeoutLabel } from './wake-timeout-display';
 
 /**
  * Brain profile sidebar panel — the primary navigation surface for
@@ -51,5 +54,11 @@ export class ProfilePanelComponent {
 
   protected onRefresh(): void {
     void this.store.refreshSessions();
+  }
+
+  protected wakeTimeoutLabel(profile: BrainProfile): string {
+    return profileWakeTimeoutLabel(profile.sessions, (sessionId) =>
+      this.admin.runtimeSession(sessionId),
+    );
   }
 }

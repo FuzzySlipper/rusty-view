@@ -237,10 +237,56 @@ export interface RuntimeConfigDiagnostic {
   readonly message: string;
 }
 
+export type RuntimeWakeTimeoutConfig =
+  | { readonly mode: 'disabled' }
+  | { readonly mode: 'default'; readonly defaultMs: number };
+
+export interface RuntimeConfigDraft {
+  readonly profilesDir?: string;
+  readonly skillsDir?: string;
+  readonly wakeTimeout?: RuntimeWakeTimeoutConfig;
+  readonly brains: readonly unknown[];
+  readonly sessions: readonly unknown[];
+  readonly scheduledJobs: readonly unknown[];
+  readonly channelBindings: readonly unknown[];
+  readonly mcpServers?: readonly unknown[];
+  readonly mcpBindings: readonly unknown[];
+}
+
+export interface RuntimeConfigDraftRequest {
+  readonly runtimeConfig: RuntimeConfigDraft;
+  readonly reason?: string;
+}
+
+export interface RuntimeConfigDraftPlan {
+  readonly ok: boolean;
+  readonly configPath: string;
+  readonly diagnostics: readonly RuntimeConfigDiagnostic[];
+  readonly implications: {
+    readonly configReloadRequired: true;
+    readonly createMissingSessions: false;
+    readonly explicitChannelLifecycle: true;
+    readonly explicitSessionLifecycle: true;
+  };
+  readonly runtimePlan?: unknown;
+  readonly applyResult?: RuntimeConfigApplyResult;
+}
+
 export interface RuntimeConfigValidationReport {
   readonly ok: boolean;
   readonly configPath: string;
   readonly profilesDir?: string;
+  /**
+   * Service-level wake timeout policy from `service.json` when the backend
+   * includes a config readback. Omitted means the service-wide wake ceiling is
+   * disabled unless a profile/session override supplies an effective timeout.
+   */
+  readonly wakeTimeout?: {
+    readonly mode?: 'disabled' | 'default' | string;
+    readonly defaultMs?: number;
+  };
+  readonly runtimeConfig?: RuntimeConfigDraft;
+  readonly serviceConfig?: RuntimeConfigDraft;
   readonly diagnostics: readonly RuntimeConfigDiagnostic[];
   readonly summary: {
     readonly diagnostics: number;

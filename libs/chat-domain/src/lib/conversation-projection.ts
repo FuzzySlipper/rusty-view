@@ -324,6 +324,14 @@ function applyAssistantMessageCompleted(
     'summary' in payload && typeof payload.summary === 'string'
       ? payload.summary
       : undefined;
+  const status =
+    'status' in payload && typeof payload.status === 'string'
+      ? payload.status
+      : undefined;
+  const reasonCode =
+    'reason_code' in payload && typeof payload.reason_code === 'string'
+      ? payload.reason_code
+      : undefined;
 
   if (messageId === undefined) {
     return projection;
@@ -340,6 +348,12 @@ function applyAssistantMessageCompleted(
     event,
     body,
     summary,
+    status,
+    reasonCode,
+    readOptionalInteger(payloadRecord(payload), 'timeout_ms'),
+    'wake_id' in payload && typeof payload.wake_id === 'string'
+      ? payload.wake_id
+      : undefined,
   );
 
   return { ...projection, messages };
@@ -979,11 +993,19 @@ function finalizeAssistantMessage(
   event: ChatEvent,
   body: string | undefined,
   summary: string | undefined,
+  status: string | undefined,
+  reasonCode: string | undefined,
+  timeoutMs: number | undefined,
+  wakeId: string | undefined,
 ): readonly ChatMessage[] {
+  const wakeTimeout = status === 'failed' && reasonCode === 'wake_timeout';
   const existingIndex = messages.findIndex((msg) => msg.id === messageId);
   if (existingIndex >= 0) {
     return messages.map((msg, i) => {
       if (i !== existingIndex) return msg;
+      if (wakeTimeout) {
+        return addWakeTimeoutNotice(msg, event, summary, timeoutMs, wakeId);
+      }
       const textBlocks = msg.blocks.filter((b) => b.kind === 'text');
       if (textBlocks.length === 1) {
         if (body === undefined) {
@@ -1019,6 +1041,20 @@ function finalizeAssistantMessage(
 
   // Message not seen during streaming — create it as completed.
   const content = body ?? summary;
+  if (wakeTimeout) {
+    const message = buildMessage(
+      messageId,
+      event.session_id,
+      'assistant',
+      event.created_at,
+      'error',
+      [],
+    );
+    return [
+      ...messages,
+      addWakeTimeoutNotice(message, event, summary, timeoutMs, wakeId),
+    ];
+  }
   if (content === undefined || content === '') {
     return messages;
   }
@@ -1031,6 +1067,36 @@ function finalizeAssistantMessage(
     [{ kind: 'text', content }],
   );
   return [...messages, message];
+}
+
+function addWakeTimeoutNotice(
+  message: ChatMessage,
+  event: ChatEvent,
+  summary: string | undefined,
+  timeoutMs: number | undefined,
+  wakeId: string | undefined,
+): ChatMessage {
+  const content =
+    summary ??
+    `Service turn cap reached${timeoutMs === undefined ? '' : ` after ${timeoutMs} ms`}.`;
+  const block: MessageBlock = {
+    id: `${message.id}-wake-timeout-${event.event_id}`,
+    messageId: message.id,
+    kind: 'service_notice',
+    content,
+    estimatedHeight: undefined,
+    renderPolicy: 'full',
+    metadata: {
+      reasonCode: 'wake_timeout',
+      wakeId,
+      timeoutMs,
+    },
+  };
+  return {
+    ...message,
+    status: 'error',
+    blocks: [...message.blocks, block],
+  };
 }
 
 function updateActiveTurnForDelta(

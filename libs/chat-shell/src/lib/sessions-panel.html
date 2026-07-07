@@ -100,6 +100,9 @@
             · {{ session.message_count ?? 0 }} msgs · {{ session.updated_at |
             date: 'short' }}
           </span>
+          <span class="rv-sessions-panel__timeout">
+            turn cap {{ wakeTimeoutLabel(session) }}
+          </span>
         </button>
         @if (admin.pauseForSession(session.session_id); as pause) {
         <div class="rv-sessions-panel__pause">

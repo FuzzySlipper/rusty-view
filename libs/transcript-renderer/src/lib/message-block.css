@@ -513,6 +513,35 @@
   white-space: pre-wrap;
 }
 
+/* ---- service notices ---- */
+
+.rv-block--service-notice {
+  display: grid;
+  gap: var(--rv-space-xs);
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border: 1px solid var(--rv-color-warning);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-block__service-notice-heading {
+  color: var(--rv-color-warning);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+  text-transform: uppercase;
+}
+
+.rv-block__service-notice-content {
+  margin: 0;
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-sans);
+  font-size: var(--rv-font-size-sm);
+  line-height: var(--rv-line-height-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- per-block raw toggle ---- */
 
 .rv-block__raw-toggle {
