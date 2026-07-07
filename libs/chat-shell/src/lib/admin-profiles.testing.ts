@@ -20,6 +20,8 @@ import type {
   RuntimeConfigDraftPlan,
   RuntimeConfigDraftRequest,
   RuntimeConfigValidationReport,
+  RuntimeWakeTimeoutPatchRequest,
+  RuntimeWakeTimeoutPatchResult,
 } from '@rusty-view/transport';
 
 /** Recording stub: a callable that records its call arguments like a vi.fn(). */
@@ -49,6 +51,7 @@ function recordingFn<A extends unknown[], R>(
 export const LANDED_PROFILE_CONTROL_CAPABILITY_IDS = [
   'admin.control.profiles.create',
   'admin.control.config.reload',
+  'admin.control.config.wake_timeout.patch',
   'admin.control.config.draft.plan',
   'admin.control.config.draft.apply',
   'admin.control.mcp.reload',
@@ -258,7 +261,59 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
       async (request: RuntimeConfigDraftRequest) =>
         runtimeConfigDraftResponse(request, true),
     ),
+    patchWakeTimeoutConfig: recordingFn(
+      async (request: RuntimeWakeTimeoutPatchRequest) =>
+        wakeTimeoutPatchResponse(request),
+    ),
   } as unknown as ChatTransport;
+}
+
+function wakeTimeoutPatchResponse(
+  request: RuntimeWakeTimeoutPatchRequest,
+): AdminControlResponse<RuntimeWakeTimeoutPatchResult> {
+  return {
+    command: {
+      name: 'patch_wake_timeout',
+      target: {},
+      requestId: 'req-wake-timeout-patch',
+      ...(request.reason === undefined ? {} : { reason: request.reason }),
+    },
+    outcome: {
+      status: 'completed',
+      summary:
+        request.wakeTimeout.mode === 'default'
+          ? `wake timeout set to ${request.wakeTimeout.defaultMs}ms`
+          : 'wake timeout disabled',
+      result: {
+        ok: true,
+        wakeTimeout: request.wakeTimeout,
+        preservedSections: {
+          brains: 1,
+          sessions: 1,
+          scheduledJobs: 1,
+          channelBindings: 1,
+          mcpServers: 1,
+          mcpBindings: 1,
+        },
+        safeWritePath: {
+          capabilityId: 'admin.control.config.wake_timeout.patch',
+          method: 'POST',
+          path: '/v1/admin/control/config/wake-timeout',
+        },
+        applyResult: {
+          brainsRegistered: 0,
+          brainsAlreadyPresent: 1,
+          sessionsCreated: 0,
+          sessionsAlreadyPresent: 1,
+          sessionsReactivated: 0,
+          sessionsMissing: 0,
+          scheduledJobsRegistered: 0,
+        },
+      },
+    },
+    audit: { started: true, terminal: true },
+    observation: {},
+  };
 }
 
 function runtimeConfigDraftResponse(

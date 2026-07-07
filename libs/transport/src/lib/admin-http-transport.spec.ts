@@ -370,6 +370,69 @@ describe('AdminHttpTransport', () => {
     expect(lastRequest().body).toContain('rusty-view service config reload');
   });
 
+  it('patches wake timeout through the narrow config control route', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        command: {
+          name: 'patch_wake_timeout',
+          target: {},
+          requestId: 'req',
+        },
+        outcome: {
+          status: 'completed',
+          summary: 'wake timeout set to 45000ms',
+          result: {
+            ok: true,
+            wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+            preservedSections: {
+              brains: 1,
+              sessions: 1,
+              scheduledJobs: 1,
+              channelBindings: 1,
+              mcpServers: 1,
+              mcpBindings: 1,
+            },
+            safeWritePath: {
+              capabilityId: 'admin.control.config.wake_timeout.patch',
+              method: 'POST',
+              path: '/v1/admin/control/config/wake-timeout',
+            },
+            applyResult: {
+              brainsRegistered: 0,
+              brainsAlreadyPresent: 1,
+              sessionsCreated: 0,
+              sessionsAlreadyPresent: 1,
+              sessionsReactivated: 0,
+              sessionsMissing: 0,
+              scheduledJobsRegistered: 0,
+            },
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.patchWakeTimeoutConfig({
+      wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+      reason: 'operator updated wake timeout',
+    });
+
+    expect(lastRequest().method).toBe('POST');
+    expect(lastRequest().url).toContain(
+      '/v1/admin/control/config/wake-timeout',
+    );
+    expect(JSON.parse(lastRequest().body ?? '{}')).toEqual({
+      wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+      reason: 'operator updated wake timeout',
+    });
+    expect(result.outcome.result?.wakeTimeout).toEqual({
+      mode: 'default',
+      defaultMs: 45_000,
+    });
+  });
+
   it('reads the admin capability registry', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

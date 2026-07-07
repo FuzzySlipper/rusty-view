@@ -12,6 +12,7 @@ import { makeTransport } from './admin-profiles.testing';
 
 const SERVICE_CONTROL_CAPABILITY_IDS = [
   'admin.control.config.reload',
+  'admin.control.config.wake_timeout.patch',
   'admin.control.config.draft.plan',
   'admin.control.config.draft.apply',
   'admin.control.profiles.rebuild_brain.plan',
@@ -130,6 +131,7 @@ describe('AdminServicePanelComponent', () => {
 
     expect(semantics.get('service reload')).toBe('available');
     expect(semantics.get('config save')).toBe('available');
+    expect(semantics.get('wake timeout save')).toBe('available');
     expect(semantics.get('brain hot swap')).toBe('available');
     expect(semantics.get('session runtime rebuild')).toBe('available');
     expect(text).not.toContain('backend API needed');
@@ -145,6 +147,7 @@ describe('AdminServicePanelComponent', () => {
 
     expect(semantics.get('service reload')).toBe('missing');
     expect(semantics.get('config save')).toBe('partial');
+    expect(semantics.get('wake timeout save')).toBe('missing');
     expect(semantics.get('brain hot swap')).toBe('partial');
     expect(semantics.get('session runtime rebuild')).toBe('missing');
     expect(reloadButton(fixture).disabled).toBe(true);
@@ -169,6 +172,7 @@ describe('AdminServicePanelComponent', () => {
     const semantics = applySemantics(fixture);
     expect(semantics.get('service reload')).toBe('checking');
     expect(semantics.get('config save')).toBe('checking');
+    expect(semantics.get('wake timeout save')).toBe('checking');
     expect(semantics.get('brain hot swap')).toBe('checking');
     expect(reloadButton(fixture).disabled).toBe(true);
   });
@@ -180,6 +184,7 @@ describe('AdminServicePanelComponent', () => {
 
     expect(semantics.get('service reload')).toBe('missing');
     expect(semantics.get('config save')).toBe('missing');
+    expect(semantics.get('wake timeout save')).toBe('missing');
     expect(semantics.get('brain hot swap')).toBe('missing');
     expect(semantics.get('session runtime rebuild')).toBe('missing');
     expect(text).not.toContain('backend API needed');
@@ -207,10 +212,10 @@ describe('AdminServicePanelComponent', () => {
     const text = textOf(fixture);
     expect(text).toContain('Wake Timeout Policy');
     expect(text).toContain('disabled / no service turn cap');
-    expect(text).toContain('full config draft readback needed');
+    expect(text).toContain('editable via wake-timeout patch');
     expect(text).not.toContain('0 ms');
     expect(text).not.toContain('unknown');
-    expect(serviceButton(fixture, 'Save').disabled).toBe(true);
+    expect(serviceButton(fixture, 'Save').disabled).toBe(false);
   });
 
   it('renders default wake timeout policy with the configured ms', async () => {
@@ -237,8 +242,70 @@ describe('AdminServicePanelComponent', () => {
     expect(textOf(fixture)).toContain('default 10 min (600,000 ms)');
   });
 
-  it('applies a wake timeout policy using the config draft route when a full draft is available', async () => {
+  it('applies a wake timeout policy using the safe patch route without full draft readback', async () => {
     const transport = makeTransport({
+      configValidation: configValidation({ mode: 'disabled' }),
+    });
+    await TestBed.configureTestingModule({
+      imports: [AdminServicePanelComponent],
+      providers: [
+        AdminStore,
+        {
+          provide: ChatTransport,
+          useValue: transport,
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AdminServicePanelComponent);
+    fixture.detectChanges();
+    await TestBed.inject(AdminStore).refresh();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.textContent).toContain('editable via wake-timeout patch');
+    host
+      .querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]
+      ?.dispatchEvent(new Event('change'));
+    const defaultMs = host.querySelector<HTMLInputElement>(
+      '.rv-admin-service__wake-ms input',
+    );
+    if (defaultMs === null) throw new Error('default ms input not found');
+    defaultMs.value = '45000';
+    defaultMs.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    serviceButton(fixture, 'Save').click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const patchCalls = (
+      transport.patchWakeTimeoutConfig as unknown as {
+        mock: { calls: [unknown][] };
+      }
+    ).mock.calls;
+    const draftCalls = (
+      transport.applyRuntimeConfigDraft as unknown as {
+        mock: { calls: [unknown][] };
+      }
+    ).mock.calls;
+    expect(patchCalls).toHaveLength(1);
+    expect(draftCalls).toHaveLength(0);
+    expect(patchCalls[0]?.[0]).toEqual({
+      wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+      reason: 'rusty-view wake timeout policy update',
+    });
+    expect(textOf(fixture)).toContain('Last Config Save');
+    expect(textOf(fixture)).toContain('wake timeout set to 45000ms');
+    expect(textOf(fixture)).toContain('/v1/admin/control/config/wake-timeout');
+  });
+
+  it('falls back to the config draft route when a full draft is available but the patch route is absent', async () => {
+    const transport = makeTransport({
+      capabilityIds: [
+        'admin.control.config.draft.plan',
+        'admin.control.config.draft.apply',
+      ],
       configValidation: configValidation(
         { mode: 'disabled' },
         {
@@ -268,7 +335,7 @@ describe('AdminServicePanelComponent', () => {
     fixture.detectChanges();
 
     const host: HTMLElement = fixture.nativeElement;
-    expect(host.textContent).toContain('editable');
+    expect(host.textContent).toContain('editable via config draft');
     host
       .querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]
       ?.dispatchEvent(new Event('change'));
@@ -290,7 +357,13 @@ describe('AdminServicePanelComponent', () => {
         mock: { calls: [unknown][] };
       }
     ).mock.calls;
+    const patchCalls = (
+      transport.patchWakeTimeoutConfig as unknown as {
+        mock: { calls: [unknown][] };
+      }
+    ).mock.calls;
     expect(calls).toHaveLength(1);
+    expect(patchCalls).toHaveLength(0);
     expect(calls[0]?.[0]).toMatchObject({
       runtimeConfig: {
         profilesDir: '/tmp/profiles',

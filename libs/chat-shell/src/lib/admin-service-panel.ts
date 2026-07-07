@@ -30,6 +30,8 @@ interface ServiceCapabilityRow {
 }
 
 const CONFIG_RELOAD_CAPABILITY_ID = 'admin.control.config.reload';
+const CONFIG_WAKE_TIMEOUT_PATCH_CAPABILITY_ID =
+  'admin.control.config.wake_timeout.patch';
 const CONFIG_DRAFT_CAPABILITY_IDS = [
   'admin.control.config.draft.plan',
   'admin.control.config.draft.apply',
@@ -54,6 +56,10 @@ const APPLY_SEMANTICS_ROWS: readonly ServiceCapabilityRow[] = [
       'admin.control.config.draft.plan',
       'admin.control.config.draft.apply',
     ],
+  },
+  {
+    label: 'wake timeout save',
+    capabilityIds: [CONFIG_WAKE_TIMEOUT_PATCH_CAPABILITY_ID],
   },
   {
     label: 'brain hot swap',
@@ -83,9 +89,24 @@ export class AdminServicePanelComponent {
   protected readonly reloadCapabilityStatus = computed(() =>
     this.capabilityStatusFor([CONFIG_RELOAD_CAPABILITY_ID]),
   );
-  protected readonly saveCapabilityStatus = computed(() =>
+  protected readonly wakeTimeoutPatchCapabilityStatus = computed(() =>
+    this.capabilityStatusFor([CONFIG_WAKE_TIMEOUT_PATCH_CAPABILITY_ID]),
+  );
+  protected readonly draftSaveCapabilityStatus = computed(() =>
     this.capabilityStatusFor(CONFIG_DRAFT_CAPABILITY_IDS),
   );
+  protected readonly savePath = computed<'patch' | 'draft' | null>(() => {
+    if (this.wakeTimeoutPatchCapabilityStatus() === 'available') {
+      return 'patch';
+    }
+    if (
+      this.draftSaveCapabilityStatus() === 'available' &&
+      this.hasRuntimeConfigDraftBase()
+    ) {
+      return 'draft';
+    }
+    return null;
+  });
   protected readonly wakeTimeoutPolicy = computed(() =>
     serviceWakeTimeoutPolicy(this.admin.configValidation()),
   );
@@ -156,19 +177,24 @@ export class AdminServicePanelComponent {
   protected saveDisabled(): boolean {
     return (
       this.admin.saving() ||
-      this.saveCapabilityStatus() !== 'available' ||
-      !this.hasRuntimeConfigDraftBase() ||
+      this.savePath() === null ||
       this.draftWakeTimeout() === null
     );
   }
 
   protected saveTitle(): string {
-    const capability = this.saveCapabilityStatus();
-    if (capability !== 'available') {
-      return `Config draft capability ${capability}`;
+    if (this.wakeTimeoutPatchCapabilityStatus() === 'available') {
+      if (this.draftWakeTimeout() === null) {
+        return 'Enter a positive default timeout in milliseconds';
+      }
+      return 'Save wake timeout policy';
+    }
+    const draftCapability = this.draftSaveCapabilityStatus();
+    if (draftCapability !== 'available') {
+      return `Wake timeout patch capability ${this.wakeTimeoutPatchCapabilityStatus()}; config draft capability ${draftCapability}`;
     }
     if (!this.hasRuntimeConfigDraftBase()) {
-      return 'Full runtime config draft readback is required before saving';
+      return 'Safe wake timeout patch or full runtime config draft readback is required before saving';
     }
     if (this.draftWakeTimeout() === null) {
       return 'Enter a positive default timeout in milliseconds';
@@ -180,6 +206,17 @@ export class AdminServicePanelComponent {
     if (this.saveDisabled()) return;
     const wakeTimeout = this.draftWakeTimeout();
     if (wakeTimeout === null) return;
+    if (this.savePath() === 'patch') {
+      void this.admin
+        .patchWakeTimeoutConfig({
+          wakeTimeout,
+          reason: 'rusty-view wake timeout policy update',
+        })
+        .then((saved) => {
+          if (saved) this.resetDraftFromPolicy();
+        });
+      return;
+    }
     const runtimeConfig = runtimeConfigDraftWithWakeTimeout(
       this.admin.configValidation(),
       wakeTimeout,
@@ -209,13 +246,25 @@ export class AdminServicePanelComponent {
   }
 
   protected wakeTimeoutEditingStatus(): string {
-    if (this.saveCapabilityStatus() !== 'available') {
-      return `config draft capability ${this.saveCapabilityStatus()}`;
+    if (this.wakeTimeoutPatchCapabilityStatus() === 'available') {
+      return 'editable via wake-timeout patch';
+    }
+    if (this.draftSaveCapabilityStatus() !== 'available') {
+      return `wake timeout patch capability ${this.wakeTimeoutPatchCapabilityStatus()}; config draft capability ${this.draftSaveCapabilityStatus()}`;
     }
     if (!this.hasRuntimeConfigDraftBase()) {
       return 'full config draft readback needed';
     }
-    return 'editable';
+    return 'editable via config draft';
+  }
+
+  protected patchWakeTimeoutSummary(): string {
+    const result = this.admin.wakeTimeoutPatchResult()?.outcome.result;
+    if (result === undefined) return '';
+    return serviceWakeTimeoutSummary({
+      ...result.wakeTimeout,
+      source: 'explicit',
+    });
   }
 
   protected diagnosticCount(

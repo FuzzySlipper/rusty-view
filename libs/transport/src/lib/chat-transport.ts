@@ -86,6 +86,8 @@ import type {
   RuntimeConfigDraftPlan,
   RuntimeConfigDraftRequest,
   RuntimeConfigValidationReport,
+  RuntimeWakeTimeoutPatchRequest,
+  RuntimeWakeTimeoutPatchResult,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimePauseScope,
@@ -514,6 +516,12 @@ export class ChatTransport {
     request: RuntimeConfigDraftRequest,
   ): Promise<AdminControlResponse<RuntimeConfigDraftPlan>> {
     return this.adminHttp.applyRuntimeConfigDraft(request);
+  }
+
+  patchWakeTimeoutConfig(
+    request: RuntimeWakeTimeoutPatchRequest,
+  ): Promise<AdminControlResponse<RuntimeWakeTimeoutPatchResult>> {
+    return this.adminHttp.patchWakeTimeoutConfig(request);
   }
 
   pauseRuntime(

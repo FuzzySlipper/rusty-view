@@ -36,6 +36,8 @@ import {
   type RuntimePauseControlResult,
   type RuntimePauseScope,
   type RuntimeResumeNoopResult,
+  type RuntimeWakeTimeoutPatchRequest,
+  type RuntimeWakeTimeoutPatchResult,
   type ProfileDeleteRequest,
   type ProfileDeleteResult,
   type ProfileRegistryFieldUpdateRequest,
@@ -203,6 +205,13 @@ interface AdminTransportMock {
           RuntimePauseControlResult | RuntimeResumeNoopResult
         >
       >
+    >
+  >;
+  readonly patchWakeTimeoutConfig: ReturnType<
+    typeof vi.fn<
+      (
+        request: RuntimeWakeTimeoutPatchRequest,
+      ) => Promise<AdminControlResponse<RuntimeWakeTimeoutPatchResult>>
     >
   >;
 }
@@ -604,6 +613,26 @@ function createTransport(
         resumedAt: '2026-07-02T00:01:00Z',
       }),
     ),
+    patchWakeTimeoutConfig: vi.fn(async (request) =>
+      controlResponse('patch_wake_timeout', {
+        ok: true,
+        wakeTimeout: request.wakeTimeout,
+        preservedSections: {
+          brains: 1,
+          sessions: 1,
+          scheduledJobs: 1,
+          channelBindings: 1,
+          mcpServers: 1,
+          mcpBindings: 1,
+        },
+        safeWritePath: {
+          capabilityId: 'admin.control.config.wake_timeout.patch',
+          method: 'POST',
+          path: '/v1/admin/control/config/wake-timeout',
+        },
+        applyResult: applyResult(),
+      }),
+    ),
     ...overrides,
   };
 }
@@ -831,6 +860,31 @@ describe('AdminStore behavior', () => {
       'tools-default',
     );
     expect(store.toolProfileWriteError()).toBeNull();
+    expect(store.saving()).toBe(false);
+  });
+
+  it('patches service wake timeout and refreshes admin data', async () => {
+    const transport = createTransport();
+    const store = setupAdminStore(transport);
+
+    const ok = await store.patchWakeTimeoutConfig({
+      wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+      reason: 'test wake timeout update',
+    });
+
+    expect(ok).toBe(true);
+    expect(transport.patchWakeTimeoutConfig).toHaveBeenCalledWith({
+      wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+      reason: 'test wake timeout update',
+    });
+    expect(store.wakeTimeoutPatchResult()?.outcome.result).toMatchObject({
+      ok: true,
+      wakeTimeout: { mode: 'default', defaultMs: 45_000 },
+      safeWritePath: {
+        capabilityId: 'admin.control.config.wake_timeout.patch',
+      },
+    });
+    expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
     expect(store.saving()).toBe(false);
   });
 

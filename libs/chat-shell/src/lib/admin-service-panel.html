@@ -165,6 +165,29 @@
     </div>
     }
   </section>
+  } @if (admin.wakeTimeoutPatchResult()?.outcome; as outcome) {
+  <section class="rv-admin-service__section" role="status">
+    <h2>Last Config Save</h2>
+    <div class="rv-admin-service__result">
+      <span>{{ outcome.status }}</span>
+      <span>{{ outcome.summary }}</span>
+      @if (outcome.reasonCode) {
+      <span>{{ outcome.reasonCode }}</span>
+      }
+    </div>
+    @if (outcome.result; as result) {
+    <div class="rv-admin-service__summary">
+      <span>path</span><strong>{{ result.safeWritePath.path }}</strong>
+      <span>policy</span><strong>{{ patchWakeTimeoutSummary() }}</strong>
+      <span>brains preserved</span
+      ><strong>{{ result.preservedSections['brains'] ?? '-' }}</strong>
+      <span>sessions preserved</span
+      ><strong>{{ result.preservedSections['sessions'] ?? '-' }}</strong>
+      <span>mcp bindings preserved</span
+      ><strong>{{ result.preservedSections['mcpBindings'] ?? '-' }}</strong>
+    </div>
+    }
+  </section>
   } @if (admin.runtimeConfigDraftResult()?.outcome; as outcome) {
   <section class="rv-admin-service__section" role="status">
     <h2>Last Config Save</h2>

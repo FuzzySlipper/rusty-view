@@ -258,6 +258,25 @@ export interface RuntimeConfigDraftRequest {
   readonly reason?: string;
 }
 
+export interface RuntimeWakeTimeoutPatchRequest {
+  readonly wakeTimeout: RuntimeWakeTimeoutConfig;
+  readonly reason?: string;
+}
+
+export interface RuntimeWakeTimeoutPatchResult {
+  readonly ok: true;
+  readonly wakeTimeout: RuntimeWakeTimeoutConfig;
+  readonly previousWakeTimeout?: RuntimeWakeTimeoutConfig;
+  readonly preservedSections: Record<string, number | undefined>;
+  readonly safeWritePath: {
+    readonly capabilityId: string;
+    readonly method: 'POST';
+    readonly path: '/v1/admin/control/config/wake-timeout';
+    readonly body?: string;
+  };
+  readonly applyResult: RuntimeConfigApplyResult;
+}
+
 export interface RuntimeConfigDraftPlan {
   readonly ok: boolean;
   readonly configPath: string;

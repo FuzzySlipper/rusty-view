@@ -58,6 +58,8 @@ import type {
   RuntimeConfigDraftPlan,
   RuntimeConfigDraftRequest,
   RuntimeConfigValidationReport,
+  RuntimeWakeTimeoutPatchRequest,
+  RuntimeWakeTimeoutPatchResult,
   RuntimePauseScope,
   RuntimeSessionDiagnostics,
   StorageQueryCatalog,
@@ -556,6 +558,14 @@ export class AdminHttpTransport {
     request: RuntimeConfigDraftRequest,
   ): Promise<AdminControlResponse<RuntimeConfigDraftPlan>> {
     return this.request('POST', '/v1/admin/control/config/draft/apply', {
+      body: compactRecord(request),
+    });
+  }
+
+  patchWakeTimeoutConfig(
+    request: RuntimeWakeTimeoutPatchRequest,
+  ): Promise<AdminControlResponse<RuntimeWakeTimeoutPatchResult>> {
+    return this.request('POST', '/v1/admin/control/config/wake-timeout', {
       body: compactRecord(request),
     });
   }

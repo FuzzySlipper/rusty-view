@@ -125,6 +125,8 @@ export type {
   RuntimeConfigDraftRequest,
   RuntimeConfigValidationReport,
   RuntimeWakeTimeoutConfig,
+  RuntimeWakeTimeoutPatchRequest,
+  RuntimeWakeTimeoutPatchResult,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimePauseDiagnostics,

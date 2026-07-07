@@ -52,6 +52,8 @@ import {
   type RuntimeConfigDraftPlan,
   type RuntimeConfigDraftRequest,
   type RuntimeConfigValidationReport,
+  type RuntimeWakeTimeoutPatchRequest,
+  type RuntimeWakeTimeoutPatchResult,
   type RuntimePauseControlRequest,
   type RuntimePauseControlResult,
   type RuntimePauseDiagnostics,
@@ -163,6 +165,8 @@ export class AdminStore {
     signal<AdminControlResponse<RuntimeConfigDraftPlan> | null>(null);
   private readonly _runtimeConfigDraftResult =
     signal<AdminControlResponse<RuntimeConfigDraftPlan> | null>(null);
+  private readonly _wakeTimeoutPatchResult =
+    signal<AdminControlResponse<RuntimeWakeTimeoutPatchResult> | null>(null);
   private readonly _profileBrainRebuildResult =
     signal<AdminControlResponse<ProfileBrainRebuildResult> | null>(null);
   private readonly _profileDeleteResult =
@@ -220,6 +224,7 @@ export class AdminStore {
   readonly runtimeConfigDraftPlan = this._runtimeConfigDraftPlan.asReadonly();
   readonly runtimeConfigDraftResult =
     this._runtimeConfigDraftResult.asReadonly();
+  readonly wakeTimeoutPatchResult = this._wakeTimeoutPatchResult.asReadonly();
   readonly profileBrainRebuildResult =
     this._profileBrainRebuildResult.asReadonly();
   readonly profileDeleteResult = this._profileDeleteResult.asReadonly();
@@ -526,6 +531,7 @@ export class AdminStore {
     this._error.set(null);
     this._runtimeConfigDraftPlan.set(null);
     this._runtimeConfigDraftResult.set(null);
+    this._wakeTimeoutPatchResult.set(null);
     try {
       const result = await this.transport.planRuntimeConfigDraft(request);
       this._runtimeConfigDraftPlan.set(result);
@@ -547,9 +553,33 @@ export class AdminStore {
     this._saving.set(true);
     this._error.set(null);
     this._runtimeConfigDraftResult.set(null);
+    this._wakeTimeoutPatchResult.set(null);
     try {
       const result = await this.transport.applyRuntimeConfigDraft(request);
       this._runtimeConfigDraftResult.set(result);
+      await this.refresh();
+      return (
+        result.outcome.status === 'completed' &&
+        result.outcome.result?.ok === true
+      );
+    } catch (error) {
+      this._error.set(storeErrorDetail(error));
+      return false;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async patchWakeTimeoutConfig(
+    request: RuntimeWakeTimeoutPatchRequest,
+  ): Promise<boolean> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._runtimeConfigDraftResult.set(null);
+    this._wakeTimeoutPatchResult.set(null);
+    try {
+      const result = await this.transport.patchWakeTimeoutConfig(request);
+      this._wakeTimeoutPatchResult.set(result);
       await this.refresh();
       return (
         result.outcome.status === 'completed' &&

@@ -115,6 +115,7 @@ describe('TopMenuComponent', () => {
             createResult: () => null,
             reloadResult: () => null,
             runtimeConfigDraftResult: () => null,
+            wakeTimeoutPatchResult: () => null,
             controlCapabilityState: () => 'unknown',
           } as unknown as AdminStore,
         },
