@@ -128,6 +128,7 @@ export interface LiveProfileCreateRequest {
 }
 
 export interface RustyViewDebugSnapshot {
+  readonly backendBaseUrl: string;
   readonly activeSessionId: string | null;
   readonly connectionStatus: string;
   readonly isGenerating: boolean;
@@ -146,6 +147,7 @@ export interface RustyViewDebugSnapshot {
 }
 
 interface RustyViewTestApi {
+  getBackendBaseUrl(): string;
   getActiveSessionId(): string | null;
   getConnectionStatus(): string;
   getIsGenerating(): boolean;
@@ -177,6 +179,7 @@ export const test = base.extend<{ live: LiveConversation }>({
 
 export class LiveConversation {
   readonly backendUrl = env('RV_LIVE_BACKEND_URL') ?? 'http://127.0.0.1:9347';
+  readonly appUrl = liveAppUrlForBackend(this.backendUrl);
   readonly sourceProfile = env('RV_LIVE_PROFILE') ?? 'tester';
   readonly targetProfile: string;
 
@@ -190,6 +193,7 @@ export class LiveConversation {
   private readonly visualChecks: VisualImpactEvidence[] = [];
   private readonly startedAt = Date.now();
   private readonly profileIsolation: LiveProfileIsolation;
+  private renderedBackendUrl: string | null = null;
   private profilePrepared = false;
   private traceStarted = false;
 
@@ -237,6 +241,7 @@ export class LiveConversation {
     await mkdir(this.artifactDir, { recursive: true });
     this.recordTimeline('fixture:start', {
       backendUrl: this.backendUrl,
+      appUrl: this.appUrl,
       targetProfile: this.targetProfile,
       baseUrl: env('BASE_URL') ?? '<playwright-default>',
     });
@@ -315,11 +320,16 @@ export class LiveConversation {
 
   async openAppAndSelectProfile(): Promise<void> {
     await this.ensureLiveProfileReady();
-    await this.page.goto('/');
-    this.recordTimeline('app:navigated', { url: this.page.url() });
+    await this.page.goto(this.appUrl);
+    this.recordTimeline('app:navigated', {
+      url: this.page.url(),
+      appUrl: this.appUrl,
+      intendedBackendUrl: canonicalBackendUrl(this.backendUrl),
+    });
     await expect(this.page.getByTestId('debug-shell')).toBeVisible({
       timeout: 10_000,
     });
+    await this.assertRenderedBackendMatchesFixture();
     await this.screenshot('00-app-loaded');
     await this.captureDebugSnapshot('00-app-loaded');
 
@@ -783,6 +793,7 @@ export class LiveConversation {
         return null;
       }
       return {
+        backendBaseUrl: api.getBackendBaseUrl(),
         activeSessionId: api.getActiveSessionId(),
         connectionStatus: api.getConnectionStatus(),
         isGenerating: api.getIsGenerating(),
@@ -830,6 +841,7 @@ export class LiveConversation {
     });
     this.recordTimeline('debug-snapshot:captured', {
       name,
+      backendBaseUrl: snapshot?.backendBaseUrl,
       rawEventCount: snapshot?.rawEventCount,
       streamingCharCount: snapshot?.streamingCharCount,
       messageCount: snapshot?.messageCount,
@@ -1188,6 +1200,8 @@ export class LiveConversation {
       environment: {
         baseUrl: env('BASE_URL') ?? null,
         backendUrl: this.backendUrl,
+        appUrl: this.appUrl,
+        renderedBackendUrl: this.renderedBackendUrl,
         sourceProfile: this.sourceProfile,
         targetProfile: this.targetProfile,
         profileIsolation: this.profileIsolation,
@@ -1202,6 +1216,7 @@ export class LiveConversation {
         name: entry.name,
         path: entry.path,
         capturedAtMs: entry.capturedAtMs,
+        backendBaseUrl: entry.snapshot?.backendBaseUrl,
         streamingCharCount: entry.snapshot?.streamingCharCount,
         rawEventCount: entry.snapshot?.rawEventCount,
         messageCount: entry.snapshot?.messageCount,
@@ -1232,6 +1247,8 @@ export class LiveConversation {
       '# Rusty View Live Scenario Summary',
       '',
       `- Backend: ${this.backendUrl}`,
+      `- Rendered backend: ${this.renderedBackendUrl ?? '<not captured>'}`,
+      `- App URL: ${this.appUrl}`,
       `- Source profile: ${this.sourceProfile}`,
       `- Requested profile: ${this.targetProfile}`,
       `- Profile isolation: ${
@@ -1249,6 +1266,38 @@ export class LiveConversation {
       ...this.summaryLines.map((line) => `- ${line}`),
       '',
     ].join('\n');
+  }
+
+  private async assertRenderedBackendMatchesFixture(): Promise<void> {
+    const expected = canonicalBackendUrl(this.backendUrl);
+    const renderedQueryBackend = canonicalBackendUrl(
+      await this.page.evaluate(
+        () => new URL(window.location.href).searchParams.get('api') ?? '',
+      ),
+    );
+    expect(
+      renderedQueryBackend,
+      'live rendered app must carry the same ?api backend as the fixture setup',
+    ).toBe(expected);
+
+    const renderedTransportBackend = canonicalBackendUrl(
+      await this.page.evaluate(() => {
+        const api = (window as BrowserWindowWithRustyView).__RUSTY_VIEW_TEST__;
+        return api?.getBackendBaseUrl() ?? '';
+      }),
+    );
+    expect(
+      renderedTransportBackend,
+      'live rendered app transport backend must match fixture setup backend',
+    ).toBe(expected);
+
+    this.renderedBackendUrl = renderedTransportBackend;
+    this.recordTimeline('app:backend-verified', {
+      backendUrl: expected,
+      renderedQueryBackend,
+      renderedTransportBackend,
+      currentUrl: this.page.url(),
+    });
   }
 }
 
@@ -1298,6 +1347,13 @@ export function liveProfileCreateRequest(input: {
   };
 }
 
+export function liveAppUrlForBackend(backendUrl: string): string {
+  const params = new URLSearchParams({
+    api: canonicalBackendUrl(backendUrl),
+  });
+  return `/?${params.toString()}`;
+}
+
 export function findSentUserMessage(
   messages: RustyViewDebugSnapshot['messages'],
   prompt: string,
@@ -1334,6 +1390,10 @@ function sanitizeProfileId(value: string): string {
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .replace(/-{2,}/g, '-');
+}
+
+function canonicalBackendUrl(value: string): string {
+  return value.trim().replace(/\/+$/, '');
 }
 
 function isDisabledFlag(value: string | undefined): boolean {

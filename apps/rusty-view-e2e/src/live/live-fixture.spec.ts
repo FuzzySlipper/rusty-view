@@ -4,6 +4,7 @@ import {
   assistantMessageStatesAfterUser,
   findSentUserMessage,
   isolatedLiveProfileId,
+  liveAppUrlForBackend,
   liveProfileIsolationPrefix,
   liveProfileCreateRequest,
   type RustyViewDebugSnapshot,
@@ -68,6 +69,12 @@ test('live profile isolation can be named or explicitly disabled', () => {
       profileIsolation: '0',
     }),
   ).toBeUndefined();
+});
+
+test('live app URL carries the fixture backend override into the rendered app', () => {
+  expect(liveAppUrlForBackend('http://127.0.0.1:9348/')).toBe(
+    '/?api=http%3A%2F%2F127.0.0.1%3A9348',
+  );
 });
 
 test('isolated profile create request uses live tester defaults without cloning history', () => {

@@ -178,6 +178,11 @@ export class ChatStore implements OnDestroy {
       : undefined;
   });
 
+  /** Backend origin resolved for this store's transport. Used by live UI evidence. */
+  backendBaseUrl(): string {
+    return this.transport.getConfig().baseUrl;
+  }
+
   // ---- profile / historical-session view state ----
   /** Profiles derived from the session list, ordered by recent activity. */
   readonly profiles = computed<readonly BrainProfile[]>(() =>

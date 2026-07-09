@@ -267,6 +267,7 @@ export class DebugShellComponent {
       getLastCursor: () => this.store.lastCursor(),
       getMessageCount: () => this.store.messages().length,
       getRawEventCount: () => this.store.rawEvents().length,
+      getBackendBaseUrl: () => this.store.backendBaseUrl(),
       getMessages: () =>
         this.store.messages().map((message) => ({
           id: message.id,
@@ -306,6 +307,7 @@ interface RustyViewTestApi {
   getLastCursor(): string | null;
   getMessageCount(): number;
   getRawEventCount(): number;
+  getBackendBaseUrl(): string;
   getMessages(): readonly {
     readonly id: string;
     readonly role: string;

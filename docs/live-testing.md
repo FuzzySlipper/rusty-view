@@ -75,6 +75,13 @@ RV_LIVE_PROFILE_ISOLATION=0
 RV_LIVE_MIN_STREAMING_MS=15000
 ```
 
+`RV_LIVE_BACKEND_URL` controls both sides of the live run: fixture/admin setup
+requests and the rendered browser app. The fixture opens the app with the
+supported `?api=<backend>` runtime override, records the rendered backend in
+`evidence-packet.json`, and fails early if the app's resolved transport backend
+does not match the fixture backend. This lets agents run the app from a broker
+or dev-server port while targeting the debug Rusty Crew service on `9348`.
+
 `RV_LIVE_PROFILE` names the existing source profile whose provider/tool defaults
 should be reused. When `RV_LIVE_RUN=1`, the live fixture isolates by default: it
 creates one fresh Rusty Crew profile/session per Playwright test through
