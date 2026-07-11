@@ -165,10 +165,10 @@ test.describe('external agent console @live-agent', () => {
     await page.goto(`/?api=${encodeURIComponent(backend)}`);
     await page.getByTestId('external-agents-tab').click();
     const search = page.getByLabel('Search loaded agent sessions');
-    await search.fill('5516');
+    await search.fill('5529');
     const row = page
       .getByTestId('external-agent-row')
-      .filter({ hasText: '#5516' })
+      .filter({ hasText: '#5529' })
       .first();
     await expect(row).toBeVisible({ timeout: 30_000 });
     await row.click();
@@ -217,6 +217,14 @@ test.describe('external agent console @live-agent', () => {
         'file_change',
       ),
     ).toBe('completed');
+    const aggregateDiff = page
+      .getByTestId('tool-call-block')
+      .filter({ hasText: 'Aggregate diff' })
+      .last();
+    await aggregateDiff.getByTestId('message-block-detail-toggle').click();
+    await expect(
+      aggregateDiff.getByTestId('message-block-detail-content'),
+    ).toContainText(temporaryPath);
     await inspectRawDiffEvent(page);
     await page.screenshot({
       path: testInfo.outputPath('fresh-plan-diff-raw-detail.png'),

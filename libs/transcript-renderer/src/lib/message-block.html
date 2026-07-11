@@ -174,6 +174,54 @@
     </div>
     } }
   </section>
+  } } @if (canLoadBlockDetail()) {
+  <div class="rv-block__debug-actions">
+    <button
+      type="button"
+      class="rv-block__debug-button"
+      data-testid="message-block-detail-toggle"
+      (click)="toggleBlockDetail()"
+      [attr.aria-expanded]="blockDetailOpen()"
+    >
+      {{ blockDetailOpen() ? 'Hide bounded detail' : 'Load bounded detail' }}
+    </button>
+  </div>
+  @if (blockDetailOpen()) {
+  <section
+    class="rv-block__debug-panel"
+    data-testid="message-block-detail-panel"
+  >
+    @if (blockDetailState(); as detailState) { @if (detailState.status ===
+    'loading') {
+    <div class="rv-block__debug-status">Loading bounded detail…</div>
+    } @else if (detailState.status === 'error') {
+    <div class="rv-block__debug-status rv-block__debug-status--error">
+      {{ detailState.message }}
+      <button
+        type="button"
+        class="rv-block__debug-button"
+        data-testid="message-block-detail-retry"
+        (click)="retryBlockDetail()"
+      >
+        Retry
+      </button>
+    </div>
+    } @else if (detailState.status === 'loaded') {
+    <div class="rv-block__debug-badges">
+      @if (detailState.detail.truncated) {
+      <span class="rv-block__debug-badge">truncated</span>
+      } @if (detailState.detail.redactedKeys.length > 0) {
+      <span class="rv-block__debug-badge">redacted</span>
+      }
+    </div>
+    <pre
+      class="rv-block__debug-json"
+      data-testid="message-block-detail-content"
+    >
+{{ detailState.detail.content }}</pre
+    >
+    } }
+  </section>
   } }
 </div>
 } @else if (isReasoning()) {

@@ -49,11 +49,14 @@ export type {
 } from './lib/render-mode-token';
 export {
   CHAT_CONTENT_RENDERERS,
+  MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
 } from './lib/content-renderers';
 export type {
   ChatContentRenderer,
   ChatContentRenderContext,
+  MessageBlockDetail,
+  MessageBlockDetailLoader,
   ToolCallDebugDetailLoader,
 } from './lib/content-renderers';
 

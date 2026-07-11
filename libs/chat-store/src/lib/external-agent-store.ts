@@ -231,14 +231,14 @@ export class ExternalAgentStore {
           const lastSequence = events.at(-1)?.sequenceId;
           if (lastSequence !== undefined)
             this.fleetCursors.set(runtime.runtimeId, lastSequence);
-          const threads = mergeThreads(listed.items, existing);
+          const knownThreads = mergeThreads(listed.items, existing);
           nextThreadCursors[runtime.runtimeId] = Object.hasOwn(
             previousThreadCursors,
             runtime.runtimeId,
           )
             ? (previousThreadCursors[runtime.runtimeId] ?? null)
             : listed.nextCursor;
-          const known = new Set(threads.map((thread) => thread.threadId));
+          const known = new Set(knownThreads.map((thread) => thread.threadId));
           const missingBoundIds = bindingFleet.bindings
             .filter(
               (binding) =>
@@ -260,16 +260,37 @@ export class ExternalAgentStore {
             ),
           );
           return {
+            runtimeId: runtime.runtimeId,
             events,
-            threads: mergeThreads(threads, recovered).map((thread) => ({
+            threads: mergeThreads(listed.items, recovered).map((thread) => ({
               runtimeId: runtime.runtimeId,
               thread,
             })),
           };
         }),
       );
-      this.threadCursors.set(nextThreadCursors);
-      this.runtimeThreads.set(runtimeData.flatMap((item) => item.threads));
+      this.threadCursors.update((current) =>
+        Object.fromEntries(
+          Object.entries(nextThreadCursors).map(([runtimeId, nextCursor]) => [
+            runtimeId,
+            Object.hasOwn(previousThreadCursors, runtimeId)
+              ? (current[runtimeId] ?? null)
+              : nextCursor,
+          ]),
+        ),
+      );
+      this.runtimeThreads.update((current) =>
+        runtimeData.flatMap((item) => {
+          const runtimeId = item.runtimeId;
+          const currentThreads = current
+            .filter((entry) => entry.runtimeId === runtimeId)
+            .map((entry) => entry.thread);
+          return mergeThreads(
+            item.threads.map((entry) => entry.thread),
+            currentThreads,
+          ).map((thread) => ({ runtimeId, thread }));
+        }),
+      );
       const knownFleetEventIds = new Set(
         previousFleetEvents.map((event) => event.eventId),
       );
@@ -433,11 +454,15 @@ export class ExternalAgentStore {
   async loadRawDetail(event: NormalizedExternalRuntimeEvent): Promise<void> {
     if (event.rawDetailRef == null) return;
     this.rawDetail.set(
-      await this.transport.external.rawDetail(
-        event.runtimeId,
-        event.rawDetailRef,
-      ),
+      await this.readRawDetail(event.runtimeId, event.rawDetailRef),
     );
+  }
+
+  async readRawDetail(
+    runtimeId: string,
+    detailId: string,
+  ): Promise<ExternalRuntimeRawDetail> {
+    return this.transport.external.rawDetail(runtimeId, detailId);
   }
 
   async loadMoreThreads(): Promise<void> {

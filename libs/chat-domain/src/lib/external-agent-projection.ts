@@ -218,14 +218,18 @@ function eventBlock(
     }
     case 'turn_lifecycle':
       if (payload.nativeMethod !== 'turn/diff/updated') return undefined;
-      return toolBlock(
+      return withExternalDetail(
+        toolBlock(
+          event,
+          'file_change',
+          'Aggregate diff',
+          payload.text ??
+            (event.rawDetailRef == null
+              ? 'Aggregate diff updated.'
+              : 'Bounded aggregate diff detail is available on demand.'),
+          status,
+        ),
         event,
-        'file_change',
-        'Aggregate diff',
-        event.rawDetailRef == null
-          ? 'Aggregate diff updated.'
-          : 'Aggregate diff updated. Inspect this event to load the bounded raw detail.',
-        status,
       );
     case 'mcp_activity':
     case 'dynamic_tool_activity':
@@ -347,6 +351,21 @@ function toolBlockValues(
       debugDetailId,
     },
   };
+}
+
+function withExternalDetail(
+  block: MessageBlock,
+  event: NormalizedExternalRuntimeEvent,
+): MessageBlock {
+  return event.rawDetailRef == null
+    ? block
+    : {
+        ...block,
+        metadata: {
+          boundedDetailRef: event.rawDetailRef,
+          externalRuntimeId: event.runtimeId,
+        },
+      };
 }
 
 function roleForItem(kind: string): MessageRole {

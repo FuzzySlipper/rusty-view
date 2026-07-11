@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ChatStore, ExternalAgentStore } from '@rusty-view/chat-store';
+import type { MessageBlock } from '@rusty-view/chat-domain';
 import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
@@ -17,6 +18,7 @@ import {
 import type { StreamStatusKind } from '@rusty-view/chat-components';
 import type { ChatCommandDescriptor } from '@rusty-view/protocol';
 import {
+  MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
   TranscriptViewportComponent,
   type MessageRevisionAction,
@@ -70,6 +72,24 @@ import {
       useFactory: (store: ChatStore) =>
         store.loadToolCallDebugDetail.bind(store),
       deps: [ChatStore],
+    },
+    {
+      provide: MESSAGE_BLOCK_DETAIL_LOADER,
+      useFactory:
+        (store: ExternalAgentStore) => async (block: MessageBlock) => {
+          const runtimeId = metadataString(block, 'externalRuntimeId');
+          const detailId = metadataString(block, 'boundedDetailRef');
+          if (runtimeId === undefined || detailId === undefined) {
+            throw new Error('Bounded detail reference is incomplete.');
+          }
+          const detail = await store.readRawDetail(runtimeId, detailId);
+          return {
+            content: formatExternalDetail(detail.json),
+            truncated: detail.truncated,
+            redactedKeys: detail.redactedKeys,
+          };
+        },
+      deps: [ExternalAgentStore],
     },
   ],
 })
@@ -341,6 +361,40 @@ function confirmCommand(message: string | undefined): Promise<boolean> {
     return Promise.resolve(globalThis.confirm(message ?? 'Run command?'));
   }
   return Promise.resolve(true);
+}
+
+function metadataString(block: MessageBlock, key: string): string | undefined {
+  const value = block.metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function formatExternalDetail(json: string): string {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return findDiffText(parsed) ?? JSON.stringify(parsed, null, 2);
+  } catch {
+    return json;
+  }
+}
+
+function findDiffText(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const diff = findDiffText(item);
+      if (diff !== undefined) return diff;
+    }
+    return undefined;
+  }
+  if (value === null || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ['diff', 'patch']) {
+    if (typeof record[key] === 'string') return record[key];
+  }
+  for (const nested of Object.values(record)) {
+    const diff = findDiffText(nested);
+    if (diff !== undefined) return diff;
+  }
+  return undefined;
 }
 
 interface RustyViewTestApi {

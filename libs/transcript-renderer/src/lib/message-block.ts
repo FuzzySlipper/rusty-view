@@ -28,8 +28,10 @@ import {
 } from './render-mode-token';
 import {
   CHAT_CONTENT_RENDERERS,
+  MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
   type ChatContentRenderContext,
+  type MessageBlockDetail,
 } from './content-renderers';
 
 type FormattedTextRenderMode = 'markdown' | 'sanitized-html';
@@ -44,6 +46,11 @@ type ToolDebugState =
   | { readonly status: 'loading' }
   | { readonly status: 'loaded'; readonly detail: ToolCallDebugDetail }
   | { readonly status: 'missing'; readonly message: string }
+  | { readonly status: 'error'; readonly message: string };
+type BlockDetailState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading' }
+  | { readonly status: 'loaded'; readonly detail: MessageBlockDetail }
   | { readonly status: 'error'; readonly message: string };
 
 const HTML_VOID_TAGS = new Set(['br', 'hr', 'img']);
@@ -124,9 +131,13 @@ export class MessageBlockComponent {
   private readonly toolDebugLoader = inject(TOOL_CALL_DEBUG_DETAIL_LOADER, {
     optional: true,
   });
+  private readonly blockDetailLoader = inject(MESSAGE_BLOCK_DETAIL_LOADER, {
+    optional: true,
+  });
   protected readonly renderMode = inject(TRANSCRIPT_TEXT_RENDER_MODE);
   protected readonly markdownPolicy = inject(TRANSCRIPT_MARKDOWN_POLICY);
   private lastToolDebugKey: string | undefined;
+  private lastBlockDetailKey: string | undefined;
 
   readonly block = input.required<MessageBlock>();
   readonly message = input<ChatMessage | undefined>(undefined);
@@ -141,6 +152,10 @@ export class MessageBlockComponent {
   protected readonly showRaw = signal(false);
   protected readonly toolDebugOpen = signal(false);
   protected readonly toolDebugState = signal<ToolDebugState>({
+    status: 'idle',
+  });
+  protected readonly blockDetailOpen = signal(false);
+  protected readonly blockDetailState = signal<BlockDetailState>({
     status: 'idle',
   });
 
@@ -226,6 +241,16 @@ export class MessageBlockComponent {
       this.toolDebugLoader !== null &&
       this.message()?.sessionId !== undefined &&
       this.toolDebugDetailId() !== undefined,
+  );
+
+  protected readonly blockDetailRef = computed(() => {
+    const value = this.block().metadata?.['boundedDetailRef'];
+    return typeof value === 'string' ? value : undefined;
+  });
+
+  protected readonly canLoadBlockDetail = computed(
+    () =>
+      this.blockDetailLoader !== null && this.blockDetailRef() !== undefined,
   );
 
   /** Attachment metadata, when this block represents an inline uploaded file. */
@@ -323,6 +348,14 @@ export class MessageBlockComponent {
       this.toolDebugState.set({ status: 'idle' });
       this.toolDebugOpen.set(false);
     });
+
+    effect(() => {
+      const nextKey = this.blockDetailRef();
+      if (nextKey === this.lastBlockDetailKey) return;
+      this.lastBlockDetailKey = nextKey;
+      this.blockDetailState.set({ status: 'idle' });
+      this.blockDetailOpen.set(false);
+    });
   }
 
   protected toggleExpand(): void {
@@ -346,6 +379,35 @@ export class MessageBlockComponent {
     if (!this.canInspectToolDebug()) return;
     this.toolDebugState.set({ status: 'idle' });
     void this.loadToolDebugDetail();
+  }
+
+  protected toggleBlockDetail(): void {
+    if (!this.canLoadBlockDetail()) return;
+    const nextOpen = !this.blockDetailOpen();
+    this.blockDetailOpen.set(nextOpen);
+    if (nextOpen && this.blockDetailState().status === 'idle') {
+      void this.loadBlockDetail();
+    }
+  }
+
+  protected retryBlockDetail(): void {
+    this.blockDetailState.set({ status: 'idle' });
+    void this.loadBlockDetail();
+  }
+
+  private async loadBlockDetail(): Promise<void> {
+    const loader = this.blockDetailLoader;
+    if (loader === null) return;
+    this.blockDetailState.set({ status: 'loading' });
+    try {
+      const detail = await loader(this.block(), this.message());
+      this.blockDetailState.set({ status: 'loaded', detail });
+    } catch (error) {
+      this.blockDetailState.set({
+        status: 'error',
+        message: errorMessage(error),
+      });
+    }
   }
 
   private async loadToolDebugDetail(): Promise<void> {

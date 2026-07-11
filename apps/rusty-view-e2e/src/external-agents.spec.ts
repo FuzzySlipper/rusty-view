@@ -34,6 +34,18 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         contentType: 'text/event-stream',
         body: ': connected\n\n',
       });
+    if (url.pathname.endsWith('/raw-details/detail-diff'))
+      return ok({
+        detailId: 'detail-diff',
+        runtimeId: 'runtime-1',
+        json: JSON.stringify({
+          method: 'turn/diff/updated',
+          params: { diff: 'diff --git a/src/app.ts b/src/app.ts' },
+        }),
+        originalSha256: 'diff-sha',
+        truncated: false,
+        redactedKeys: [],
+      });
     if (url.pathname.includes('/raw-details/'))
       return ok({
         detailId: 'detail-4',
@@ -108,7 +120,18 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     });
   await expect(page.locator('[data-block-kind="plan"]')).toBeVisible();
   await expect(page.locator('[data-block-kind="command"]')).toBeVisible();
-  await expect(page.locator('[data-block-kind="file_change"]')).toBeVisible();
+  await expect(
+    page.locator('[data-block-kind="file_change"]').filter({
+      hasText: 'File changes',
+    }),
+  ).toBeVisible();
+  const aggregateDiff = page
+    .getByTestId('tool-call-block')
+    .filter({ hasText: 'Aggregate diff' });
+  await aggregateDiff.getByTestId('message-block-detail-toggle').click();
+  await expect(
+    aggregateDiff.getByTestId('message-block-detail-content'),
+  ).toContainText('diff --git a/src/app.ts b/src/app.ts');
   await page
     .getByTestId('event-row')
     .filter({ hasText: 'unknown_native_notification' })
@@ -239,6 +262,12 @@ const events = [
       nativeMethod: 'future/event',
     }),
     rawDetailRef: 'detail-4',
+  },
+  {
+    ...externalEvent('6', 'turn_lifecycle', {
+      nativeMethod: 'turn/diff/updated',
+    }),
+    rawDetailRef: 'detail-diff',
   },
 ];
 function externalEvent(

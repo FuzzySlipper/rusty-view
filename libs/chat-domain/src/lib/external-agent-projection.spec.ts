@@ -65,6 +65,13 @@ describe('projectExternalAgentTranscript', () => {
       name: 'Aggregate diff',
       status: 'completed',
     });
+    expect(messages.at(-1)?.blocks[0]?.metadata).toEqual({
+      boundedDetailRef: 'detail-diff',
+      externalRuntimeId: 'runtime-1',
+    });
+    expect(messages.at(-1)?.blocks[0]?.content).toContain(
+      'available on demand',
+    );
   });
 
   it('bounds long turns by native item and coalesces text deltas', () => {

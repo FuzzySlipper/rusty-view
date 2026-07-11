@@ -92,6 +92,50 @@ describe('ExternalAgentStore', () => {
     ]);
   });
 
+  it('preserves a page loaded while an older refresh finishes', async () => {
+    const refreshPage = deferred<ReturnType<typeof page>>();
+    let firstPageReads = 0;
+    const listThreads = vi.fn(
+      async (_runtimeId: string, query?: { cursor?: string }) => {
+        if (query?.cursor === 'page-2') {
+          return page([thread('thread-2', 20)], 'page-3');
+        }
+        if (query?.cursor === 'page-3') {
+          return page([thread('thread-3', 30)], null);
+        }
+        firstPageReads += 1;
+        return firstPageReads === 1
+          ? page([thread('thread-1', 10)], 'page-2')
+          : refreshPage.promise;
+      },
+    );
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads,
+    });
+    await store.refresh();
+
+    const refresh = store.refresh();
+    await store.loadMoreThreads();
+    refreshPage.resolve(page([thread('thread-1', 11)], 'page-2'));
+    await refresh;
+
+    expect(store.threads().map((item) => item.threadId)).toEqual([
+      'thread-1',
+      'thread-2',
+    ]);
+    await store.loadMoreThreads();
+    expect(listThreads).toHaveBeenLastCalledWith('runtime-1', {
+      limit: 100,
+      cursor: 'page-3',
+    });
+    expect(store.threads().map((item) => item.threadId)).toEqual([
+      'thread-1',
+      'thread-2',
+      'thread-3',
+    ]);
+  });
+
   it('keeps selection and unread state qualified by runtime identity', async () => {
     const runtimes = [registration('runtime-1'), registration('runtime-2')];
     const store = setupStore({
@@ -208,6 +252,17 @@ function page(
   nextCursor: string | null,
 ) {
   return { items, nextCursor, backwardsCursor: null };
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 function registration(runtimeId: string): ExternalRuntimeRegistration {

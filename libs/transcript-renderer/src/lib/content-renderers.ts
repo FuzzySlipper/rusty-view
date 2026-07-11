@@ -40,3 +40,17 @@ export const TOOL_CALL_DEBUG_DETAIL_LOADER =
   new InjectionToken<ToolCallDebugDetailLoader>(
     'TOOL_CALL_DEBUG_DETAIL_LOADER',
   );
+
+export interface MessageBlockDetail {
+  readonly content: string;
+  readonly truncated: boolean;
+  readonly redactedKeys: readonly string[];
+}
+
+export type MessageBlockDetailLoader = (
+  block: MessageBlock,
+  message: ChatMessage | undefined,
+) => Promise<MessageBlockDetail>;
+
+export const MESSAGE_BLOCK_DETAIL_LOADER =
+  new InjectionToken<MessageBlockDetailLoader>('MESSAGE_BLOCK_DETAIL_LOADER');

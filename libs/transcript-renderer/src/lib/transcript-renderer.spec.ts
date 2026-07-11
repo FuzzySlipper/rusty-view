@@ -20,6 +20,7 @@ import {
 } from './render-mode-token';
 import {
   CHAT_CONTENT_RENDERERS,
+  MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
   type ChatContentRenderContext,
 } from './content-renderers';
@@ -245,6 +246,48 @@ describe('MessageBlockComponent', () => {
     expect(host.textContent).toContain('hash_args');
     expect(host.textContent).toContain('2048 original JSON chars');
     expect(host.textContent).toContain('"query": "amber"');
+  });
+
+  it('loads bounded detail directly from an attributed block', async () => {
+    const load = vi.fn(async () => ({
+      content: 'diff --git a/src/app.ts b/src/app.ts',
+      truncated: true,
+      redactedKeys: ['token'],
+    }));
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'file_change',
+        content: 'Bounded aggregate diff detail is available on demand.',
+        renderPolicy: 'collapsed',
+        metadata: {
+          boundedDetailRef: 'detail-diff',
+          externalRuntimeId: 'runtime-1',
+        },
+        tool: {
+          name: 'Aggregate diff',
+          status: 'completed',
+          summary: 'Aggregate diff updated',
+          reasonCode: undefined,
+          debugDetailId: undefined,
+        },
+      }),
+      [{ provide: MESSAGE_BLOCK_DETAIL_LOADER, useValue: load }],
+    );
+
+    const host: HTMLElement = fixture.nativeElement;
+    (
+      host.querySelector(
+        '[data-testid="message-block-detail-toggle"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(load).toHaveBeenCalledOnce();
+    expect(host.textContent).toContain('diff --git a/src/app.ts b/src/app.ts');
+    expect(host.textContent).toContain('truncated');
+    expect(host.textContent).toContain('redacted');
   });
 
   it('shows a calm message when raw tool-call debug details are missing', async () => {
