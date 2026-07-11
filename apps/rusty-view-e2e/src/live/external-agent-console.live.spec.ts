@@ -17,7 +17,7 @@ test.describe('external agent console @live-agent', () => {
     await page.goto(`/?api=${encodeURIComponent(backend)}`);
     await page.getByTestId('external-agents-tab').click();
 
-    const search = page.getByLabel('Search agent sessions');
+    const search = page.getByLabel('Search loaded agent sessions');
     await search.fill('5516');
     const primary = page
       .getByTestId('external-agent-row')
@@ -42,7 +42,9 @@ test.describe('external agent console @live-agent', () => {
     await page.getByTestId('message-input-field').fill(prompt);
     await page.getByTestId('send-message').click();
     const turnStatus = page.getByTestId('external-turn-status');
-    await expect(turnStatus).toContainText('active', { timeout: 45_000 });
+    await expect(turnStatus).toHaveAttribute('data-turn-phase', 'active', {
+      timeout: 45_000,
+    });
     await expect(turnStatus).toHaveAttribute('data-active-turn-id', /.+/);
     const primaryTurnId = await turnStatus.evaluate((element) =>
       element.getAttribute('data-active-turn-id'),
@@ -61,9 +63,20 @@ test.describe('external agent console @live-agent', () => {
       primaryTurnId ?? '',
       { timeout: 5 * 60_000 },
     );
-    await expect(turnStatus).toContainText('completed');
+    await expect(turnStatus).toHaveAttribute('data-turn-phase', 'completed');
     await revealTranscriptBlock(page, 'pnpm exec prettier', 'command');
     await revealCertificationFileChange(page);
+    expect(await revealTranscriptBlock(page, 'Plan updated', 'plan')).toBe(
+      'completed',
+    );
+    expect(
+      await revealTranscriptBlock(
+        page,
+        'Aggregate diff updated',
+        'file_change',
+      ),
+    ).toBe('completed');
+    await inspectRawDiffEvent(page);
     await page.screenshot({
       path: testInfo.outputPath('01-primary-completed.png'),
       fullPage: true,
@@ -86,7 +99,8 @@ test.describe('external agent console @live-agent', () => {
       timeout: 45_000,
     });
     await page.getByTestId('external-interrupt').click();
-    await expect(page.getByTestId('external-turn-status')).toContainText(
+    await expect(page.getByTestId('external-turn-status')).toHaveAttribute(
+      'data-turn-phase',
       'interrupted',
       { timeout: 60_000 },
     );
@@ -121,24 +135,36 @@ test.describe('external agent console @live-agent', () => {
       primaryThreadId ?? '',
     );
     await recovered.click();
-    await expect(page.getByTestId('external-turn-status')).toContainText(
+    await expect(page.getByTestId('external-turn-status')).toHaveAttribute(
+      'data-turn-phase',
       'completed',
       { timeout: 30_000 },
     );
     await revealCertificationFileChange(page);
+    expect(await revealTranscriptBlock(page, 'Plan updated', 'plan')).toBe(
+      'completed',
+    );
+    expect(
+      await revealTranscriptBlock(
+        page,
+        'Aggregate diff updated',
+        'file_change',
+      ),
+    ).toBe('completed');
+    await inspectRawDiffEvent(page);
     await page.screenshot({
       path: testInfo.outputPath('03-refresh-recovered.png'),
       fullPage: true,
     });
   });
 
-  test('recovers the persisted certification thread and transcript', async ({
+  test('projects a fresh real plan and aggregate diff with raw detail', async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(5 * 60_000);
     await page.goto(`/?api=${encodeURIComponent(backend)}`);
     await page.getByTestId('external-agents-tab').click();
-    const search = page.getByLabel('Search agent sessions');
+    const search = page.getByLabel('Search loaded agent sessions');
     await search.fill('5516');
     const row = page
       .getByTestId('external-agent-row')
@@ -146,11 +172,63 @@ test.describe('external agent console @live-agent', () => {
       .first();
     await expect(row).toBeVisible({ timeout: 30_000 });
     await row.click();
-    await expect(page.getByTestId('external-turn-status')).toBeVisible();
-    await revealTranscriptBlock(page, 'pnpm exec prettier', 'command');
-    await revealCertificationFileChange(page);
+    const status = page.getByTestId('external-turn-status');
+    await expect(status).toBeVisible();
+    const temporaryPath = `.rv-live-projection-${Date.now()}.txt`;
+    await page
+      .getByTestId('message-input-field')
+      .fill(
+        [
+          'Run a non-destructive live UI projection check.',
+          'Use update_plan with at least two steps.',
+          `Use the apply_patch tool, not a shell command, to create ${temporaryPath} under /home/dev/rusty-view with one short line. Inspect it, then use apply_patch again to delete it before finishing.`,
+          'Do not modify Den, commit, or push.',
+          'Finish with the exact marker RV_FRESH_DIFF_COMPLETE.',
+        ].join(' '),
+      );
+    await page.getByTestId('send-message').click();
+    await expect(status).toHaveAttribute('data-turn-phase', 'active', {
+      timeout: 45_000,
+    });
+    const turnId = await status.evaluate((element) =>
+      element.getAttribute('data-active-turn-id'),
+    );
+    expect(turnId).toBeTruthy();
+    await expect(status).not.toHaveAttribute(
+      'data-active-turn-id',
+      turnId ?? '',
+      { timeout: 4 * 60_000 },
+    );
+    await expect(status).toHaveAttribute('data-turn-phase', 'completed');
+    await expect(page.getByTestId('transcript-shell')).toContainText(
+      'RV_FRESH_DIFF_COMPLETE',
+    );
+    expect(await revealTranscriptBlock(page, 'Plan updated', 'plan')).toBe(
+      'completed',
+    );
     await page.screenshot({
-      path: testInfo.outputPath('persisted-thread.png'),
+      path: testInfo.outputPath('fresh-plan-completed.png'),
+      fullPage: true,
+    });
+    expect(
+      await revealTranscriptBlock(
+        page,
+        'Aggregate diff updated',
+        'file_change',
+      ),
+    ).toBe('completed');
+    await inspectRawDiffEvent(page);
+    await page.screenshot({
+      path: testInfo.outputPath('fresh-plan-diff-raw-detail.png'),
+      fullPage: true,
+    });
+    await inspectRawNativeEvent(
+      page,
+      'thread_lifecycle',
+      'thread/status/changed',
+    );
+    await page.screenshot({
+      path: testInfo.outputPath('fresh-unprojected-raw-detail.png'),
       fullPage: true,
     });
   });
@@ -168,7 +246,7 @@ async function revealTranscriptBlock(
   page: Page,
   query: string,
   blockKind: string,
-): Promise<void> {
+): Promise<string | null> {
   const searchInput = page.getByTestId('transcript-search-input');
   if (!(await searchInput.isVisible())) {
     await page.getByTestId('transcript-search-toggle').click();
@@ -177,11 +255,66 @@ async function revealTranscriptBlock(
   await expect(page.getByTestId('transcript-search-status')).not.toContainText(
     '0 results',
   );
-  const block = page.locator(`[data-block-kind="${blockKind}"]`).first();
-  for (let index = 0; index < 12 && (await block.count()) === 0; index++) {
+  const blocks = page
+    .locator(`[data-block-kind="${blockKind}"]`)
+    .filter({ hasText: query });
+  for (let searchIndex = 0; searchIndex < 20; searchIndex++) {
+    const status = await blocks.evaluateAll((elements) => {
+      const viewport = document.querySelector(
+        '[data-testid="transcript-viewport"]',
+      );
+      if (viewport === null) return undefined;
+      const clip = viewport.getBoundingClientRect();
+      const visible = elements.find((element) => {
+        const box = element.getBoundingClientRect();
+        return (
+          box.bottom > clip.top &&
+          box.top < clip.bottom &&
+          box.right > clip.left &&
+          box.left < clip.right
+        );
+      });
+      return visible
+        ?.closest('[data-message-status]')
+        ?.getAttribute('data-message-status');
+    });
+    if (status !== undefined) {
+      return status;
+    }
     await page.getByTestId('transcript-search-next').click();
+    // Search navigation and virtual-scroll materialization settle asynchronously.
+    // eslint-disable-next-line playwright/no-wait-for-timeout
     await page.waitForTimeout(100);
   }
-  await expect(block).toBeVisible({ timeout: 30_000 });
-  await expect(block).toBeInViewport();
+  throw new Error(
+    `No in-viewport ${blockKind} block containing ${JSON.stringify(query)} was materialized.`,
+  );
+}
+
+async function inspectRawDiffEvent(page: Page): Promise<void> {
+  await inspectRawNativeEvent(page, 'turn_lifecycle', 'turn/diff/updated');
+}
+
+async function inspectRawNativeEvent(
+  page: Page,
+  kind: string,
+  nativeMethod: string,
+): Promise<void> {
+  const events = page.locator(
+    `[data-testid="event-row"][data-event-kind="${kind}"]`,
+  );
+  for (let index = (await events.count()) - 1; index >= 0; index--) {
+    await events.nth(index).click();
+    const detail = page.getByTestId('event-inspector-detail');
+    if ((await detail.textContent())?.includes(nativeMethod)) {
+      await page.getByTestId('external-raw-detail').click();
+      await expect(page.getByTestId('external-raw-detail-view')).toContainText(
+        nativeMethod,
+      );
+      return;
+    }
+  }
+  throw new Error(
+    `No real ${nativeMethod} event was available for raw inspection.`,
+  );
 }

@@ -121,11 +121,15 @@
   max-width: 190px;
 }
 .rv-debug__external-raw {
+  box-sizing: border-box;
+  max-width: 100%;
   max-height: 220px;
   margin: 0;
   overflow: auto;
   padding: var(--rv-space-sm);
   border-top: 1px solid var(--rv-color-border);
+  overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: pre-wrap;
 }
 

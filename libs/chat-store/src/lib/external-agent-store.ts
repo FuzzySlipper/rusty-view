@@ -49,6 +49,9 @@ export class ExternalAgentStore {
   private stream: ExternalRuntimeEventStream | undefined;
   private polling = false;
   private readonly fleetCursors = new Map<string, number>();
+  private readonly threadCursors = signal<
+    Readonly<Record<string, string | null>>
+  >({});
   private readonly seen = signal<Readonly<Record<string, number>>>({});
 
   readonly runtimes = signal<readonly ExternalRuntimeRegistration[]>([]);
@@ -65,11 +68,19 @@ export class ExternalAgentStore {
   readonly events = signal<readonly NormalizedExternalRuntimeEvent[]>([]);
   readonly selectedRuntimeId = signal<string | undefined>(undefined);
   readonly selectedThreadId = signal<string | undefined>(undefined);
+  readonly selectedSessionKey = computed(() => {
+    const runtimeId = this.selectedRuntimeId();
+    const threadId = this.selectedThreadId();
+    return runtimeId === undefined || threadId === undefined
+      ? undefined
+      : sessionKey(runtimeId, threadId);
+  });
   readonly selectedThread = signal<ExternalThreadProjection | undefined>(
     undefined,
   );
   readonly loading = signal(false);
   readonly pending = signal(false);
+  readonly loadingMore = signal(false);
   readonly error = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
   readonly composerMode = signal<ExternalComposerMode>('auto');
@@ -81,7 +92,7 @@ export class ExternalAgentStore {
     const bindings = this.bindings();
     const interactions = this.interactions();
     const events = this.fleetEvents();
-    const selected = this.selectedThreadId();
+    const selected = this.selectedSessionKey();
     const seen = this.seen();
     return this.runtimeThreads().flatMap(({ runtimeId, thread }) => {
       const runtime = this.runtimes().find(
@@ -94,14 +105,13 @@ export class ExternalAgentStore {
           item.nativeThreadId === thread.threadId,
       );
       const controller = controllers.get(runtime.runtimeId);
-      const key = `${runtime.runtimeId}:${thread.threadId}`;
+      const key = sessionKey(runtime.runtimeId, thread.threadId);
       const phase = latestExternalTurnPhase(
         events,
         runtime.runtimeId,
         thread.threadId,
       );
-      const unread =
-        selected !== thread.threadId && (seen[key] ?? 0) < thread.updatedAt;
+      const unread = selected !== key && (seen[key] ?? 0) < thread.updatedAt;
       const needsAttention =
         interactions.some(
           (item) =>
@@ -134,6 +144,10 @@ export class ExternalAgentStore {
         item.runtimeId === runtimeId && item.nativeThreadId === threadId,
     );
   });
+
+  readonly hasMoreThreads = computed(() =>
+    Object.values(this.threadCursors()).some((cursor) => cursor !== null),
+  );
 
   readonly selectedInteractions = computed(() => {
     const runtimeId = this.selectedRuntimeId();
@@ -187,14 +201,21 @@ export class ExternalAgentStore {
       const activeRuntimeIds = new Set(
         fleet.runtimes.map((runtime) => runtime.runtimeId),
       );
+      const previousThreadCursors = this.threadCursors();
+      const nextThreadCursors: Record<string, string | null> = {};
       for (const runtimeId of this.fleetCursors.keys()) {
         if (!activeRuntimeIds.has(runtimeId))
           this.fleetCursors.delete(runtimeId);
       }
       const runtimeData = await Promise.all(
         fleet.runtimes.map(async (runtime) => {
+          const existing = this.runtimeThreads()
+            .filter((item) => item.runtimeId === runtime.runtimeId)
+            .map((item) => item.thread);
           const [listed, events] = await Promise.all([
-            this.listAllThreads(runtime.runtimeId),
+            this.transport.external.listThreads(runtime.runtimeId, {
+              limit: 100,
+            }),
             this.listAllEvents(
               runtime.runtimeId,
               this.fleetCursors.get(runtime.runtimeId),
@@ -203,7 +224,14 @@ export class ExternalAgentStore {
           const lastSequence = events.at(-1)?.sequenceId;
           if (lastSequence !== undefined)
             this.fleetCursors.set(runtime.runtimeId, lastSequence);
-          const known = new Set(listed.map((thread) => thread.threadId));
+          const threads = mergeThreads(listed.items, existing);
+          nextThreadCursors[runtime.runtimeId] = Object.hasOwn(
+            previousThreadCursors,
+            runtime.runtimeId,
+          )
+            ? (previousThreadCursors[runtime.runtimeId] ?? null)
+            : listed.nextCursor;
+          const known = new Set(threads.map((thread) => thread.threadId));
           const missingBoundIds = bindingFleet.bindings
             .filter(
               (binding) =>
@@ -226,13 +254,14 @@ export class ExternalAgentStore {
           );
           return {
             events,
-            threads: [...listed, ...recovered].map((thread) => ({
+            threads: mergeThreads(threads, recovered).map((thread) => ({
               runtimeId: runtime.runtimeId,
               thread,
             })),
           };
         }),
       );
+      this.threadCursors.set(nextThreadCursors);
       this.runtimeThreads.set(runtimeData.flatMap((item) => item.threads));
       const knownFleetEventIds = new Set(
         previousFleetEvents.map((event) => event.eventId),
@@ -304,10 +333,15 @@ export class ExternalAgentStore {
 
   async send(text: string): Promise<void> {
     const binding = this.selectedBinding();
-    if (binding === undefined)
-      throw new Error('Selected external thread has no Crew binding');
+    if (binding === undefined) {
+      this.error.set(
+        'Send failed: selected external thread has no Crew binding.',
+      );
+      return;
+    }
     this.pending.set(true);
     try {
+      this.error.set(undefined);
       const mode = this.composerMode();
       const activeTurnId = this.activeTurnId();
       if (mode === 'steer' || (mode === 'auto' && activeTurnId !== undefined)) {
@@ -332,6 +366,8 @@ export class ExternalAgentStore {
         await this.transport.external.sendMessage(binding.bindingId, request);
       }
       await this.refreshSelectedEvents();
+    } catch (error) {
+      this.error.set(`Send failed: ${errorMessage(error)}`);
     } finally {
       this.pending.set(false);
     }
@@ -343,11 +379,14 @@ export class ExternalAgentStore {
     if (binding?.nativeThreadId == null || turnId === undefined) return;
     this.pending.set(true);
     try {
+      this.error.set(undefined);
       await this.transport.external.submitControl(binding.bindingId, {
         kind: 'interrupt_turn',
         expectedNativeTurnId: turnId,
         payload: { threadId: binding.nativeThreadId, turnId },
       });
+    } catch (error) {
+      this.error.set(`Interrupt failed: ${errorMessage(error)}`);
     } finally {
       this.pending.set(false);
     }
@@ -377,6 +416,60 @@ export class ExternalAgentStore {
         event.rawDetailRef,
       ),
     );
+  }
+
+  async loadMoreThreads(): Promise<void> {
+    if (this.loadingMore()) return;
+    const cursors = this.threadCursors();
+    const pending = Object.entries(cursors).filter(
+      (entry): entry is [string, string] => entry[1] !== null,
+    );
+    if (pending.length === 0) return;
+    this.loadingMore.set(true);
+    try {
+      const pages = await Promise.all(
+        pending.map(async ([runtimeId, cursor]) => ({
+          runtimeId,
+          page: await this.transport.external.listThreads(runtimeId, {
+            limit: 100,
+            cursor,
+          }),
+        })),
+      );
+      this.runtimeThreads.update((current) => {
+        let next = [...current];
+        for (const { runtimeId, page } of pages) {
+          const otherRuntimes = next.filter(
+            (item) => item.runtimeId !== runtimeId,
+          );
+          const runtimeThreads = next
+            .filter((item) => item.runtimeId === runtimeId)
+            .map((item) => item.thread);
+          next = [
+            ...otherRuntimes,
+            ...mergeThreads(runtimeThreads, page.items).map((thread) => ({
+              runtimeId,
+              thread,
+            })),
+          ];
+        }
+        return next;
+      });
+      this.threadCursors.update((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          pages.map(({ runtimeId, page }) => [
+            runtimeId,
+            page.nextCursor === current[runtimeId] ? null : page.nextCursor,
+          ]),
+        ),
+      }));
+      this.error.set(undefined);
+    } catch (error) {
+      this.error.set(`Loading more sessions failed: ${errorMessage(error)}`);
+    } finally {
+      this.loadingMore.set(false);
+    }
   }
 
   private startStream(runtimeId: string, cursor?: number): void {
@@ -434,23 +527,6 @@ export class ExternalAgentStore {
     });
   }
 
-  private async listAllThreads(
-    runtimeId: string,
-  ): Promise<ExternalThreadProjection[]> {
-    const threads: ExternalThreadProjection[] = [];
-    let cursor: string | undefined;
-    for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
-      const page = await this.transport.external.listThreads(runtimeId, {
-        limit: 100,
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-      threads.push(...page.items);
-      if (page.nextCursor == null || page.nextCursor === cursor) break;
-      cursor = page.nextCursor;
-    }
-    return threads;
-  }
-
   private async listAllEvents(
     runtimeId: string,
     initialAfter?: number,
@@ -470,6 +546,28 @@ export class ExternalAgentStore {
     }
     return events;
   }
+}
+
+export function sessionKey(runtimeId: string, threadId: string): string {
+  return `${runtimeId}:${threadId}`;
+}
+
+export function mergeThreads(
+  preferred: readonly ExternalThreadProjection[],
+  additional: readonly ExternalThreadProjection[],
+): ExternalThreadProjection[] {
+  const seen = new Set(preferred.map((thread) => thread.threadId));
+  const merged = [...preferred];
+  for (const thread of additional) {
+    if (seen.has(thread.threadId)) continue;
+    seen.add(thread.threadId);
+    merged.push(thread);
+  }
+  return merged;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function latestExternalTurnPhase(

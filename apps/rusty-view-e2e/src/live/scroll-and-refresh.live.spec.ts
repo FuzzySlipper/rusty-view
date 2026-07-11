@@ -7,19 +7,32 @@ test('scroll interaction during a real streaming turn leaves visual evidence @li
   await live.requireLiveRun();
   await live.openAppAndSelectProfile();
 
-  const before = await live.assistantStateCount();
-  await live.sendPrompt(
-    [
-      'Live UI scroll-while-streaming verification:',
-      'Write a long, structured analysis of failure modes in virtualized chat transcripts while assistant text streams in.',
-      'Cover scroll anchoring, tail-follow behavior, streamed reasoning blocks, tool-call rows, late completion events, and refresh recovery.',
-      'Use at least 14 numbered sections with concrete examples and tradeoffs.',
-    ].join('\n'),
-  );
+  const prompt = [
+    'Live UI scroll-while-streaming verification:',
+    'Do not call tools, inspect files, or modify anything. Respond with text only.',
+    'Write a long, structured analysis of failure modes in virtualized chat transcripts while assistant text streams in.',
+    'Cover scroll anchoring, tail-follow behavior, streamed reasoning blocks, tool-call rows, late completion events, and refresh recovery.',
+    'Use at least 14 numbered sections with concrete examples and tradeoffs.',
+  ].join('\n');
+  const beforeUsers = await live.userStateCount();
+  await live.sendPrompt(prompt);
   await live.screenshot('scroll-streaming-prompt-sent');
 
-  const assistant = await live.waitForNextAssistantMessage(before, 180_000);
-  await live.waitForVisibleAssistantContent(assistant, 60_000);
+  const sentUser = await live.waitForSentUserMessage(
+    prompt,
+    beforeUsers,
+    180_000,
+  );
+  let assistant = await live.waitForNextAssistantMessageAfterUser(
+    sentUser.id,
+    180_000,
+  );
+  assistant = await live.waitForVisibleAssistantContentAfterUser(
+    sentUser.id,
+    (await assistant.getAttribute('data-message-id')) ?? undefined,
+    180_000,
+  );
+  await expect(assistant).toHaveAttribute('data-message-status', 'streaming');
 
   await live.expectVisibleImpact(
     'scroll-during-real-streaming',
@@ -35,7 +48,7 @@ test('scroll interaction during a real streaming turn leaves visual evidence @li
     },
   );
 
-  await live.waitForAssistantCompletedAfter(before, 360_000);
+  await live.waitForAssistantCompletedAfterUser(sentUser.id, 360_000);
   await live.screenshot('scroll-streaming-assistant-complete');
   await live.captureDebugSnapshot('scroll-streaming-assistant-complete');
   live.note(

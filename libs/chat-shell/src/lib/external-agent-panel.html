@@ -12,8 +12,8 @@
   <input
     class="rv-agents__search"
     type="search"
-    placeholder="Search sessions"
-    aria-label="Search agent sessions"
+    placeholder="Search loaded sessions"
+    aria-label="Search loaded agent sessions"
     [value]="query()"
     (input)="updateQuery($event)"
   />
@@ -26,7 +26,7 @@
       type="button"
       class="rv-agent"
       data-testid="external-agent-row"
-      [class.rv-agent--selected]="store.selectedThreadId() === session.thread.threadId"
+      [class.rv-agent--selected]="store.selectedSessionKey() === session.key"
       [attr.data-runtime-id]="session.runtime.runtimeId"
       [attr.data-thread-id]="session.thread.threadId"
       [attr.data-status]="session.phase ?? session.thread.status"
@@ -59,4 +59,14 @@
     </div>
     }
   </div>
+  @if (store.hasMoreThreads()) {
+  <button
+    type="button"
+    data-testid="external-agent-load-more"
+    [disabled]="store.loadingMore()"
+    (click)="store.loadMoreThreads()"
+  >
+    {{ store.loadingMore() ? 'Loading…' : 'Load more sessions' }}
+  </button>
+  }
 </div>

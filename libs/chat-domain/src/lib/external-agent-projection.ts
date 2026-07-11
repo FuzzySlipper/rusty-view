@@ -16,6 +16,7 @@ export function projectExternalAgentTranscript(
 ): readonly ChatMessage[] {
   const messages: ChatMessage[] = [];
   const knownItems = new Set<string>();
+  const terminalByTurn = terminalStatusesByTurn(events);
   if (thread !== undefined) {
     for (const turn of thread.turns) {
       for (const item of turn.items) {
@@ -29,7 +30,7 @@ export function projectExternalAgentTranscript(
             roleForItem(item.kind),
             unixDate(turn.startedAt ?? thread.updatedAt),
             [blockForItem(item.itemId, item.kind, content, item.status)],
-            item.status === 'failed' ? 'error' : 'completed',
+            messageStatus(item.status),
             {
               nativeThreadId: thread.threadId,
               nativeTurnId: turn.turnId,
@@ -58,9 +59,12 @@ export function projectExternalAgentTranscript(
   }
   for (const [key, group] of grouped) {
     const first = group[0];
-    const last = group[group.length - 1];
-    if (first === undefined || last === undefined) continue;
-    const blocks = blocksForGroup(group);
+    if (first === undefined) continue;
+    const status = terminalStatus(
+      group,
+      terminalByTurn.get(first.nativeTurnId ?? ''),
+    );
+    const blocks = blocksForGroup(group, status);
     if (blocks.length === 0) continue;
     messages.push(
       buildMessage(
@@ -70,7 +74,7 @@ export function projectExternalAgentTranscript(
         'assistant',
         first.createdAt,
         blocks,
-        terminalStatus(last),
+        status,
         {
           runtimeId: first.runtimeId,
           nativeThreadId: first.nativeThreadId,
@@ -84,6 +88,7 @@ export function projectExternalAgentTranscript(
 
 function blocksForGroup(
   events: readonly NormalizedExternalRuntimeEvent[],
+  messageStatus: ChatMessage['status'],
 ): MessageBlock[] {
   const first = events[0];
   if (first === undefined) return [];
@@ -137,16 +142,27 @@ function blocksForGroup(
           ),
         ];
   }
+  if (first.kind === 'turn_lifecycle') {
+    const latestDiff = events
+      .filter((event) => event.payload.nativeMethod === 'turn/diff/updated')
+      .at(-1);
+    const block =
+      latestDiff === undefined
+        ? undefined
+        : eventBlock(latestDiff, messageStatus);
+    return block === undefined ? [] : [block];
+  }
   return events
-    .map(eventBlock)
+    .map((event) => eventBlock(event, messageStatus))
     .filter((block): block is MessageBlock => block !== undefined);
 }
 
 function eventBlock(
   event: NormalizedExternalRuntimeEvent,
+  messageStatus: ChatMessage['status'],
 ): MessageBlock | undefined {
   const payload = event.payload;
-  const status = toolStatus(payload.status);
+  const status = toolStatus(payload.status, messageStatus);
   switch (event.kind) {
     case 'assistant_text_delta':
       return simpleBlock(event.eventId, 'text', payload.text ?? '');
@@ -170,16 +186,38 @@ function eventBlock(
         payload.output ?? payload.cwd ?? '',
         status,
       );
-    case 'file_activity':
+    case 'file_activity': {
+      const changes = payload.fileChanges ?? [];
       return toolBlock(
         event,
         'file_change',
         'File changes',
-        (payload.fileChanges ?? [])
-          .map((change) =>
-            [change.status, change.kind, change.path].filter(Boolean).join(' '),
-          )
-          .join('\n'),
+        [
+          ...changes
+            .slice(0, 100)
+            .map((change) =>
+              [change.status, change.kind, change.path]
+                .filter(Boolean)
+                .join(' '),
+            ),
+          ...(changes.length > 100
+            ? [
+                `... ${changes.length - 100} more changes; inspect the event for full detail.`,
+              ]
+            : []),
+        ].join('\n'),
+        status,
+      );
+    }
+    case 'turn_lifecycle':
+      if (payload.nativeMethod !== 'turn/diff/updated') return undefined;
+      return toolBlock(
+        event,
+        'file_change',
+        'Aggregate diff',
+        event.rawDetailRef == null
+          ? 'Aggregate diff updated.'
+          : 'Aggregate diff updated. Inspect this event to load the bounded raw detail.',
         status,
       );
     case 'mcp_activity':
@@ -312,22 +350,64 @@ function roleForItem(kind: string): MessageRole {
       : 'assistant';
 }
 
-function toolStatus(status: string | undefined): ToolBlockStatus {
+function toolStatus(
+  status: string | undefined,
+  fallbackMessageStatus: ChatMessage['status'] = 'streaming',
+): ToolBlockStatus {
   if (status === 'failed' || status === 'error') return 'failed';
   if (status === 'completed' || status === 'success') return 'completed';
   if (status === 'started') return 'started';
+  if (fallbackMessageStatus === 'completed') return 'completed';
+  if (fallbackMessageStatus === 'error') return 'failed';
   return 'running';
 }
 
 function terminalStatus(
-  event: NormalizedExternalRuntimeEvent,
+  events: readonly NormalizedExternalRuntimeEvent[],
+  turnStatus: ChatMessage['status'] | undefined,
 ): ChatMessage['status'] {
-  if (event.kind !== 'turn_lifecycle') return 'streaming';
-  if (event.payload.status === 'failed') return 'error';
-  return event.payload.status === 'completed' ||
-    event.payload.status === 'interrupted'
-    ? 'completed'
-    : 'streaming';
+  let latest: { sequenceId: number; status: ChatMessage['status'] } | undefined;
+  for (const event of events) {
+    const status = messageStatus(event.payload.status);
+    if (
+      status !== 'streaming' &&
+      (latest === undefined || event.sequenceId > latest.sequenceId)
+    ) {
+      latest = { sequenceId: event.sequenceId, status };
+    }
+  }
+  return latest?.status ?? turnStatus ?? 'streaming';
+}
+
+function terminalStatusesByTurn(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): ReadonlyMap<string, ChatMessage['status']> {
+  const latest = new Map<
+    string,
+    { readonly sequenceId: number; readonly status: ChatMessage['status'] }
+  >();
+  for (const event of events) {
+    if (event.kind !== 'turn_lifecycle' || event.nativeTurnId == null) continue;
+    const status = messageStatus(event.payload.status);
+    if (status === 'streaming') continue;
+    const previous = latest.get(event.nativeTurnId);
+    if (previous === undefined || event.sequenceId > previous.sequenceId) {
+      latest.set(event.nativeTurnId, { sequenceId: event.sequenceId, status });
+    }
+  }
+  return new Map([...latest].map(([turnId, value]) => [turnId, value.status]));
+}
+
+function messageStatus(status: string | undefined): ChatMessage['status'] {
+  if (status === 'failed' || status === 'error') return 'error';
+  if (
+    status === 'completed' ||
+    status === 'success' ||
+    status === 'interrupted'
+  ) {
+    return 'completed';
+  }
+  return 'streaming';
 }
 
 function unixDate(value: number): string {

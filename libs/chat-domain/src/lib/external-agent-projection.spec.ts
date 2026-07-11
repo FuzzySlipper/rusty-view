@@ -27,6 +27,20 @@ describe('projectExternalAgentTranscript', () => {
       event('5', 'unknown_native_notification', {
         nativeMethod: 'future/event',
       }),
+      event('6', 'assistant_text_delta', {
+        nativeMethod: 'item/agentMessage/delta',
+        text: 'Done',
+      }),
+      {
+        ...event('7', 'turn_lifecycle', {
+          nativeMethod: 'turn/diff/updated',
+        }),
+        rawDetailRef: 'detail-diff',
+      },
+      event('8', 'turn_lifecycle', {
+        nativeMethod: 'turn/completed',
+        status: 'completed',
+      }),
     ];
 
     const messages = projectExternalAgentTranscript(undefined, events);
@@ -39,9 +53,18 @@ describe('projectExternalAgentTranscript', () => {
       'file_change',
       'reasoning',
       'debug',
+      'text',
+      'file_change',
     ]);
     expect(messages[1]?.blocks[0]?.tool?.status).toBe('completed');
     expect(messages[2]?.blocks[0]?.content).toContain('src/app.ts');
+    expect(messages.every((message) => message.status === 'completed')).toBe(
+      true,
+    );
+    expect(messages.at(-1)?.blocks[0]?.tool).toMatchObject({
+      name: 'Aggregate diff',
+      status: 'completed',
+    });
   });
 
   it('bounds long turns by native item and coalesces text deltas', () => {
@@ -71,8 +94,8 @@ function event(
     sequenceId: Number(eventId),
     createdAt: '2026-07-11T00:00:00Z',
     kind,
-    nativeThreadId: `thread-${eventId}`,
-    nativeTurnId: `turn-${eventId}`,
+    nativeThreadId: 'thread-1',
+    nativeTurnId: 'turn-1',
     payload,
   };
 }

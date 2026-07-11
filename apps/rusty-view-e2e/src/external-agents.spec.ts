@@ -3,6 +3,8 @@ import { expect, test } from '@playwright/test';
 test('external agent fleet, transcript activity, interactions, and controls are visible', async ({
   page,
 }, testInfo) => {
+  let interactionResolution: unknown;
+  let rejectMessages = false;
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -57,13 +59,25 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         status: 'applied',
         updatedAt: '2026-07-11T00:00:01Z',
       });
-    if (url.pathname.endsWith('/resolve'))
+    if (url.pathname.endsWith('/resolve')) {
+      interactionResolution = request.postDataJSON();
       return ok({
         ...interaction,
         status: 'resolved',
         resolvedAt: '2026-07-11T00:00:02Z',
         revision: 2,
       });
+    }
+    if (url.pathname.endsWith('/messages') && rejectMessages) {
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          error: { code: 'unavailable', message: 'delivery offline' },
+        }),
+      });
+    }
     if (url.pathname.endsWith('/messages'))
       return ok({ deliveryId: 'delivery-1', status: 'accepted' });
     return route.fulfill({
@@ -84,6 +98,14 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     'active',
   );
   await expect(page.getByTestId('external-interaction-card')).toBeVisible();
+  await page.getByRole('button', { name: 'Blue' }).click();
+  await page.getByTestId('external-interaction-submit').click();
+  await expect
+    .poll(() => interactionResolution)
+    .toMatchObject({
+      expectedRevision: 1,
+      result: { answers: { color: { answers: ['Blue'] } } },
+    });
   await expect(page.locator('[data-block-kind="plan"]')).toBeVisible();
   await expect(page.locator('[data-block-kind="command"]')).toBeVisible();
   await expect(page.locator('[data-block-kind="file_change"]')).toBeVisible();
@@ -96,6 +118,13 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     'future',
   );
   await expect(page.getByTestId('external-interrupt')).toBeEnabled();
+  rejectMessages = true;
+  await page.getByLabel('External message mode').selectOption('queue');
+  await page.getByTestId('message-input-field').fill('Rejected message proof');
+  await page.getByTestId('send-message').click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Send failed: delivery offline',
+  );
   await page.screenshot({
     path: testInfo.outputPath('external-agent-console.png'),
     fullPage: true,
@@ -164,7 +193,21 @@ const interaction = {
   nativeTurnId: 'turn-1',
   nativeRequestId: 'native-1',
   kind: 'request_user_input',
-  prompt: { question: 'Choose verification depth' },
+  prompt: {
+    questions: [
+      {
+        id: 'color',
+        header: 'Color',
+        question: 'Choose a color',
+        isOther: false,
+        isSecret: false,
+        options: [
+          { label: 'Blue', description: 'Use the blue path.' },
+          { label: 'Green', description: 'Use the green path.' },
+        ],
+      },
+    ],
+  },
   allowedResponses: ['answers'],
   status: 'pending',
   requestedAt: '2026-07-11T00:00:00Z',

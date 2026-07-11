@@ -6,10 +6,64 @@
   <div class="rv-interaction__heading">
     {{ interaction().kind.replaceAll('_', ' ') }}
   </div>
+  @if (questions().length > 0) {
+  <div class="rv-interaction__questions">
+    @for (question of questions(); track question.id) {
+    <fieldset [attr.data-question-id]="question.id">
+      <legend>{{ question.header ?? 'Question' }}</legend>
+      <div class="rv-interaction__question">{{ question.question }}</div>
+      @if (question.options.length > 0) {
+      <div class="rv-interaction__presets">
+        @for (option of question.options; track option.label) {
+        <button
+          type="button"
+          [class.rv-interaction__option--selected]="answers()[question.id] === option.label"
+          [attr.aria-pressed]="answers()[question.id] === option.label"
+          (click)="selectAnswer(question.id, option.label)"
+        >
+          <span>{{ option.label }}</span>
+          @if (option.description) {
+          <small>{{ option.description }}</small>
+          }
+        </button>
+        }
+      </div>
+      } @else {
+      <input
+        type="text"
+        [attr.aria-label]="'Answer for ' + question.question"
+        [value]="answers()[question.id] ?? ''"
+        (input)="updateAnswer(question.id, $event)"
+      />
+      }
+    </fieldset>
+    }
+  </div>
+  <button
+    type="button"
+    data-testid="external-interaction-submit"
+    (click)="resolveAnswers()"
+  >
+    Submit answers
+  </button>
+  <details>
+    <summary>Raw response</summary>
+    <pre>{{ prompt() }}</pre>
+    <textarea
+      aria-label="Structured interaction response"
+      [value]="response()"
+      (input)="updateResponse($event)"
+      rows="3"
+    ></textarea>
+    <button type="button" (click)="resolveJson()">Submit raw JSON</button>
+  </details>
+  } @else {
   <pre>{{ prompt() }}</pre>
   <div class="rv-interaction__presets">
     @for (choice of interaction().allowedResponses; track choice) {
-    <button type="button" (click)="resolvePreset(choice)">{{ choice }}</button>
+    <button type="button" (click)="resolveDecision(choice)">
+      {{ choice }}
+    </button>
     }
   </div>
   <textarea
@@ -25,7 +79,7 @@
   >
     Submit response
   </button>
-  @if (error()) {
+  } @if (error()) {
   <div role="alert">{{ error() }}</div>
   }
 </section>

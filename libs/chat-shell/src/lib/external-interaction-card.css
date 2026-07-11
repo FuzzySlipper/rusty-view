@@ -20,11 +20,33 @@
   background: var(--rv-color-surface);
   color: var(--rv-color-text-primary);
 }
+.rv-interaction input {
+  box-sizing: border-box;
+  width: 100%;
+}
+.rv-interaction fieldset {
+  margin: var(--rv-space-xs) 0;
+  border: 1px solid var(--rv-color-border);
+}
+.rv-interaction__question {
+  margin-bottom: var(--rv-space-xs);
+}
 .rv-interaction__presets {
   display: flex;
   flex-wrap: wrap;
   gap: var(--rv-space-xs);
   margin-bottom: var(--rv-space-xs);
+}
+.rv-interaction__presets button {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+.rv-interaction__presets small {
+  color: var(--rv-color-text-secondary);
+}
+.rv-interaction__option--selected {
+  border-color: var(--rv-color-accent);
 }
 .rv-interaction button {
   cursor: pointer;
