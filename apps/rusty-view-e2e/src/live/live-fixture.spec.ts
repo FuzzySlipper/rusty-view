@@ -8,6 +8,7 @@ import {
   liveProfileIsolationPrefix,
   liveProfileCreateRequest,
   type RustyViewDebugSnapshot,
+  LiveConversation,
 } from './live-fixture';
 
 const messages = [
@@ -31,6 +32,93 @@ test('live fixture turn correlation ignores historical rows before the sent user
 test('live fixture turn correlation does not fall back to generic latest assistant', () => {
   expect(findSentUserMessage(messages, 'missing prompt', 1)).toBeUndefined();
   expect(assistantMessageStatesAfterUser(messages, 'missing-user')).toEqual([]);
+});
+
+test('live fixture follows pending assistant replacement before the row becomes visible', async ({
+  page,
+}, testInfo) => {
+  await page.setContent('<main id="transcript"></main>');
+  await page.evaluate(() => {
+    type Message = RustyViewDebugSnapshot['messages'][number];
+    const state = window as typeof window & {
+      messages: Message[];
+      scrollRequests: string[];
+      __RUSTY_VIEW_TEST__: Record<string, (...args: unknown[]) => unknown>;
+    };
+    state.scrollRequests = [];
+    state.messages = [
+      messageState('sent-user', 'user', 'completed', 'race prompt'),
+      messageState('pending-assistant-race', 'assistant', 'streaming', ''),
+    ];
+    state.__RUSTY_VIEW_TEST__ = {
+      getBackendBaseUrl: () => 'http://crew.test',
+      getActiveSessionId: () => 'session-1',
+      getConnectionStatus: () => 'connected',
+      getIsGenerating: () => false,
+      getIsStreaming: () => false,
+      getStreamingCharCount: () => 0,
+      getLastCursor: () => 'cursor-2',
+      getMessageCount: () => state.messages.length,
+      getRawEventCount: () => 3,
+      getMessages: () => state.messages,
+      scrollToMessageId: (...args: unknown[]) => {
+        const id = args[0];
+        if (typeof id !== 'string') return;
+        state.scrollRequests.push(id);
+        if (id !== 'pending-assistant-race') return;
+        queueMicrotask(() => {
+          state.messages = [
+            messageState('sent-user', 'user', 'completed', 'race prompt'),
+            messageState(
+              'assistant-durable',
+              'assistant',
+              'completed',
+              'durable answer',
+            ),
+          ];
+          document
+            .querySelector('#transcript')
+            ?.insertAdjacentHTML(
+              'beforeend',
+              '<div data-testid="message-row" data-message-id="assistant-durable" data-message-status="completed">durable answer</div>',
+            );
+        });
+      },
+    };
+
+    function messageState(
+      id: string,
+      role: string,
+      status: string,
+      text: string,
+    ): Message {
+      return { id, role, status, text, blockKinds: ['text'] };
+    }
+  });
+
+  const live = new LiveConversation(page, testInfo);
+  const assistant = await live.waitForNextAssistantMessageAfterUser(
+    'sent-user',
+    2_000,
+  );
+
+  await expect(assistant).toHaveAttribute(
+    'data-message-id',
+    'assistant-durable',
+  );
+  await expect(assistant).toHaveAttribute('data-message-status', 'completed');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              scrollRequests: string[];
+            }
+          ).scrollRequests,
+      ),
+    )
+    .toEqual(['pending-assistant-race', 'assistant-durable']);
 });
 
 test('isolated profile ids are stable, scoped, and slug-safe', () => {

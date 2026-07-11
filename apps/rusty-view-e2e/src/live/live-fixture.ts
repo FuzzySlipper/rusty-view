@@ -396,7 +396,7 @@ export class LiveConversation {
       messageId: sentUser.id,
     });
 
-    const assistant = await this.waitForNextAssistantMessageAfterUser(
+    let assistant = await this.waitForNextAssistantMessageAfterUser(
       sentUser.id,
       options.assistantStartedTimeoutMs ?? 120_000,
     );
@@ -412,10 +412,23 @@ export class LiveConversation {
       messageId: turn.assistantMessageId,
     });
     await this.captureDebugSnapshot(`turn-${turn.index}-assistant-visible`);
-    await this.waitForVisibleAssistantContent(
-      assistant,
+    assistant = await this.waitForVisibleAssistantContentAfterUser(
+      sentUser.id,
+      assistantMessageId ?? undefined,
       Math.min(options.assistantCompletedTimeoutMs ?? 180_000, 60_000),
     );
+    const contentMessageId = await assistant.getAttribute('data-message-id');
+    if (
+      contentMessageId !== null &&
+      turn.assistantMessageId !== contentMessageId
+    ) {
+      this.recordTimeline('turn:assistant-id-changed-before-content', {
+        turn: turn.index,
+        firstMessageId: turn.assistantMessageId,
+        contentMessageId,
+      });
+      turn.assistantMessageId = contentMessageId;
+    }
     turn.assistantContentVisibleAtMs = Date.now();
     this.recordTimeline('turn:assistant-content-visible', {
       turn: turn.index,
@@ -566,24 +579,72 @@ export class LiveConversation {
       );
     }
 
-    const assistant = this.messageById(assistantState.id);
-    await this.ensureMessageRowVisible(assistantState.id, 10_000);
-    return assistant;
+    return this.waitForCorrelatedAssistantRow(
+      userMessageId,
+      assistantState.id,
+      10_000,
+      () => true,
+    );
   }
 
-  async waitForVisibleAssistantContent(
-    assistant: Locator,
+  async waitForVisibleAssistantContentAfterUser(
+    userMessageId: string,
+    preferredMessageId: string | undefined,
     timeoutMs: number,
-  ): Promise<void> {
-    await expect
-      .poll(
-        async () => {
-          const text = (await assistant.innerText().catch(() => '')).trim();
-          return text.length;
-        },
-        { timeout: timeoutMs },
-      )
-      .toBeGreaterThan(0);
+  ): Promise<Locator> {
+    return this.waitForCorrelatedAssistantRow(
+      userMessageId,
+      preferredMessageId,
+      timeoutMs,
+      (state) => state.text.trim().length > 0,
+    );
+  }
+
+  private async waitForCorrelatedAssistantRow(
+    userMessageId: string,
+    preferredMessageId: string | undefined,
+    timeoutMs: number,
+    matches: (state: RustyViewDebugSnapshot['messages'][number]) => boolean,
+  ): Promise<Locator> {
+    const deadline = Date.now() + timeoutMs;
+    let currentMessageId = preferredMessageId;
+    while (Date.now() < deadline) {
+      const states = await this.assistantMessageStatesAfterUser(userMessageId);
+      const state =
+        states.find((candidate) => candidate.id === currentMessageId) ??
+        states.at(0);
+      if (state !== undefined) {
+        if (currentMessageId !== undefined && state.id !== currentMessageId) {
+          this.recordTimeline('transcript:assistant-id-replaced', {
+            userMessageId,
+            previousMessageId: currentMessageId,
+            replacementMessageId: state.id,
+          });
+        }
+        currentMessageId = state.id;
+        if (matches(state)) {
+          await this.page.evaluate((id) => {
+            const api = (window as BrowserWindowWithRustyView)
+              .__RUSTY_VIEW_TEST__;
+            api?.scrollToMessageId(id);
+          }, currentMessageId);
+          const row = this.messageById(currentMessageId);
+          if (await row.isVisible().catch(() => false)) {
+            return row;
+          }
+        }
+      }
+      // Let snapshots and CDK virtual scroll advance before resolving the
+      // same user-anchored assistant position again.
+      // eslint-disable-next-line playwright/no-wait-for-timeout
+      await this.page.waitForTimeout(50);
+    }
+    throw new Error(
+      `Assistant row after user ${userMessageId} did not become visible within ${timeoutMs}ms` +
+        (currentMessageId === undefined
+          ? '.'
+          : `; last correlated id was ${currentMessageId}.`),
+    );
   }
 
   async waitForMinimumStreaming(
