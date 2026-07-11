@@ -92,21 +92,27 @@ function blocksForGroup(
 ): MessageBlock[] {
   const first = events[0];
   if (first === undefined) return [];
-  if (first.kind === 'assistant_text_delta') {
+  const textEvents = events.filter(
+    (event) => event.kind === 'assistant_text_delta',
+  );
+  if (textEvents.length > 0) {
     return [
       simpleBlock(
-        first.eventId,
+        textEvents[0]?.eventId ?? first.eventId,
         'text',
-        events.map((event) => event.payload.text ?? '').join(''),
+        textEvents.map((event) => event.payload.text ?? '').join(''),
       ),
     ];
   }
-  if (first.kind === 'reasoning_delta') {
+  const reasoningEvents = events.filter(
+    (event) => event.kind === 'reasoning_delta',
+  );
+  if (reasoningEvents.length > 0) {
     return [
       simpleBlock(
-        first.eventId,
+        reasoningEvents[0]?.eventId ?? first.eventId,
         'reasoning',
-        events
+        reasoningEvents
           .map(
             (event) =>
               event.payload.text ?? event.payload.summary?.join('\n') ?? '',
@@ -115,12 +121,13 @@ function blocksForGroup(
       ),
     ];
   }
-  if (first.kind === 'plan_delta') {
+  const planEvents = events.filter((event) => event.kind === 'plan_delta');
+  if (planEvents.length > 0) {
     return [
       simpleBlock(
-        first.eventId,
+        planEvents[0]?.eventId ?? first.eventId,
         'plan',
-        events
+        planEvents
           .map(
             (event) =>
               event.payload.text ?? event.payload.summary?.join('\n') ?? '',

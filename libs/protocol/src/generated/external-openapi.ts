@@ -333,6 +333,7 @@ export interface components {
         AgentMessageCommand: {
             body: string;
             caller: components["schemas"]["AgentCoordinationCaller"];
+            collaborationMode?: components["schemas"]["ExternalCollaborationMode"] | null;
             correlationId?: string | null;
             createdAt: string;
             deliveryId: string;
@@ -356,6 +357,7 @@ export interface components {
         };
         AgentMessageDeliveryRequest: {
             body: string;
+            collaborationMode?: components["schemas"]["ExternalCollaborationMode"] | null;
             correlationId?: string | null;
             createdAt: string;
             deliveryId: string;
@@ -784,6 +786,8 @@ export interface components {
         ExternalBindingPurpose: "crew_agent" | "imported_observer";
         /** @enum {string} */
         ExternalBindingStatus: "active" | "paused" | "archived";
+        /** @enum {string} */
+        ExternalCollaborationMode: "plan";
         /** @enum {string} */
         ExternalControlKind: "start_or_resume_thread" | "start_turn" | "steer_turn" | "interrupt_turn" | "compact_thread" | "resolve_interaction" | "reconcile_runtime" | "archive_binding";
         ExternalControlReceipt: {
@@ -1306,6 +1310,7 @@ export interface components {
         SessionStatus: "active" | "idle" | "archived";
         SessionTurnRequested: {
             bindingId: string;
+            collaborationMode?: components["schemas"]["ExternalCollaborationMode"] | null;
             createdAt: string;
             expiresAt?: string | null;
             idempotencyKey: string;
@@ -1421,6 +1426,7 @@ export interface components {
             idempotencyKey?: string;
             messageId?: string;
             correlationId?: string;
+            collaborationMode?: components["schemas"]["ExternalCollaborationMode"];
             /** @default 5000 */
             ttlMs: number;
         };

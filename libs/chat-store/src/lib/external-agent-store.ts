@@ -24,7 +24,7 @@ import {
   type ExternalRuntimeEventStream,
 } from '@rusty-view/transport';
 
-export type ExternalComposerMode = 'auto' | 'steer' | 'queue';
+export type ExternalComposerMode = 'auto' | 'steer' | 'queue' | 'plan';
 
 export interface ExternalAgentSession {
   readonly key: string;
@@ -48,6 +48,7 @@ export class ExternalAgentStore {
   private readonly destroyRef = inject(DestroyRef);
   private stream: ExternalRuntimeEventStream | undefined;
   private polling = false;
+  private interactionsPolling = false;
   private readonly fleetCursors = new Map<string, number>();
   private readonly threadCursors = signal<
     Readonly<Record<string, string | null>>
@@ -163,6 +164,9 @@ export class ExternalAgentStore {
   );
 
   readonly turnPhase = computed<ExternalTurnPhase | undefined>(() => {
+    if (this.selectedInteractions().some((item) => item.status === 'pending')) {
+      return 'waiting_interaction';
+    }
     return latestExternalTurnPhase(this.events());
   });
 
@@ -176,7 +180,10 @@ export class ExternalAgentStore {
   });
 
   constructor() {
-    const timer = setInterval(() => void this.refresh(), 3_000);
+    const timer = setInterval(() => {
+      void this.refresh();
+      void this.refreshInteractions();
+    }, 3_000);
     this.destroyRef.onDestroy(() => {
       clearInterval(timer);
       this.stream?.close();
@@ -289,6 +296,19 @@ export class ExternalAgentStore {
     }
   }
 
+  async refreshInteractions(): Promise<void> {
+    if (this.interactionsPolling) return;
+    this.interactionsPolling = true;
+    try {
+      const attention = await this.transport.external.listInteractions();
+      this.interactions.set(attention.interactions);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.interactionsPolling = false;
+    }
+  }
+
   async selectSession(session: ExternalAgentSession): Promise<void> {
     this.stream?.close();
     this.events.set([]);
@@ -362,8 +382,10 @@ export class ExternalAgentStore {
         const request: ExternalBindingMessageWrite = {
           body: text,
           ttlMs: 60_000,
+          ...(mode === 'plan' ? { collaborationMode: 'plan' } : {}),
         };
         await this.transport.external.sendMessage(binding.bindingId, request);
+        if (mode === 'plan') this.composerMode.set('auto');
       }
       await this.refreshSelectedEvents();
     } catch (error) {
@@ -488,6 +510,12 @@ export class ExternalAgentStore {
             )
           ) {
             void this.refresh();
+          }
+          if (
+            event.kind === 'thread_lifecycle' &&
+            event.payload.nativeMethod === 'thread/status/changed'
+          ) {
+            void this.refreshInteractions();
           }
         }
       } catch (error) {

@@ -186,7 +186,12 @@ export class DebugShellComponent {
 
   protected setExternalComposerMode(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    if (value === 'auto' || value === 'steer' || value === 'queue') {
+    if (
+      value === 'auto' ||
+      value === 'steer' ||
+      value === 'queue' ||
+      value === 'plan'
+    ) {
       this.external.composerMode.set(value);
     }
   }

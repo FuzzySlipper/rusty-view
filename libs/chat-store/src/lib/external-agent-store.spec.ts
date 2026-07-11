@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type {
   ExternalAgentBinding,
+  ExternalInteractionRecord,
   ExternalRuntimeRegistration,
   ExternalThreadProjection,
   NormalizedExternalRuntimeEvent,
@@ -41,6 +42,26 @@ describe('external agent lifecycle reduction', () => {
 });
 
 describe('ExternalAgentStore', () => {
+  it('projects a pending interaction as a waiting turn', () => {
+    const store = setupStore({
+      runtimes: [],
+      listThreads: vi.fn(),
+    });
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.events.set([event(1, 'turn-1', 'inProgress')]);
+    store.interactions.set([
+      {
+        runtimeId: 'runtime-1',
+        nativeThreadId: 'thread-1',
+        status: 'pending',
+      } as ExternalInteractionRecord,
+    ]);
+
+    expect(store.turnPhase()).toBe('waiting_interaction');
+    expect(store.isTurnActive()).toBe(true);
+  });
+
   it('refreshes one thread page and appends exactly one page on demand', async () => {
     const runtime = registration('runtime-1');
     const listThreads = vi.fn(
@@ -121,6 +142,29 @@ describe('ExternalAgentStore', () => {
     store.events.set([event(1, 'turn-1', 'inProgress')]);
     await store.interrupt();
     expect(store.error()).toContain('Interrupt failed: control offline');
+  });
+
+  it('sends Plan collaboration mode once and returns the composer to auto', async () => {
+    const sendMessage = vi.fn();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.composerMode.set('plan');
+
+    await store.send('ask me');
+
+    expect(sendMessage).toHaveBeenCalledWith('binding-1', {
+      body: 'ask me',
+      ttlMs: 60_000,
+      collaborationMode: 'plan',
+    });
+    expect(store.composerMode()).toBe('auto');
   });
 });
 

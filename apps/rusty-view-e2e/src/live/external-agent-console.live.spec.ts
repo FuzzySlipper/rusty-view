@@ -232,6 +232,124 @@ test.describe('external agent console @live-agent', () => {
       fullPage: true,
     });
   });
+
+  test('resolves real structured input from a Plan turn and recovers it after refresh', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(6 * 60_000);
+    let planWrite: Record<string, unknown> | undefined;
+    let planResponse:
+      | { readonly status: number; readonly body: unknown }
+      | undefined;
+    let resolutionWrite: Record<string, unknown> | undefined;
+    page.on('request', (request) => {
+      if (request.method() !== 'POST') return;
+      if (/\/v1\/external-bindings\/[^/]+\/messages$/.test(request.url())) {
+        planWrite = request.postDataJSON() as Record<string, unknown>;
+      }
+      if (/\/v1\/external-interactions\/[^/]+\/resolve$/.test(request.url())) {
+        resolutionWrite = request.postDataJSON() as Record<string, unknown>;
+      }
+    });
+    page.on('response', async (response) => {
+      if (
+        response.request().method() === 'POST' &&
+        /\/v1\/external-bindings\/[^/]+\/messages$/.test(response.url())
+      ) {
+        planResponse = {
+          status: response.status(),
+          body: await response.json().catch(() => undefined),
+        };
+      }
+    });
+
+    await page.goto(`/?api=${encodeURIComponent(backend)}`);
+    await page.getByTestId('external-agents-tab').click();
+    const search = page.getByLabel('Search loaded agent sessions');
+    await search.fill('5529');
+    const row = page
+      .getByTestId('external-agent-row')
+      .filter({ hasText: '#5529' })
+      .first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.click();
+
+    const marker = `RV_PLAN_INPUT_${Date.now()}`;
+    await page.getByLabel('External message mode').selectOption('plan');
+    await page
+      .getByTestId('message-input-field')
+      .fill(
+        [
+          'Use request_user_input exactly once.',
+          'Ask which certification color to use with two options labelled Blue and Green.',
+          `After the answer, reply with the exact marker ${marker} followed by a colon and the selected label.`,
+          'Do not call other tools or modify files.',
+        ].join(' '),
+      );
+    await page.getByTestId('send-message').click();
+    await expect
+      .poll(() => planWrite)
+      .toMatchObject({
+        collaborationMode: 'plan',
+      });
+    await expect
+      .poll(() => planResponse)
+      .toMatchObject({
+        status: 200,
+        body: { ok: true, data: { status: 'accepted' } },
+      });
+
+    const status = page.getByTestId('external-turn-status');
+    await expect(status).toHaveAttribute(
+      'data-turn-phase',
+      'waiting_interaction',
+      { timeout: 3 * 60_000 },
+    );
+    const card = page.getByTestId('external-interaction-card');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(/which certification color/i);
+    await page.screenshot({
+      path: testInfo.outputPath('real-plan-interaction-pending.png'),
+      fullPage: true,
+    });
+
+    const blue = card.getByRole('button', { name: /^blue/i });
+    await expect(blue).toBeVisible();
+    const selectedLabel = (await blue.locator('span').innerText()).trim();
+    await blue.click();
+    await card.getByTestId('external-interaction-submit').click();
+    await expect.poll(() => resolutionWrite).toBeDefined();
+    const result = resolutionWrite?.['result'] as
+      | { answers?: Record<string, { answers?: string[] }> }
+      | undefined;
+    const submitted = Object.values(result?.answers ?? {});
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0]?.answers).toEqual([selectedLabel]);
+
+    await expect(card).toBeHidden({ timeout: 30_000 });
+    await expect(status).toHaveAttribute('data-turn-phase', 'completed', {
+      timeout: 3 * 60_000,
+    });
+    await revealTranscriptBlock(page, marker, 'text');
+    await page.screenshot({
+      path: testInfo.outputPath('real-plan-interaction-completed.png'),
+      fullPage: true,
+    });
+
+    await page.reload();
+    await page.getByTestId('external-agents-tab').click();
+    await search.fill('5529');
+    const recovered = page
+      .getByTestId('external-agent-row')
+      .filter({ hasText: '#5529' })
+      .first();
+    await recovered.click();
+    await revealTranscriptBlock(page, marker, 'text');
+    await page.screenshot({
+      path: testInfo.outputPath('real-plan-interaction-recovered.png'),
+      fullPage: true,
+    });
+  });
 });
 
 async function revealCertificationFileChange(page: Page): Promise<void> {
@@ -252,42 +370,37 @@ async function revealTranscriptBlock(
     await page.getByTestId('transcript-search-toggle').click();
   }
   await searchInput.fill(query);
-  await expect(page.getByTestId('transcript-search-status')).not.toContainText(
-    '0 results',
+  await expect(page.getByTestId('transcript-search-status')).toHaveText(
+    /\d+ \/ \d+/,
   );
   const blocks = page
-    .locator(`[data-block-kind="${blockKind}"]`)
+    .locator(
+      blockKind === 'text'
+        ? '[data-testid="text-block"]'
+        : `[data-block-kind="${blockKind}"]`,
+    )
     .filter({ hasText: query });
-  for (let searchIndex = 0; searchIndex < 20; searchIndex++) {
-    const status = await blocks.evaluateAll((elements) => {
-      const viewport = document.querySelector(
-        '[data-testid="transcript-viewport"]',
-      );
-      if (viewport === null) return undefined;
-      const clip = viewport.getBoundingClientRect();
-      const visible = elements.find((element) => {
-        const box = element.getBoundingClientRect();
-        return (
-          box.bottom > clip.top &&
-          box.top < clip.bottom &&
-          box.right > clip.left &&
-          box.left < clip.right
-        );
-      });
-      return visible
-        ?.closest('[data-message-status]')
-        ?.getAttribute('data-message-status');
-    });
-    if (status !== undefined) {
-      return status;
-    }
-    await page.getByTestId('transcript-search-next').click();
-    // Search navigation and virtual-scroll materialization settle asynchronously.
-    // eslint-disable-next-line playwright/no-wait-for-timeout
-    await page.waitForTimeout(100);
-  }
-  throw new Error(
-    `No in-viewport ${blockKind} block containing ${JSON.stringify(query)} was materialized.`,
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect
+    .poll(
+      async () => {
+        await page.getByTestId('transcript-search-next').click();
+        await viewport.evaluate((element) => {
+          element.scrollTop = element.scrollHeight;
+          element.dispatchEvent(new Event('scroll'));
+        });
+        return blocks.count();
+      },
+      { timeout: 10_000 },
+    )
+    .toBeGreaterThan(0);
+  const block = blocks.last();
+  await expect(block).toBeAttached();
+  await expect(block).toBeVisible({ timeout: 10_000 });
+  return block.evaluate((element) =>
+    element
+      .closest('[data-message-status]')
+      ?.getAttribute('data-message-status'),
   );
 }
 

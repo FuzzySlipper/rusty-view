@@ -81,6 +81,43 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages[0]?.blocks).toHaveLength(1);
     expect(messages[0]?.blocks[0]?.content).toHaveLength(500);
   });
+
+  it('coalesces text deltas when an item lifecycle event starts the group', () => {
+    const itemId = 'message-item';
+    const events = [
+      {
+        ...event('1', 'item_lifecycle', { nativeMethod: 'item/started' }),
+        itemId,
+      },
+      {
+        ...event('2', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'hello ',
+        }),
+        itemId,
+      },
+      {
+        ...event('3', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'world',
+        }),
+        itemId,
+      },
+      {
+        ...event('4', 'item_lifecycle', {
+          nativeMethod: 'item/completed',
+          text: 'hello world',
+        }),
+        itemId,
+      },
+    ];
+
+    const messages = projectExternalAgentTranscript(undefined, events);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks).toHaveLength(1);
+    expect(messages[0]?.blocks[0]?.content).toBe('hello world');
+  });
 });
 
 function event(
