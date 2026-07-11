@@ -1,0 +1,102 @@
+:host,
+.rv-agents {
+  display: block;
+  height: 100%;
+}
+.rv-agents {
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+}
+.rv-agents__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-bottom: 1px solid var(--rv-color-border);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+  text-transform: uppercase;
+}
+.rv-agents__header button {
+  border: 0;
+  background: transparent;
+  color: var(--rv-color-accent);
+  cursor: pointer;
+}
+.rv-agents__search {
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--rv-space-sm));
+  margin: var(--rv-space-sm);
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: inherit;
+}
+.rv-agents__list {
+  overflow: auto;
+  height: calc(100% - 84px);
+}
+.rv-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border: 0;
+  border-bottom: 1px solid var(--rv-color-border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rv-agent:hover,
+.rv-agent--selected {
+  background: var(--rv-color-surface-raised);
+}
+.rv-agent--selected {
+  border-left: 3px solid var(--rv-color-accent);
+}
+.rv-agent__title {
+  overflow: hidden;
+  font-weight: var(--rv-font-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-agent__state {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  text-transform: uppercase;
+}
+.rv-agent__attention {
+  color: var(--rv-color-warning);
+}
+.rv-agent__unread {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rv-color-accent);
+}
+.rv-agent__meta,
+.rv-agent__runtime {
+  overflow: hidden;
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-agents__error,
+.rv-agents__empty {
+  padding: var(--rv-space-md);
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-sm);
+}
+.rv-agents__error {
+  color: var(--rv-color-danger);
+}

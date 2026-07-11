@@ -37,6 +37,8 @@ import type {
 } from './chat-transport-config';
 import { resolveChatTransportConfig } from './chat-transport-config';
 import { AdminHttpTransport } from './admin-http-transport';
+import { ExternalRuntimeHttpTransport } from './external-runtime-http-transport';
+import { ExternalRuntimeEventStream } from './external-runtime-event-stream';
 import type {
   AdminAgentDiagnostics,
   AdminControlResponse,
@@ -124,12 +126,14 @@ export class ChatTransport {
   private readonly config: ChatTransportConfig;
   private readonly http: ChatHttpTransport;
   private readonly adminHttp: AdminHttpTransport;
+  readonly external: ExternalRuntimeHttpTransport;
   private readonly fetchImpl: FetchImpl;
 
   constructor(configInput: ChatTransportConfigInput) {
     this.config = resolveChatTransportConfig(configInput);
     this.http = new ChatHttpTransport(this.config);
     this.adminHttp = new AdminHttpTransport(this.config);
+    this.external = new ExternalRuntimeHttpTransport(this.config);
     // Bind fetch to globalThis (see ChatHttpTransport for the 'Illegal
     // invocation' rationale).
     this.fetchImpl = this.config.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -566,6 +570,17 @@ export class ChatTransport {
         ? { initialCursor: options.initialCursor }
         : {}),
     });
+  }
+
+  streamExternalRuntimeEvents(
+    runtimeId: string,
+    initialCursor?: number,
+  ): ExternalRuntimeEventStream {
+    return new ExternalRuntimeEventStream(
+      this.external,
+      runtimeId,
+      initialCursor,
+    );
   }
 }
 

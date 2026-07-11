@@ -349,6 +349,7 @@ export class TranscriptViewportComponent {
   }
 
   scrollToMessageId(messageId: string): void {
+    this.cancelPendingSeeks();
     const msgs = this.currentMessagesForScroll();
     const index = msgs.findIndex((m) => m.id === messageId);
     if (index >= 0) {
@@ -356,6 +357,11 @@ export class TranscriptViewportComponent {
         this.seekMessageIntoView(messageId, index, 0);
       });
     }
+  }
+
+  private cancelPendingSeeks(): void {
+    for (const timer of this.pendingSeekTimers) clearTimeout(timer);
+    this.pendingSeekTimers.clear();
   }
 
   private afterNextRender(callback: () => void): void {

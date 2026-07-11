@@ -14,6 +14,19 @@
   overflow-y: auto;
   border-bottom: 1px solid var(--rv-color-border);
 }
+.rv-event-inspector__filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding: var(--rv-space-xs);
+  border-bottom: 1px solid var(--rv-color-border);
+}
+.rv-event-inspector__filters input {
+  min-width: 0;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  border: 1px solid var(--rv-color-border);
+}
 
 .rv-event-inspector__empty {
   padding: var(--rv-space-md);

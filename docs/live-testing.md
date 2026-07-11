@@ -70,10 +70,16 @@ Useful environment variables:
 ```bash
 RV_LIVE_BACKEND_URL=http://127.0.0.1:9347
 RV_LIVE_PROFILE=tester
+RV_EXTERNAL_LIVE_RUN=1
 RV_LIVE_PROFILE_PREFIX=rv-live-custom
 RV_LIVE_PROFILE_ISOLATION=0
 RV_LIVE_MIN_STREAMING_MS=15000
 ```
+
+`RV_EXTERNAL_LIVE_RUN=1` enables the separate real Codex app-server console
+scenario in `external-agent-console.live.spec.ts`. It expects pre-provisioned
+external runtime bindings and is intentionally independent of `RV_LIVE_RUN`,
+which controls isolated direct-chat scenarios derived from the `tester` profile.
 
 `RV_LIVE_BACKEND_URL` controls both sides of the live run: fixture/admin setup
 requests and the rendered browser app. The fixture opens the app with the

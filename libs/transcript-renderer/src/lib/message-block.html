@@ -21,6 +21,7 @@
   data-testid="tool-call-block"
   [class.rv-block--search-match]="searchMatched()"
   [attr.data-block-id]="block().id"
+  [attr.data-block-kind]="block().kind"
   [attr.data-status]="tool.status"
 >
   <button

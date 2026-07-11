@@ -24,59 +24,76 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
-const CHECKED_IN = join(
-  REPO_ROOT,
-  'libs',
-  'protocol',
-  'src',
-  'generated',
-  'openapi.ts',
-);
-
-const SOURCE =
-  process.env['RUSTY_VIEW_OPENAPI_SOURCE'] ??
-  '/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json';
-
-if (!existsSync(SOURCE)) {
-  console.warn(
-    `[protocol:check] OpenAPI source not found at ${SOURCE}; skipping drift ` +
-      'check (source is required to measure drift).',
-  );
-  process.exit(0);
-}
-if (!existsSync(CHECKED_IN)) {
-  console.error(
-    `[protocol:check] Checked-in generated file not found at ${CHECKED_IN}. ` +
-      'Run `nx run protocol:generate` and commit the output.',
-  );
-  process.exit(1);
-}
+const CONTRACTS = [
+  {
+    name: 'chat',
+    source:
+      process.env['RUSTY_VIEW_OPENAPI_SOURCE'] ??
+      '/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json',
+    checkedIn: join(
+      REPO_ROOT,
+      'libs',
+      'protocol',
+      'src',
+      'generated',
+      'openapi.ts',
+    ),
+  },
+  {
+    name: 'external runtime',
+    source:
+      process.env['RUSTY_VIEW_EXTERNAL_OPENAPI_SOURCE'] ??
+      '/home/dev/rusty-crew/docs/external-runtime-api-v0.openapi.json',
+    checkedIn: join(
+      REPO_ROOT,
+      'libs',
+      'protocol',
+      'src',
+      'generated',
+      'external-openapi.ts',
+    ),
+  },
+];
 
 const tmpDir = mkdtempSync(join(tmpdir(), 'rv-protocol-check-'));
-const generatedPath = join(tmpDir, 'openapi.ts');
 try {
-  execFileSync(
-    'pnpm',
-    ['exec', 'openapi-typescript', SOURCE, '-o', generatedPath],
-    { cwd: REPO_ROOT, stdio: ['ignore', 'ignore', 'inherit'] },
-  );
-
-  const fresh = readFileSync(generatedPath, 'utf8');
-  const checkedIn = readFileSync(CHECKED_IN, 'utf8');
-
-  if (fresh === checkedIn) {
-    console.log('[protocol:check] Generated wire types are in sync.');
-    process.exit(0);
+  for (const contract of CONTRACTS) {
+    if (!existsSync(contract.source)) {
+      console.warn(
+        `[protocol:check] ${contract.name} OpenAPI source not found at ` +
+          `${contract.source}; skipping its drift check.`,
+      );
+      continue;
+    }
+    if (!existsSync(contract.checkedIn)) {
+      console.error(
+        `[protocol:check] Checked-in ${contract.name} generated file not found. ` +
+          'Run `nx run protocol:generate` and commit the output.',
+      );
+      process.exit(1);
+    }
+    const generatedPath = join(
+      tmpDir,
+      `${contract.name.replaceAll(' ', '-')}.ts`,
+    );
+    execFileSync(
+      'pnpm',
+      ['exec', 'openapi-typescript', contract.source, '-o', generatedPath],
+      { cwd: REPO_ROOT, stdio: ['ignore', 'ignore', 'inherit'] },
+    );
+    if (
+      readFileSync(generatedPath, 'utf8') !==
+      readFileSync(contract.checkedIn, 'utf8')
+    ) {
+      console.error(
+        `[protocol:check] Generated ${contract.name} wire types are out of sync ` +
+          `with ${contract.source}.`,
+      );
+      console.error('  Run `nx run protocol:generate`, review, and commit.');
+      process.exit(1);
+    }
   }
-
-  console.error(
-    '[protocol:check] Generated wire types are out of sync with the OpenAPI ' +
-      `source (${SOURCE}).`,
-  );
-  console.error(
-    '  Run `nx run protocol:generate`, review the diff, and commit the result.',
-  );
-  process.exit(1);
+  console.log('[protocol:check] Generated wire types are in sync.');
 } finally {
   rmSync(tmpDir, { recursive: true, force: true });
 }

@@ -1,0 +1,123 @@
+import { describe, expect, it, vi } from 'vitest';
+import { ExternalRuntimeEventStream } from './external-runtime-event-stream';
+import { ExternalRuntimeHttpTransport } from './external-runtime-http-transport';
+
+describe('ExternalRuntimeHttpTransport', () => {
+  it('uses generated endpoint shapes for fleets, pagination, and controls', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes('/threads')) {
+          return json({
+            ok: true,
+            data: { items: [], nextCursor: null, backwardsCursor: null },
+            meta: meta(),
+          });
+        }
+        if (url.includes('/controls')) {
+          const request = JSON.parse(String(init?.body)) as { kind: string };
+          expect(request.kind).toBe('interrupt_turn');
+          return json({
+            ok: true,
+            data: {
+              request: {
+                bindingId: 'b',
+                controlId: 'c',
+                expectedBindingRevision: 1,
+                idempotencyKey: 'i',
+                kind: 'interrupt_turn',
+                payload: {},
+                requestedAt: '',
+              },
+              requestFingerprint: 'f',
+              revision: 1,
+              status: 'applied',
+              updatedAt: '',
+            },
+            meta: meta(),
+          });
+        }
+        return json({
+          ok: true,
+          data: { runtimes: [], controllers: [] },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(transport.listRuntimes()).resolves.toEqual({
+      runtimes: [],
+      controllers: [],
+    });
+    await expect(
+      transport.listThreads('runtime/a', { limit: 100, cursor: 'next' }),
+    ).resolves.toMatchObject({ items: [] });
+    await expect(
+      transport.submitControl('b', { kind: 'interrupt_turn', payload: {} }),
+    ).resolves.toMatchObject({ status: 'applied' });
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain('runtime%2Fa');
+  });
+
+  it('reconnects an external event stream from its last sequence cursor', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(sse([externalEvent(7)]))
+      .mockResolvedValueOnce(sse([externalEvent(8)]));
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+    const stream = new ExternalRuntimeEventStream(transport, 'runtime/a');
+    const received = [];
+
+    for await (const event of stream.events()) {
+      received.push(event.sequenceId);
+      if (received.length === 2) stream.close();
+    }
+
+    expect(received).toEqual([7, 8]);
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain('cursor=7');
+    expect(
+      new Headers(fetchImpl.mock.calls[1]?.[1]?.headers).get('Last-Event-ID'),
+    ).toBe('7');
+  });
+});
+
+function config(fetchImpl: typeof fetch) {
+  return {
+    baseUrl: 'http://crew.test',
+    timeoutMs: 1_000,
+    writeTimeoutMs: 1_000,
+    reconnectInitialMs: 0,
+    reconnectMaxMs: 0,
+    reconnectMaxAttempts: 1,
+    fetchImpl,
+  };
+}
+function meta() {
+  return { request_id: 'req', schema_version: 1 };
+}
+function json(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function sse(events: readonly object[]): Response {
+  return new Response(
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+}
+
+function externalEvent(sequenceId: number) {
+  return {
+    eventId: `event-${sequenceId}`,
+    runtimeId: 'runtime/a',
+    sequenceId,
+    createdAt: '2026-07-11T00:00:00Z',
+    kind: 'turn_lifecycle',
+    nativeThreadId: 'thread-1',
+    nativeTurnId: 'turn-1',
+    payload: { nativeMethod: 'turn/started', status: 'inProgress' },
+  };
+}

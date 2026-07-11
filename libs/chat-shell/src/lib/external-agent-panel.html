@@ -1,0 +1,62 @@
+<div class="rv-agents" data-testid="external-agent-panel">
+  <div class="rv-agents__header">
+    <span>Agent sessions</span>
+    <button
+      type="button"
+      data-testid="external-agent-refresh"
+      (click)="store.refresh()"
+    >
+      Refresh
+    </button>
+  </div>
+  <input
+    class="rv-agents__search"
+    type="search"
+    placeholder="Search sessions"
+    aria-label="Search agent sessions"
+    [value]="query()"
+    (input)="updateQuery($event)"
+  />
+  @if (store.error()) {
+  <div class="rv-agents__error" role="alert">{{ store.error() }}</div>
+  }
+  <div class="rv-agents__list">
+    @for (session of sessions(); track session.key) {
+    <button
+      type="button"
+      class="rv-agent"
+      data-testid="external-agent-row"
+      [class.rv-agent--selected]="store.selectedThreadId() === session.thread.threadId"
+      [attr.data-runtime-id]="session.runtime.runtimeId"
+      [attr.data-thread-id]="session.thread.threadId"
+      [attr.data-status]="session.phase ?? session.thread.status"
+      (click)="select(session)"
+    >
+      <span class="rv-agent__title"
+        >{{ session.thread.name ?? session.thread.preview }}</span
+      >
+      <span class="rv-agent__state">
+        <span>{{ session.phase ?? session.thread.status }}</span>
+        @if (session.needsAttention) {
+        <span class="rv-agent__attention">attention</span> } @if
+        (session.unread) {
+        <span class="rv-agent__unread" aria-label="Unread activity"></span> }
+      </span>
+      <span class="rv-agent__meta"
+        >{{ session.binding?.taskRef?.task_id ? '#' +
+        session.binding?.taskRef?.task_id : 'unmapped' }} · {{
+        session.thread.cwd }}</span
+      >
+      <span class="rv-agent__runtime"
+        >{{ session.runtime.runtimeId }} · {{ session.controller?.driverState ??
+        session.runtime.observedState }}</span
+      >
+    </button>
+    } @empty {
+    <div class="rv-agents__empty">
+      {{ store.loading() ? 'Loading agent sessions…' : 'No external agent
+      sessions found.' }}
+    </div>
+    }
+  </div>
+</div>

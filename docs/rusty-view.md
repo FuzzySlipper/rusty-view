@@ -1,6 +1,7 @@
 # Rusty View Architecture
 
-Rusty View is an Angular/Nx frontend for Rusty Crew chat sessions. It is both:
+Rusty View is an Angular/Nx frontend for Rusty Crew chat sessions and generic
+external agent runtimes. It is both:
 
 - the `apps/rusty-view` operator/debug console; and
 - a set of reusable `@rusty-view/*` chat client libraries.
@@ -32,7 +33,7 @@ libs/
 ## Data Flow
 
 ```text
-Rusty Crew OpenAPI / SSE
+Rusty Crew chat and external-runtime OpenAPI / SSE
   -> @rusty-view/protocol
   -> @rusty-view/transport
   -> @rusty-view/chat-store
@@ -50,6 +51,29 @@ Important boundaries:
 - `chat-shell` composes the reference app and plugin contribution points.
 - `chat-theme` owns persisted appearance settings and applies design tokens.
 - `testing-fixtures` is test-only and must not be imported by production libs.
+
+## External Agent Console
+
+The reference shell exposes Profiles and Agents as peer conversation sources.
+The Agents source is session-first: it lists persisted external threads with
+runtime, working directory, optional Den task mapping, lifecycle state, unread
+activity, and attention. Selecting a thread projects its runtime-neutral history
+and normalized live events through the same transcript renderer used by direct
+chat sessions.
+
+The implementation keeps the normal library boundaries:
+
+- `protocol` generates wire types from `external-runtime-api-v0.openapi.json`;
+- `transport` owns external runtime HTTP, cursor-resuming SSE, interactions, and controls;
+- `chat-domain` projects text, reasoning, plans, commands, file changes, usage, tools, and unknown debug events into generic message blocks;
+- `chat-store` owns runtime-namespaced identity, fleet polling, selected-thread streaming, lifecycle reduction, attention, and async controls; and
+- `chat-shell` owns the Agents panel, auto/steer/queue composer modes, interrupt control, structured interaction card, and bounded raw-event inspection.
+
+Selection is load-gated so a user cannot submit against a half-loaded thread.
+Only the selected thread opens an SSE stream; fleet lifecycle and interaction
+attention advance through cursor-based polling. Full native payloads remain out
+of the normal transcript and are fetched on demand through bounded raw-detail
+references.
 
 ## Transcript Renderer
 
@@ -125,6 +149,13 @@ backend/profile/LLM. The close criterion is inspected browser evidence, not
 merely a passing deterministic assertion.
 
 See [live-testing.md](live-testing.md).
+
+The gated `external-agent-console.live.spec.ts` scenario uses the real Codex
+app-server and Rusty Crew external-runtime routes. It proves Den-mapped work,
+steer, interrupt, fleet attention, command/file rendering, browser refresh, and
+exact-thread recovery after service replacement. See
+[external-agent-console-certification.md](external-agent-console-certification.md)
+for the low-risk edit created by that real external agent.
 
 ## Publishing
 

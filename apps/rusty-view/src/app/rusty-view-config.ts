@@ -9,6 +9,7 @@ import { ChatTransport } from '@rusty-view/transport';
 import {
   AdminStore,
   ChatStore,
+  ExternalAgentStore,
   CHAT_STORAGE_ADAPTER,
   IndexedDbChatStorage,
 } from '@rusty-view/chat-store';
@@ -131,6 +132,7 @@ export function provideRustyView(
       deps: [ChatTheme],
     },
     ChatStore,
+    ExternalAgentStore,
     AdminStore,
     provideAppInitializer(() => {
       const store = inject(ChatStore);

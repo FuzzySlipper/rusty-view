@@ -49,7 +49,26 @@
     <!-- Profile sidebar -->
     @if (showProfiles()) {
     <aside class="rv-debug__sidebar">
-      <rv-profile-panel />
+      <nav class="rv-debug__sidebar-tabs" aria-label="Conversation sources">
+        <button
+          type="button"
+          [class.active]="sidebarMode() === 'profiles'"
+          (click)="showSidebar('profiles')"
+        >
+          Profiles
+        </button>
+        <button
+          type="button"
+          data-testid="external-agents-tab"
+          [class.active]="sidebarMode() === 'agents'"
+          (click)="showSidebar('agents')"
+        >
+          Agents @if (externalAttention()) {
+          <span class="rv-debug__attention-dot"></span> }
+        </button>
+      </nav>
+      @if (sidebarMode() === 'profiles') { <rv-profile-panel /> } @else {
+      <rv-external-agent-panel /> }
     </aside>
     }
 
@@ -74,20 +93,53 @@
           Return to active
         </button>
       </div>
-      } @if (store.activeSessionId()) {
+      } @if (hasConversation()) { @if (externalSelected()) {
+      <div
+        class="rv-debug__external-status"
+        data-testid="external-turn-status"
+        [attr.data-turn-phase]="external.turnPhase()"
+        [attr.data-active-turn-id]="external.activeTurnId()"
+        [attr.data-event-count]="external.events().length"
+        [attr.data-latest-sequence]="external.events().at(-1)?.sequenceId"
+      >
+        <span
+          >{{ external.turnPhase() ?? external.selectedThread()?.status ??
+          'idle' }}</span
+        >
+        <select
+          aria-label="External message mode"
+          [value]="external.composerMode()"
+          (change)="setExternalComposerMode($event)"
+        >
+          <option value="auto">Auto follow-up</option>
+          <option value="steer">Steer active turn</option>
+          <option value="queue">Queue next turn</option>
+        </select>
+        <button
+          type="button"
+          data-testid="external-interrupt"
+          [disabled]="!external.isTurnActive() || external.pending()"
+          (click)="external.interrupt()"
+        >
+          Interrupt
+        </button>
+      </div>
+      @for (interaction of external.selectedInteractions(); track
+      interaction.interactionId) { @if (interaction.status === 'pending') {
+      <rv-external-interaction-card [interaction]="interaction" /> } } }
       <div class="rv-debug__transcript" data-testid="transcript-shell">
         <rv-transcript-viewport
-          [messages]="store.messages()"
+          [messages]="displayedMessages()"
           [searchEnabled]="showTranscriptSearch()"
-          [branches]="store.branches()"
-          [activeBranchId]="store.activeBranchId()"
-          [snapshots]="store.snapshots()"
+          [branches]="externalSelected() ? [] : store.branches()"
+          [activeBranchId]="externalSelected() ? undefined : store.activeBranchId()"
+          [snapshots]="externalSelected() ? [] : store.snapshots()"
           [revisionCapabilities]="revisionCapabilities"
           (activeBranchSelected)="onActiveBranchSelected($event)"
           (revisionRequested)="onRevisionRequested($event)"
         />
       </div>
-      @if (!isViewingHistorical()) {
+      @if (!isViewingHistorical() || externalSelected()) {
       <rv-message-input
         [disabled]="inputDisabled()"
         [commands]="inputCommands()"
@@ -104,7 +156,7 @@
       </div>
       } } } @else {
       <div class="rv-debug__no-session" data-testid="no-session">
-        Select a profile from the sidebar to begin.
+        Select a profile or agent session from the sidebar to begin.
       </div>
       }
     </main>
@@ -134,11 +186,19 @@
       </nav>
       @if (inspectorTab() === 'events') {
       <rv-event-inspector
-        [events]="store.rawEvents()"
+        [events]="externalSelected() ? external.events() : store.rawEvents()"
         [selectedEventId]="selectedEventId()"
         (selectEvent)="selectEvent($event)"
+        (inspectRawDetail)="external.loadRawDetail($event)"
       />
-      } @else {
+      @if (externalSelected() && external.rawDetail(); as detail) {
+      <pre
+        class="rv-debug__external-raw"
+        data-testid="external-raw-detail-view"
+      >
+{{ detail.json }}</pre
+      >
+      } } @else {
       <rv-context-diagnostics
         [usage]="store.contextUsage()"
         [timeline]="store.contextTimeline()"

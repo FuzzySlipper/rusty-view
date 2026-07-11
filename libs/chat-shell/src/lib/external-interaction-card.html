@@ -1,0 +1,31 @@
+<section
+  class="rv-interaction"
+  data-testid="external-interaction-card"
+  [attr.data-kind]="interaction().kind"
+>
+  <div class="rv-interaction__heading">
+    {{ interaction().kind.replaceAll('_', ' ') }}
+  </div>
+  <pre>{{ prompt() }}</pre>
+  <div class="rv-interaction__presets">
+    @for (choice of interaction().allowedResponses; track choice) {
+    <button type="button" (click)="resolvePreset(choice)">{{ choice }}</button>
+    }
+  </div>
+  <textarea
+    aria-label="Structured interaction response"
+    [value]="response()"
+    (input)="updateResponse($event)"
+    rows="3"
+  ></textarea>
+  <button
+    type="button"
+    data-testid="external-interaction-submit"
+    (click)="resolveJson()"
+  >
+    Submit response
+  </button>
+  @if (error()) {
+  <div role="alert">{{ error() }}</div>
+  }
+</section>

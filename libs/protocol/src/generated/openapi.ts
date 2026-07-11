@@ -457,7 +457,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List chat command registry entries */
+        /** List browser-safe chat slash commands. */
         get: operations["listChatCommands"];
         put?: never;
         post?: never;
@@ -474,8 +474,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Resolve backend-provided autocomplete values for a slash command argument */
+        /** Resolve backend-provided autocomplete values for a chat slash command argument. */
         get: operations["autocompleteChatCommandArgument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List public admin, chat, and control capabilities. */
+        get: operations["listApiCapabilities"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1014,11 +1031,21 @@ export interface components {
             metadata_json?: unknown;
             blocks?: components["schemas"]["MessageBlockDraft"][];
         };
+        BranchHeadConflict: {
+            expected?: string | null;
+            actual?: string | null;
+        };
         MessageSlotMutationResult: {
             /** @enum {string} */
             status: "created" | "deleted";
             slot: components["schemas"]["MessageSlotRecord"];
             latest_cursor: string;
+        } | {
+            /** @enum {string} */
+            status: "conflict";
+            branch: components["schemas"]["ConversationBranchRecord"];
+            conflict: components["schemas"]["BranchHeadConflict"];
+            latest_cursor?: string;
         };
         MessageVariantMutationResult: {
             /** @enum {string} */
@@ -1287,7 +1314,7 @@ export interface components {
         };
         ChatCommandDescriptor: {
             name: string;
-            aliases?: string[];
+            aliases: string[];
             description: string;
             args_schema: {
                 [key: string]: unknown;
@@ -1300,10 +1327,10 @@ export interface components {
             mutating: boolean;
             /** @enum {string} */
             scope: "session" | "profile" | "service";
-            allowed_session_kinds?: ("full" | "worker" | "delegated")[];
-            /** @default false */
+            allowed_session_kinds: ("full" | "worker" | "delegated")[];
             requires_control_auth: boolean;
             backing_control_command?: string;
+            rust_plan_operation?: string;
         };
         ChatCommandArgumentDescriptor: {
             name: string;
@@ -1334,6 +1361,12 @@ export interface components {
             items: components["schemas"]["ChatCommandEnumValue"][];
             has_more: boolean;
         };
+        ApiCapabilityRegistry: {
+            /** @constant */
+            schema_version: 1;
+            slash_commands: components["schemas"]["ChatCommandDescriptor"][];
+            capabilities: components["schemas"]["ApiCapabilityDescriptor"][];
+        };
         ExecuteChatCommandRequest: {
             /** @description Raw slash command text such as /status or /new fresh start. */
             command: string;
@@ -1351,6 +1384,29 @@ export interface components {
             response?: {
                 [key: string]: unknown;
             };
+        };
+        "schemas-ApiEnvelope": {
+            ok: boolean;
+            data?: unknown;
+            error?: components["schemas"]["ApiError"];
+            meta: components["schemas"]["ApiMeta"];
+        };
+        ApiCapabilityDescriptor: {
+            id: string;
+            /** @enum {string} */
+            method: "DELETE" | "GET" | "PATCH" | "POST";
+            path_template: string;
+            description: string;
+            /** @enum {string} */
+            auth: "none" | "chat" | "admin";
+            /** @enum {string} */
+            mutation: "read" | "write" | "control";
+            /** @enum {string} */
+            stability: "stable" | "experimental";
+            tags: ("attachment" | "chat" | "config" | "conversation" | "curator" | "delegation" | "diagnostics" | "governance" | "maintenance" | "mcp" | "memory" | "profile" | "prompt" | "scheduler" | "search" | "service" | "session" | "storage" | "tool")[];
+            public: boolean;
+            command_name?: string;
+            rust_plan_operation?: string;
         };
     };
     responses: never;
@@ -2263,15 +2319,27 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Command registry */
+            /** @description Successful typed discovery response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiEnvelope"] & {
-                        data?: components["schemas"]["ChatCommandRegistry"];
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ChatCommandRegistry"];
+                        meta: components["schemas"]["ApiMeta"];
                     };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas-ApiEnvelope"];
                 };
             };
         };
@@ -2281,7 +2349,7 @@ export interface operations {
             query: {
                 argument: string;
                 query?: string;
-                limit?: components["parameters"]["Limit"];
+                limit?: number;
             };
             header?: never;
             path: {
@@ -2291,15 +2359,61 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Autocomplete values */
+            /** @description Successful typed discovery response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiEnvelope"] & {
-                        data?: components["schemas"]["ChatCommandAutocompleteResult"];
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ChatCommandAutocompleteResult"];
+                        meta: components["schemas"]["ApiMeta"];
                     };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas-ApiEnvelope"];
+                };
+            };
+        };
+    };
+    listApiCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed discovery response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ApiCapabilityRegistry"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas-ApiEnvelope"];
                 };
             };
         };

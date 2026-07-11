@@ -137,6 +137,7 @@ export function pluginCommandDescriptor(
     named_args: [],
     surfaces: ['chat-input'],
     source: 'plugin',
+    allowed_session_kinds: [],
     read_only: !mutating,
     mutating,
     requires_control_auth:

@@ -14,6 +14,11 @@
 
 export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
 export { AdminStore } from './lib/admin-store';
+export { ExternalAgentStore } from './lib/external-agent-store';
+export type {
+  ExternalAgentSession,
+  ExternalComposerMode,
+} from './lib/external-agent-store';
 export type { AdminProfileSummary } from './lib/admin-store';
 export {
   storeErrorDetail,

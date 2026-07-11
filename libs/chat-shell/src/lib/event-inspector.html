@@ -1,23 +1,43 @@
 <div class="rv-event-inspector" data-testid="event-inspector">
+  <div class="rv-event-inspector__filters">
+    <input
+      aria-label="Filter by runtime"
+      placeholder="runtime"
+      [value]="runtimeFilter()"
+      (input)="updateFilter('runtime', $event)"
+    />
+    <input
+      aria-label="Filter by session"
+      placeholder="session"
+      [value]="sessionFilter()"
+      (input)="updateFilter('session', $event)"
+    />
+    <input
+      aria-label="Filter by turn"
+      placeholder="turn"
+      [value]="turnFilter()"
+      (input)="updateFilter('turn', $event)"
+    />
+  </div>
   <div class="rv-event-inspector__list" data-testid="event-inspector-list">
-    @for (event of events(); track event.event_id) {
+    @for (event of filteredEvents(); track eventId(event)) {
     <button
       type="button"
       class="rv-event"
       data-testid="event-row"
-      [attr.data-event-id]="event.event_id"
+      [attr.data-event-id]="eventId(event)"
       [attr.data-event-kind]="event.kind"
-      [class.rv-event--selected]="selectedEventId() === event.event_id"
-      (click)="selectEvent.emit(event.event_id)"
+      [class.rv-event--selected]="selectedEventId() === eventId(event)"
+      (click)="selectEvent.emit(eventId(event))"
     >
-      <span class="rv-event__seq">{{ event.sequence_id }}</span>
+      <span class="rv-event__seq">{{ sequenceId(event) }}</span>
       <span
         class="rv-event__kind"
         [class]="kindColor[event.kind] ?? 'rv-event-kind--unknown'"
       >
         {{ event.kind }}
       </span>
-      <span class="rv-event__id">{{ event.event_id }}</span>
+      <span class="rv-event__id">{{ eventId(event) }}</span>
     </button>
     } @empty {
     <div class="rv-event-inspector__empty" data-testid="event-inspector-empty">
@@ -25,9 +45,18 @@
     </div>
     }
   </div>
-  @if (selectedEvent(events()); as selected) {
+  @if (selectedEvent(filteredEvents()); as selected) {
   <div class="rv-event-inspector__detail" data-testid="event-inspector-detail">
     <rv-json-inspector [data]="selected" />
+    @if (isExternal(selected) && selected.rawDetailRef) {
+    <button
+      type="button"
+      data-testid="external-raw-detail"
+      (click)="inspectRawDetail.emit(selected)"
+    >
+      Load bounded raw detail
+    </button>
+    }
   </div>
   }
 </div>

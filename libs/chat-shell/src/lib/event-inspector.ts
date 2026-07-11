@@ -1,10 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
+  signal,
 } from '@angular/core';
-import type { ChatEvent } from '@rusty-view/protocol';
+import type {
+  ChatEvent,
+  NormalizedExternalRuntimeEvent,
+} from '@rusty-view/protocol';
 import { JsonInspectorComponent } from '@rusty-view/chat-components';
 
 /**
@@ -20,10 +25,22 @@ import { JsonInspectorComponent } from '@rusty-view/chat-components';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EventInspectorComponent {
-  readonly events = input<readonly ChatEvent[]>([]);
+  readonly events = input<readonly InspectorEvent[]>([]);
   readonly selectedEventId = input<string | undefined>(undefined);
   /** Emits the clicked event's id so the shell can drive the JSON detail. */
   readonly selectEvent = output<string>();
+  readonly inspectRawDetail = output<NormalizedExternalRuntimeEvent>();
+  protected readonly runtimeFilter = signal('');
+  protected readonly sessionFilter = signal('');
+  protected readonly turnFilter = signal('');
+  protected readonly filteredEvents = computed(() =>
+    this.events().filter(
+      (event) =>
+        includes(this.runtimeId(event), this.runtimeFilter()) &&
+        includes(this.sessionId(event), this.sessionFilter()) &&
+        includes(this.turnId(event), this.turnFilter()),
+    ),
+  );
 
   protected readonly kindColor: Record<string, string> = {
     session_snapshot: 'rv-event-kind--snapshot',
@@ -46,9 +63,49 @@ export class EventInspectorComponent {
     unknown: 'rv-event-kind--unknown',
   };
 
-  protected selectedEvent(events: readonly ChatEvent[]): ChatEvent | undefined {
+  protected selectedEvent(
+    events: readonly InspectorEvent[],
+  ): InspectorEvent | undefined {
     const id = this.selectedEventId();
     if (id === undefined) return undefined;
-    return events.find((e) => e.event_id === id);
+    return events.find((event) => this.eventId(event) === id);
   }
+
+  protected eventId(event: InspectorEvent): string {
+    return 'event_id' in event ? event.event_id : event.eventId;
+  }
+  protected sequenceId(event: InspectorEvent): string | number {
+    return 'sequence_id' in event ? event.sequence_id : event.sequenceId;
+  }
+  protected runtimeId(event: InspectorEvent): string {
+    return 'runtimeId' in event ? event.runtimeId : '';
+  }
+  protected sessionId(event: InspectorEvent): string {
+    return ('session_id' in event ? event.session_id : event.sessionId) ?? '';
+  }
+  protected turnId(event: InspectorEvent): string {
+    return 'nativeTurnId' in event ? (event.nativeTurnId ?? '') : '';
+  }
+  protected isExternal(
+    event: InspectorEvent,
+  ): event is NormalizedExternalRuntimeEvent {
+    return 'runtimeId' in event;
+  }
+  protected updateFilter(
+    filter: 'runtime' | 'session' | 'turn',
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLInputElement).value;
+    ({
+      runtime: this.runtimeFilter,
+      session: this.sessionFilter,
+      turn: this.turnFilter,
+    })[filter].set(value);
+  }
+}
+
+type InspectorEvent = ChatEvent | NormalizedExternalRuntimeEvent;
+
+function includes(value: string, query: string): boolean {
+  return query === '' || value.toLowerCase().includes(query.toLowerCase());
 }

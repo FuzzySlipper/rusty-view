@@ -1,0 +1,250 @@
+import type {
+  ExternalAgentBinding,
+  ExternalBindingFleet,
+  ExternalBindingMessageWrite,
+  ExternalControlReceipt,
+  ExternalControlWrite,
+  ExternalInteractionAttention,
+  ExternalInteractionRecord,
+  ExternalInteractionResolutionWrite,
+  ExternalRuntimeEventPage,
+  ExternalRuntimeFleet,
+  ExternalRuntimeRawDetail,
+  ExternalThreadPage,
+  ExternalThreadReadRequest,
+  ExternalThreadReadResult,
+  ListExternalBindingsResponse,
+  ListExternalInteractionsResponse,
+  ListExternalRuntimeEventsResponse,
+  ListExternalRuntimeThreadsResponse,
+  ListExternalRuntimesResponse,
+  ReadExternalRuntimeRawDetailResponse,
+  ReadExternalRuntimeThreadResponse,
+  ResolveExternalInteractionResponse,
+  SendExternalBindingMessageResponse,
+  SubmitExternalBindingControlResponse,
+} from '@rusty-view/protocol';
+
+import { ChatTransportError, classifyFetchError } from './chat-transport-error';
+import type { ChatTransportConfig, FetchImpl } from './chat-transport-config';
+
+type SuccessEnvelope<T> = { readonly ok: true; readonly data: T };
+
+export class ExternalRuntimeHttpTransport {
+  private readonly fetchImpl: FetchImpl;
+
+  constructor(private readonly config: ChatTransportConfig) {
+    this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
+
+  async listRuntimes(): Promise<ExternalRuntimeFleet> {
+    return unwrap(
+      await this.request<ListExternalRuntimesResponse>(
+        'GET',
+        '/v1/external-runtimes',
+      ),
+    );
+  }
+
+  async listBindings(): Promise<ExternalBindingFleet> {
+    return unwrap(
+      await this.request<ListExternalBindingsResponse>(
+        'GET',
+        '/v1/external-bindings',
+      ),
+    );
+  }
+
+  async listThreads(
+    runtimeId: string,
+    query?: { readonly limit?: number; readonly cursor?: string },
+  ): Promise<ExternalThreadPage> {
+    return unwrap(
+      await this.request<ListExternalRuntimeThreadsResponse>(
+        'GET',
+        `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/threads`,
+        undefined,
+        query,
+      ),
+    );
+  }
+
+  async readThread(
+    runtimeId: string,
+    request: ExternalThreadReadRequest,
+  ): Promise<ExternalThreadReadResult> {
+    return unwrap(
+      await this.request<ReadExternalRuntimeThreadResponse>(
+        'POST',
+        `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/threads/read`,
+        request,
+      ),
+    );
+  }
+
+  async listEvents(
+    runtimeId: string,
+    query?: { readonly after?: number; readonly limit?: number },
+  ): Promise<ExternalRuntimeEventPage> {
+    return unwrap(
+      await this.request<ListExternalRuntimeEventsResponse>(
+        'GET',
+        `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/events`,
+        undefined,
+        query,
+      ),
+    );
+  }
+
+  async listInteractions(): Promise<ExternalInteractionAttention> {
+    return unwrap(
+      await this.request<ListExternalInteractionsResponse>(
+        'GET',
+        '/v1/external-interactions',
+      ),
+    );
+  }
+
+  async submitControl(
+    bindingId: string,
+    request: ExternalControlWrite,
+  ): Promise<ExternalControlReceipt> {
+    return unwrap(
+      await this.request<SubmitExternalBindingControlResponse>(
+        'POST',
+        `/v1/external-bindings/${encodeURIComponent(bindingId)}/controls`,
+        request,
+      ),
+    );
+  }
+
+  async sendMessage(
+    bindingId: string,
+    request: ExternalBindingMessageWrite,
+  ): Promise<SendExternalBindingMessageResponse['data']> {
+    return unwrap(
+      await this.request<SendExternalBindingMessageResponse>(
+        'POST',
+        `/v1/external-bindings/${encodeURIComponent(bindingId)}/messages`,
+        request,
+      ),
+    );
+  }
+
+  async resolveInteraction(
+    interactionId: string,
+    request: ExternalInteractionResolutionWrite,
+  ): Promise<ExternalInteractionRecord> {
+    return unwrap(
+      await this.request<ResolveExternalInteractionResponse>(
+        'POST',
+        `/v1/external-interactions/${encodeURIComponent(interactionId)}/resolve`,
+        request,
+      ),
+    );
+  }
+
+  async rawDetail(
+    runtimeId: string,
+    detailId: string,
+  ): Promise<ExternalRuntimeRawDetail> {
+    return unwrap(
+      await this.request<ReadExternalRuntimeRawDetailResponse>(
+        'GET',
+        `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/raw-details/${encodeURIComponent(detailId)}`,
+      ),
+    );
+  }
+
+  streamUrl(runtimeId: string, cursor?: number): string {
+    const url = new URL(
+      `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/stream`,
+      this.config.baseUrl,
+    );
+    if (cursor !== undefined) url.searchParams.set('cursor', String(cursor));
+    return url.toString();
+  }
+
+  streamHeaders(cursor?: number): Headers {
+    const headers = new Headers({ Accept: 'text/event-stream' });
+    if (this.config.bearerToken !== undefined) {
+      headers.set('Authorization', `Bearer ${this.config.bearerToken}`);
+    }
+    if (cursor !== undefined) headers.set('Last-Event-ID', String(cursor));
+    return headers;
+  }
+
+  fetch(): FetchImpl {
+    return this.fetchImpl;
+  }
+
+  private async request<T extends SuccessEnvelope<unknown>>(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+    query?: Readonly<Record<string, unknown>>,
+  ): Promise<T> {
+    const url = new URL(path, this.config.baseUrl);
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value !== undefined) url.searchParams.set(key, String(value));
+    }
+    const headers = new Headers({ Accept: 'application/json' });
+    if (body !== undefined) headers.set('Content-Type', 'application/json');
+    if (this.config.bearerToken !== undefined) {
+      headers.set('Authorization', `Bearer ${this.config.bearerToken}`);
+    }
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch (error) {
+      throw classifyFetchError(error);
+    }
+    const parsed = (await response.json()) as unknown;
+    if (!response.ok || !isSuccessEnvelope(parsed)) {
+      throw new ChatTransportError({
+        code:
+          response.status === 401 || response.status === 403
+            ? 'auth_error'
+            : 'http_error',
+        message: errorMessage(parsed, response),
+        statusCode: response.status,
+      });
+    }
+    return parsed as T;
+  }
+}
+
+function unwrap<T>(envelope: SuccessEnvelope<T>): T {
+  return envelope.data;
+}
+
+function isSuccessEnvelope(value: unknown): value is SuccessEnvelope<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'ok' in value &&
+    value.ok === true &&
+    'data' in value
+  );
+}
+
+function errorMessage(value: unknown, response: Response): string {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'error' in value &&
+    typeof value.error === 'object' &&
+    value.error !== null &&
+    'message' in value.error &&
+    typeof value.error.message === 'string'
+  ) {
+    return value.error.message;
+  }
+  return `External runtime request failed: HTTP ${response.status}`;
+}
+
+export type ExternalBinding = ExternalAgentBinding;

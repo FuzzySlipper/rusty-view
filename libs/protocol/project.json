@@ -27,7 +27,11 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "pnpm exec openapi-typescript \"${RUSTY_VIEW_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json}\" -o {projectRoot}/src/generated/openapi.ts"
+        "commands": [
+          "pnpm exec openapi-typescript \"${RUSTY_VIEW_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json}\" -o {projectRoot}/src/generated/openapi.ts",
+          "pnpm exec openapi-typescript \"${RUSTY_VIEW_EXTERNAL_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/external-runtime-api-v0.openapi.json}\" -o {projectRoot}/src/generated/external-openapi.ts"
+        ],
+        "parallel": false
       }
     },
     "check": {

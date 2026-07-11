@@ -26,6 +26,8 @@ export type {
   ReplayEventsQuery,
 } from './lib/chat-http-transport';
 export { AdminHttpTransport } from './lib/admin-http-transport';
+export { ExternalRuntimeHttpTransport } from './lib/external-runtime-http-transport';
+export { ExternalRuntimeEventStream } from './lib/external-runtime-event-stream';
 export type { AdminListQuery } from './lib/admin-http-transport';
 export type {
   AdminAgentDiagnostics,

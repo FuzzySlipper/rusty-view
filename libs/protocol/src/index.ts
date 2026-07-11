@@ -31,6 +31,10 @@
  */
 
 import type { components, operations } from './generated/openapi';
+import type {
+  components as externalComponents,
+  operations as externalOperations,
+} from './generated/external-openapi';
 
 /**
  * Schemas namespace from the generated OpenAPI artifact. Re-exported so the
@@ -38,9 +42,74 @@ import type { components, operations } from './generated/openapi';
  * should prefer the named aliases below.
  */
 export type { components, operations, paths } from './generated/openapi';
+export type {
+  components as ExternalApiComponents,
+  operations as ExternalApiOperations,
+  paths as ExternalApiPaths,
+} from './generated/external-openapi';
 
 /** Shortcut into the generated schemas map, for the aliases below. */
 type Schemas = components['schemas'];
+type ExternalSchemas = externalComponents['schemas'];
+
+// ---- external-agent runtime ----
+export type ExternalRuntimeFleet = ExternalSchemas['ExternalRuntimeFleet'];
+export type ExternalRuntimeRegistration =
+  ExternalSchemas['ExternalRuntimeRegistration'];
+export type ExternalRuntimeControllerStatus =
+  ExternalSchemas['ExternalRuntimeControllerStatus'];
+export type ExternalRuntimeObservedState =
+  ExternalSchemas['ExternalRuntimeObservedState'];
+export type ExternalBindingFleet = ExternalSchemas['ExternalBindingFleet'];
+export type ExternalAgentBinding = ExternalSchemas['ExternalAgentBinding'];
+export type ExternalThreadPage = ExternalSchemas['ExternalThreadPage'];
+export type ExternalThreadProjection =
+  ExternalSchemas['ExternalThreadProjection'];
+export type ExternalThreadReadRequest =
+  ExternalSchemas['ExternalThreadReadRequest'];
+export type ExternalThreadReadResult =
+  ExternalSchemas['ExternalThreadReadResult'];
+export type ExternalRuntimeEventPage =
+  ExternalSchemas['ExternalRuntimeEventPage'];
+export type NormalizedExternalRuntimeEvent =
+  ExternalSchemas['NormalizedExternalRuntimeEvent'];
+export type ExternalRuntimeEventPayload =
+  ExternalSchemas['ExternalRuntimeEventPayload'];
+export type ExternalRuntimeRawDetail =
+  ExternalSchemas['ExternalRuntimeRawDetail'];
+export type ExternalInteractionAttention =
+  ExternalSchemas['ExternalInteractionAttention'];
+export type ExternalInteractionRecord =
+  ExternalSchemas['ExternalInteractionRecord'];
+export type ExternalInteractionResolutionWrite =
+  ExternalSchemas['ExternalInteractionResolutionWrite'];
+export type ExternalControlKind = ExternalSchemas['ExternalControlKind'];
+export type ExternalControlWrite = ExternalSchemas['ExternalControlWrite'];
+export type ExternalControlReceipt = ExternalSchemas['ExternalControlReceipt'];
+export type ExternalBindingMessageWrite =
+  ExternalSchemas['ExternalBindingMessageWrite'];
+export type ExternalTurnPhase = ExternalSchemas['ExternalTurnPhase'];
+
+export type ListExternalRuntimesResponse =
+  externalOperations['listExternalRuntimes']['responses'][200]['content']['application/json'];
+export type ListExternalBindingsResponse =
+  externalOperations['listExternalBindings']['responses'][200]['content']['application/json'];
+export type ListExternalRuntimeThreadsResponse =
+  externalOperations['listExternalRuntimeThreads']['responses'][200]['content']['application/json'];
+export type ReadExternalRuntimeThreadResponse =
+  externalOperations['readExternalRuntimeThread']['responses'][200]['content']['application/json'];
+export type ListExternalRuntimeEventsResponse =
+  externalOperations['listExternalRuntimeEvents']['responses'][200]['content']['application/json'];
+export type ListExternalInteractionsResponse =
+  externalOperations['listExternalInteractions']['responses'][200]['content']['application/json'];
+export type SubmitExternalBindingControlResponse =
+  externalOperations['submitExternalBindingControl']['responses'][200]['content']['application/json'];
+export type SendExternalBindingMessageResponse =
+  externalOperations['sendExternalBindingMessage']['responses'][200]['content']['application/json'];
+export type ResolveExternalInteractionResponse =
+  externalOperations['resolveExternalInteraction']['responses'][200]['content']['application/json'];
+export type ReadExternalRuntimeRawDetailResponse =
+  externalOperations['readExternalRuntimeRawDetail']['responses'][200]['content']['application/json'];
 
 // ---- envelope + meta + error ----
 export type ApiEnvelope = Schemas['ApiEnvelope'];

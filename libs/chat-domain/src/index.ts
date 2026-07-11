@@ -12,6 +12,7 @@
  */
 
 export { projectConversation } from './lib/conversation-projection';
+export { projectExternalAgentTranscript } from './lib/external-agent-projection';
 export { emptyProjection } from './lib/domain-types';
 export { projectProfile, projectProfiles } from './lib/brain-profile';
 export {

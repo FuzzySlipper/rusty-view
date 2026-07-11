@@ -7,7 +7,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ChatStore } from '@rusty-view/chat-store';
+import { ChatStore, ExternalAgentStore } from '@rusty-view/chat-store';
 import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
@@ -24,6 +24,8 @@ import {
 } from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
 import { ProfilePanelComponent } from './profile-panel';
+import { ExternalAgentPanelComponent } from './external-agent-panel';
+import { ExternalInteractionCardComponent } from './external-interaction-card';
 import { TopMenuComponent } from './top-menu';
 import {
   CHAT_SLASH_COMMANDS,
@@ -49,6 +51,8 @@ import {
   selector: 'rv-debug-shell',
   imports: [
     ProfilePanelComponent,
+    ExternalAgentPanelComponent,
+    ExternalInteractionCardComponent,
     TranscriptViewportComponent,
     MessageInputComponent,
     StreamStatusComponent,
@@ -71,6 +75,7 @@ import {
 })
 export class DebugShellComponent {
   protected readonly store = inject(ChatStore);
+  protected readonly external = inject(ExternalAgentStore);
   private readonly destroyRef = inject(DestroyRef);
   private readonly slashCommands =
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
@@ -79,6 +84,7 @@ export class DebugShellComponent {
   protected readonly showInspector = signal(true);
   protected readonly showProfiles = signal(true);
   protected readonly showTranscriptSearch = signal(false);
+  protected readonly sidebarMode = signal<'profiles' | 'agents'>('profiles');
   /** Which inspector tab is shown: the raw event log or context diagnostics. */
   protected readonly inspectorTab = signal<'events' | 'context'>('events');
   protected readonly selectedEventId = signal<string | undefined>(undefined);
@@ -99,9 +105,27 @@ export class DebugShellComponent {
   /** Disable the message input when streaming OR a submission is in flight. */
   protected readonly inputDisabled = computed(
     () =>
-      this.store.isGenerating() ||
-      this.store.isSubmitting() ||
+      (this.external.selectedThreadId() === undefined &&
+        (this.store.isGenerating() || this.store.isSubmitting())) ||
+      (this.external.selectedThreadId() !== undefined &&
+        this.external.loading()) ||
+      this.external.pending() ||
       this.pluginCommandPending(),
+  );
+
+  protected readonly externalSelected = computed(
+    () => this.external.selectedThreadId() !== undefined,
+  );
+  protected readonly displayedMessages = computed(() =>
+    this.externalSelected() ? this.external.messages() : this.store.messages(),
+  );
+  protected readonly hasConversation = computed(
+    () => this.externalSelected() || this.store.activeSessionId() !== undefined,
+  );
+  protected readonly externalAttention = computed(() =>
+    this.external
+      .sessions()
+      .some((session) => session.needsAttention || session.unread),
   );
 
   protected readonly inputCommands = computed<readonly ChatCommandDescriptor[]>(
@@ -131,6 +155,10 @@ export class DebugShellComponent {
   }
 
   protected onSendMessage(text: string): void {
+    if (this.externalSelected()) {
+      void this.external.send(text);
+      return;
+    }
     if (text.startsWith('/') && this.hasPluginCommand(text)) {
       void this.runPluginCommand(text);
       return;
@@ -149,6 +177,18 @@ export class DebugShellComponent {
 
   protected toggleProfiles(): void {
     this.showProfiles.update((v) => !v);
+  }
+
+  protected showSidebar(mode: 'profiles' | 'agents'): void {
+    this.sidebarMode.set(mode);
+    if (mode === 'profiles') this.external.clearSelection();
+  }
+
+  protected setExternalComposerMode(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === 'auto' || value === 'steer' || value === 'queue') {
+      this.external.composerMode.set(value);
+    }
   }
 
   protected toggleTranscriptSearch(): void {

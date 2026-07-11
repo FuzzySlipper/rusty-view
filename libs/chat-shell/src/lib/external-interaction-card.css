@@ -1,0 +1,31 @@
+.rv-interaction {
+  margin: var(--rv-space-sm);
+  padding: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-warning);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+}
+.rv-interaction__heading {
+  font-weight: var(--rv-font-weight-bold);
+  text-transform: capitalize;
+}
+.rv-interaction pre {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.rv-interaction textarea {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+}
+.rv-interaction__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-xs);
+  margin-bottom: var(--rv-space-xs);
+}
+.rv-interaction button {
+  cursor: pointer;
+}

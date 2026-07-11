@@ -1,9 +1,9 @@
 # rusty-view
 
 Rusty View is a boring, industrial chat console and reusable Angular client kit
-for Rusty Crew sessions. It renders real agent transcripts, streams assistant
-turns, exposes debug/admin panels, and keeps the reusable chat mechanics separate
-from any downstream product-specific UI.
+for Rusty Crew sessions and external agent runtimes. It renders real agent
+transcripts, streams assistant turns, exposes debug/admin panels, and keeps the
+reusable chat mechanics separate from downstream product-specific UI.
 
 ## What Lives Here
 
@@ -32,7 +32,7 @@ Rusty Crew owns backend protocol truth. Rusty View consumes generated
 OpenAPI-derived TypeScript types and keeps each layer narrow:
 
 ```text
-Rusty Crew API/SSE
+Rusty Crew chat and external-runtime APIs/SSE
   -> @rusty-view/protocol
   -> @rusty-view/transport
   -> @rusty-view/chat-store
@@ -89,10 +89,11 @@ pnpm exec nx g rv:library --name=my-lib --type=js --scope=chat-domain
 
 ## Protocol Contract
 
-Protocol types are generated from the Rusty Crew OpenAPI artifact:
+Protocol types are generated from the Rusty Crew OpenAPI artifacts:
 
 ```text
 /home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json
+/home/dev/rusty-crew/docs/external-runtime-api-v0.openapi.json
 ```
 
 Generated files are not hand-edited. Frontend domain/view-model types live in
@@ -102,6 +103,7 @@ Generated files are not hand-edited. Frontend domain/view-model types live in
 
 - [docs/rusty-view.md](docs/rusty-view.md) - current architecture map
 - [docs/live-testing.md](docs/live-testing.md) - real LLM/front-end testing
+- [docs/external-agent-console-certification.md](docs/external-agent-console-certification.md) - real external-agent console proof
 - [docs/plugin-api.md](docs/plugin-api.md) - plugin and contribution contracts
 - [docs/theming.md](docs/theming.md) - design tokens and appearance settings
 - [docs/tooltips.md](docs/tooltips.md) - reusable tooltip API and guidance

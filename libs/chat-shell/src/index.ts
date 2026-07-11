@@ -20,6 +20,7 @@ export { AppearanceTabComponent } from './lib/appearance-tab';
 export { HelpPanelComponent } from './lib/help-panel';
 export { DebugPanelComponent } from './lib/debug-panel';
 export { ProfilePanelComponent } from './lib/profile-panel';
+export { ExternalAgentPanelComponent } from './lib/external-agent-panel';
 export { SessionsPanelComponent } from './lib/sessions-panel';
 export { AdminProfilesPanelComponent } from './lib/admin-profiles-panel';
 export { AdminProfileCreateComponent } from './lib/admin-profile-create';
