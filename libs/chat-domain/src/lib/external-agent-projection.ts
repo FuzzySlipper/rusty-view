@@ -16,11 +16,16 @@ export function projectExternalAgentTranscript(
 ): readonly ChatMessage[] {
   const messages: ChatMessage[] = [];
   const knownItems = new Set<string>();
+  const snapshotKindsByTurn = new Map<string, Set<string>>();
   const terminalByTurn = terminalStatusesByTurn(events);
   if (thread !== undefined) {
     for (const turn of thread.turns) {
+      const snapshotKinds = new Set<string>();
+      snapshotKindsByTurn.set(turn.turnId, snapshotKinds);
       for (const item of turn.items) {
         knownItems.add(item.itemId);
+        snapshotKinds.add(item.kind);
+        const status = item.status ?? turn.status;
         const content =
           item.text ?? item.summary?.join('\n') ?? item.status ?? item.kind;
         messages.push(
@@ -29,8 +34,8 @@ export function projectExternalAgentTranscript(
             thread.sessionId,
             roleForItem(item.kind),
             unixDate(turn.startedAt ?? thread.updatedAt),
-            [blockForItem(item.itemId, item.kind, content, item.status)],
-            messageStatus(item.status),
+            [blockForItem(item.itemId, item.kind, content, status)],
+            messageStatus(status),
             {
               nativeThreadId: thread.threadId,
               nativeTurnId: turn.turnId,
@@ -60,6 +65,14 @@ export function projectExternalAgentTranscript(
   for (const [key, group] of grouped) {
     const first = group[0];
     if (first === undefined) continue;
+    if (
+      snapshotCoversEventGroup(
+        snapshotKindsByTurn.get(first.nativeTurnId ?? ''),
+        group,
+      )
+    ) {
+      continue;
+    }
     const status = terminalStatus(
       group,
       terminalByTurn.get(first.nativeTurnId ?? ''),
@@ -84,6 +97,25 @@ export function projectExternalAgentTranscript(
     );
   }
   return messages;
+}
+
+function snapshotCoversEventGroup(
+  snapshotKinds: ReadonlySet<string> | undefined,
+  events: readonly NormalizedExternalRuntimeEvent[],
+): boolean {
+  if (snapshotKinds === undefined) return false;
+  const projectedKind = events.some(
+    (event) => event.kind === 'assistant_text_delta',
+  )
+    ? 'agentMessage'
+    : events.some((event) => event.kind === 'reasoning_delta')
+      ? 'reasoning'
+      : events.some((event) => event.kind === 'plan_delta')
+        ? 'plan'
+        : events.some((event) => event.kind === 'command_activity')
+          ? 'commandExecution'
+          : undefined;
+  return projectedKind !== undefined && snapshotKinds.has(projectedKind);
 }
 
 function blocksForGroup(
@@ -137,17 +169,31 @@ function blocksForGroup(
       ),
     ];
   }
+  if (
+    first.kind === 'mcp_activity' &&
+    events.every(
+      (event) =>
+        event.payload.nativeMethod === 'mcpServer/startupStatus/updated' &&
+        event.payload.tool == null &&
+        event.payload.server == null &&
+        event.payload.text == null &&
+        event.payload.message == null,
+    )
+  ) {
+    return [];
+  }
   if (first.kind === 'usage') {
     const last = events.at(-1);
+    const usage = last?.payload.usage;
+    if (
+      usage == null ||
+      (typeof usage === 'object' && Object.keys(usage).length === 0)
+    ) {
+      return [];
+    }
     return last === undefined
       ? []
-      : [
-          simpleBlock(
-            last.eventId,
-            'usage',
-            JSON.stringify(last.payload.usage ?? {}, null, 2),
-          ),
-        ];
+      : [simpleBlock(last.eventId, 'usage', JSON.stringify(usage, null, 2))];
   }
   if (first.kind === 'turn_lifecycle') {
     const diffEvents = events.filter(

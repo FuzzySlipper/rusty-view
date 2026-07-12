@@ -62,6 +62,10 @@ export type ExternalRuntimeObservedState =
   ExternalSchemas['ExternalRuntimeObservedState'];
 export type ExternalBindingFleet = ExternalSchemas['ExternalBindingFleet'];
 export type ExternalAgentBinding = ExternalSchemas['ExternalAgentBinding'];
+export type ExternalAgentSessionCreateWrite =
+  ExternalSchemas['ExternalAgentSessionCreateWrite'];
+export type ExternalAgentSessionCreateResult =
+  ExternalSchemas['ExternalAgentSessionCreateResult'];
 export type ExternalThreadPage = ExternalSchemas['ExternalThreadPage'];
 export type ExternalThreadProjection =
   ExternalSchemas['ExternalThreadProjection'];
@@ -92,6 +96,8 @@ export type ExternalTurnPhase = ExternalSchemas['ExternalTurnPhase'];
 
 export type ListExternalRuntimesResponse =
   externalOperations['listExternalRuntimes']['responses'][200]['content']['application/json'];
+export type CreateExternalAgentSessionResponse =
+  externalOperations['createExternalAgentSession']['responses'][200]['content']['application/json'];
 export type ListExternalBindingsResponse =
   externalOperations['listExternalBindings']['responses'][200]['content']['application/json'];
 export type ListExternalRuntimeThreadsResponse =

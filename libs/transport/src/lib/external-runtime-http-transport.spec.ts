@@ -3,6 +3,39 @@ import { ExternalRuntimeEventStream } from './external-runtime-event-stream';
 import { ExternalRuntimeHttpTransport } from './external-runtime-http-transport';
 
 describe('ExternalRuntimeHttpTransport', () => {
+  it('creates an external agent session through the browser-safe endpoint', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-agent-sessions',
+        );
+        expect(JSON.parse(String(init?.body))).toEqual({
+          idempotencyKey: 'view-create-1',
+          runtimeId: 'runtime-1',
+          profileId: 'tester',
+          cwd: '/home/dev/rusty-view',
+          taskRef: { project_id: 'rusty-crew', task_id: '5675' },
+        });
+        return json({
+          ok: true,
+          data: { creation: { phase: 'ready' }, runtime: {}, thread: {} },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(
+      transport.createAgentSession({
+        idempotencyKey: 'view-create-1',
+        runtimeId: 'runtime-1',
+        profileId: 'tester',
+        cwd: '/home/dev/rusty-view',
+        taskRef: { project_id: 'rusty-crew', task_id: '5675' },
+      }),
+    ).resolves.toMatchObject({ creation: { phase: 'ready' } });
+  });
+
   it('uses generated endpoint shapes for fleets, pagination, and controls', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

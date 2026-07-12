@@ -134,6 +134,76 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages[0]?.blocks).toHaveLength(1);
     expect(messages[0]?.blocks[0]?.content).toBe('hello world');
   });
+
+  it('does not duplicate a completed snapshot item whose event uses another id', () => {
+    const events = [
+      {
+        ...event('1', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'Finished response',
+        }),
+        itemId: 'msg-native-id',
+        nativeTurnId: 'turn-1',
+      },
+      event('2', 'turn_lifecycle', {
+        nativeMethod: 'turn/completed',
+        status: 'completed',
+      }),
+    ];
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1_000,
+            items: [
+              {
+                itemId: 'item-2',
+                kind: 'agentMessage',
+                text: 'Finished response',
+              },
+            ],
+          },
+        ],
+      },
+      events,
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.status).toBe('completed');
+    expect(messages[0]?.blocks[0]?.content).toBe('Finished response');
+  });
+
+  it('keeps empty MCP startup and usage diagnostics out of the transcript', () => {
+    const messages = projectExternalAgentTranscript(undefined, [
+      event('1', 'mcp_activity', {
+        nativeMethod: 'mcpServer/startupStatus/updated',
+      }),
+      event('2', 'usage', {
+        nativeMethod: 'turn/completed',
+        usage: {},
+      }),
+    ]);
+
+    expect(messages).toEqual([]);
+  });
 });
 
 function event(

@@ -1,14 +1,146 @@
 <div class="rv-agents" data-testid="external-agent-panel">
   <div class="rv-agents__header">
     <span>Agent sessions</span>
-    <button
-      type="button"
-      data-testid="external-agent-refresh"
-      (click)="store.refresh()"
-    >
-      Refresh
-    </button>
+    <div class="rv-agents__header-actions">
+      @if (!creating()) {
+      <button
+        type="button"
+        data-testid="external-agent-create"
+        [disabled]="!canOpenCreator()"
+        (click)="openCreator()"
+      >
+        New
+      </button>
+      }
+      <button
+        type="button"
+        data-testid="external-agent-refresh"
+        (click)="store.refresh(); store.refreshCreationProfiles()"
+      >
+        Refresh
+      </button>
+    </div>
   </div>
+  @if (store.readyRuntimes().length === 0) {
+  <div class="rv-agents__prerequisite" data-testid="external-agent-no-runtime">
+    No ready Codex runtime is connected to this service.
+  </div>
+  } @else if (store.creationProfiles().length === 0) {
+  <div class="rv-agents__prerequisite" data-testid="external-agent-no-profile">
+    No active full-session profile is available.
+  </div>
+  } @if (creating()) {
+  <form
+    class="rv-agents__create"
+    data-testid="external-agent-create-form"
+    (submit)="create($event)"
+  >
+    <div class="rv-agents__create-heading">
+      <div>
+        <strong>New Codex session</strong>
+        <span>Start a persistent external agent</span>
+      </div>
+      <button
+        type="button"
+        [disabled]="store.creatingSession()"
+        (click)="closeCreator()"
+      >
+        Cancel
+      </button>
+    </div>
+
+    <label>
+      Runtime
+      <select
+        aria-label="Codex runtime"
+        [value]="runtimeId()"
+        (change)="updateDraft(runtimeId, $event)"
+      >
+        @for (runtime of store.readyRuntimes(); track runtime.runtimeId) {
+        <option [value]="runtime.runtimeId">{{ runtime.runtimeId }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Profile
+      <select
+        aria-label="Codex session profile"
+        [value]="profileId()"
+        (change)="updateDraft(profileId, $event)"
+      >
+        @for (profile of store.creationProfiles(); track profile.profileId) {
+        <option [value]="profile.profileId">
+          {{ profile.displayName ?? profile.profileId }}
+        </option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Working directory
+      <input
+        type="text"
+        required
+        placeholder="/home/dev/project"
+        autocomplete="off"
+        [value]="cwd()"
+        (input)="updateDraft(cwd, $event)"
+      />
+    </label>
+
+    <label>
+      Label
+      <input
+        type="text"
+        placeholder="Optional session name"
+        autocomplete="off"
+        [value]="label()"
+        (input)="updateDraft(label, $event)"
+      />
+    </label>
+
+    <div class="rv-agents__create-row">
+      <label>
+        Den project
+        <input
+          type="text"
+          placeholder="Optional"
+          autocomplete="off"
+          [value]="taskProjectId()"
+          (input)="updateDraft(taskProjectId, $event)"
+        />
+      </label>
+      <label>
+        Task
+        <input
+          type="text"
+          inputmode="numeric"
+          placeholder="Optional"
+          autocomplete="off"
+          [value]="taskId()"
+          (input)="updateDraft(taskId, $event)"
+        />
+      </label>
+    </div>
+
+    @if (store.creationError()) {
+    <div class="rv-agents__error" role="alert">{{ store.creationError() }}</div>
+    } @if (attempted() && store.creationError()) {
+    <div class="rv-agents__retry" role="status">
+      Retry will resume this same creation request.
+    </div>
+    }
+    <button
+      class="rv-agents__create-submit"
+      type="submit"
+      data-testid="external-agent-create-submit"
+      [disabled]="!canSubmit()"
+    >
+      {{ store.creatingSession() ? 'Starting…' : 'Start session' }}
+    </button>
+  </form>
+  } @else {
   <input
     class="rv-agents__search"
     type="search"
@@ -68,5 +200,5 @@
   >
     {{ store.loadingMore() ? 'Loading…' : 'Load more sessions' }}
   </button>
-  }
+  } }
 </div>

@@ -5,6 +5,10 @@ test('external agent fleet, transcript activity, interactions, and controls are 
 }, testInfo) => {
   let interactionResolution: unknown;
   let rejectMessages = false;
+  let creationRequest: Record<string, unknown> | undefined;
+  let messageBindingId: string | undefined;
+  let listedBindings = [binding];
+  let listedThreads = [thread];
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -18,15 +22,86 @@ test('external agent fleet, transcript activity, interactions, and controls are 
           meta: { request_id: 'req', schema_version: 1 },
         }),
       });
+    if (url.pathname === '/v1/admin/profiles/registry')
+      return ok({
+        items: [
+          {
+            profileId: 'tester',
+            displayName: 'Tester',
+            lifecycleStatus: 'active',
+            defaultSessionKind: 'full',
+          },
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      });
+    if (url.pathname === '/v1/external-agent-sessions') {
+      creationRequest = request.postDataJSON() as Record<string, unknown>;
+      const createdBinding = {
+        ...binding,
+        bindingId: 'binding-created',
+        nativeThreadId: 'thread-created',
+        sessionId: 'session-created',
+        agentId: 'agent-created',
+        taskRef: { project_id: 'rusty-crew', task_id: '5675' },
+      };
+      const createdThread = {
+        ...thread,
+        threadId: 'thread-created',
+        sessionId: 'session-created',
+        preview: 'New browser-created Codex session',
+        name: 'View external session',
+        turns: [],
+      };
+      listedBindings = [...listedBindings, createdBinding];
+      listedThreads = [...listedThreads, createdThread];
+      return ok({
+        creation: {
+          creationId: 'creation-1',
+          request: {
+            ...creationRequest,
+            requestedAt: '2026-07-12T00:00:00Z',
+          },
+          requestFingerprint: 'creation-fingerprint',
+          session: {
+            sessionId: 'session-created',
+            agentId: 'agent-created',
+            profileId: 'tester',
+            status: 'idle',
+          },
+          binding: createdBinding,
+          nativeThreadSource: 'rusty-crew:create-1',
+          nativeThreadId: 'thread-created',
+          phase: 'ready',
+          revision: 4,
+          createdAt: '2026-07-12T00:00:00Z',
+          updatedAt: '2026-07-12T00:00:01Z',
+        },
+        runtime,
+        thread: createdThread,
+      });
+    }
     if (url.pathname === '/v1/external-runtimes')
       return ok({ runtimes: [runtime], controllers: [controller] });
     if (url.pathname === '/v1/external-bindings')
-      return ok({ bindings: [binding] });
+      return ok({ bindings: listedBindings });
     if (url.pathname === '/v1/external-interactions')
       return ok({ interactions: [interaction] });
-    if (url.pathname.endsWith('/threads/read')) return ok({ thread });
+    if (url.pathname.endsWith('/threads/read')) {
+      const body = request.postDataJSON() as { threadId?: string };
+      return ok({
+        thread:
+          listedThreads.find((item) => item.threadId === body.threadId) ??
+          thread,
+      });
+    }
     if (url.pathname.endsWith('/threads'))
-      return ok({ items: [thread], nextCursor: null, backwardsCursor: null });
+      return ok({
+        items: listedThreads,
+        nextCursor: null,
+        backwardsCursor: null,
+      });
     if (url.pathname.endsWith('/events')) return ok({ events });
     if (url.pathname.endsWith('/stream'))
       return route.fulfill({
@@ -90,8 +165,10 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         }),
       });
     }
-    if (url.pathname.endsWith('/messages'))
+    if (url.pathname.endsWith('/messages')) {
+      messageBindingId = url.pathname.split('/')[3];
       return ok({ deliveryId: 'delivery-1', status: 'accepted' });
+    }
     return route.fulfill({
       status: 404,
       contentType: 'application/json',
@@ -101,7 +178,41 @@ test('external agent fleet, transcript activity, interactions, and controls are 
 
   await page.goto('/?api=http://crew.test');
   await page.getByTestId('external-agents-tab').click();
-  const row = page.getByTestId('external-agent-row');
+  await page.getByTestId('external-agent-create').click();
+  await page.getByPlaceholder('/home/dev/project').fill('/home/dev/rusty-view');
+  await page
+    .getByPlaceholder('Optional session name')
+    .fill('View external session');
+  await page.getByLabel('Den project').fill('rusty-crew');
+  await page.getByLabel('Task').fill('5675');
+  await page.screenshot({
+    path: testInfo.outputPath('external-agent-create-form.png'),
+    fullPage: true,
+  });
+  await page.getByTestId('external-agent-create-submit').click();
+  await expect(
+    page.getByTestId('external-agent-row').filter({ hasText: '#5675' }),
+  ).toBeVisible();
+  expect(creationRequest).toMatchObject({
+    runtimeId: 'runtime-1',
+    profileId: 'tester',
+    cwd: '/home/dev/rusty-view',
+    label: 'View external session',
+    taskRef: { project_id: 'rusty-crew', task_id: '5675' },
+  });
+  await page.screenshot({
+    path: testInfo.outputPath('external-agent-created.png'),
+    fullPage: true,
+  });
+  await page
+    .getByTestId('message-input-field')
+    .fill('Hello from the created session');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => messageBindingId).toBe('binding-created');
+
+  const row = page
+    .getByTestId('external-agent-row')
+    .filter({ hasText: '#5516' });
   await expect(row).toContainText('#5516');
   await expect(row).toContainText('/home/dev/rusty-view');
   await row.click();
@@ -152,6 +263,43 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     path: testInfo.outputPath('external-agent-console.png'),
     fullPage: true,
   });
+});
+
+test('external agent creation explains a missing ready runtime', async ({
+  page,
+}) => {
+  await page.route('http://crew.test/v1/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const data =
+      pathname === '/v1/admin/profiles/registry'
+        ? { items: [], total: 0, limit: 100, offset: 0 }
+        : pathname === '/v1/external-runtimes'
+          ? { runtimes: [], controllers: [] }
+          : pathname === '/v1/external-bindings'
+            ? { bindings: [] }
+            : pathname === '/v1/external-interactions'
+              ? { interactions: [] }
+              : undefined;
+    await route.fulfill({
+      status: data === undefined ? 404 : 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        data === undefined
+          ? { ok: false, error: { message: 'not mocked' } }
+          : {
+              ok: true,
+              data,
+              meta: { request_id: 'req', schema_version: 1 },
+            },
+      ),
+    });
+  });
+
+  await page.goto('/?api=http://crew.test');
+  await page.getByTestId('external-agents-tab').click();
+
+  await expect(page.getByTestId('external-agent-no-runtime')).toBeVisible();
+  await expect(page.getByTestId('external-agent-create')).toBeDisabled();
 });
 
 const runtime = {

@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/v1/external-agent-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createExternalAgentSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-runtimes": {
         parameters: {
             query?: never;
@@ -783,6 +799,39 @@ export interface components {
             updatedAt: string;
         };
         /** @enum {string} */
+        ExternalAgentSessionCreationPhase: "prepared" | "binding_ready" | "native_starting" | "recovery_required" | "ready";
+        ExternalAgentSessionCreationRecord: {
+            binding: components["schemas"]["ExternalAgentBinding"];
+            createdAt: string;
+            creationId: string;
+            nativeThreadId?: string | null;
+            nativeThreadSource: string;
+            phase: components["schemas"]["ExternalAgentSessionCreationPhase"];
+            reasonCode?: string | null;
+            reasonMessage?: string | null;
+            request: components["schemas"]["ExternalAgentSessionCreationRequest"];
+            requestFingerprint: string;
+            /** Format: uint64 */
+            revision: number;
+            session: components["schemas"]["ExternalAgentSessionIdentity"];
+            updatedAt: string;
+        };
+        ExternalAgentSessionCreationRequest: {
+            cwd: string;
+            idempotencyKey: string;
+            label?: string | null;
+            profileId: string;
+            requestedAt: string;
+            runtimeId: string;
+            taskRef?: components["schemas"]["DenRuntimeReference"] | null;
+        };
+        ExternalAgentSessionIdentity: {
+            agentId: string;
+            profileId: string;
+            sessionId: string;
+            status: components["schemas"]["SessionStatus"];
+        };
+        /** @enum {string} */
         ExternalBindingPurpose: "crew_agent" | "imported_observer";
         /** @enum {string} */
         ExternalBindingStatus: "active" | "paused" | "archived";
@@ -1405,6 +1454,19 @@ export interface components {
             registration: components["schemas"]["ExternalRuntimeRegistration"];
             expectedRevision?: number;
         };
+        ExternalAgentSessionCreateWrite: {
+            idempotencyKey: string;
+            runtimeId: string;
+            profileId: string;
+            cwd: string;
+            taskRef?: components["schemas"]["DenRuntimeReference"];
+            label?: string;
+        };
+        ExternalAgentSessionCreateResult: {
+            creation: components["schemas"]["ExternalAgentSessionCreationRecord"];
+            runtime: components["schemas"]["ExternalRuntimeRegistration"];
+            thread: components["schemas"]["ExternalThreadProjection"];
+        };
         ExternalBindingFleet: {
             bindings: components["schemas"]["ExternalAgentBinding"][];
         };
@@ -1526,6 +1588,44 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    createExternalAgentSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalAgentSessionCreateWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalAgentSessionCreateResult"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
     listExternalRuntimes: {
         parameters: {
             query?: never;

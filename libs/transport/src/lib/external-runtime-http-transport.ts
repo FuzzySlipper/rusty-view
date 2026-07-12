@@ -1,5 +1,8 @@
 import type {
+  CreateExternalAgentSessionResponse,
   ExternalAgentBinding,
+  ExternalAgentSessionCreateResult,
+  ExternalAgentSessionCreateWrite,
   ExternalBindingFleet,
   ExternalBindingMessageWrite,
   ExternalControlReceipt,
@@ -42,6 +45,18 @@ export class ExternalRuntimeHttpTransport {
       await this.request<ListExternalRuntimesResponse>(
         'GET',
         '/v1/external-runtimes',
+      ),
+    );
+  }
+
+  async createAgentSession(
+    request: ExternalAgentSessionCreateWrite,
+  ): Promise<ExternalAgentSessionCreateResult> {
+    return unwrap(
+      await this.request<CreateExternalAgentSessionResponse>(
+        'POST',
+        '/v1/external-agent-sessions',
+        request,
       ),
     );
   }

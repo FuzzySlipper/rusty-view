@@ -8,6 +8,8 @@ import {
 import { projectExternalAgentTranscript } from '@rusty-view/chat-domain';
 import type {
   ExternalAgentBinding,
+  ExternalAgentSessionCreateResult,
+  ExternalAgentSessionCreateWrite,
   ExternalBindingMessageWrite,
   ExternalControlWrite,
   ExternalInteractionRecord,
@@ -21,6 +23,7 @@ import type {
 } from '@rusty-view/protocol';
 import {
   ChatTransport,
+  type AdminProfileRegistryRecord,
   type ExternalRuntimeEventStream,
 } from '@rusty-view/transport';
 
@@ -35,6 +38,11 @@ export interface ExternalAgentSession {
   readonly phase?: ExternalTurnPhase;
   readonly unread: boolean;
   readonly needsAttention: boolean;
+}
+
+export interface ExternalAgentProfileOption {
+  readonly profileId: string;
+  readonly displayName?: string;
 }
 
 interface RuntimeThread {
@@ -59,6 +67,7 @@ export class ExternalAgentStore {
   readonly runtimes = signal<readonly ExternalRuntimeRegistration[]>([]);
   readonly controllers = signal<readonly ExternalRuntimeControllerStatus[]>([]);
   readonly bindings = signal<readonly ExternalAgentBinding[]>([]);
+  readonly creationProfiles = signal<readonly ExternalAgentProfileOption[]>([]);
   private readonly runtimeThreads = signal<readonly RuntimeThread[]>([]);
   private readonly fleetEvents = signal<
     readonly NormalizedExternalRuntimeEvent[]
@@ -83,9 +92,26 @@ export class ExternalAgentStore {
   readonly loading = signal(false);
   readonly pending = signal(false);
   readonly loadingMore = signal(false);
+  readonly creatingSession = signal(false);
+  readonly creationError = signal<string | undefined>(undefined);
   readonly error = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
   readonly composerMode = signal<ExternalComposerMode>('auto');
+
+  readonly readyRuntimes = computed(() => {
+    const controllers = new Map(
+      this.controllers().map((controller) => [
+        controller.runtimeId,
+        controller.driverState,
+      ]),
+    );
+    return this.runtimes().filter(
+      (runtime) =>
+        runtime.desiredState === 'enabled' &&
+        runtime.observedState === 'ready' &&
+        controllers.get(runtime.runtimeId) === 'ready',
+    );
+  });
 
   readonly sessions = computed<readonly ExternalAgentSession[]>(() => {
     const controllers = new Map(
@@ -331,7 +357,91 @@ export class ExternalAgentStore {
     }
   }
 
-  async selectSession(session: ExternalAgentSession): Promise<void> {
+  async refreshCreationProfiles(): Promise<void> {
+    try {
+      const page = await this.transport.adminProfileRegistry({
+        limit: 100,
+        lifecycleStatus: 'active',
+      });
+      this.creationProfiles.set(
+        page.items
+          .filter(
+            (record: AdminProfileRegistryRecord) =>
+              record.lifecycleStatus === 'active' &&
+              (record.defaultSessionKind === undefined ||
+                record.defaultSessionKind === 'full'),
+          )
+          .map((record: AdminProfileRegistryRecord) => ({
+            profileId: record.profileId,
+            ...(record.displayName === undefined
+              ? {}
+              : { displayName: record.displayName }),
+          })),
+      );
+    } catch (error) {
+      this.error.set(`Loading profiles failed: ${errorMessage(error)}`);
+    }
+  }
+
+  async createSession(
+    request: ExternalAgentSessionCreateWrite,
+  ): Promise<ExternalAgentSessionCreateResult | undefined> {
+    if (this.creatingSession()) return undefined;
+    this.creatingSession.set(true);
+    try {
+      this.error.set(undefined);
+      this.creationError.set(undefined);
+      const result = await this.transport.external.createAgentSession(request);
+      this.runtimes.update((runtimes) => [
+        ...runtimes.filter(
+          (runtime) => runtime.runtimeId !== result.runtime.runtimeId,
+        ),
+        result.runtime,
+      ]);
+      this.bindings.update((bindings) => [
+        ...bindings.filter(
+          (binding) => binding.bindingId !== result.creation.binding.bindingId,
+        ),
+        result.creation.binding,
+      ]);
+      this.runtimeThreads.update((threads) => [
+        ...threads.filter(
+          (item) =>
+            item.runtimeId !== result.runtime.runtimeId ||
+            item.thread.threadId !== result.thread.threadId,
+        ),
+        { runtimeId: result.runtime.runtimeId, thread: result.thread },
+      ]);
+      this.selectCreatedSession(result);
+      return result;
+    } catch (error) {
+      const message = `Create failed: ${errorMessage(error)}`;
+      this.creationError.set(message);
+      this.error.set(message);
+      return undefined;
+    } finally {
+      this.creatingSession.set(false);
+    }
+  }
+
+  private selectCreatedSession(result: ExternalAgentSessionCreateResult): void {
+    this.stream?.close();
+    const runtimeId = result.runtime.runtimeId;
+    const threadId = result.thread.threadId;
+    this.selectedRuntimeEventCursor = this.fleetCursors.get(runtimeId);
+    this.events.set([]);
+    this.selectedRuntimeId.set(runtimeId);
+    this.selectedThreadId.set(threadId);
+    this.selectedThread.set(result.thread);
+    this.seen.update((seen) => ({
+      ...seen,
+      [sessionKey(runtimeId, threadId)]: result.thread.updatedAt,
+    }));
+    this.startStream(runtimeId, this.selectedRuntimeEventCursor);
+    this.error.set(undefined);
+  }
+
+  async selectSession(session: ExternalAgentSession): Promise<boolean> {
     this.stream?.close();
     this.selectedRuntimeEventCursor = undefined;
     this.events.set([]);
@@ -362,8 +472,10 @@ export class ExternalAgentStore {
         this.selectedRuntimeEventCursor,
       );
       this.error.set(undefined);
+      return true;
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
+      return false;
     } finally {
       this.loading.set(false);
     }

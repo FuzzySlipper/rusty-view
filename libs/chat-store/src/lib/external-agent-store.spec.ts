@@ -250,6 +250,89 @@ describe('ExternalAgentStore', () => {
     });
     expect(store.events()).toEqual([freshEvent]);
   });
+
+  it('creates, indexes, and selects a browser-created external session', async () => {
+    const runtime = registration('runtime-1');
+    const createdThread = thread('thread-created', 30);
+    const createdBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-created',
+      nativeThreadId: createdThread.threadId,
+      sessionId: 'session-created',
+      agentId: 'agent-created',
+    };
+    const createAgentSession = vi.fn(async () => ({
+      creation: {
+        creationId: 'creation-1',
+        request: {
+          idempotencyKey: 'create-1',
+          runtimeId: runtime.runtimeId,
+          profileId: 'tester',
+          cwd: '/home/dev/rusty-view',
+          requestedAt: '2026-07-12T00:00:00Z',
+        },
+        requestFingerprint: 'fingerprint',
+        session: {
+          sessionId: 'session-created',
+          agentId: 'agent-created',
+          profileId: 'tester',
+          status: 'idle' as const,
+        },
+        binding: createdBinding,
+        nativeThreadSource: 'rusty-crew:create-1',
+        nativeThreadId: createdThread.threadId,
+        phase: 'ready' as const,
+        revision: 4,
+        createdAt: '2026-07-12T00:00:00Z',
+        updatedAt: '2026-07-12T00:00:01Z',
+      },
+      runtime,
+      thread: createdThread,
+    }));
+    const readThread = vi.fn(async () => ({ thread: createdThread }));
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([], null)),
+      createAgentSession,
+      readThread,
+    });
+
+    const result = await store.createSession({
+      idempotencyKey: 'create-1',
+      runtimeId: runtime.runtimeId,
+      profileId: 'tester',
+      cwd: '/home/dev/rusty-view',
+    });
+
+    expect(result?.creation.phase).toBe('ready');
+    expect(store.selectedSessionKey()).toBe('runtime-1:thread-created');
+    expect(store.selectedBinding()?.bindingId).toBe('binding-created');
+    expect(readThread).not.toHaveBeenCalled();
+    expect(
+      store.sessions().map((session) => session.thread.threadId),
+    ).toContain('thread-created');
+  });
+
+  it('keeps a creation failure visible across periodic fleet refreshes', async () => {
+    const runtime = registration('runtime-1');
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([], null)),
+      createAgentSession: vi
+        .fn()
+        .mockRejectedValue(new Error('native offline')),
+    });
+
+    await store.createSession({
+      idempotencyKey: 'create-failed',
+      runtimeId: runtime.runtimeId,
+      profileId: 'tester',
+      cwd: '/home/dev/rusty-view',
+    });
+    await store.refresh();
+
+    expect(store.creationError()).toBe('Create failed: native offline');
+  });
 });
 
 function setupStore(options: {
@@ -260,6 +343,7 @@ function setupStore(options: {
   submitControl?: ReturnType<typeof vi.fn>;
   listEvents?: ReturnType<typeof vi.fn>;
   readThread?: ReturnType<typeof vi.fn>;
+  createAgentSession?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
     listRuntimes: vi.fn(async () => ({
@@ -271,6 +355,7 @@ function setupStore(options: {
     listThreads: options.listThreads,
     listEvents: options.listEvents ?? vi.fn(async () => ({ events: [] })),
     readThread: options.readThread ?? vi.fn(),
+    createAgentSession: options.createAgentSession ?? vi.fn(),
     sendMessage: options.sendMessage ?? vi.fn(),
     submitControl: options.submitControl ?? vi.fn(),
   };
@@ -281,10 +366,16 @@ function setupStore(options: {
         provide: ChatTransport,
         useValue: {
           external,
+          adminProfileRegistry: vi.fn(async () => ({
+            items: [],
+            total: 0,
+            limit: 100,
+            offset: 0,
+          })),
           streamExternalRuntimeEvents: vi.fn(() => ({
             close: vi.fn(),
             async *events() {
-              return;
+              yield* [];
             },
           })),
         } as unknown as ChatTransport,
