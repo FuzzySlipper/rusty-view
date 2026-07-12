@@ -92,6 +92,34 @@ describe('ExternalAgentStore', () => {
     ]);
   });
 
+  it('keeps healthy sessions when a stale binding thread cannot be recovered', async () => {
+    const staleBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-stale',
+      nativeThreadId: 'thread-stale',
+    };
+    const readThread = vi
+      .fn()
+      .mockRejectedValue(new Error('thread not loaded'));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding(), staleBinding],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread,
+    });
+
+    await store.refresh();
+
+    expect(readThread).toHaveBeenCalledWith('runtime-1', {
+      threadId: 'thread-stale',
+      includeTurns: false,
+    });
+    expect(store.sessions().map((session) => session.thread.threadId)).toEqual([
+      'thread-1',
+    ]);
+    expect(store.error()).toBeUndefined();
+  });
+
   it('preserves a page loaded while an older refresh finishes', async () => {
     const refreshPage = deferred<ReturnType<typeof page>>();
     let firstPageReads = 0;

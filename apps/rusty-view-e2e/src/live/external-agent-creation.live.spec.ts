@@ -42,6 +42,7 @@ test.describe('external agent creation @live-agent', () => {
     );
     await expect(selected).toBeVisible({ timeout: 60_000 });
     await expect(selected).toHaveAttribute('data-thread-id', /\S+/);
+    await expect(selected).toContainText('#5675');
     const threadId = await selected.evaluate(
       (element) => (element as HTMLElement).dataset['threadId'] ?? '',
     );
@@ -80,6 +81,7 @@ test.describe('external agent creation @live-agent', () => {
       `[data-testid="external-agent-row"][data-thread-id="${threadId}"]`,
     );
     await expect(recovered).toBeVisible({ timeout: 30_000 });
+    await expect(recovered).toContainText('#5675');
     await recovered.click();
     const recoveredAssistant = page
       .getByTestId('message-row')

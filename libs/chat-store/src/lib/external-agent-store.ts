@@ -275,16 +275,16 @@ export class ExternalAgentStore {
             )
             .map((binding) => binding.nativeThreadId)
             .filter((threadId): threadId is string => threadId != null);
-          const recovered = await Promise.all(
-            missingBoundIds.map(
-              async (threadId) =>
-                (
-                  await this.transport.external.readThread(runtime.runtimeId, {
-                    threadId,
-                    includeTurns: false,
-                  })
-                ).thread,
+          const recoveredReads = await Promise.allSettled(
+            [...new Set(missingBoundIds)].map(async (threadId) =>
+              this.transport.external.readThread(runtime.runtimeId, {
+                threadId,
+                includeTurns: false,
+              }),
             ),
+          );
+          const recovered = recoveredReads.flatMap((result) =>
+            result.status === 'fulfilled' ? [result.value.thread] : [],
           );
           return {
             runtimeId: runtime.runtimeId,

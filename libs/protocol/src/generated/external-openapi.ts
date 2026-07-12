@@ -1441,6 +1441,13 @@ export interface components {
             controllerGeneration: number;
             /** Format: date-time */
             leaseExpiresAt: string;
+            bindingResumeFailures: {
+                bindingId: string;
+                nativeThreadId: string;
+                reason: string;
+                /** Format: date-time */
+                observedAt: string;
+            }[];
         };
         ExternalRuntimeFleet: {
             runtimes: components["schemas"]["ExternalRuntimeRegistration"][];
