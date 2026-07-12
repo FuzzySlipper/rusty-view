@@ -2,6 +2,7 @@
   "name": "@rusty-view/chat-components",
   "version": "0.0.1",
   "peerDependencies": {
+    "@angular/cdk": "^21.2.0",
     "@angular/core": "^21.2.0",
     "@rusty-view/chat-domain": "workspace:*",
     "@rusty-view/protocol": "workspace:*",

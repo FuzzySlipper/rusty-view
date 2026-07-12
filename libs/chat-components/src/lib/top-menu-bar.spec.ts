@@ -19,7 +19,8 @@ describe('TopMenuBarComponent', () => {
       { id: 'a', label: 'Alpha' },
       { id: 'b', label: 'Beta' },
     ]);
-    const buttons = fixture.nativeElement.querySelectorAll('.rv-top-menu__item');
+    const buttons =
+      fixture.nativeElement.querySelectorAll('.rv-top-menu__item');
     expect(buttons.length).toBe(2);
   });
 

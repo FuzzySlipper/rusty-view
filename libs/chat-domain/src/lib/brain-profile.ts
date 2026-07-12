@@ -1,4 +1,7 @@
-import type { ChatSessionStatus, ChatSessionSummary } from '@rusty-view/protocol';
+import type {
+  ChatSessionStatus,
+  ChatSessionSummary,
+} from '@rusty-view/protocol';
 
 /**
  * Frontend view model for a "brain profile".
@@ -84,7 +87,7 @@ export function projectProfile(
       : 'archived';
 
   const lastActivityAt =
-    sorted.length === 0 ? '' : sorted[0]?.updated_at ?? '';
+    sorted.length === 0 ? '' : (sorted[0]?.updated_at ?? '');
 
   return {
     profileId,

@@ -7,10 +7,14 @@ import {
   Input,
   NgZone,
   numberAttribute,
-  OnDestroy,
   Renderer2,
+  type OnDestroy,
 } from '@angular/core';
-import { ConnectedPosition, Overlay, OverlayRef } from '@angular/cdk/overlay';
+import {
+  Overlay,
+  type ConnectedPosition,
+  type OverlayRef,
+} from '@angular/cdk/overlay';
 import { ComponentPortal } from '@angular/cdk/portal';
 
 import { TooltipPanelComponent } from './tooltip-panel';

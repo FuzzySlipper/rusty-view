@@ -17,7 +17,12 @@ import {
 
 /** Built-in tabs the Options panel always ships with. */
 const BUILT_IN_TABS: readonly ChatOptionsTab[] = [
-  { id: 'appearance', label: 'Appearance', order: 0, component: AppearanceTabComponent },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    order: 0,
+    component: AppearanceTabComponent,
+  },
 ];
 
 /**

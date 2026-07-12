@@ -1,42 +1,40 @@
 <div class="rv-help">
-  <div class="rv-help__count">
-    {{ commands().length }} command(s) available
-  </div>
+  <div class="rv-help__count">{{ commands().length }} command(s) available</div>
 
   @if (commands().length === 0) {
-    <div class="rv-help__empty">
-      No commands loaded. The command registry is empty.
-    </div>
+  <div class="rv-help__empty">
+    No commands loaded. The command registry is empty.
+  </div>
   } @else {
-    <table class="rv-help__table">
-      <thead>
-        <tr>
-          <th scope="col">command</th>
-          <th scope="col">aliases</th>
-          <th scope="col">scope</th>
-          <th scope="col">args</th>
-          <th scope="col">flags</th>
-          <th scope="col">description</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (cmd of commands(); track cmd.name) {
-          <tr>
-            <td class="rv-help__name">/{{ cmd.name }}</td>
-            <td class="rv-help__aliases">
-              {{ cmd.aliases ? cmd.aliases.join(', ') : '—' }}
-            </td>
-            <td class="rv-help__scope">{{ cmd.scope }}</td>
-            <td class="rv-help__args">{{ argsLabel(cmd) }}</td>
-            <td class="rv-help__flags">
-              <span class="rv-help__flag" [class.rv-help__flag--mut]="cmd.mutating">
-                {{ cmd.mutating ? 'mut' : 'ro' }}
-              </span>
-            </td>
-            <td class="rv-help__desc">{{ cmd.description }}</td>
-          </tr>
-        }
-      </tbody>
-    </table>
+  <table class="rv-help__table">
+    <thead>
+      <tr>
+        <th scope="col">command</th>
+        <th scope="col">aliases</th>
+        <th scope="col">scope</th>
+        <th scope="col">args</th>
+        <th scope="col">flags</th>
+        <th scope="col">description</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (cmd of commands(); track cmd.name) {
+      <tr>
+        <td class="rv-help__name">/{{ cmd.name }}</td>
+        <td class="rv-help__aliases">
+          {{ cmd.aliases ? cmd.aliases.join(', ') : '—' }}
+        </td>
+        <td class="rv-help__scope">{{ cmd.scope }}</td>
+        <td class="rv-help__args">{{ argsLabel(cmd) }}</td>
+        <td class="rv-help__flags">
+          <span class="rv-help__flag" [class.rv-help__flag--mut]="cmd.mutating">
+            {{ cmd.mutating ? 'mut' : 'ro' }}
+          </span>
+        </td>
+        <td class="rv-help__desc">{{ cmd.description }}</td>
+      </tr>
+      }
+    </tbody>
+  </table>
   }
 </div>
