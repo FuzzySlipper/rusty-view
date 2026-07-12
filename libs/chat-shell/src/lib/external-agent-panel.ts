@@ -10,6 +10,15 @@ import {
   ExternalAgentStore,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
+import type { ExternalAgentSessionCreateWrite } from '@rusty-view/protocol';
+
+const CREATION_ATTEMPTS_STORAGE_KEY =
+  'rusty-view:external-agent-creation-attempts:v1';
+const MAX_PERSISTED_CREATION_ATTEMPTS = 20;
+type ExternalAgentSessionCreateIntent = Omit<
+  ExternalAgentSessionCreateWrite,
+  'idempotencyKey'
+>;
 
 @Component({
   selector: 'rv-external-agent-panel',
@@ -28,7 +37,7 @@ export class ExternalAgentPanelComponent {
   protected readonly taskProjectId = signal('');
   protected readonly taskId = signal('');
   protected readonly attempted = signal(false);
-  private readonly idempotencyKey = signal(crypto.randomUUID());
+  private readonly creationAttemptKeys = loadCreationAttemptKeys();
 
   protected readonly canOpenCreator = computed(
     () =>
@@ -83,7 +92,7 @@ export class ExternalAgentPanelComponent {
     this.label.set('');
     this.taskProjectId.set('');
     this.taskId.set('');
-    this.resetAttempt();
+    this.clearAttemptFeedback();
     this.creating.set(true);
   }
 
@@ -96,21 +105,35 @@ export class ExternalAgentPanelComponent {
     const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
     if (target() === value) return;
     target.set(value);
-    this.resetAttempt();
+    this.clearAttemptFeedback();
   }
 
   protected async create(event: Event): Promise<void> {
     event.preventDefault();
     if (!this.canSubmit()) return;
     this.attempted.set(true);
+    const intent = this.creationIntent();
+    const intentKey = JSON.stringify(intent);
+    const idempotencyKey = this.idempotencyKeyFor(intentKey);
+    const result = await this.store.createSession({
+      ...intent,
+      idempotencyKey,
+    });
+    if (result === undefined) return;
+    this.forgetAttempt(intentKey);
+    this.creating.set(false);
+    this.clearAttemptFeedback();
+  }
+
+  private creationIntent(): ExternalAgentSessionCreateIntent {
     const projectId = this.taskProjectId().trim();
     const taskId = this.taskId().trim();
-    const result = await this.store.createSession({
-      idempotencyKey: this.idempotencyKey(),
+    const label = this.label().trim();
+    return {
       runtimeId: this.runtimeId(),
       profileId: this.profileId(),
       cwd: this.cwd().trim(),
-      ...(this.label().trim() === '' ? {} : { label: this.label().trim() }),
+      ...(label === '' ? {} : { label }),
       ...(projectId === '' && taskId === ''
         ? {}
         : {
@@ -119,15 +142,63 @@ export class ExternalAgentPanelComponent {
               ...(taskId === '' ? {} : { task_id: taskId }),
             },
           }),
-    });
-    if (result === undefined) return;
-    this.creating.set(false);
-    this.resetAttempt();
+    };
   }
 
-  private resetAttempt(): void {
-    this.idempotencyKey.set(crypto.randomUUID());
+  private idempotencyKeyFor(intentKey: string): string {
+    const existing = this.creationAttemptKeys[intentKey];
+    if (existing !== undefined) return existing;
+    const idempotencyKey = crypto.randomUUID();
+    this.creationAttemptKeys[intentKey] = idempotencyKey;
+    persistCreationAttemptKeys(this.creationAttemptKeys);
+    return idempotencyKey;
+  }
+
+  private forgetAttempt(intentKey: string): void {
+    delete this.creationAttemptKeys[intentKey];
+    persistCreationAttemptKeys(this.creationAttemptKeys);
+  }
+
+  private clearAttemptFeedback(): void {
     this.attempted.set(false);
     this.store.creationError.set(undefined);
+  }
+}
+
+function loadCreationAttemptKeys(): Record<string, string> {
+  try {
+    const serialized = sessionStorage.getItem(CREATION_ATTEMPTS_STORAGE_KEY);
+    if (serialized === null) return {};
+    const parsed: unknown = JSON.parse(serialized);
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        )
+        .slice(-MAX_PERSISTED_CREATION_ATTEMPTS),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function persistCreationAttemptKeys(attempts: Record<string, string>): void {
+  try {
+    const bounded = Object.fromEntries(
+      Object.entries(attempts).slice(-MAX_PERSISTED_CREATION_ATTEMPTS),
+    );
+    sessionStorage.setItem(
+      CREATION_ATTEMPTS_STORAGE_KEY,
+      JSON.stringify(bounded),
+    );
+  } catch {
+    // Session storage can be unavailable in embedded or privacy-restricted UIs.
   }
 }

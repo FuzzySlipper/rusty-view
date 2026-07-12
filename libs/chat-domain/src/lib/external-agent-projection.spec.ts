@@ -191,6 +191,74 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages[0]?.blocks[0]?.content).toBe('Finished response');
   });
 
+  it('keeps later text and command items after an in-progress snapshot', () => {
+    const events = [
+      {
+        ...event('10', 'command_activity', {
+          nativeMethod: 'item/commandExecution/completed',
+          command: 'second command',
+          output: 'SECOND_OUTPUT',
+          status: 'completed',
+        }),
+        itemId: 'different-command',
+      },
+      {
+        ...event('11', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'Later assistant text',
+        }),
+        itemId: 'different-message',
+      },
+    ];
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'active',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'inProgress',
+            startedAt: 1,
+            completedAt: null,
+            durationMs: null,
+            items: [
+              {
+                itemId: 'snapshot-command',
+                kind: 'commandExecution',
+                text: 'first command',
+              },
+              {
+                itemId: 'snapshot-message',
+                kind: 'agentMessage',
+                text: 'Partial assistant text',
+              },
+            ],
+          },
+        ],
+      },
+      events,
+    );
+
+    expect(messages.flatMap((message) => message.blocks)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ content: 'SECOND_OUTPUT' }),
+        expect.objectContaining({ content: 'Later assistant text' }),
+      ]),
+    );
+  });
+
   it('keeps empty MCP startup and usage diagnostics out of the transcript', () => {
     const messages = projectExternalAgentTranscript(undefined, [
       event('1', 'mcp_activity', {

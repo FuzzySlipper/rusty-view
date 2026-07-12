@@ -15,19 +15,24 @@ export function projectExternalAgentTranscript(
   events: readonly NormalizedExternalRuntimeEvent[],
 ): readonly ChatMessage[] {
   const messages: ChatMessage[] = [];
-  const knownItems = new Set<string>();
-  const snapshotKindsByTurn = new Map<string, Set<string>>();
+  const snapshotCoverageByTurn = new Map<string, SnapshotTurnCoverage>();
   const terminalByTurn = terminalStatusesByTurn(events);
   if (thread !== undefined) {
     for (const turn of thread.turns) {
-      const snapshotKinds = new Set<string>();
-      snapshotKindsByTurn.set(turn.turnId, snapshotKinds);
+      const coverage: SnapshotTurnCoverage = {
+        terminal: isTerminalStatus(turn.status),
+        items: [],
+      };
+      snapshotCoverageByTurn.set(turn.turnId, coverage);
       for (const item of turn.items) {
-        knownItems.add(item.itemId);
-        snapshotKinds.add(item.kind);
         const status = item.status ?? turn.status;
         const content =
           item.text ?? item.summary?.join('\n') ?? item.status ?? item.kind;
+        coverage.items.push({
+          itemId: item.itemId,
+          kind: item.kind,
+          content,
+        });
         messages.push(
           buildMessage(
             `external:${thread.threadId}:${turn.turnId}:${item.itemId}`,
@@ -48,16 +53,6 @@ export function projectExternalAgentTranscript(
   }
   const grouped = new Map<string, NormalizedExternalRuntimeEvent[]>();
   for (const event of events) {
-    // Thread projections intentionally summarize native items. Preserve file
-    // activity events even when the item is present so paths/status remain
-    // visible instead of being lost behind the summary-only history shape.
-    if (
-      event.itemId != null &&
-      knownItems.has(event.itemId) &&
-      event.kind !== 'file_activity'
-    ) {
-      continue;
-    }
     const key =
       event.itemId ?? `${event.nativeTurnId ?? event.eventId}:${event.kind}`;
     grouped.set(key, [...(grouped.get(key) ?? []), event]);
@@ -67,7 +62,7 @@ export function projectExternalAgentTranscript(
     if (first === undefined) continue;
     if (
       snapshotCoversEventGroup(
-        snapshotKindsByTurn.get(first.nativeTurnId ?? ''),
+        snapshotCoverageByTurn.get(first.nativeTurnId ?? ''),
         group,
       )
     ) {
@@ -99,23 +94,96 @@ export function projectExternalAgentTranscript(
   return messages;
 }
 
+interface SnapshotItemCoverage {
+  readonly itemId: string;
+  readonly kind: string;
+  readonly content: string;
+}
+
+interface SnapshotTurnCoverage {
+  readonly terminal: boolean;
+  readonly items: SnapshotItemCoverage[];
+}
+
 function snapshotCoversEventGroup(
-  snapshotKinds: ReadonlySet<string> | undefined,
+  snapshot: SnapshotTurnCoverage | undefined,
   events: readonly NormalizedExternalRuntimeEvent[],
 ): boolean {
-  if (snapshotKinds === undefined) return false;
-  const projectedKind = events.some(
+  if (snapshot === undefined) return false;
+  const projected = snapshotProjectionForEvents(events);
+  if (projected === undefined) return false;
+  const itemId = events.find((event) => event.itemId != null)?.itemId;
+  return snapshot.items.some((item) => {
+    if (item.kind !== projected.kind) return false;
+    const snapshotContent = normalizeCoverageContent(item.content);
+    const eventContent = normalizeCoverageContent(projected.content);
+    if (itemId === item.itemId) {
+      return eventContent === '' || snapshotContent.includes(eventContent);
+    }
+    return (
+      snapshot.terminal &&
+      eventContent !== '' &&
+      snapshotContent === eventContent
+    );
+  });
+}
+
+function snapshotProjectionForEvents(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): { readonly kind: string; readonly content: string } | undefined {
+  const assistant = events.filter(
     (event) => event.kind === 'assistant_text_delta',
-  )
-    ? 'agentMessage'
-    : events.some((event) => event.kind === 'reasoning_delta')
-      ? 'reasoning'
-      : events.some((event) => event.kind === 'plan_delta')
-        ? 'plan'
-        : events.some((event) => event.kind === 'command_activity')
-          ? 'commandExecution'
-          : undefined;
-  return projectedKind !== undefined && snapshotKinds.has(projectedKind);
+  );
+  if (assistant.length > 0) {
+    return {
+      kind: 'agentMessage',
+      content: assistant.map((event) => event.payload.text ?? '').join(''),
+    };
+  }
+  const reasoning = events.filter((event) => event.kind === 'reasoning_delta');
+  if (reasoning.length > 0) {
+    return {
+      kind: 'reasoning',
+      content: reasoning
+        .map(
+          (event) =>
+            event.payload.text ?? event.payload.summary?.join('\n') ?? '',
+        )
+        .join(''),
+    };
+  }
+  const plan = events.filter((event) => event.kind === 'plan_delta');
+  if (plan.length > 0) {
+    return {
+      kind: 'plan',
+      content: plan
+        .map(
+          (event) =>
+            event.payload.text ?? event.payload.summary?.join('\n') ?? '',
+        )
+        .filter((content) => content !== '')
+        .join('\n'),
+    };
+  }
+  const command = events.filter((event) => event.kind === 'command_activity');
+  if (command.length > 0) {
+    const latest = command.at(-1);
+    return {
+      kind: 'commandExecution',
+      content: [latest?.payload.command, latest?.payload.output]
+        .filter((value): value is string => value !== undefined)
+        .join('\n'),
+    };
+  }
+  return undefined;
+}
+
+function normalizeCoverageContent(content: string): string {
+  return content.replaceAll('\r\n', '\n').trim();
+}
+
+function isTerminalStatus(status: string): boolean {
+  return ['completed', 'failed', 'interrupted'].includes(status);
 }
 
 function blocksForGroup(

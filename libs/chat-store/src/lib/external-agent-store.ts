@@ -57,6 +57,7 @@ export class ExternalAgentStore {
   private stream: ExternalRuntimeEventStream | undefined;
   private polling = false;
   private interactionsPolling = false;
+  private bindingMutationRevision = 0;
   private selectedRuntimeEventCursor: number | undefined;
   private readonly fleetCursors = new Map<string, number>();
   private readonly threadCursors = signal<
@@ -220,6 +221,7 @@ export class ExternalAgentStore {
   async refresh(): Promise<void> {
     if (this.polling) return;
     this.polling = true;
+    const bindingRevisionAtStart = this.bindingMutationRevision;
     this.loading.set(this.runtimes().length === 0);
     try {
       const [fleet, bindingFleet, attention] = await Promise.all([
@@ -229,7 +231,11 @@ export class ExternalAgentStore {
       ]);
       this.runtimes.set(fleet.runtimes);
       this.controllers.set(fleet.controllers);
-      this.bindings.set(bindingFleet.bindings);
+      const refreshedBindings =
+        this.bindingMutationRevision === bindingRevisionAtStart
+          ? bindingFleet.bindings
+          : mergeBindings(this.bindings(), bindingFleet.bindings);
+      this.bindings.set(refreshedBindings);
       this.interactions.set(attention.interactions);
       const previousFleetEvents = this.fleetEvents();
       const activeRuntimeIds = new Set(
@@ -266,7 +272,7 @@ export class ExternalAgentStore {
             ? (previousThreadCursors[runtime.runtimeId] ?? null)
             : listed.nextCursor;
           const known = new Set(knownThreads.map((thread) => thread.threadId));
-          const missingBoundIds = bindingFleet.bindings
+          const missingBoundIds = refreshedBindings
             .filter(
               (binding) =>
                 binding.runtimeId === runtime.runtimeId &&
@@ -398,6 +404,7 @@ export class ExternalAgentStore {
         ),
         result.runtime,
       ]);
+      this.bindingMutationRevision += 1;
       this.bindings.update((bindings) => [
         ...bindings.filter(
           (binding) => binding.bindingId !== result.creation.binding.bindingId,
@@ -748,6 +755,17 @@ export function mergeThreads(
     merged.push(thread);
   }
   return merged;
+}
+
+function mergeBindings(
+  preferred: readonly ExternalAgentBinding[],
+  additional: readonly ExternalAgentBinding[],
+): ExternalAgentBinding[] {
+  const seen = new Set(preferred.map((binding) => binding.bindingId));
+  return [
+    ...preferred,
+    ...additional.filter((binding) => !seen.has(binding.bindingId)),
+  ];
 }
 
 function errorMessage(error: unknown): string {

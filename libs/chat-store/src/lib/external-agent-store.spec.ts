@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type {
   ExternalAgentBinding,
+  ExternalAgentSessionCreateResult,
   ExternalInteractionRecord,
   ExternalRuntimeRegistration,
   ExternalThreadProjection,
@@ -341,6 +342,39 @@ describe('ExternalAgentStore', () => {
     ).toContain('thread-created');
   });
 
+  it('preserves a created binding when an older fleet refresh finishes later', async () => {
+    const staleBindings = deferred<{
+      bindings: readonly ExternalAgentBinding[];
+    }>();
+    const result = createdSessionResult();
+    const sendMessage = vi.fn();
+    const store = setupStore({
+      runtimes: [result.runtime],
+      listBindings: vi.fn(() => staleBindings.promise),
+      listThreads: vi.fn(async () => page([], null)),
+      createAgentSession: vi.fn(async () => result),
+      sendMessage,
+    });
+
+    const refresh = store.refresh();
+    await Promise.resolve();
+    await store.createSession({
+      idempotencyKey: 'create-racing-refresh',
+      runtimeId: result.runtime.runtimeId,
+      profileId: 'tester',
+      cwd: '/home/dev/rusty-view',
+    });
+    staleBindings.resolve({ bindings: [] });
+    await refresh;
+
+    expect(store.selectedBinding()?.bindingId).toBe('binding-created');
+    await store.send('immediate message');
+    expect(sendMessage).toHaveBeenCalledWith('binding-created', {
+      body: 'immediate message',
+      ttlMs: 60_000,
+    });
+  });
+
   it('keeps a creation failure visible across periodic fleet refreshes', async () => {
     const runtime = registration('runtime-1');
     const store = setupStore({
@@ -366,6 +400,7 @@ describe('ExternalAgentStore', () => {
 function setupStore(options: {
   runtimes: readonly ExternalRuntimeRegistration[];
   bindings?: readonly ExternalAgentBinding[];
+  listBindings?: ReturnType<typeof vi.fn>;
   listThreads: ReturnType<typeof vi.fn>;
   sendMessage?: ReturnType<typeof vi.fn>;
   submitControl?: ReturnType<typeof vi.fn>;
@@ -378,7 +413,9 @@ function setupStore(options: {
       runtimes: options.runtimes,
       controllers: [],
     })),
-    listBindings: vi.fn(async () => ({ bindings: options.bindings ?? [] })),
+    listBindings:
+      options.listBindings ??
+      vi.fn(async () => ({ bindings: options.bindings ?? [] })),
     listInteractions: vi.fn(async () => ({ interactions: [] })),
     listThreads: options.listThreads,
     listEvents: options.listEvents ?? vi.fn(async () => ({ events: [] })),
@@ -485,6 +522,46 @@ function externalBinding(): ExternalAgentBinding {
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',
     updatedAt: '2026-07-11T00:00:00Z',
+  };
+}
+
+function createdSessionResult(): ExternalAgentSessionCreateResult {
+  const runtime = registration('runtime-1');
+  const createdThread = thread('thread-created', 30);
+  const createdBinding: ExternalAgentBinding = {
+    ...externalBinding(),
+    bindingId: 'binding-created',
+    nativeThreadId: createdThread.threadId,
+    sessionId: 'session-created',
+    agentId: 'agent-created',
+  };
+  return {
+    creation: {
+      creationId: 'creation-1',
+      request: {
+        idempotencyKey: 'create-racing-refresh',
+        runtimeId: runtime.runtimeId,
+        profileId: 'tester',
+        cwd: '/home/dev/rusty-view',
+        requestedAt: '2026-07-12T00:00:00Z',
+      },
+      requestFingerprint: 'fingerprint',
+      session: {
+        sessionId: 'session-created',
+        agentId: 'agent-created',
+        profileId: 'tester',
+        status: 'idle',
+      },
+      binding: createdBinding,
+      nativeThreadSource: 'rusty-crew:create-racing-refresh',
+      nativeThreadId: createdThread.threadId,
+      phase: 'ready',
+      revision: 4,
+      createdAt: '2026-07-12T00:00:00Z',
+      updatedAt: '2026-07-12T00:00:01Z',
+    },
+    runtime,
+    thread: createdThread,
   };
 }
 
