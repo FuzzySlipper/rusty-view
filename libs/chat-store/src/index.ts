@@ -14,7 +14,10 @@
 
 export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
 export { AdminStore } from './lib/admin-store';
-export { ExternalAgentStore } from './lib/external-agent-store';
+export {
+  createExternalAgentRequestKey,
+  ExternalAgentStore,
+} from './lib/external-agent-store';
 export type {
   ExternalAgentProfileOption,
   ExternalAgentSession,

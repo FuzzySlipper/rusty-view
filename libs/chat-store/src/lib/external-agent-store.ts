@@ -576,7 +576,7 @@ export class ExternalAgentStore {
   ): Promise<void> {
     const request: ExternalInteractionResolutionWrite = {
       expectedRevision: interaction.revision,
-      idempotencyKey: `rusty-view:${interaction.interactionId}:${crypto.randomUUID()}`,
+      idempotencyKey: `rusty-view:${interaction.interactionId}:${createExternalAgentRequestKey()}`,
       result,
     };
     await this.transport.external.resolveInteraction(
@@ -750,6 +750,20 @@ export class ExternalAgentStore {
 
 export function sessionKey(runtimeId: string, threadId: string): string {
   return `${runtimeId}:${threadId}`;
+}
+
+export function createExternalAgentRequestKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0'));
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10, 16).join(''),
+  ].join('-');
 }
 
 export function mergeThreads(

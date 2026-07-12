@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import {
+  createExternalAgentRequestKey,
   ExternalAgentStore,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
@@ -155,7 +156,7 @@ export class ExternalAgentPanelComponent {
   private idempotencyKeyFor(intentKey: string): string {
     const existing = this.creationAttemptKeys[intentKey];
     if (existing !== undefined) return existing;
-    const idempotencyKey = crypto.randomUUID();
+    const idempotencyKey = createExternalAgentRequestKey();
     this.creationAttemptKeys[intentKey] = idempotencyKey;
     persistCreationAttemptKeys(this.creationAttemptKeys);
     return idempotencyKey;

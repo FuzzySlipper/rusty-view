@@ -46,7 +46,10 @@ async function createPanel(
 
 describe('ExternalAgentPanelComponent creation retries', () => {
   beforeEach(() => sessionStorage.clear());
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  });
 
   it('explains the required working directory when start is clicked', async () => {
     const created = vi.fn();
@@ -65,6 +68,27 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     expect(
       fixture.nativeElement.querySelector('[role="alert"]')?.textContent,
     ).toContain('Enter a working directory.');
+  });
+
+  it('starts a session without secure-context randomUUID support', async () => {
+    const secureCrypto = globalThis.crypto;
+    vi.stubGlobal('crypto', {
+      getRandomValues: secureCrypto.getRandomValues.bind(secureCrypto),
+    });
+    const created = vi.fn(async () => ({}));
+    const { panel } = await createPanel(created);
+    panel.openCreator();
+    panel.updateDraft(panel.cwd, input('/home/dev/rusty-view'));
+
+    await panel.create({ preventDefault: vi.fn() } as unknown as Event);
+
+    expect(created).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
+      }),
+    );
   });
 
   it('reuses one key for the same canonical intent after edits, cancel, and reload', async () => {
