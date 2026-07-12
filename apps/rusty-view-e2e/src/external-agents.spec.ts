@@ -322,6 +322,7 @@ const controller = {
   controllerInstanceId: 'crew-1',
   controllerGeneration: 1,
   leaseExpiresAt: '2026-07-11T00:10:00Z',
+  bindingResumeFailures: [],
 };
 const binding = {
   bindingId: 'binding-1',
