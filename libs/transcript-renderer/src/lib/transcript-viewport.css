@@ -1,8 +1,35 @@
 :host {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+.rv-transcript-tail {
+  position: absolute;
+  right: var(--rv-space-lg);
+  bottom: var(--rv-space-md);
+  z-index: var(--rv-z-sticky);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rv-space-xs);
+  min-height: var(--rv-density-control-md);
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border: 1px solid var(--rv-color-accent);
+  border-radius: 999px;
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  box-shadow: var(--rv-shadow-sm);
+  font-family: var(--rv-font-ui);
+  font-size: var(--rv-font-size-xs);
+  cursor: pointer;
+}
+
+.rv-transcript-tail:hover,
+.rv-transcript-tail:focus-visible {
+  background: var(--rv-color-accent);
+  color: var(--rv-color-accent-text);
 }
 
 .rv-transcript {

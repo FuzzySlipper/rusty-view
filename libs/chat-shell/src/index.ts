@@ -17,6 +17,18 @@ export { TopMenuComponent } from './lib/top-menu';
 export { TopMenuController } from './lib/top-menu-controller';
 export { OptionsPanelComponent } from './lib/options-panel';
 export { AppearanceTabComponent } from './lib/appearance-tab';
+export { HotkeysTabComponent } from './lib/hotkeys-tab';
+export {
+  DEFAULT_HOTKEY_SETTINGS,
+  HOTKEY_ACTIONS,
+  HOTKEY_SETTINGS_STORAGE,
+  HotkeySettingsService,
+  IndexedDbHotkeySettingsStorage,
+  normalizeHotkeySettings,
+  type HotkeyAction,
+  type HotkeySettings,
+  type HotkeySettingsStorage,
+} from './lib/hotkey-settings';
 export { HelpPanelComponent } from './lib/help-panel';
 export { DebugPanelComponent } from './lib/debug-panel';
 export { ProfilePanelComponent } from './lib/profile-panel';

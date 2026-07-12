@@ -12,6 +12,7 @@ import {
   type ChatAttachmentScope,
 } from '@rusty-view/chat-domain';
 import { TooltipDirective } from './tooltip';
+import { matchesHotkey } from './hotkeys';
 
 export type MessageInputAttachmentSource = 'picker' | 'paste' | 'drop';
 
@@ -44,6 +45,7 @@ const TEXT_PREVIEW_LIMIT = 2_000;
 })
 export class MessageInputComponent {
   readonly disabled = input<boolean>(false);
+  readonly erasePreviousWordHotkey = input<string>('Ctrl+W');
   readonly placeholder = input<string>('Type a message…');
   readonly commands = input<
     readonly {
@@ -94,6 +96,11 @@ export class MessageInputComponent {
   protected readonly accept = computed(() => this.activeScope()?.accept);
 
   protected onKeydown(event: KeyboardEvent): void {
+    if (matchesHotkey(event, this.erasePreviousWordHotkey())) {
+      event.preventDefault();
+      this.erasePreviousWord(event.target);
+      return;
+    }
     const hints = this.filteredCommands();
     const isOpen = this.hintOpen() && hints.length > 0;
 
@@ -139,6 +146,22 @@ export class MessageInputComponent {
       event.preventDefault();
       this.submit();
     }
+  }
+
+  private erasePreviousWord(target: EventTarget | null): void {
+    if (!(target instanceof HTMLTextAreaElement)) return;
+    const selectionStart = target.selectionStart ?? target.value.length;
+    const selectionEnd = target.selectionEnd ?? selectionStart;
+    let deleteStart = selectionStart;
+    if (selectionStart === selectionEnd) {
+      const prefix = target.value.slice(0, selectionStart);
+      const word = /\S+\s*$/.exec(prefix);
+      const whitespace = /\s+$/.exec(prefix);
+      deleteStart = word?.index ?? whitespace?.index ?? selectionStart;
+    }
+    target.setRangeText('', deleteStart, selectionEnd, 'end');
+    this.text.set(target.value);
+    this.historyIndex.set(null);
   }
 
   protected onInput(event: Event): void {

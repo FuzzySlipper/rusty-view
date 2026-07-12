@@ -1,0 +1,87 @@
+:host {
+  display: block;
+}
+
+.rv-hotkeys {
+  display: grid;
+  gap: var(--rv-space-lg);
+  padding: var(--rv-space-lg);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-hotkeys h2,
+.rv-hotkeys p {
+  margin: 0;
+}
+
+.rv-hotkeys p,
+.rv-hotkeys__description span,
+.rv-hotkeys__footer span {
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-hotkeys__list {
+  display: grid;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+}
+
+.rv-hotkeys__row {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(8rem, auto) auto auto;
+  align-items: center;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-md);
+}
+
+.rv-hotkeys__row + .rv-hotkeys__row {
+  border-top: 1px solid var(--rv-color-border);
+}
+
+.rv-hotkeys__description {
+  display: grid;
+  gap: var(--rv-space-xs);
+}
+
+.rv-hotkeys kbd {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border-strong);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  font-family: var(--rv-font-mono);
+  text-align: center;
+}
+
+.rv-hotkeys button {
+  min-height: var(--rv-density-control-md);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+}
+
+.rv-hotkeys button:hover,
+.rv-hotkeys button:focus-visible,
+.rv-hotkeys__recording {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-hotkeys__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rv-space-md);
+}
+
+@media (max-width: 700px) {
+  .rv-hotkeys__row {
+    grid-template-columns: 1fr auto auto;
+  }
+
+  .rv-hotkeys__description {
+    grid-column: 1 / -1;
+  }
+}

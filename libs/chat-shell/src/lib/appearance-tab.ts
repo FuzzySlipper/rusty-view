@@ -21,6 +21,10 @@ import {
   CHAT_WIDTH_MAX,
   CHAT_WIDTH_MIN,
   CHAT_WIDTH_STEP,
+  COMPOSER_HEIGHT_MAX,
+  COMPOSER_HEIGHT_MIN,
+  COMPOSER_HEIGHT_STEP,
+  DEFAULT_APPEARANCE,
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
   FONT_SCALE_STEP,
@@ -75,6 +79,9 @@ export class AppearanceTabComponent {
   protected readonly chatWidthMin = CHAT_WIDTH_MIN;
   protected readonly chatWidthMax = CHAT_WIDTH_MAX;
   protected readonly chatWidthStep = CHAT_WIDTH_STEP;
+  protected readonly composerHeightMin = COMPOSER_HEIGHT_MIN;
+  protected readonly composerHeightMax = COMPOSER_HEIGHT_MAX;
+  protected readonly composerHeightStep = COMPOSER_HEIGHT_STEP;
 
   /** Full semantic colour palette rendered in the tab (task #3691). */
   protected readonly colorFields = APPEARANCE_COLOR_FIELDS;
@@ -151,6 +158,20 @@ export class AppearanceTabComponent {
     const parsed = Number.parseFloat(target.value);
     if (Number.isNaN(parsed)) return;
     void this.theme.update({ chatWidthPercent: parsed });
+  }
+
+  protected onComposerHeight(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const parsed = Number.parseFloat(target.value);
+    if (Number.isNaN(parsed)) return;
+    void this.theme.update({ composerHeightPx: parsed });
+  }
+
+  protected resetComposerHeight(): void {
+    void this.theme.update({
+      composerHeightPx: DEFAULT_APPEARANCE.composerHeightPx,
+    });
   }
 
   protected toggleReducedMotion(event: Event): void {

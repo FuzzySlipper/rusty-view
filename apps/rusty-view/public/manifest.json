@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Rusty View",
+  "short_name": "Rusty View",
+  "description": "Industrial chat console for Rusty Crew sessions and external agents.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1116",
+  "theme_color": "#10231f",
+  "categories": ["developer", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "rusty-view-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

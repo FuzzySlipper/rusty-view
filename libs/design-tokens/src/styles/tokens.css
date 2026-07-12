@@ -83,6 +83,7 @@
   /* ---- transcript layout ---- */
   --rv-chat-width: 100%;
   --rv-message-padding-y: var(--rv-space-sm);
+  --rv-composer-height: 72px;
 
   /* ---- z-index ---- */
   --rv-z-base: 1;

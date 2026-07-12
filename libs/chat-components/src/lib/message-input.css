@@ -62,6 +62,9 @@
 
 .rv-input__field {
   flex: 1;
+  height: min(var(--rv-composer-height), 40vh);
+  min-height: 56px;
+  max-height: 40vh;
   min-width: 14rem;
   resize: none;
   padding: var(--rv-space-sm);

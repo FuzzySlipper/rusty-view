@@ -117,7 +117,10 @@ export class TranscriptViewportComponent {
    * height of a single-line message row. */
   private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
 
-  private isAtBottom = true;
+  protected readonly isAtBottom = signal(true);
+  protected readonly showScrollToBottom = computed(
+    () => this.renderMessages().length > 0 && !this.isAtBottom(),
+  );
 
   /** Previous messages reference — used to detect prepends for anchor preservation. */
   private previousMessages: readonly ChatMessage[] = [];
@@ -278,7 +281,12 @@ export class TranscriptViewportComponent {
 
       const prependedCount = countPrependedMessages(prev, msgs);
 
-      if (prependedCount > 0 && !this.isAtBottom) {
+      const replaced = messagesWereReplaced(prev, msgs);
+      if (replaced) {
+        this.isAtBottom.set(true);
+      }
+
+      if (prependedCount > 0 && !this.isAtBottom()) {
         // Older history was prepended above the viewport. Preserve the anchor
         // so the user doesn't see a jump.
         this.afterNextRender(() => {
@@ -287,7 +295,7 @@ export class TranscriptViewportComponent {
         return;
       }
 
-      if (this.tailFollow() && this.isAtBottom) {
+      if (this.tailFollow() && this.isAtBottom()) {
         this.afterNextRender(() => {
           this.scrollToBottom();
         });
@@ -331,12 +339,15 @@ export class TranscriptViewportComponent {
   protected onScroll(): void {
     const vp = this.viewport();
     const bottomOffset = vp.measureScrollOffset('bottom');
-    this.isAtBottom =
-      bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX;
+    this.isAtBottom.set(
+      bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX,
+    );
   }
 
   /** Scroll to the bottom of the transcript (latest message). */
   scrollToBottom(): void {
+    this.cancelPendingSeeks();
+    this.isAtBottom.set(true);
     this.scrollToBottomOffset();
     this.settleScrollToBottom(0);
   }
@@ -552,6 +563,7 @@ export class TranscriptViewportComponent {
       this.afterNextRender(() => {
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
         if (bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
+          this.isAtBottom.set(true);
           return;
         }
         this.scrollToBottomOffset();
@@ -578,6 +590,16 @@ export class TranscriptViewportComponent {
     // remeasured and repositioned items after the data change.
     vp.scrollToOffset(scrollOffsetFromTop);
   }
+}
+
+/** Detect a session/thread replacement so the new transcript opens at its tail. */
+function messagesWereReplaced(
+  previous: readonly ChatMessage[],
+  current: readonly ChatMessage[],
+): boolean {
+  if (previous.length === 0 || current.length === 0) return false;
+  const previousIds = new Set(previous.map((message) => message.id));
+  return current.every((message) => !previousIds.has(message.id));
 }
 
 /**

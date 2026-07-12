@@ -20,6 +20,10 @@ import {
   provideChatTheme,
 } from '@rusty-view/chat-theme';
 import { TRANSCRIPT_TEXT_RENDER_MODE } from '@rusty-view/transcript-renderer';
+import {
+  HOTKEY_SETTINGS_STORAGE,
+  IndexedDbHotkeySettingsStorage,
+} from '@rusty-view/chat-shell';
 
 /**
  * Configuration for the rusty-view app's transport connection to rusty-crew.
@@ -123,6 +127,10 @@ export function provideRustyView(
     { provide: ChatTransport, useValue: transport },
     { provide: CHAT_STORAGE_ADAPTER, useClass: IndexedDbChatStorage },
     { provide: CHAT_SETTINGS_STORAGE, useClass: IndexedDbChatSettingsStorage },
+    {
+      provide: HOTKEY_SETTINGS_STORAGE,
+      useClass: IndexedDbHotkeySettingsStorage,
+    },
     IndexedDbChatSettingsStorage,
     provideChatTheme(),
     {

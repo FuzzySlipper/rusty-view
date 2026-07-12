@@ -186,6 +186,8 @@ export interface AppearanceSettings {
   readonly density: AppearanceDensity;
   readonly messageSpacing: AppearanceMessageSpacing;
   readonly chatWidthPercent: number;
+  /** Preferred message composer height in CSS pixels. */
+  readonly composerHeightPx: number;
   readonly reducedMotion: boolean;
   readonly disableShadows: boolean;
   readonly showTimestamps: boolean;
@@ -211,6 +213,11 @@ export const FONT_SCALE_STEP = 0.05;
 export const CHAT_WIDTH_MIN = 45;
 export const CHAT_WIDTH_MAX = 100;
 export const CHAT_WIDTH_STEP = 5;
+
+/** Inclusive bounds for the message composer height preference. */
+export const COMPOSER_HEIGHT_MIN = 56;
+export const COMPOSER_HEIGHT_MAX = 320;
+export const COMPOSER_HEIGHT_STEP = 8;
 
 /**
  * Base font-size pixel values. These mirror `libs/design-tokens/src/styles/
@@ -257,6 +264,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   density: 'normal',
   messageSpacing: 'normal',
   chatWidthPercent: 100,
+  composerHeightPx: 72,
   reducedMotion: false,
   disableShadows: false,
   showTimestamps: false,
@@ -319,6 +327,16 @@ export function clampFontScale(value: number): number {
 export function clampChatWidthPercent(value: number): number {
   if (Number.isNaN(value)) return 100;
   const clamped = Math.min(CHAT_WIDTH_MAX, Math.max(CHAT_WIDTH_MIN, value));
+  return Math.round(clamped);
+}
+
+/** Clamp the composer height into a viewport-safe persisted range. */
+export function clampComposerHeightPx(value: number): number {
+  if (Number.isNaN(value)) return DEFAULT_APPEARANCE.composerHeightPx;
+  const clamped = Math.min(
+    COMPOSER_HEIGHT_MAX,
+    Math.max(COMPOSER_HEIGHT_MIN, value),
+  );
   return Math.round(clamped);
 }
 

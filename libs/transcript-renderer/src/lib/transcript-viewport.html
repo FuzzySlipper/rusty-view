@@ -156,3 +156,16 @@
     />
   </div>
 </cdk-virtual-scroll-viewport>
+@if (showScrollToBottom()) {
+<button
+  type="button"
+  class="rv-transcript-tail"
+  data-testid="transcript-scroll-to-bottom"
+  aria-label="Scroll to latest message"
+  title="Scroll to latest message"
+  (click)="scrollToBottom()"
+>
+  <span aria-hidden="true">↓</span>
+  <span>Latest</span>
+</button>
+}

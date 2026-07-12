@@ -40,7 +40,21 @@ describe('ChatTheme', () => {
     // Default scale = 1 → md = 13px; no colour overrides on defaults.
     expect(style.getPropertyValue('--rv-font-size-md')).toBe('13px');
     expect(style.getPropertyValue('--rv-color-bg')).toBe('');
+    expect(style.getPropertyValue('--rv-composer-height')).toBe('72px');
     expect(theme.settings()).toEqual(DEFAULT_APPEARANCE);
+  });
+
+  it('clamps and persists composer height as a live layout token', async () => {
+    const theme = TestBed.inject(ChatTheme);
+
+    await theme.update({ composerHeightPx: 999 });
+    TestBed.flushEffects?.();
+
+    expect(theme.settings().composerHeightPx).toBe(320);
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-composer-height'),
+    ).toBe('320px');
+    expect((await storage.load())?.composerHeightPx).toBe(320);
   });
 
   it('honors provideChatTheme defaults before persisted settings load', () => {

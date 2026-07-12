@@ -50,6 +50,7 @@ describe('OptionsPanelComponent', () => {
     expect(host.textContent).toContain('Theme Colors');
     expect(host.textContent).toContain('Chat / Message Handling');
     expect(host.textContent).toContain('Chat Width');
+    expect(host.textContent).toContain('Composer Height');
     expect(host.textContent).toContain('Message IDs');
 
     const messageIds = Array.from(host.querySelectorAll('label')).find(
@@ -62,12 +63,69 @@ describe('OptionsPanelComponent', () => {
     expect(theme.settings().showMessageIds).toBe(true);
   });
 
+  it('updates and resets the persisted composer height preference', async () => {
+    const fixture = await createOptions();
+    const host: HTMLElement = fixture.nativeElement;
+    const theme = TestBed.inject(ChatTheme);
+    const slider = host.querySelector<HTMLInputElement>(
+      '[data-testid="appearance-composer-height"]',
+    );
+
+    expect(slider).not.toBeNull();
+    if (slider === null) return;
+    slider.value = '200';
+    slider.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(theme.settings().composerHeightPx).toBe(200);
+    host
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="appearance-composer-height-reset"]',
+      )
+      ?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(theme.settings().composerHeightPx).toBe(72);
+  });
+
   it('keeps the appearance tab active by default', async () => {
     const fixture = await createOptions();
     const activeTab: HTMLElement | null = fixture.nativeElement.querySelector(
       '.rv-tab-strip__tab--active',
     );
     expect(activeTab?.textContent?.trim()).toBe('Appearance');
+  });
+
+  it('renders the built-in Hotkeys tab and records a unique shortcut', async () => {
+    const fixture = await createOptions();
+    const host: HTMLElement = fixture.nativeElement;
+    const hotkeysTab = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('.rv-tab-strip__tab'),
+    ).find((button) => button.textContent?.trim() === 'Hotkeys');
+    hotkeysTab?.click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-hotkeys-tab')).not.toBeNull();
+    const nextRow = host.querySelector<HTMLElement>(
+      '[data-hotkey-action="nextSession"]',
+    );
+    const record = nextRow?.querySelector<HTMLButtonElement>(
+      '[data-testid="hotkey-record"]',
+    );
+    record?.click();
+    record?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        altKey: true,
+        key: 'n',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(nextRow?.querySelector('kbd')?.textContent).toContain('Alt+N');
   });
 
   it('emits dismissed when the close button is clicked', async () => {

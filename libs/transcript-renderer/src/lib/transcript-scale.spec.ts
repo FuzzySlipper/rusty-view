@@ -54,6 +54,35 @@ function generateLargeMessageList(count: number): ChatMessage[] {
 }
 
 describe('TranscriptViewportComponent scale', () => {
+  it('offers an accessible latest-message control while tail-follow is paused', async () => {
+    const messages = generateLargeMessageList(3);
+    await TestBed.configureTestingModule({
+      imports: [TranscriptViewportComponent],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TranscriptViewportComponent);
+    fixture.componentRef.setInput('messages', messages);
+    const internals = fixture.componentInstance as unknown as {
+      renderMessages: { set(value: readonly ChatMessage[]): void };
+      isAtBottom: { set(value: boolean): void; (): boolean };
+    };
+    internals.renderMessages.set(messages);
+    internals.isAtBottom.set(false);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector<HTMLButtonElement>(
+      '[data-testid="transcript-scroll-to-bottom"]',
+    );
+    expect(button?.getAttribute('aria-label')).toBe('Scroll to latest message');
+
+    internals.isAtBottom.set(true);
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="transcript-scroll-to-bottom"]'),
+    ).toBeNull();
+  });
+
   it('accepts 10k+ messages without throwing', async () => {
     const messages = generateLargeMessageList(10_000);
     expect(messages).toHaveLength(10_000);

@@ -1,0 +1,38 @@
+<section class="rv-hotkeys">
+  <header>
+    <h2>Hotkeys</h2>
+    <p>
+      Browser-reserved shortcuts may only work when the browser delivers them to
+      the page. Record a fallback if your browser keeps the default action.
+    </p>
+  </header>
+
+  <div class="rv-hotkeys__list">
+    @for (action of actions; track action.id) {
+    <div class="rv-hotkeys__row" [attr.data-hotkey-action]="action.id">
+      <div class="rv-hotkeys__description">
+        <strong>{{ action.label }}</strong>
+        <span>{{ action.description }}</span>
+      </div>
+      <kbd data-testid="hotkey-binding">{{ hotkeys.binding(action.id) }}</kbd>
+      <button
+        type="button"
+        data-testid="hotkey-record"
+        [class.rv-hotkeys__recording]="recording() === action.id"
+        (click)="startRecording(action.id)"
+        (keydown)="capture($event)"
+      >
+        {{ recording() === action.id ? 'Press keys…' : 'Record' }}
+      </button>
+      <button type="button" (click)="reset(action.id)">Reset</button>
+    </div>
+    }
+  </div>
+
+  <div class="rv-hotkeys__footer">
+    <span aria-live="polite">{{ feedback() }}</span>
+    <button type="button" data-testid="hotkeys-reset-all" (click)="resetAll()">
+      Reset all
+    </button>
+  </div>
+</section>

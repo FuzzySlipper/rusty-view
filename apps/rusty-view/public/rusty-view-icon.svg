@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Rusty View</title>
+  <desc id="description">A terminal prompt and chat cursor on a dark green square.</desc>
+  <rect width="512" height="512" rx="104" fill="#10231f"/>
+  <rect x="72" y="88" width="368" height="336" rx="48" fill="#0b1116" stroke="#56d6b1" stroke-width="20"/>
+  <path d="M130 180l64 56-64 56" fill="none" stroke="#56d6b1" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M230 300h142" fill="none" stroke="#e8f3ef" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="372" cy="180" r="20" fill="#d18b47"/>
+</svg>

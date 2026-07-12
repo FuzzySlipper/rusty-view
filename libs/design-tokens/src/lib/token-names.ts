@@ -80,6 +80,7 @@ export const DENSITY_TOKENS = {
 export const LAYOUT_TOKENS = {
   chatWidth: '--rv-chat-width',
   messagePaddingY: '--rv-message-padding-y',
+  composerHeight: '--rv-composer-height',
 } as const;
 
 export const Z_INDEX_TOKENS = {

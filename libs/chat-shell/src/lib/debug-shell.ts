@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  HostListener,
   inject,
   signal,
   viewChild,
@@ -14,6 +15,7 @@ import {
   MessageInputComponent,
   StreamStatusComponent,
   TooltipDirective,
+  matchesHotkey,
 } from '@rusty-view/chat-components';
 import type { StreamStatusKind } from '@rusty-view/chat-components';
 import type { ChatCommandDescriptor } from '@rusty-view/protocol';
@@ -30,6 +32,7 @@ import { ProfilePanelComponent } from './profile-panel';
 import { ExternalAgentPanelComponent } from './external-agent-panel';
 import { ExternalInteractionCardComponent } from './external-interaction-card';
 import { TopMenuComponent } from './top-menu';
+import { HotkeySettingsService } from './hotkey-settings';
 import {
   CHAT_SLASH_COMMANDS,
   type ChatPluginCommandResult,
@@ -112,6 +115,7 @@ import {
 export class DebugShellComponent {
   protected readonly store = inject(ChatStore);
   protected readonly external = inject(ExternalAgentStore);
+  protected readonly hotkeys = inject(HotkeySettingsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly slashCommands =
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
@@ -186,8 +190,45 @@ export class DebugShellComponent {
     this.installTestSnapshotApi();
   }
 
+  @HostListener('document:keydown', ['$event'])
+  protected onGlobalHotkey(event: KeyboardEvent): void {
+    if (matchesHotkey(event, this.hotkeys.binding('nextSession'))) {
+      event.preventDefault();
+      this.cycleSession(1);
+      return;
+    }
+    if (matchesHotkey(event, this.hotkeys.binding('previousSession'))) {
+      event.preventDefault();
+      this.cycleSession(-1);
+    }
+  }
+
   protected onSelectSession(sessionId: string): void {
     void this.store.selectSession(sessionId);
+  }
+
+  private cycleSession(direction: 1 | -1): void {
+    if (this.sidebarMode() === 'agents') {
+      const sessions = this.external
+        .sessions()
+        .filter((session) => canCycleExternalThread(session.thread.status));
+      const target = cyclicTarget(
+        sessions,
+        this.external.selectedSessionKey(),
+        (session) => session.key,
+        direction,
+      );
+      if (target !== undefined) void this.external.selectSession(target);
+      return;
+    }
+
+    const target = cyclicTarget(
+      this.store.profiles(),
+      this.store.selectedProfileId(),
+      (profile) => profile.profileId,
+      direction,
+    );
+    if (target !== undefined) void this.store.selectProfile(target.profileId);
   }
 
   protected onSendMessage(text: string): void {
@@ -377,6 +418,22 @@ function confirmCommand(message: string | undefined): Promise<boolean> {
     return Promise.resolve(globalThis.confirm(message ?? 'Run command?'));
   }
   return Promise.resolve(true);
+}
+
+export function cyclicTarget<T>(
+  items: readonly T[],
+  selectedId: string | null | undefined,
+  idFor: (item: T) => string,
+  direction: 1 | -1,
+): T | undefined {
+  if (items.length === 0) return undefined;
+  const selectedIndex = items.findIndex((item) => idFor(item) === selectedId);
+  if (selectedIndex < 0) return direction === 1 ? items[0] : items.at(-1);
+  return items[(selectedIndex + direction + items.length) % items.length];
+}
+
+export function canCycleExternalThread(status: string): boolean {
+  return status !== 'archived';
 }
 
 function metadataString(block: MessageBlock, key: string): string | undefined {

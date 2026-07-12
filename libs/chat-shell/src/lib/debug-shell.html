@@ -145,6 +145,7 @@
         [disabled]="inputDisabled()"
         [commands]="inputCommands()"
         [commandHistory]="store.commandHistory()"
+        [erasePreviousWordHotkey]="hotkeys.binding('erasePreviousWord')"
         (send)="onSendMessage($event)"
       />
       @if (pluginCommandError()) {

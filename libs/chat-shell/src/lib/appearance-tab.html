@@ -56,6 +56,31 @@
         />
         <strong>{{ theme.settings().chatWidthPercent }}%</strong>
       </label>
+
+      <label class="rv-appearance__range-row">
+        <span>Composer Height</span>
+        <input
+          type="range"
+          class="rv-appearance__slider"
+          data-testid="appearance-composer-height"
+          [min]="composerHeightMin"
+          [max]="composerHeightMax"
+          [step]="composerHeightStep"
+          [value]="theme.settings().composerHeightPx"
+          (input)="onComposerHeight($event)"
+        />
+        <strong>{{ theme.settings().composerHeightPx }}px</strong>
+      </label>
+      <div class="rv-appearance__actions">
+        <button
+          type="button"
+          class="rv-appearance__reset"
+          data-testid="appearance-composer-height-reset"
+          (click)="resetComposerHeight()"
+        >
+          Reset composer size
+        </button>
+      </div>
     </fieldset>
 
     <fieldset class="rv-appearance__group">

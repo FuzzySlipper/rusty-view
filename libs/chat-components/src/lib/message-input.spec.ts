@@ -20,6 +20,30 @@ describe('MessageInputComponent', () => {
     TestBed.configureTestingModule({});
   });
 
+  it('erases the previous word only for the configured composer hotkey', () => {
+    const fixture = TestBed.createComponent(MessageInputComponent);
+    fixture.detectChanges();
+    const textarea = fixture.nativeElement.querySelector(
+      'textarea',
+    ) as HTMLTextAreaElement;
+    textarea.value = 'hello brave world';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'w',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    fixture.detectChanges();
+
+    expect(textarea.value).toBe('hello brave ');
+    expect(fixture.componentInstance['text']()).toBe('hello brave ');
+  });
+
   describe('Command filtering', () => {
     it('should return empty array when text does not start with /', () => {
       const fixture = TestBed.createComponent(MessageInputComponent);

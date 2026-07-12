@@ -31,5 +31,10 @@ export { TabStripComponent } from './lib/tab-strip';
 export type { TabEntry } from './lib/tab-strip';
 export { TooltipDirective } from './lib/tooltip';
 export type { TooltipPlacement } from './lib/tooltip';
+export {
+  hotkeyBindingFromEvent,
+  matchesHotkey,
+  type HotkeyBinding,
+} from './lib/hotkeys';
 
 export const CHAT_COMPONENTS_VERSION = '0.0.0' as const;
