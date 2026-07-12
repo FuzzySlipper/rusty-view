@@ -11,7 +11,13 @@ const devServerPort =
 const devServerHost = devServerUrl.hostname || 'localhost';
 const outputDir =
   process.env['RV_PLAYWRIGHT_OUTPUT_DIR'] ??
-  join('/tmp', 'rusty-view', 'playwright-output', String(process.pid));
+  join(
+    workspaceRoot,
+    'dist',
+    '.playwright',
+    'rusty-view-e2e',
+    String(process.pid),
+  );
 
 /**
  * Read environment variables from file.
@@ -31,8 +37,8 @@ const outputDir =
  */
 export default defineConfig({
   ...nxE2EPreset(import.meta.dirname, { testDir: './src' }),
-  // Keep screenshots/traces outside the workspace so Angular/Nx dev servers do
-  // not rebuild or reload the browser while live scenarios are writing evidence.
+  // Keep screenshots/traces under the ignored build-output tree so Angular's
+  // source watcher does not reload while Nx still accepts the target output.
   outputDir,
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {

@@ -125,10 +125,11 @@ pnpm e2e:live:headed
 
 Each live scenario writes artifacts under Playwright's test output directory in
 a `live-artifacts` folder. Rusty View's Playwright config defaults this output
-to `/tmp/rusty-view/playwright-output/<playwright-pid>` so artifact writes do
-not trigger Angular/Nx dev-server rebuilds or browser reloads. Override it with
-`RV_PLAYWRIGHT_OUTPUT_DIR` only when the chosen path is outside watched
-workspace build/source directories. Broker-managed runs also provide
+to `dist/.playwright/rusty-view-e2e/<playwright-pid>` so artifact writes do not
+trigger Angular/Nx dev-server rebuilds or browser reloads. When invoking
+Playwright through Nx, set `RV_PLAYWRIGHT_OUTPUT_DIR` only to another ignored
+path inside the workspace; Nx rejects target outputs outside the workspace.
+Broker-managed runs also provide
 `PLAYWRIGHT_BROKER_ARTIFACT_ROOT`, `PLAYWRIGHT_BROKER_EVIDENCE_PATH`, and a
 `run-index.json` that links the test run, server allocation, Den task metadata,
 and artifact paths. The broker marks live UI runs as requiring human/agent
