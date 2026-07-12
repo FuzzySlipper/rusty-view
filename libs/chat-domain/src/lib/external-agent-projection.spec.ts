@@ -259,6 +259,58 @@ describe('projectExternalAgentTranscript', () => {
     );
   });
 
+  it('merges only the uncovered same-item suffix after a mid-turn snapshot', () => {
+    const itemId = 'message-1';
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'active',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'inProgress',
+            startedAt: 1,
+            completedAt: null,
+            durationMs: null,
+            items: [{ itemId, kind: 'agentMessage', text: 'Hello' }],
+          },
+        ],
+      },
+      [
+        {
+          ...event('10', 'assistant_text_delta', {
+            nativeMethod: 'item/agentMessage/delta',
+            text: 'Hello',
+          }),
+          itemId,
+        },
+        {
+          ...event('11', 'assistant_text_delta', {
+            nativeMethod: 'item/agentMessage/delta',
+            text: ' world',
+          }),
+          itemId,
+        },
+      ],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks).toHaveLength(1);
+    expect(messages[0]?.blocks[0]?.content).toBe('Hello world');
+  });
+
   it('keeps empty MCP startup and usage diagnostics out of the transcript', () => {
     const messages = projectExternalAgentTranscript(undefined, [
       event('1', 'mcp_activity', {

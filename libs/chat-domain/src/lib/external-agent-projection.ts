@@ -25,6 +25,7 @@ export function projectExternalAgentTranscript(
       };
       snapshotCoverageByTurn.set(turn.turnId, coverage);
       for (const item of turn.items) {
+        const messageIndex = messages.length;
         const status = item.status ?? turn.status;
         const content =
           item.text ?? item.summary?.join('\n') ?? item.status ?? item.kind;
@@ -32,6 +33,7 @@ export function projectExternalAgentTranscript(
           itemId: item.itemId,
           kind: item.kind,
           content,
+          messageIndex,
         });
         messages.push(
           buildMessage(
@@ -60,18 +62,28 @@ export function projectExternalAgentTranscript(
   for (const [key, group] of grouped) {
     const first = group[0];
     if (first === undefined) continue;
-    if (
-      snapshotCoversEventGroup(
-        snapshotCoverageByTurn.get(first.nativeTurnId ?? ''),
-        group,
-      )
-    ) {
-      continue;
-    }
     const status = terminalStatus(
       group,
       terminalByTurn.get(first.nativeTurnId ?? ''),
     );
+    const reconciliation = reconcileSnapshotEventGroup(
+      snapshotCoverageByTurn.get(first.nativeTurnId ?? ''),
+      group,
+    );
+    if (reconciliation.covered) {
+      if (
+        reconciliation.item !== undefined &&
+        reconciliation.uncoveredContent !== undefined
+      ) {
+        appendSnapshotContinuation(
+          messages,
+          reconciliation.item.messageIndex,
+          reconciliation.uncoveredContent,
+          status,
+        );
+      }
+      continue;
+    }
     const blocks = blocksForGroup(group, status);
     if (blocks.length === 0) continue;
     messages.push(
@@ -98,6 +110,7 @@ interface SnapshotItemCoverage {
   readonly itemId: string;
   readonly kind: string;
   readonly content: string;
+  readonly messageIndex: number;
 }
 
 interface SnapshotTurnCoverage {
@@ -105,27 +118,52 @@ interface SnapshotTurnCoverage {
   readonly items: SnapshotItemCoverage[];
 }
 
-function snapshotCoversEventGroup(
+interface SnapshotEventReconciliation {
+  readonly covered: boolean;
+  readonly item?: SnapshotItemCoverage;
+  readonly uncoveredContent?: string;
+}
+
+function reconcileSnapshotEventGroup(
   snapshot: SnapshotTurnCoverage | undefined,
   events: readonly NormalizedExternalRuntimeEvent[],
-): boolean {
-  if (snapshot === undefined) return false;
+): SnapshotEventReconciliation {
+  if (snapshot === undefined) return { covered: false };
   const projected = snapshotProjectionForEvents(events);
-  if (projected === undefined) return false;
+  if (projected === undefined) return { covered: false };
   const itemId = events.find((event) => event.itemId != null)?.itemId;
-  return snapshot.items.some((item) => {
-    if (item.kind !== projected.kind) return false;
-    const snapshotContent = normalizeCoverageContent(item.content);
-    const eventContent = normalizeCoverageContent(projected.content);
-    if (itemId === item.itemId) {
-      return eventContent === '' || snapshotContent.includes(eventContent);
+  const sameItem = snapshot.items.find(
+    (item) => item.itemId === itemId && item.kind === projected.kind,
+  );
+  if (sameItem !== undefined) {
+    const snapshotContent = normalizeLineEndings(sameItem.content);
+    const eventContent = normalizeLineEndings(projected.content);
+    const normalizedEventContent = normalizeCoverageContent(eventContent);
+    if (
+      eventContent === '' ||
+      (normalizedEventContent !== '' &&
+        normalizeCoverageContent(snapshotContent).includes(
+          normalizedEventContent,
+        ))
+    ) {
+      return { covered: true };
     }
-    return (
+    const overlap = suffixPrefixOverlap(snapshotContent, eventContent);
+    return {
+      covered: true,
+      item: sameItem,
+      uncoveredContent: eventContent.slice(overlap),
+    };
+  }
+  const eventContent = normalizeCoverageContent(projected.content);
+  const semanticallyCovered = snapshot.items.some(
+    (item) =>
+      item.kind === projected.kind &&
       snapshot.terminal &&
       eventContent !== '' &&
-      snapshotContent === eventContent
-    );
-  });
+      normalizeCoverageContent(item.content) === eventContent,
+  );
+  return { covered: semanticallyCovered };
 }
 
 function snapshotProjectionForEvents(
@@ -179,7 +217,50 @@ function snapshotProjectionForEvents(
 }
 
 function normalizeCoverageContent(content: string): string {
-  return content.replaceAll('\r\n', '\n').trim();
+  return normalizeLineEndings(content).trim();
+}
+
+function normalizeLineEndings(content: string): string {
+  return content.replaceAll('\r\n', '\n');
+}
+
+function suffixPrefixOverlap(snapshot: string, events: string): number {
+  const limit = Math.min(snapshot.length, events.length);
+  for (let length = limit; length > 0; length -= 1) {
+    if (snapshot.endsWith(events.slice(0, length))) return length;
+  }
+  return 0;
+}
+
+function appendSnapshotContinuation(
+  messages: ChatMessage[],
+  messageIndex: number,
+  continuation: string,
+  status: ChatMessage['status'],
+): void {
+  if (continuation === '') return;
+  const message = messages[messageIndex];
+  const block = message?.blocks[0];
+  if (message === undefined || block === undefined) return;
+  messages[messageIndex] = {
+    ...message,
+    status,
+    blocks: [
+      {
+        ...block,
+        content: `${block.content}${continuation}`,
+        ...(block.tool === undefined
+          ? {}
+          : {
+              tool: {
+                ...block.tool,
+                status: toolStatus(undefined, status),
+              },
+            }),
+      },
+      ...message.blocks.slice(1),
+    ],
+  };
 }
 
 function isTerminalStatus(status: string): boolean {
