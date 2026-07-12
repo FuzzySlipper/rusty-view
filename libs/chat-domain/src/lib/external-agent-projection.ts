@@ -150,14 +150,17 @@ function blocksForGroup(
         ];
   }
   if (first.kind === 'turn_lifecycle') {
-    const latestDiff = events
-      .filter((event) => event.payload.nativeMethod === 'turn/diff/updated')
-      .at(-1);
+    const diffEvents = events.filter(
+      (event) => event.payload.nativeMethod === 'turn/diff/updated',
+    );
+    const latestDiff = diffEvents.at(-1);
     const block =
       latestDiff === undefined
         ? undefined
         : eventBlock(latestDiff, messageStatus);
-    return block === undefined ? [] : [block];
+    return block === undefined
+      ? []
+      : [withExternalDetailHistory(block, diffEvents)];
   }
   return events
     .map((event) => eventBlock(event, messageStatus))
@@ -366,6 +369,25 @@ function withExternalDetail(
           externalRuntimeId: event.runtimeId,
         },
       };
+}
+
+function withExternalDetailHistory(
+  block: MessageBlock,
+  events: readonly NormalizedExternalRuntimeEvent[],
+): MessageBlock {
+  const references = events
+    .flatMap((event) =>
+      event.rawDetailRef == null ? [] : [event.rawDetailRef],
+    )
+    .slice(-32);
+  if (references.length === 0) return block;
+  return {
+    ...block,
+    metadata: {
+      ...block.metadata,
+      boundedDetailRefs: references,
+    },
+  };
 }
 
 function roleForItem(kind: string): MessageRole {

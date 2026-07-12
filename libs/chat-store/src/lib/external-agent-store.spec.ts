@@ -210,6 +210,46 @@ describe('ExternalAgentStore', () => {
     });
     expect(store.composerMode()).toBe('auto');
   });
+
+  it('polls from the runtime cursor when a fresh selected thread has no events', async () => {
+    const runtime = registration('runtime-1');
+    const selectedThread = thread('thread-1', 10);
+    const binding = externalBinding();
+    const historicalEvent = {
+      ...event(100, 'old-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    };
+    const freshEvent = event(101, 'fresh-turn', 'inProgress');
+    const listEvents = vi.fn(
+      async (_runtimeId: string, query?: { after?: number }) => ({
+        events: query?.after === 100 ? [freshEvent] : [historicalEvent],
+      }),
+    );
+    const store = setupStore({
+      runtimes: [runtime],
+      bindings: [binding],
+      listThreads: vi.fn(),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: selectedThread })),
+    });
+    store.bindings.set([binding]);
+
+    await store.selectSession({
+      key: 'runtime-1:thread-1',
+      runtime,
+      thread: selectedThread,
+      binding,
+      unread: false,
+      needsAttention: false,
+    });
+    await store.send('start fresh work');
+
+    expect(listEvents).toHaveBeenLastCalledWith('runtime-1', {
+      after: 100,
+      limit: 1_000,
+    });
+    expect(store.events()).toEqual([freshEvent]);
+  });
 });
 
 function setupStore(options: {
@@ -218,6 +258,8 @@ function setupStore(options: {
   listThreads: ReturnType<typeof vi.fn>;
   sendMessage?: ReturnType<typeof vi.fn>;
   submitControl?: ReturnType<typeof vi.fn>;
+  listEvents?: ReturnType<typeof vi.fn>;
+  readThread?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
     listRuntimes: vi.fn(async () => ({
@@ -227,8 +269,8 @@ function setupStore(options: {
     listBindings: vi.fn(async () => ({ bindings: options.bindings ?? [] })),
     listInteractions: vi.fn(async () => ({ interactions: [] })),
     listThreads: options.listThreads,
-    listEvents: vi.fn(async () => ({ events: [] })),
-    readThread: vi.fn(),
+    listEvents: options.listEvents ?? vi.fn(async () => ({ events: [] })),
+    readThread: options.readThread ?? vi.fn(),
     sendMessage: options.sendMessage ?? vi.fn(),
     submitControl: options.submitControl ?? vi.fn(),
   };
@@ -239,7 +281,12 @@ function setupStore(options: {
         provide: ChatTransport,
         useValue: {
           external,
-          streamExternalRuntimeEvents: vi.fn(),
+          streamExternalRuntimeEvents: vi.fn(() => ({
+            close: vi.fn(),
+            async *events() {
+              return;
+            },
+          })),
         } as unknown as ChatTransport,
       },
     ],

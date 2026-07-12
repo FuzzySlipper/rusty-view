@@ -37,6 +37,14 @@ describe('projectExternalAgentTranscript', () => {
         }),
         rawDetailRef: 'detail-diff',
       },
+      {
+        ...event('7', 'turn_lifecycle', {
+          nativeMethod: 'turn/diff/updated',
+        }),
+        eventId: '7-empty',
+        sequenceId: 75,
+        rawDetailRef: 'detail-empty-final-diff',
+      },
       event('8', 'turn_lifecycle', {
         nativeMethod: 'turn/completed',
         status: 'completed',
@@ -66,7 +74,8 @@ describe('projectExternalAgentTranscript', () => {
       status: 'completed',
     });
     expect(messages.at(-1)?.blocks[0]?.metadata).toEqual({
-      boundedDetailRef: 'detail-diff',
+      boundedDetailRef: 'detail-empty-final-diff',
+      boundedDetailRefs: ['detail-diff', 'detail-empty-final-diff'],
       externalRuntimeId: 'runtime-1',
     });
     expect(messages.at(-1)?.blocks[0]?.content).toContain(

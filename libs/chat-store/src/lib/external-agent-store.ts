@@ -49,6 +49,7 @@ export class ExternalAgentStore {
   private stream: ExternalRuntimeEventStream | undefined;
   private polling = false;
   private interactionsPolling = false;
+  private selectedRuntimeEventCursor: number | undefined;
   private readonly fleetCursors = new Map<string, number>();
   private readonly threadCursors = signal<
     Readonly<Record<string, string | null>>
@@ -332,6 +333,7 @@ export class ExternalAgentStore {
 
   async selectSession(session: ExternalAgentSession): Promise<void> {
     this.stream?.close();
+    this.selectedRuntimeEventCursor = undefined;
     this.events.set([]);
     this.selectedThread.set(undefined);
     this.selectedRuntimeId.set(session.runtime.runtimeId);
@@ -353,8 +355,12 @@ export class ExternalAgentStore {
       const events = page.filter(
         (event) => event.nativeThreadId === session.thread.threadId,
       );
+      this.selectedRuntimeEventCursor = page.at(-1)?.sequenceId;
       this.events.set(events);
-      this.startStream(session.runtime.runtimeId, events.at(-1)?.sequenceId);
+      this.startStream(
+        session.runtime.runtimeId,
+        this.selectedRuntimeEventCursor,
+      );
       this.error.set(undefined);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -370,6 +376,7 @@ export class ExternalAgentStore {
     this.selectedThreadId.set(undefined);
     this.selectedThread.set(undefined);
     this.events.set([]);
+    this.selectedRuntimeEventCursor = undefined;
   }
 
   async send(text: string): Promise<void> {
@@ -525,6 +532,11 @@ export class ExternalAgentStore {
     void (async () => {
       try {
         for await (const event of stream.events()) {
+          if (this.stream !== stream) break;
+          this.selectedRuntimeEventCursor = Math.max(
+            this.selectedRuntimeEventCursor ?? event.sequenceId,
+            event.sequenceId,
+          );
           if (event.nativeThreadId === this.selectedThreadId()) {
             this.appendEvents([event]);
           }
@@ -556,11 +568,18 @@ export class ExternalAgentStore {
   private async refreshSelectedEvents(): Promise<void> {
     const runtimeId = this.selectedRuntimeId();
     if (runtimeId === undefined) return;
-    const after = this.events().at(-1)?.sequenceId;
+    const after = this.selectedRuntimeEventCursor;
     const page = await this.transport.external.listEvents(runtimeId, {
       ...(after === undefined ? {} : { after }),
       limit: 1_000,
     });
+    const lastSequence = page.events.at(-1)?.sequenceId;
+    if (lastSequence !== undefined) {
+      this.selectedRuntimeEventCursor = Math.max(
+        this.selectedRuntimeEventCursor ?? lastSequence,
+        lastSequence,
+      );
+    }
     const selectedThreadId = this.selectedThreadId();
     this.appendEvents(
       page.events.filter((event) => event.nativeThreadId === selectedThreadId),

@@ -3,6 +3,8 @@ import type { Page } from '@playwright/test';
 
 const live = process.env['RV_EXTERNAL_LIVE_RUN'] === '1';
 const backend = process.env['RV_LIVE_BACKEND_URL'] ?? 'http://127.0.0.1:9348';
+const peerBindingId =
+  process.env['RV_EXTERNAL_PEER_BINDING_ID'] ?? 'rv-codex-5516-b-binding';
 
 test.describe('external agent console @live-agent', () => {
   test.skip(
@@ -70,11 +72,7 @@ test.describe('external agent console @live-agent', () => {
       'completed',
     );
     expect(
-      await revealTranscriptBlock(
-        page,
-        'Aggregate diff updated',
-        'file_change',
-      ),
+      await revealTranscriptBlock(page, 'Aggregate diff', 'file_change'),
     ).toBe('completed');
     await inspectRawDiffEvent(page);
     await page.screenshot({
@@ -145,11 +143,7 @@ test.describe('external agent console @live-agent', () => {
       'completed',
     );
     expect(
-      await revealTranscriptBlock(
-        page,
-        'Aggregate diff updated',
-        'file_change',
-      ),
+      await revealTranscriptBlock(page, 'Aggregate diff', 'file_change'),
     ).toBe('completed');
     await inspectRawDiffEvent(page);
     await page.screenshot({
@@ -162,6 +156,7 @@ test.describe('external agent console @live-agent', () => {
     page,
   }, testInfo) => {
     test.setTimeout(5 * 60_000);
+    await startFreshExternalThread(backend, peerBindingId);
     await page.goto(`/?api=${encodeURIComponent(backend)}`);
     await page.getByTestId('external-agents-tab').click();
     const search = page.getByLabel('Search loaded agent sessions');
@@ -203,32 +198,46 @@ test.describe('external agent console @live-agent', () => {
     await expect(page.getByTestId('transcript-shell')).toContainText(
       'RV_FRESH_DIFF_COMPLETE',
     );
-    expect(await revealTranscriptBlock(page, 'Plan updated', 'plan')).toBe(
-      'completed',
-    );
-    await page.screenshot({
-      path: testInfo.outputPath('fresh-plan-completed.png'),
-      fullPage: true,
-    });
     expect(
       await revealTranscriptBlock(
         page,
-        'Aggregate diff updated',
+        'Plan updated',
+        'plan',
+        `external-event:${turnId ?? ''}:plan_delta`,
+      ),
+    ).toBe('completed');
+    await page.screenshot({
+      path: testInfo.outputPath('fresh-plan-completed.png'),
+    });
+    const aggregateDiffMessageId = `external-event:${turnId ?? ''}:turn_lifecycle`;
+    expect(
+      await revealTranscriptBlock(
+        page,
+        'Aggregate diff',
         'file_change',
+        aggregateDiffMessageId,
       ),
     ).toBe('completed');
     const aggregateDiff = page
-      .getByTestId('tool-call-block')
-      .filter({ hasText: 'Aggregate diff' })
-      .last();
-    await aggregateDiff.getByTestId('message-block-detail-toggle').click();
+      .locator(
+        `[data-testid="message-row"][data-message-id="${aggregateDiffMessageId}"]`,
+      )
+      .getByTestId('tool-call-block');
+    const detailToggle = aggregateDiff.getByTestId(
+      'message-block-detail-toggle',
+    );
+    await expect(detailToggle).toBeVisible();
+    await detailToggle.click();
     await expect(
       aggregateDiff.getByTestId('message-block-detail-content'),
     ).toContainText(temporaryPath);
+    await expect(detailToggle).toHaveAttribute('aria-expanded', 'true');
+    await page.screenshot({
+      path: testInfo.outputPath('fresh-plan-diff-detail.png'),
+    });
     await inspectRawDiffEvent(page);
     await page.screenshot({
       path: testInfo.outputPath('fresh-plan-diff-raw-detail.png'),
-      fullPage: true,
     });
     await inspectRawNativeEvent(
       page,
@@ -237,7 +246,6 @@ test.describe('external agent console @live-agent', () => {
     );
     await page.screenshot({
       path: testInfo.outputPath('fresh-unprojected-raw-detail.png'),
-      fullPage: true,
     });
   });
 
@@ -360,6 +368,61 @@ test.describe('external agent console @live-agent', () => {
   });
 });
 
+async function startFreshExternalThread(
+  baseUrl: string,
+  bindingId: string,
+): Promise<void> {
+  const listed = await requestJson<{
+    bindings: Array<Record<string, unknown>>;
+  }>(`${baseUrl}/v1/external-bindings`);
+  const binding = listed.bindings.find(
+    (item) => item['bindingId'] === bindingId,
+  );
+  if (binding === undefined) {
+    throw new Error(`External binding ${bindingId} was not found.`);
+  }
+  const { nativeThreadId: _previousThreadId, ...withoutThread } = binding;
+  const rebound = await requestJson<Record<string, unknown>>(
+    `${baseUrl}/v1/external-bindings`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        binding: withoutThread,
+        expectedRevision: binding['revision'],
+      }),
+    },
+  );
+  await requestJson<Record<string, unknown>>(
+    `${baseUrl}/v1/external-bindings/${encodeURIComponent(bindingId)}/controls`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'start_or_resume_thread',
+        expectedBindingRevision: rebound['revision'],
+        payload: { cwd: '/home/dev/rusty-view' },
+      }),
+    },
+  );
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  const envelope = (await response.json()) as {
+    ok?: boolean;
+    data?: T;
+    error?: { message?: string };
+  };
+  if (!response.ok || envelope.ok !== true || envelope.data === undefined) {
+    throw new Error(
+      envelope.error?.message ??
+        `Request ${init?.method ?? 'GET'} ${url} failed with ${response.status}.`,
+    );
+  }
+  return envelope.data;
+}
+
 async function revealCertificationFileChange(page: Page): Promise<void> {
   await revealTranscriptBlock(
     page,
@@ -372,6 +435,7 @@ async function revealTranscriptBlock(
   page: Page,
   query: string,
   blockKind: string,
+  messageId?: string,
 ): Promise<string | null> {
   const searchInput = page.getByTestId('transcript-search-input');
   if (!(await searchInput.isVisible())) {
@@ -381,22 +445,23 @@ async function revealTranscriptBlock(
   await expect(page.getByTestId('transcript-search-status')).toHaveText(
     /\d+ \/ \d+/,
   );
-  const blocks = page
+  const scope =
+    messageId === undefined
+      ? page
+      : page.locator(
+          `[data-testid="message-row"][data-message-id="${messageId}"]`,
+        );
+  const blocks = scope
     .locator(
       blockKind === 'text'
         ? '[data-testid="text-block"]'
         : `[data-block-kind="${blockKind}"]`,
     )
     .filter({ hasText: query });
-  const viewport = page.getByTestId('transcript-viewport');
   await expect
     .poll(
       async () => {
         await page.getByTestId('transcript-search-next').click();
-        await viewport.evaluate((element) => {
-          element.scrollTop = element.scrollHeight;
-          element.dispatchEvent(new Event('scroll'));
-        });
         return blocks.count();
       },
       { timeout: 10_000 },
@@ -405,10 +470,17 @@ async function revealTranscriptBlock(
   const block = blocks.last();
   await expect(block).toBeAttached();
   await expect(block).toBeVisible({ timeout: 10_000 });
-  return block.evaluate((element) =>
-    element
-      .closest('[data-message-status]')
-      ?.getAttribute('data-message-status'),
+  if (messageId !== undefined) {
+    return page
+      .locator(`[data-testid="message-row"][data-message-id="${messageId}"]`)
+      .getAttribute('data-message-status');
+  }
+  return (
+    (await block.evaluate((element) =>
+      element
+        .closest('[data-message-status]')
+        ?.getAttribute('data-message-status'),
+    )) ?? null
   );
 }
 

@@ -21,6 +21,7 @@ import {
   MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
   TranscriptViewportComponent,
+  type MessageBlockDetail,
   type MessageRevisionAction,
   type MessageRevisionCapabilities,
 } from '@rusty-view/transcript-renderer';
@@ -82,12 +83,27 @@ import {
           if (runtimeId === undefined || detailId === undefined) {
             throw new Error('Bounded detail reference is incomplete.');
           }
-          const detail = await store.readRawDetail(runtimeId, detailId);
-          return {
-            content: formatExternalDetail(detail.json),
-            truncated: detail.truncated,
-            redactedKeys: detail.redactedKeys,
-          };
+          const detailIds = metadataStrings(block, 'boundedDetailRefs') ?? [
+            detailId,
+          ];
+          let fallback: MessageBlockDetail | undefined;
+          let lastError: unknown;
+          for (const candidateId of [...detailIds].reverse()) {
+            try {
+              const detail = await store.readRawDetail(runtimeId, candidateId);
+              const candidate = {
+                content: formatExternalDetail(detail.json),
+                truncated: detail.truncated,
+                redactedKeys: detail.redactedKeys,
+              };
+              fallback ??= candidate;
+              if (candidate.content.trim().length > 0) return candidate;
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          if (fallback !== undefined) return fallback;
+          throw lastError ?? new Error('Bounded detail was not found.');
         },
       deps: [ExternalAgentStore],
     },
@@ -366,6 +382,16 @@ function confirmCommand(message: string | undefined): Promise<boolean> {
 function metadataString(block: MessageBlock, key: string): string | undefined {
   const value = block.metadata?.[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function metadataStrings(
+  block: MessageBlock,
+  key: string,
+): readonly string[] | undefined {
+  const value = block.metadata?.[key];
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : undefined;
 }
 
 function formatExternalDetail(json: string): string {
