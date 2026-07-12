@@ -39,6 +39,13 @@ export class ExternalAgentPanelComponent {
   protected readonly attempted = signal(false);
   private readonly creationAttemptKeys = loadCreationAttemptKeys();
 
+  protected readonly cwdValidationError = computed(() => {
+    const cwd = this.cwd().trim();
+    if (cwd === '') return 'Enter a working directory.';
+    if (!cwd.startsWith('/')) return 'Working directory must be absolute.';
+    return undefined;
+  });
+
   protected readonly canOpenCreator = computed(
     () =>
       this.store.readyRuntimes().length > 0 &&
@@ -48,7 +55,6 @@ export class ExternalAgentPanelComponent {
     () =>
       this.runtimeId() !== '' &&
       this.profileId() !== '' &&
-      this.cwd().startsWith('/') &&
       !this.store.creatingSession(),
   );
   protected readonly sessions = computed(() => {
@@ -112,6 +118,7 @@ export class ExternalAgentPanelComponent {
     event.preventDefault();
     if (!this.canSubmit()) return;
     this.attempted.set(true);
+    if (this.cwdValidationError() !== undefined) return;
     const intent = this.creationIntent();
     const intentKey = JSON.stringify(intent);
     const idempotencyKey = this.idempotencyKeyFor(intentKey);

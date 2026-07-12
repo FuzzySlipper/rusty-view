@@ -48,6 +48,25 @@ describe('ExternalAgentPanelComponent creation retries', () => {
   beforeEach(() => sessionStorage.clear());
   afterEach(() => TestBed.resetTestingModule());
 
+  it('explains the required working directory when start is clicked', async () => {
+    const created = vi.fn();
+    const { fixture, panel } = await createPanel(created);
+    panel.openCreator();
+    fixture.detectChanges();
+
+    const submit = fixture.nativeElement.querySelector(
+      '[data-testid="external-agent-create-submit"]',
+    ) as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    submit.click();
+    fixture.detectChanges();
+
+    expect(created).not.toHaveBeenCalled();
+    expect(
+      fixture.nativeElement.querySelector('[role="alert"]')?.textContent,
+    ).toContain('Enter a working directory.');
+  });
+
   it('reuses one key for the same canonical intent after edits, cancel, and reload', async () => {
     const requests: ExternalAgentSessionCreateWrite[] = [];
     const createSession = async (request: ExternalAgentSessionCreateWrite) => {

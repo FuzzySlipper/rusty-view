@@ -272,12 +272,21 @@ export class ExternalAgentStore {
             ? (previousThreadCursors[runtime.runtimeId] ?? null)
             : listed.nextCursor;
           const known = new Set(knownThreads.map((thread) => thread.threadId));
+          const failedResumeBindingIds = new Set(
+            fleet.controllers
+              .filter(
+                (controller) => controller.runtimeId === runtime.runtimeId,
+              )
+              .flatMap((controller) => controller.bindingResumeFailures)
+              .map((failure) => failure.bindingId),
+          );
           const missingBoundIds = refreshedBindings
             .filter(
               (binding) =>
                 binding.runtimeId === runtime.runtimeId &&
                 binding.nativeThreadId != null &&
-                !known.has(binding.nativeThreadId),
+                !known.has(binding.nativeThreadId) &&
+                !failedResumeBindingIds.has(binding.bindingId),
             )
             .map((binding) => binding.nativeThreadId)
             .filter((threadId): threadId is string => threadId != null);

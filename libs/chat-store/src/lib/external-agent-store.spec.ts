@@ -3,6 +3,7 @@ import type {
   ExternalAgentBinding,
   ExternalAgentSessionCreateResult,
   ExternalInteractionRecord,
+  ExternalRuntimeControllerStatus,
   ExternalRuntimeRegistration,
   ExternalThreadProjection,
   NormalizedExternalRuntimeEvent,
@@ -119,6 +120,46 @@ describe('ExternalAgentStore', () => {
       'thread-1',
     ]);
     expect(store.error()).toBeUndefined();
+  });
+
+  it('does not retry a binding thread with a controller resume failure', async () => {
+    const staleBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-stale',
+      nativeThreadId: 'thread-stale',
+    };
+    const readThread = vi.fn();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      controllers: [
+        {
+          runtimeId: 'runtime-1',
+          driverState: 'ready',
+          controllerInstanceId: 'controller-1',
+          controllerGeneration: 1,
+          leaseExpiresAt: '2026-07-12T10:00:00.000Z',
+          bindingResumeFailures: [
+            {
+              bindingId: 'binding-stale',
+              nativeThreadId: 'thread-stale',
+              reason: 'no rollout found for thread id',
+              observedAt: '2026-07-12T09:00:00.000Z',
+            },
+          ],
+        },
+      ],
+      bindings: [externalBinding(), staleBinding],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread,
+    });
+
+    await store.refresh();
+    await store.refresh();
+
+    expect(readThread).not.toHaveBeenCalled();
+    expect(store.sessions().map((session) => session.thread.threadId)).toEqual([
+      'thread-1',
+    ]);
   });
 
   it('preserves a page loaded while an older refresh finishes', async () => {
@@ -399,6 +440,7 @@ describe('ExternalAgentStore', () => {
 
 function setupStore(options: {
   runtimes: readonly ExternalRuntimeRegistration[];
+  controllers?: readonly ExternalRuntimeControllerStatus[];
   bindings?: readonly ExternalAgentBinding[];
   listBindings?: ReturnType<typeof vi.fn>;
   listThreads: ReturnType<typeof vi.fn>;
@@ -411,7 +453,7 @@ function setupStore(options: {
   const external = {
     listRuntimes: vi.fn(async () => ({
       runtimes: options.runtimes,
-      controllers: [],
+      controllers: options.controllers ?? [],
     })),
     listBindings:
       options.listBindings ??

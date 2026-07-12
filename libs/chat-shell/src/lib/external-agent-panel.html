@@ -33,6 +33,7 @@
   <form
     class="rv-agents__create"
     data-testid="external-agent-create-form"
+    novalidate
     (submit)="create($event)"
   >
     <div class="rv-agents__create-heading">
@@ -84,10 +85,17 @@
         required
         placeholder="/home/dev/project"
         autocomplete="off"
+        aria-describedby="external-agent-cwd-error"
+        [attr.aria-invalid]="attempted() && cwdValidationError() ? 'true' : null"
         [value]="cwd()"
         (input)="updateDraft(cwd, $event)"
       />
     </label>
+    @if (attempted() && cwdValidationError()) {
+    <div id="external-agent-cwd-error" class="rv-agents__error" role="alert">
+      {{ cwdValidationError() }}
+    </div>
+    }
 
     <label>
       Label
