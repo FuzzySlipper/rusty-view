@@ -588,7 +588,17 @@ export class TranscriptViewportComponent {
           this.isAtBottom.set(true);
           return;
         }
-        this.scrollToBottomOffset();
+        // Autosize can converge on a provisional content size whose reported
+        // bottom is real in pixels but whose rendered range stops one or more
+        // rows before the data tail. Repeating the same clamped offset cannot
+        // escape that estimate. After a few normal attempts, explicitly seed a
+        // tail range; the strategy remeasures it on the next render and can
+        // then place the actual final row at the bottom.
+        if (attempt >= 3 && !this.isTailMaterialized()) {
+          this.materializeTailRange();
+        } else {
+          this.scrollToBottomOffset();
+        }
         this.settleScrollToBottom(attempt + 1);
       });
     }, 50);
@@ -601,6 +611,23 @@ export class TranscriptViewportComponent {
       lastMessage === undefined ||
       this.findRenderedMessageElement(lastMessage.id) !== null
     );
+  }
+
+  private materializeTailRange(): void {
+    const viewport = this.viewport();
+    const length = this.renderMessages().length;
+    if (length === 0) return;
+    const currentRange = viewport.getRenderedRange();
+    const windowSize = Math.max(20, currentRange.end - currentRange.start);
+    const start = Math.max(0, length - windowSize);
+    const estimatedTotal = Math.max(
+      viewport.measureScrollOffset('top') + viewport.getViewportSize(),
+      length * this.averageRenderedItemSize(),
+    );
+    viewport.setTotalContentSize(estimatedTotal);
+    viewport.setRenderedRange({ start, end: length });
+    viewport.setRenderedContentOffset(estimatedTotal, 'to-end');
+    viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
   }
 
   /**
