@@ -206,6 +206,7 @@ function inventorySession(
       preview: threadId,
       ephemeral: false,
       modelProvider: 'openai',
+      effectiveModel: null,
       createdAt: index,
       updatedAt: index,
       status: options.active ? 'active' : 'idle',

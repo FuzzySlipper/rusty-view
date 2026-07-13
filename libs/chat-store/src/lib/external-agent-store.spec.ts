@@ -709,6 +709,7 @@ function thread(threadId: string, updatedAt: number): ExternalThreadProjection {
     preview: threadId,
     ephemeral: false,
     modelProvider: 'openai',
+    effectiveModel: null,
     createdAt: updatedAt,
     updatedAt,
     status: 'active',
