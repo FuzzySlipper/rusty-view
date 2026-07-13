@@ -446,6 +446,72 @@ describe('ExternalAgentStore', () => {
     expect(store.composerMode()).toBe('auto');
   });
 
+  it('discovers and executes external commands without using the message route', async () => {
+    const listCommands = vi.fn(async () => externalCommandCatalog());
+    const executeCommand = vi.fn(async () => externalCommandResult('applied'));
+    const sendMessage = vi.fn();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      listCommands,
+      executeCommand,
+      sendMessage,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+
+    await store.refreshSelectedCommands();
+    await store.executeCommand('/status');
+
+    expect(store.commandCatalog()?.settings.model).toBe('gpt-5.6');
+    expect(executeCommand).toHaveBeenCalledWith('binding-1', {
+      input: '/status',
+      idempotencyKey: expect.stringMatching(/^rusty-view-command:/),
+      expectedBindingRevision: 1,
+    });
+    expect(store.commandHistory()).toEqual(['/status']);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(listCommands).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps command rejection explicit and command history isolated by external session', async () => {
+    const secondBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-2',
+      nativeThreadId: 'thread-2',
+      sessionId: 'session-2',
+    };
+    const executeCommand = vi
+      .fn()
+      .mockResolvedValueOnce(externalCommandResult('rejected'))
+      .mockResolvedValueOnce(externalCommandResult('applied'));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding(), secondBinding],
+      listThreads: vi.fn(async () =>
+        page([thread('thread-1', 10), thread('thread-2', 20)], null),
+      ),
+      listCommands: vi.fn(async () => externalCommandCatalog()),
+      executeCommand,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+
+    await store.executeCommand('/model unavailable');
+    expect(store.commandError()).toContain('external_command_model_invalid');
+    expect(store.commandHistory()).toEqual(['/model unavailable']);
+
+    store.selectedThreadId.set('thread-2');
+    await store.executeCommand('/status');
+    expect(store.commandHistory()).toEqual(['/status']);
+
+    store.selectedThreadId.set('thread-1');
+    expect(store.commandHistory()).toEqual(['/model unavailable']);
+  });
+
   it('polls from the runtime cursor when a fresh selected thread has no events', async () => {
     const runtime = registration('runtime-1');
     const selectedThread = thread('thread-1', 10);
@@ -617,6 +683,8 @@ function setupStore(options: {
   archiveThread?: ReturnType<typeof vi.fn>;
   unarchiveThread?: ReturnType<typeof vi.fn>;
   deleteThread?: ReturnType<typeof vi.fn>;
+  listCommands?: ReturnType<typeof vi.fn>;
+  executeCommand?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
     listRuntimes: vi.fn(async () => ({
@@ -636,6 +704,9 @@ function setupStore(options: {
     archiveThread: options.archiveThread ?? vi.fn(),
     unarchiveThread: options.unarchiveThread ?? vi.fn(),
     deleteThread: options.deleteThread ?? vi.fn(),
+    listCommands:
+      options.listCommands ?? vi.fn(async () => externalCommandCatalog()),
+    executeCommand: options.executeCommand ?? vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -736,6 +807,48 @@ function externalBinding(): ExternalAgentBinding {
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',
     updatedAt: '2026-07-11T00:00:00Z',
+  };
+}
+
+function externalCommandCatalog() {
+  return {
+    contractVersion: '0.7.0',
+    runtimeId: 'runtime-1',
+    bindingId: 'binding-1',
+    nativeThreadId: 'thread-1',
+    commands: [
+      {
+        name: 'status',
+        aliases: [],
+        usage: '/status',
+        description: 'Show status',
+        mutates: false,
+        requiredCapabilities: [],
+        available: true,
+        unavailableReasonCode: null,
+      },
+    ],
+    settings: {
+      model: 'gpt-5.6',
+      modelProvider: 'openai',
+      effort: 'medium',
+    },
+    models: [],
+  };
+}
+
+function externalCommandResult(status: 'applied' | 'rejected') {
+  const rejected = status === 'rejected';
+  return {
+    commandId: 'command-1',
+    input: rejected ? '/model unavailable' : '/status',
+    command: rejected ? 'model' : 'status',
+    argument: rejected ? 'unavailable' : null,
+    status,
+    reasonCode: rejected ? 'external_command_model_invalid' : null,
+    message: rejected ? 'model unavailable' : 'Runtime ready',
+    result: {},
+    receipt: {},
   };
 }
 

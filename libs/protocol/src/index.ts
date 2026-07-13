@@ -97,6 +97,26 @@ export type ExternalControlReceipt = ExternalSchemas['ExternalControlReceipt'];
 export type ExternalBindingMessageWrite =
   ExternalSchemas['ExternalBindingMessageWrite'];
 export type ExternalTurnPhase = ExternalSchemas['ExternalTurnPhase'];
+export type ExternalRuntimeCommandWrite =
+  ExternalSchemas['ExternalRuntimeCommandWrite'];
+export type ExternalRuntimeCommandDescriptor =
+  ExternalSchemas['ExternalRuntimeCommandDescriptor'];
+export type ExternalRuntimeReasoningEffortOption =
+  ExternalSchemas['ExternalRuntimeReasoningEffortOption'];
+export type ExternalRuntimeModelOption =
+  ExternalSchemas['ExternalRuntimeModelOption'];
+export type ExternalThreadSettingsProjection =
+  ExternalSchemas['ExternalThreadSettingsProjection'];
+export type ExternalThreadUsageProjection =
+  ExternalSchemas['ExternalThreadUsageProjection'];
+export type ExternalThreadCommandStatus =
+  ExternalSchemas['ExternalThreadCommandStatus'];
+export type ExternalRuntimeCommandCatalog =
+  ExternalSchemas['ExternalRuntimeCommandCatalog'];
+export type ExternalRuntimeCommandResultData =
+  ExternalSchemas['ExternalRuntimeCommandResultData'];
+export type ExternalRuntimeCommandExecutionResult =
+  ExternalSchemas['ExternalRuntimeCommandExecutionResult'];
 
 export type ListExternalRuntimesResponse =
   externalOperations['listExternalRuntimes']['responses'][200]['content']['application/json'];
@@ -122,6 +142,10 @@ export type SubmitExternalBindingControlResponse =
   externalOperations['submitExternalBindingControl']['responses'][200]['content']['application/json'];
 export type SendExternalBindingMessageResponse =
   externalOperations['sendExternalBindingMessage']['responses'][200]['content']['application/json'];
+export type ListExternalBindingCommandsResponse =
+  externalOperations['listExternalBindingCommands']['responses'][200]['content']['application/json'];
+export type ExecuteExternalBindingCommandResponse =
+  externalOperations['executeExternalBindingCommand']['responses'][200]['content']['application/json'];
 export type ResolveExternalInteractionResponse =
   externalOperations['resolveExternalInteraction']['responses'][200]['content']['application/json'];
 export type ReadExternalRuntimeRawDetailResponse =

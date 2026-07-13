@@ -61,8 +61,7 @@ export function projectExternalAgentTranscript(
   }
   const grouped = new Map<string, NormalizedExternalRuntimeEvent[]>();
   for (const event of events) {
-    const key =
-      event.itemId ?? `${event.nativeTurnId ?? event.eventId}:${event.kind}`;
+    const key = eventGroupKey(event);
     grouped.set(key, [...(grouped.get(key) ?? []), event]);
   }
   for (const [key, group] of grouped) {
@@ -430,6 +429,25 @@ function blocksForGroup(
       ? []
       : [withExternalDetailHistory(block, diffEvents)];
   }
+  if (isExternalCommandEvent(first.kind)) {
+    const latest = events.at(-1);
+    if (latest === undefined) return [];
+    const command = latest.payload.command ?? 'unknown';
+    const argument = latest.payload.argument;
+    return [
+      toolBlock(
+        latest,
+        'command',
+        `/${command}${argument == null || argument === '' ? '' : ` ${argument}`}`,
+        latest.payload.message ??
+          latest.payload.reasonCode ??
+          (latest.kind === 'command_started'
+            ? 'Command started.'
+            : 'Command completed.'),
+        toolStatus(latest.payload.status, messageStatus),
+      ),
+    ];
+  }
   return events
     .map((event) => eventBlock(event, messageStatus))
     .filter((block): block is MessageBlock => block !== undefined);
@@ -670,9 +688,11 @@ function toolStatus(
   status: string | undefined,
   fallbackMessageStatus: ChatMessage['status'] = 'streaming',
 ): ToolBlockStatus {
-  if (status === 'failed' || status === 'error') return 'failed';
-  if (status === 'completed' || status === 'success') return 'completed';
-  if (status === 'started') return 'started';
+  if (status === 'failed' || status === 'error' || status === 'rejected')
+    return 'failed';
+  if (status === 'completed' || status === 'success' || status === 'applied')
+    return 'completed';
+  if (status === 'started' || status === 'pending') return 'started';
   if (fallbackMessageStatus === 'completed') return 'completed';
   if (fallbackMessageStatus === 'error') return 'failed';
   return 'running';
@@ -723,15 +743,33 @@ function messagePhaseForEvents(
 }
 
 function messageStatus(status: string | undefined): ChatMessage['status'] {
-  if (status === 'failed' || status === 'error') return 'error';
+  if (status === 'failed' || status === 'error' || status === 'rejected')
+    return 'error';
   if (
     status === 'completed' ||
     status === 'success' ||
-    status === 'interrupted'
+    status === 'interrupted' ||
+    status === 'applied'
   ) {
     return 'completed';
   }
   return 'streaming';
+}
+
+function eventGroupKey(event: NormalizedExternalRuntimeEvent): string {
+  if (event.itemId !== undefined && event.itemId !== null) return event.itemId;
+  if (isExternalCommandEvent(event.kind) && event.requestId != null) {
+    return `external-command:${event.requestId}`;
+  }
+  return `${event.nativeTurnId ?? event.eventId}:${event.kind}`;
+}
+
+function isExternalCommandEvent(kind: string): boolean {
+  return (
+    kind === 'command_started' ||
+    kind === 'command_completed' ||
+    kind === 'command_failed'
+  );
 }
 
 function unixDate(value: number): string {

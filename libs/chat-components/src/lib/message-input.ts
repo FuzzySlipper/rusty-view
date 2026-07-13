@@ -23,6 +23,19 @@ export interface MessageInputAttachmentSelection {
   readonly source: MessageInputAttachmentSource;
 }
 
+export interface MessageInputCommandArgumentValue {
+  readonly value: string;
+  readonly label?: string;
+  readonly description?: string;
+}
+
+export interface MessageInputCommandDescriptor {
+  readonly name: string;
+  readonly description?: string;
+  readonly args_schema?: Record<string, unknown>;
+  readonly argumentValues?: readonly MessageInputCommandArgumentValue[];
+}
+
 const TEXT_PREVIEW_LIMIT = 2_000;
 
 /**
@@ -47,13 +60,7 @@ export class MessageInputComponent {
   readonly disabled = input<boolean>(false);
   readonly erasePreviousWordHotkey = input<string>('Ctrl+W');
   readonly placeholder = input<string>('Type a message…');
-  readonly commands = input<
-    readonly {
-      readonly name: string;
-      readonly description?: string;
-      readonly args_schema?: Record<string, unknown>;
-    }[]
-  >([]);
+  readonly commands = input<readonly MessageInputCommandDescriptor[]>([]);
   /** Submitted slash commands for Up/Down navigation (newest-first). */
   readonly commandHistory = input<readonly string[]>([]);
   readonly attachmentsEnabled = input<boolean>(false);
@@ -77,10 +84,36 @@ export class MessageInputComponent {
   /** Draft preserved when the user enters history navigation. */
   protected savedDraft = '';
 
-  protected readonly filteredCommands = computed(() => {
+  protected readonly filteredCommands = computed<
+    readonly MessageInputCommandDescriptor[]
+  >(() => {
     const text = this.text();
     if (!text.startsWith('/')) return [];
-    const query = text.slice(1).toLowerCase();
+    const commandInput = text.slice(1);
+    const separator = commandInput.search(/\s/);
+    if (separator >= 0) {
+      const commandName = commandInput.slice(0, separator).toLowerCase();
+      const argumentQuery = commandInput
+        .slice(separator)
+        .trimStart()
+        .toLowerCase();
+      const command = this.commands().find(
+        (candidate) => candidate.name.toLowerCase() === commandName,
+      );
+      return (command?.argumentValues ?? [])
+        .filter((choice) =>
+          choice.value.toLowerCase().startsWith(argumentQuery),
+        )
+        .slice(0, 10)
+        .map((choice) => {
+          const description = choice.description ?? command?.description;
+          return {
+            name: `${command?.name ?? commandName} ${choice.value}`,
+            ...(description === undefined ? {} : { description }),
+          };
+        });
+    }
+    const query = commandInput.toLowerCase();
     return this.commands()
       .filter((cmd) => cmd.name.toLowerCase().startsWith(query))
       .slice(0, 10);
@@ -213,7 +246,10 @@ export class MessageInputComponent {
 
   protected acceptHint(name: string): void {
     this.text.set(`/${name} `);
-    this.hintOpen.set(false);
+    const selected = this.commands().find(
+      (command) => command.name.toLowerCase() === name.toLowerCase(),
+    );
+    this.hintOpen.set((selected?.argumentValues?.length ?? 0) > 0);
     this.hintSelected.emit(name);
   }
 

@@ -126,6 +126,31 @@ describe('MessageInputComponent', () => {
 
       expect(component['filteredCommands']()).toHaveLength(10);
     });
+
+    it('filters backend-provided argument choices after a command is selected', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('commands', [
+        {
+          name: 'model',
+          description: 'Select a model',
+          argumentValues: [
+            { value: 'gpt-5.6', description: 'Frontier' },
+            { value: 'o3', description: 'Reasoning' },
+          ],
+        },
+      ]);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = '/model g';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      expect(component['filteredCommands']()).toEqual([
+        { name: 'model gpt-5.6', description: 'Frontier' },
+      ]);
+    });
   });
 
   describe('Hint menu state', () => {

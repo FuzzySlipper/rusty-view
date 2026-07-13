@@ -7,8 +7,10 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let rejectMessages = false;
   let creationRequest: Record<string, unknown> | undefined;
   let messageBindingId: string | undefined;
+  let commandRequest: Record<string, unknown> | undefined;
   let listedBindings = [binding];
   let listedThreads = [thread];
+  let listedEvents = [...events];
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -102,7 +104,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         nextCursor: null,
         backwardsCursor: null,
       });
-    if (url.pathname.endsWith('/events')) return ok({ events });
+    if (url.pathname.endsWith('/events')) return ok({ events: listedEvents });
     if (url.pathname.endsWith('/stream'))
       return route.fulfill({
         status: 200,
@@ -146,6 +148,75 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         status: 'applied',
         updatedAt: '2026-07-11T00:00:01Z',
       });
+    if (
+      /\/v1\/external-bindings\/[^/]+\/commands$/.test(url.pathname) &&
+      request.method() === 'GET'
+    ) {
+      const bindingId = url.pathname.split('/')[3] ?? 'binding-1';
+      return ok(commandCatalog(bindingId));
+    }
+    if (
+      /\/v1\/external-bindings\/[^/]+\/commands$/.test(url.pathname) &&
+      request.method() === 'POST'
+    ) {
+      commandRequest = request.postDataJSON() as Record<string, unknown>;
+      const input = String(commandRequest['input']);
+      const command = input.slice(1).split(/\s+/, 1)[0] ?? 'unknown';
+      const message =
+        command === 'compact'
+          ? 'Native Codex compaction started.'
+          : 'Runtime ready\nModel: gpt-5.6';
+      const commandId = `command-${command}-1`;
+      listedEvents = [
+        ...listedEvents,
+        {
+          ...externalEvent('100', 'command_started', {
+            nativeMethod: 'rustyCrew/externalCommand',
+            status: 'pending',
+            command,
+            argument: null,
+          }),
+          eventId: `${commandId}:started`,
+          requestId: commandId,
+          nativeTurnId: null,
+        },
+        {
+          ...externalEvent('101', 'command_completed', {
+            nativeMethod: 'rustyCrew/externalCommand',
+            status: 'applied',
+            command,
+            argument: null,
+            message,
+          }),
+          eventId: `${commandId}:completed`,
+          requestId: commandId,
+          nativeTurnId: null,
+        },
+        ...(command === 'compact'
+          ? [
+              externalEvent('102', 'compaction', {
+                nativeMethod: 'thread/compacted',
+                message: 'Native Codex compaction completed.',
+              }),
+            ]
+          : []),
+      ];
+      return ok({
+        commandId,
+        input: commandRequest['input'],
+        command,
+        argument: null,
+        status: 'applied',
+        reasonCode: null,
+        message,
+        result: {
+          status: {
+            settings: commandCatalog('binding-1').settings,
+          },
+        },
+        receipt: {},
+      });
+    }
     if (url.pathname.endsWith('/resolve')) {
       interactionResolution = request.postDataJSON();
       return ok({
@@ -220,6 +291,25 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(page.getByTestId('external-turn-status')).toContainText(
     'active',
   );
+  await expect(page.getByTestId('external-current-model')).toHaveText(
+    'gpt-5.6',
+  );
+  await expect(page.getByTestId('external-current-effort')).toHaveText(
+    'medium',
+  );
+  await page.getByTestId('message-input-field').fill('/');
+  await expect(
+    page.getByTestId('message-command-hint').filter({ hasText: 'model' }),
+  ).toBeVisible();
+  await page.getByTestId('message-input-field').fill('/model ');
+  await expect(
+    page.getByTestId('message-command-hint').filter({ hasText: 'gpt-5.6' }),
+  ).toBeVisible();
+  messageBindingId = undefined;
+  await page.getByTestId('message-input-field').fill('/status');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => commandRequest).toMatchObject({ input: '/status' });
+  expect(messageBindingId).toBeUndefined();
   await expect(page.getByTestId('external-interaction-card')).toBeVisible();
   await page.getByRole('button', { name: 'Blue' }).click();
   await page.getByTestId('external-interaction-submit').click();
@@ -230,7 +320,11 @@ test('external agent fleet, transcript activity, interactions, and controls are 
       result: { answers: { color: { answers: ['Blue'] } } },
     });
   await expect(page.locator('[data-block-kind="plan"]')).toBeVisible();
-  await expect(page.locator('[data-block-kind="command"]')).toBeVisible();
+  await expect(
+    page
+      .locator('[data-block-kind="command"]')
+      .filter({ hasText: 'pnpm test' }),
+  ).toBeVisible();
   await expect(
     page.locator('[data-block-kind="file_change"]').filter({
       hasText: 'File changes',
@@ -251,6 +345,14 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(page.getByTestId('external-raw-detail-view')).toContainText(
     'future',
   );
+  commandRequest = undefined;
+  await page.getByTestId('message-input-field').fill('/compact');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => commandRequest).toMatchObject({ input: '/compact' });
+  await expect(page.getByTestId('transcript-shell')).toContainText(
+    'Native Codex compaction completed.',
+  );
+  expect(messageBindingId).toBeUndefined();
   await expect(page.getByTestId('external-interrupt')).toBeEnabled();
   rejectMessages = true;
   await page.getByLabel('External message mode').selectOption('queue');
@@ -324,6 +426,87 @@ const controller = {
   leaseExpiresAt: '2026-07-11T00:10:00Z',
   bindingResumeFailures: [],
 };
+
+function commandCatalog(bindingId: string) {
+  return {
+    contractVersion: '0.7.0',
+    runtimeId: 'runtime-1',
+    bindingId,
+    nativeThreadId: 'thread-1',
+    commands: [
+      {
+        name: 'help',
+        aliases: ['commands'],
+        usage: '/help',
+        description: 'List commands',
+        mutates: false,
+        requiredCapabilities: [],
+        available: true,
+        unavailableReasonCode: null,
+      },
+      {
+        name: 'status',
+        aliases: [],
+        usage: '/status',
+        description: 'Show status',
+        mutates: false,
+        requiredCapabilities: [],
+        available: true,
+        unavailableReasonCode: null,
+      },
+      {
+        name: 'model',
+        aliases: [],
+        usage: '/model [id]',
+        description: 'Select model',
+        mutates: true,
+        requiredCapabilities: ['model/list'],
+        available: true,
+        unavailableReasonCode: null,
+      },
+      {
+        name: 'effort',
+        aliases: [],
+        usage: '/effort [value]',
+        description: 'Select effort',
+        mutates: true,
+        requiredCapabilities: ['model/list'],
+        available: true,
+        unavailableReasonCode: null,
+      },
+      {
+        name: 'compact',
+        aliases: [],
+        usage: '/compact',
+        description: 'Compact context',
+        mutates: true,
+        requiredCapabilities: ['thread/compact/start'],
+        available: true,
+        unavailableReasonCode: null,
+      },
+    ],
+    settings: {
+      model: 'gpt-5.6',
+      modelProvider: 'openai',
+      effort: 'medium',
+    },
+    models: [
+      {
+        id: 'gpt-5.6',
+        model: 'gpt-5.6',
+        displayName: 'GPT 5.6',
+        description: 'Frontier model',
+        hidden: false,
+        isDefault: true,
+        defaultEffort: 'medium',
+        supportedEfforts: [
+          { value: 'medium', description: 'Balanced' },
+          { value: 'high', description: 'Thorough' },
+        ],
+      },
+    ],
+  };
+}
 const binding = {
   bindingId: 'binding-1',
   runtimeId: 'runtime-1',

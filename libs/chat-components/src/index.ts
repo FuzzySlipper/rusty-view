@@ -15,6 +15,8 @@ export { MessageInputComponent } from './lib/message-input';
 export type {
   MessageInputAttachmentSelection,
   MessageInputAttachmentSource,
+  MessageInputCommandArgumentValue,
+  MessageInputCommandDescriptor,
 } from './lib/message-input';
 export { StreamStatusComponent } from './lib/stream-status';
 export type { StreamStatusKind } from './lib/stream-status';

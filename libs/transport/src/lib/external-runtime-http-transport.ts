@@ -15,17 +15,22 @@ import type {
   ExternalRuntimeEventPage,
   ExternalRuntimeFleet,
   ExternalRuntimeRawDetail,
+  ExternalRuntimeCommandCatalog,
+  ExternalRuntimeCommandExecutionResult,
+  ExternalRuntimeCommandWrite,
   ExternalThreadPage,
   ExternalThreadReadRequest,
   ExternalThreadReadResult,
   ListExternalBindingsResponse,
   ListExternalInteractionsResponse,
+  ListExternalBindingCommandsResponse,
   ListExternalRuntimeEventsResponse,
   ListExternalRuntimeThreadsResponse,
   ListExternalRuntimesResponse,
   ReadExternalRuntimeRawDetailResponse,
   ReadExternalRuntimeThreadResponse,
   ResolveExternalInteractionResponse,
+  ExecuteExternalBindingCommandResponse,
   SendExternalBindingMessageResponse,
   SubmitExternalBindingControlResponse,
   UnarchiveExternalRuntimeThreadResponse,
@@ -189,6 +194,30 @@ export class ExternalRuntimeHttpTransport {
     );
   }
 
+  async listCommands(
+    bindingId: string,
+  ): Promise<ExternalRuntimeCommandCatalog> {
+    return unwrap(
+      await this.request<ListExternalBindingCommandsResponse>(
+        'GET',
+        externalBindingCommandsPath(bindingId),
+      ),
+    );
+  }
+
+  async executeCommand(
+    bindingId: string,
+    request: ExternalRuntimeCommandWrite,
+  ): Promise<ExternalRuntimeCommandExecutionResult> {
+    return unwrap(
+      await this.request<ExecuteExternalBindingCommandResponse>(
+        'POST',
+        externalBindingCommandsPath(bindingId),
+        request,
+      ),
+    );
+  }
+
   async resolveInteraction(
     interactionId: string,
     request: ExternalInteractionResolutionWrite,
@@ -282,6 +311,10 @@ function threadLifecyclePath(
   action: 'archive' | 'unarchive' | 'delete',
 ): string {
   return `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/threads/${encodeURIComponent(threadId)}/${action}`;
+}
+
+function externalBindingCommandsPath(bindingId: string): string {
+  return `/v1/external-bindings/${encodeURIComponent(bindingId)}/commands`;
 }
 
 function unwrap<T>(envelope: SuccessEnvelope<T>): T {

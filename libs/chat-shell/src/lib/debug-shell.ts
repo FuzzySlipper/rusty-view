@@ -14,12 +14,12 @@ import type { MessageBlock } from '@rusty-view/chat-domain';
 import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
+  type MessageInputCommandDescriptor,
   StreamStatusComponent,
   TooltipDirective,
   matchesHotkey,
 } from '@rusty-view/chat-components';
 import type { StreamStatusKind } from '@rusty-view/chat-components';
-import type { ChatCommandDescriptor } from '@rusty-view/protocol';
 import {
   MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
@@ -43,6 +43,7 @@ import {
   findSlashCommand,
   pluginCommandDescriptor,
 } from './slash-commands/slash-command-runtime';
+import { externalCommandComposerDescriptors } from './external-command-composer';
 
 /**
  * Debug chat shell — the composition layer that wires everything together.
@@ -174,11 +175,27 @@ export class DebugShellComponent {
       .some((session) => session.needsAttention || session.unread),
   );
 
-  protected readonly inputCommands = computed<readonly ChatCommandDescriptor[]>(
-    () => [
-      ...this.store.commands(),
-      ...this.slashCommands.map((command) => pluginCommandDescriptor(command)),
-    ],
+  protected readonly inputCommands = computed<
+    readonly MessageInputCommandDescriptor[]
+  >(() =>
+    this.externalSelected()
+      ? externalCommandComposerDescriptors(this.external.commandCatalog())
+      : [
+          ...this.store.commands(),
+          ...this.slashCommands.map((command) =>
+            pluginCommandDescriptor(command),
+          ),
+        ],
+  );
+  protected readonly inputCommandHistory = computed(() =>
+    this.externalSelected()
+      ? this.external.commandHistory()
+      : this.store.commandHistory(),
+  );
+  protected readonly composerError = computed(() =>
+    this.externalSelected()
+      ? this.external.commandError()
+      : this.pluginCommandError(),
   );
 
   protected readonly isViewingHistorical = computed(() =>
@@ -239,7 +256,11 @@ export class DebugShellComponent {
 
   protected onSendMessage(text: string): void {
     if (this.externalSelected()) {
-      void this.external.send(text);
+      if (text.trimStart().startsWith('/')) {
+        void this.external.executeCommand(text);
+      } else {
+        void this.external.send(text);
+      }
       return;
     }
     if (text.startsWith('/') && this.hasPluginCommand(text)) {

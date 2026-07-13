@@ -130,6 +130,53 @@ describe('ExternalRuntimeHttpTransport', () => {
     ]);
   });
 
+  it('lists and executes commands through the encoded external binding route', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-bindings/binding%2Fone/commands',
+        );
+        if (init?.method === 'GET') {
+          return json({
+            ok: true,
+            data: { commands: [], settings: {}, models: [] },
+            meta: meta(),
+          });
+        }
+        expect(JSON.parse(String(init?.body))).toEqual({
+          input: '/status',
+          idempotencyKey: 'view-command-1',
+          expectedBindingRevision: 7,
+        });
+        return json({
+          ok: true,
+          data: {
+            commandId: 'command-1',
+            input: '/status',
+            command: 'status',
+            argument: null,
+            status: 'applied',
+            reasonCode: null,
+            message: 'Runtime ready',
+            result: {},
+            receipt: {},
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await transport.listCommands('binding/one');
+    await expect(
+      transport.executeCommand('binding/one', {
+        input: '/status',
+        idempotencyKey: 'view-command-1',
+        expectedBindingRevision: 7,
+      }),
+    ).resolves.toMatchObject({ status: 'applied', command: 'status' });
+  });
+
   it('reconnects an external event stream from its last sequence cursor', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

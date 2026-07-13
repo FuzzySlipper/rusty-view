@@ -106,6 +106,14 @@
           >{{ external.turnPhase() ?? external.selectedThread()?.status ??
           'idle' }}</span
         >
+        @if (external.commandCatalog(); as catalog) {
+        <span data-testid="external-current-model"
+          >{{ catalog.settings.model }}</span
+        >
+        <span data-testid="external-current-effort"
+          >{{ catalog.settings.effort ?? 'default' }}</span
+        >
+        }
         <select
           aria-label="External message mode"
           [value]="external.composerMode()"
@@ -145,17 +153,17 @@
       <rv-message-input
         [disabled]="inputDisabled()"
         [commands]="inputCommands()"
-        [commandHistory]="store.commandHistory()"
+        [commandHistory]="inputCommandHistory()"
         [erasePreviousWordHotkey]="hotkeys.binding('erasePreviousWord')"
         (send)="onSendMessage($event)"
       />
-      @if (pluginCommandError()) {
+      @if (composerError()) {
       <div
         class="rv-debug__command-error"
         role="alert"
         data-testid="command-error"
       >
-        {{ pluginCommandError() }}
+        {{ composerError() }}
       </div>
       } } } @else {
       <div class="rv-debug__no-session" data-testid="no-session">

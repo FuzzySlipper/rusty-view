@@ -83,6 +83,57 @@ describe('projectExternalAgentTranscript', () => {
     );
   });
 
+  it('coalesces external slash-command lifecycle events into one result block', () => {
+    const started = {
+      ...event('1', 'command_started', {
+        nativeMethod: 'rustyCrew/externalCommand',
+        status: 'pending',
+        command: 'status',
+        argument: null,
+      }),
+      nativeTurnId: null,
+      requestId: 'command-1',
+    };
+    const completed = {
+      ...event('2', 'command_completed', {
+        nativeMethod: 'rustyCrew/externalCommand',
+        status: 'applied',
+        command: 'status',
+        argument: null,
+        message: 'Runtime ready\nModel: gpt-5.6',
+      }),
+      nativeTurnId: null,
+      requestId: 'command-1',
+    };
+
+    const messages = projectExternalAgentTranscript(undefined, [
+      started,
+      completed,
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.status).toBe('completed');
+    expect(messages[0]?.blocks[0]).toMatchObject({
+      kind: 'command',
+      content: 'Runtime ready\nModel: gpt-5.6',
+      tool: { name: '/status', status: 'completed' },
+    });
+  });
+
+  it('keeps native compaction completion visible in the transcript', () => {
+    const messages = projectExternalAgentTranscript(undefined, [
+      event('1', 'compaction', {
+        nativeMethod: 'thread/compacted',
+        message: 'Native Codex compaction completed.',
+      }),
+    ]);
+
+    expect(messages[0]?.blocks[0]).toMatchObject({
+      kind: 'service_notice',
+      content: 'Native Codex compaction completed.',
+    });
+  });
+
   it('bounds long turns by native item and coalesces text deltas', () => {
     const events = Array.from({ length: 500 }, (_, index) => ({
       ...event(String(index + 1), 'assistant_text_delta', {

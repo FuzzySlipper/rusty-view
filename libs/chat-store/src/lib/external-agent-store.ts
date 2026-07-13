@@ -15,6 +15,8 @@ import type {
   ExternalInteractionRecord,
   ExternalInteractionResolutionWrite,
   ExternalRuntimeControllerStatus,
+  ExternalRuntimeCommandCatalog,
+  ExternalRuntimeCommandExecutionResult,
   ExternalRuntimeRegistration,
   ExternalRuntimeRawDetail,
   ExternalThreadProjection,
@@ -71,6 +73,9 @@ export class ExternalAgentStore {
     Readonly<Record<string, string | null>>
   >({});
   private readonly seen = signal<Readonly<Record<string, number>>>({});
+  private readonly commandHistoryBySession = signal<
+    Readonly<Record<string, readonly string[]>>
+  >({});
 
   readonly runtimes = signal<readonly ExternalRuntimeRegistration[]>([]);
   readonly controllers = signal<readonly ExternalRuntimeControllerStatus[]>([]);
@@ -109,6 +114,16 @@ export class ExternalAgentStore {
   readonly lifecycleNotice = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
   readonly composerMode = signal<ExternalComposerMode>('auto');
+  readonly commandCatalog = signal<ExternalRuntimeCommandCatalog | undefined>(
+    undefined,
+  );
+  readonly commandResult = signal<
+    ExternalRuntimeCommandExecutionResult | undefined
+  >(undefined);
+  readonly commandError = signal<string | undefined>(undefined);
+  readonly commandHistory = computed(
+    () => this.commandHistoryBySession()[this.selectedSessionKey() ?? ''] ?? [],
+  );
 
   readonly readyRuntimes = computed(() => {
     const controllers = new Map(
@@ -485,6 +500,7 @@ export class ExternalAgentStore {
         { runtimeId: result.runtime.runtimeId, thread: result.thread },
       ]);
       this.selectCreatedSession(result);
+      await this.refreshSelectedCommands();
       return result;
     } catch (error) {
       const message = `Create failed: ${errorMessage(error)}`;
@@ -518,6 +534,9 @@ export class ExternalAgentStore {
     this.selectedRuntimeEventCursor = undefined;
     this.events.set([]);
     this.selectedThread.set(undefined);
+    this.commandCatalog.set(undefined);
+    this.commandResult.set(undefined);
+    this.commandError.set(undefined);
     this.selectedRuntimeId.set(session.runtime.runtimeId);
     this.selectedThreadId.set(session.thread.threadId);
     this.seen.update((seen) => ({
@@ -543,6 +562,7 @@ export class ExternalAgentStore {
         session.runtime.runtimeId,
         this.selectedRuntimeEventCursor,
       );
+      await this.refreshSelectedCommands();
       this.error.set(undefined);
       return true;
     } catch (error) {
@@ -561,6 +581,88 @@ export class ExternalAgentStore {
     this.selectedThread.set(undefined);
     this.events.set([]);
     this.selectedRuntimeEventCursor = undefined;
+    this.commandCatalog.set(undefined);
+    this.commandResult.set(undefined);
+    this.commandError.set(undefined);
+  }
+
+  async refreshSelectedCommands(): Promise<boolean> {
+    const binding = this.selectedBinding();
+    if (binding === undefined) {
+      this.commandCatalog.set(undefined);
+      this.commandError.set(
+        'Command discovery failed: selected external thread has no Crew binding.',
+      );
+      return false;
+    }
+    const bindingId = binding.bindingId;
+    try {
+      const catalog = await this.transport.external.listCommands(bindingId);
+      if (this.selectedBinding()?.bindingId !== bindingId) return false;
+      this.commandCatalog.set(catalog);
+      return true;
+    } catch (error) {
+      if (this.selectedBinding()?.bindingId !== bindingId) return false;
+      this.commandCatalog.set(undefined);
+      this.commandError.set(`Command discovery failed: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  async executeCommand(
+    input: string,
+  ): Promise<ExternalRuntimeCommandExecutionResult | undefined> {
+    const binding = this.selectedBinding();
+    this.recordCommand(input);
+    if (binding === undefined) {
+      this.commandError.set(
+        'Command failed: selected external thread has no Crew binding.',
+      );
+      return undefined;
+    }
+    this.pending.set(true);
+    this.commandError.set(undefined);
+    this.commandResult.set(undefined);
+    try {
+      const result = await this.transport.external.executeCommand(
+        binding.bindingId,
+        {
+          input,
+          idempotencyKey: `rusty-view-command:${createExternalAgentRequestKey()}`,
+          expectedBindingRevision: binding.revision,
+        },
+      );
+      this.commandResult.set(result);
+      if (result.result.catalog !== undefined) {
+        this.commandCatalog.set(result.result.catalog);
+      }
+      await Promise.all([
+        this.refreshSelectedEvents(),
+        this.refreshSelectedCommands(),
+      ]);
+      if (result.status !== 'applied') {
+        this.commandError.set(
+          `${result.message}${result.reasonCode === null ? '' : ` (${result.reasonCode})`}`,
+        );
+      }
+      return result;
+    } catch (error) {
+      this.commandError.set(`Command failed: ${errorMessage(error)}`);
+      return undefined;
+    } finally {
+      this.pending.set(false);
+    }
+  }
+
+  private recordCommand(command: string): void {
+    const key = this.selectedSessionKey();
+    const trimmed = command.trim();
+    if (key === undefined || trimmed.length === 0) return;
+    this.commandHistoryBySession.update((histories) => {
+      const current = histories[key] ?? [];
+      const next = current[0] === trimmed ? current : [trimmed, ...current];
+      return { ...histories, [key]: next.slice(0, 100) };
+    });
   }
 
   async send(text: string): Promise<void> {
@@ -781,6 +883,12 @@ export class ExternalAgentStore {
           );
           if (event.nativeThreadId === this.selectedThreadId()) {
             this.appendEvents([event]);
+            const settings = event.payload.settings;
+            if (settings !== undefined) {
+              this.commandCatalog.update((catalog) =>
+                catalog === undefined ? catalog : { ...catalog, settings },
+              );
+            }
           }
           if (
             event.kind === 'turn_lifecycle' &&
