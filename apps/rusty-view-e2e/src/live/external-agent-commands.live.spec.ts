@@ -10,7 +10,7 @@ test.describe('external agent commands @live-agent @commands', () => {
     'set RV_EXTERNAL_COMMANDS_LIVE_RUN=1 for the real Crew command API scenario',
   );
 
-  test('routes status and same-value settings through Crew without a Codex user turn', async ({
+  test('routes commands separately and carries live settings into the next Codex turn', async ({
     page,
     request,
   }, testInfo) => {
@@ -57,47 +57,113 @@ test.describe('external agent commands @live-agent @commands', () => {
       { timeout: 30_000 },
     );
 
-    await input.fill('/effort ');
-    await expect(
-      page.getByRole('option', {
-        name: new RegExp(`^effort ${escapeRegExp(target.effort)}\\b`),
-      }),
-    ).toBeVisible();
-    await input.fill(`/effort ${target.effort}`);
-    await page.getByTestId('send-message').click();
-    await expect(page.getByTestId('transcript-shell')).toContainText(
-      `Reasoning effort set to ${target.effort}`,
-      { timeout: 30_000 },
-    );
+    try {
+      await input.fill('/effort ');
+      await expect(
+        page.getByRole('option', {
+          name: new RegExp(
+            `^effort ${escapeRegExp(target.alternateEffort)}\\b`,
+          ),
+        }),
+      ).toBeVisible();
+      await input.fill(`/effort ${target.alternateEffort}`);
+      await page.getByTestId('send-message').click();
+      await expect(page.getByTestId('transcript-shell')).toContainText(
+        `Reasoning effort set to ${target.alternateEffort}`,
+        { timeout: 30_000 },
+      );
+      await expect(page.getByTestId('external-current-effort')).toHaveText(
+        target.alternateEffort,
+      );
 
-    await input.fill('/comp');
-    await expect(
-      page.getByTestId('message-command-hint').filter({ hasText: 'compact' }),
-    ).toBeVisible();
-    await input.fill('/status');
-    await page.getByTestId('send-message').click();
-    await expect(page.getByTestId('transcript-shell')).toContainText(
-      `Runtime: ${target.runtimeId} (ready)`,
-      { timeout: 30_000 },
-    );
+      await input.fill('/comp');
+      await expect(
+        page.getByTestId('message-command-hint').filter({ hasText: 'compact' }),
+      ).toBeVisible();
+      await input.fill('/status');
+      await page.getByTestId('send-message').click();
+      await expect(page.getByTestId('transcript-shell')).toContainText(
+        `Runtime: ${target.runtimeId} (ready)`,
+        { timeout: 30_000 },
+      );
 
-    expect(commandPosts).toBe(3);
-    expect(messagePosts).toBe(0);
-    const after = await readThread(request, target.runtimeId, target.threadId);
-    expect(threadSignature(after)).toEqual(threadSignature(before));
+      expect(commandPosts).toBe(3);
+      expect(messagePosts).toBe(0);
+      const afterCommands = await readThread(
+        request,
+        target.runtimeId,
+        target.threadId,
+      );
+      expect(threadSignature(afterCommands)).toEqual(threadSignature(before));
 
-    await page.reload();
-    await page.getByTestId('external-agents-tab').click();
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByRole('button').first().click();
-    await expect(page.getByTestId('transcript-shell')).toContainText(
-      `Runtime: ${target.runtimeId} (ready)`,
-      { timeout: 30_000 },
-    );
-    await page.screenshot({
-      path: testInfo.outputPath('external-command-status-replayed.png'),
-      fullPage: true,
-    });
+      const marker = `RV_EXTERNAL_SETTINGS_${Date.now()}`;
+      await input.fill(`Reply with exactly ${marker} and nothing else.`);
+      await page.getByTestId('send-message').click();
+      await expect
+        .poll(
+          async () => {
+            const projection = await readThread(
+              request,
+              target.runtimeId,
+              target.threadId,
+            );
+            return projection.data.thread.turns.length;
+          },
+          { timeout: 2 * 60_000 },
+        )
+        .toBe(before.data.thread.turns.length + 1);
+      await expect
+        .poll(
+          async () => {
+            const projection = await readThread(
+              request,
+              target.runtimeId,
+              target.threadId,
+            );
+            return projection.data.thread.turns.at(-1)?.status;
+          },
+          { timeout: 2 * 60_000 },
+        )
+        .toBe('completed');
+      expect(commandPosts).toBe(3);
+      expect(messagePosts).toBe(1);
+      const settingsAfterTurn = await readCatalog(request, target.bindingId);
+      expect(settingsAfterTurn.settings.effort).toBe(target.alternateEffort);
+      const afterTurn = await readThread(
+        request,
+        target.runtimeId,
+        target.threadId,
+      );
+      expect(afterTurn.data.thread.turns).toHaveLength(
+        before.data.thread.turns.length + 1,
+      );
+      expect(afterTurn.data.thread.turns.at(-1)?.items).toEqual([
+        expect.objectContaining({
+          kind: 'userMessage',
+          text: expect.stringContaining(marker),
+        }),
+        expect.objectContaining({ kind: 'agentMessage', text: marker }),
+      ]);
+      await expect(page.getByTestId('external-turn-status')).toHaveAttribute(
+        'data-turn-phase',
+        'completed',
+      );
+
+      await page.reload();
+      await page.getByTestId('external-agents-tab').click();
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      await row.getByRole('button').first().click();
+      await expect(page.getByTestId('external-current-effort')).toHaveText(
+        target.alternateEffort,
+        { timeout: 30_000 },
+      );
+      await page.screenshot({
+        path: testInfo.outputPath('external-command-settings-replayed.png'),
+        fullPage: true,
+      });
+    } finally {
+      await restoreEffort(request, target.bindingId, target.effort);
+    }
   });
 });
 
@@ -137,16 +203,75 @@ async function commandTarget(request: APIRequestContext) {
   if (binding === undefined || catalogResponse === undefined) {
     throw new Error('No active command-capable external binding was found.');
   }
-  const catalog = (await catalogResponse.json()) as {
-    data: { settings: { model: string; effort: string | null } };
-  };
+  const catalog = (await catalogResponse.json()) as CommandCatalogEnvelope;
+  const model = catalog.data.models.find(
+    (candidate) =>
+      candidate.id === catalog.data.settings.model ||
+      candidate.model === catalog.data.settings.model,
+  );
+  const effort = catalog.data.settings.effort;
+  expect(
+    effort,
+    'the selected live thread must expose an effort that can be restored',
+  ).not.toBeNull();
+  const alternateEffort = model?.supportedEfforts.find(
+    (candidate) => candidate.value !== effort,
+  )?.value;
+  expect(
+    alternateEffort,
+    'the selected live model must advertise an alternate effort',
+  ).toBeDefined();
   return {
     bindingId: binding.bindingId,
     runtimeId: binding.runtimeId,
     threadId: binding.nativeThreadId ?? '',
     model: catalog.data.settings.model,
-    effort: catalog.data.settings.effort ?? 'medium',
+    effort: effort ?? alternateEffort ?? 'medium',
+    alternateEffort: alternateEffort ?? effort,
   };
+}
+
+interface CommandCatalogEnvelope {
+  readonly data: {
+    readonly settings: {
+      readonly model: string;
+      readonly effort: string | null;
+    };
+    readonly models: readonly {
+      readonly id: string;
+      readonly model: string;
+      readonly supportedEfforts: readonly { readonly value: string }[];
+    }[];
+  };
+}
+
+async function readCatalog(request: APIRequestContext, bindingId: string) {
+  const response = await request.get(
+    `${backend}/v1/external-bindings/${encodeURIComponent(bindingId)}/commands`,
+  );
+  expect(response.ok()).toBe(true);
+  return ((await response.json()) as CommandCatalogEnvelope).data;
+}
+
+async function restoreEffort(
+  request: APIRequestContext,
+  bindingId: string,
+  effort: string,
+): Promise<void> {
+  const response = await request.post(
+    `${backend}/v1/external-bindings/${encodeURIComponent(bindingId)}/commands`,
+    {
+      data: {
+        input: `/effort ${effort}`,
+        idempotencyKey: `rusty-view-live-restore:${Date.now()}`,
+      },
+    },
+  );
+  expect(response.ok()).toBe(true);
+  const result = (await response.json()) as {
+    readonly data: { readonly status: string; readonly message: string };
+  };
+  expect(result.data.status, result.data.message).toBe('applied');
 }
 
 async function readThread(
@@ -162,7 +287,11 @@ async function readThread(
   return (await response.json()) as {
     data: {
       thread: {
-        turns: Array<{ turnId: string; items: Array<{ itemId: string }> }>;
+        turns: Array<{
+          turnId: string;
+          status: string;
+          items: Array<{ itemId: string; kind: string; text?: string }>;
+        }>;
       };
     };
   };

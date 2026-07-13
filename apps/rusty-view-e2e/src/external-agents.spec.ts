@@ -10,7 +10,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let commandRequest: Record<string, unknown> | undefined;
   let listedBindings = [binding];
   let listedThreads = [thread];
-  let listedEvents = [...events];
+  let listedEvents: unknown[] = [...events];
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
