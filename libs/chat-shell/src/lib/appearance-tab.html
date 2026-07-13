@@ -166,6 +166,15 @@
       <label class="rv-appearance__check">
         <input
           type="checkbox"
+          data-testid="appearance-session-status-bar"
+          [checked]="theme.settings().showSessionStatusBar"
+          (change)="toggleShowSessionStatusBar($event)"
+        />
+        <span>Session status bar</span>
+      </label>
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
           [checked]="theme.settings().reducedMotion"
           (change)="toggleReducedMotion($event)"
         />

@@ -18,6 +18,7 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
     .toBe('160px');
 
   await page.getByTestId('appearance-message-actions').uncheck();
+  await page.getByTestId('appearance-session-status-bar').uncheck();
 
   await page.locator('.rv-tab-strip__tab', { hasText: 'Hotkeys' }).click();
   const nextRow = page.locator('[data-hotkey-action="nextSession"]');
@@ -39,6 +40,9 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
   await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
   await expect(
     page.getByTestId('appearance-message-actions'),
+  ).not.toBeChecked();
+  await expect(
+    page.getByTestId('appearance-session-status-bar'),
   ).not.toBeChecked();
   await page.locator('.rv-tab-strip__tab', { hasText: 'Hotkeys' }).click();
   await expect(
@@ -84,9 +88,24 @@ test('requested shortcuts cycle non-archived sessions and erase a composer word'
   await expect(agentRows).toHaveCount(3);
 
   await agentRows.first().click();
+  await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
+    'data-surface',
+    'agent',
+  );
+  await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
+    'data-activity',
+    'idle',
+  );
+  await expect(page.getByTestId('external-current-model')).toHaveText(
+    'gpt-5.6-sol',
+  );
   await page.keyboard.press('Control+Tab');
   await expect(page.locator('[data-thread-id="thread-2"]')).toHaveClass(
     /rv-agent--selected/,
+  );
+  await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
+    'data-activity',
+    'working',
   );
   await page.keyboard.press('Control+Tab');
   await expect(page.locator('[data-thread-id="thread-1"]')).toHaveClass(
@@ -193,6 +212,7 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
     preview: 'Session',
     ephemeral: false,
     modelProvider: 'openai',
+    effectiveModel: 'gpt-5.6-sol',
     createdAt: 1,
     updatedAt: 2,
     status: 'idle',
@@ -224,7 +244,12 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
         },
       ],
     },
-    { ...baseThread, threadId: 'thread-2', preview: 'Second active session' },
+    {
+      ...baseThread,
+      threadId: 'thread-2',
+      preview: 'Second active session',
+      status: 'active',
+    },
     {
       ...baseThread,
       threadId: 'thread-archived',

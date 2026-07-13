@@ -96,6 +96,15 @@ export function projectExternalAgentTranscript(
       }
       continue;
     }
+    // A terminal native thread snapshot is the canonical transcript for that
+    // turn. App-server replay item ids are not guaranteed to match the compact
+    // ids returned by thread/read, so trying to append every unmatched replay
+    // group can put old reasoning/tool rows after the snapshot's final_answer.
+    // The raw events remain available in the inspector; event augmentation is
+    // still used for in-progress turns where the snapshot may be incomplete.
+    if (snapshotCoverageByTurn.get(first.nativeTurnId ?? '')?.terminal) {
+      continue;
+    }
     const blocks = blocksForGroup(group, status);
     if (blocks.length === 0) continue;
     messages.push(

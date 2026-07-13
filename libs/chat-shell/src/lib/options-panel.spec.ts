@@ -97,6 +97,21 @@ describe('OptionsPanelComponent', () => {
     expect(theme.settings().composerHeightPx).toBe(72);
   });
 
+  it('toggles the persisted session status bar preference', async () => {
+    const fixture = await createOptions();
+    const theme = TestBed.inject(ChatTheme);
+    const toggle = fixture.nativeElement.querySelector(
+      '[data-testid="appearance-session-status-bar"]',
+    ) as HTMLInputElement;
+
+    expect(toggle.checked).toBe(true);
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(theme.settings().showSessionStatusBar).toBe(false);
+  });
+
   it('keeps the appearance tab active by default', async () => {
     const fixture = await createOptions();
     const activeTab: HTMLElement | null = fixture.nativeElement.querySelector(

@@ -79,6 +79,12 @@ test('renders commentary, activity, and one final answer identically after reloa
     'final_answer',
   );
   await expect(phases.nth(1)).toContainText('Final answer from Codex.');
+  await expect(page.locator('.rv-transcript__item').last()).toContainText(
+    'Final answer from Codex.',
+  );
+  await expect(page.getByTestId('transcript-viewport')).not.toContainText(
+    'Replay-only reasoning after canonical final',
+  );
 
   const before = await page
     .getByTestId('transcript-viewport')
@@ -158,6 +164,7 @@ async function installHistoryFixture(page: Page): Promise<void> {
     preview: `Native Codex history ${index}`,
     ephemeral: false,
     modelProvider: 'openai',
+    effectiveModel: 'gpt-5.6-sol',
     createdAt: index + 1,
     updatedAt: index + 1,
     status: 'idle',
@@ -283,7 +290,26 @@ async function installHistoryFixture(page: Page): Promise<void> {
         backwardsCursor: null,
       });
     }
-    if (url.pathname.endsWith('/events')) return ok({ events: [] });
+    if (url.pathname.endsWith('/events')) {
+      return ok({
+        events: [
+          {
+            eventId: 'event-replay-reasoning',
+            runtimeId: 'runtime-1',
+            sequenceId: 1,
+            createdAt: '2026-07-12T00:00:01Z',
+            kind: 'reasoning_delta',
+            nativeThreadId: 'thread-0',
+            nativeTurnId: 'turn-phase',
+            itemId: 'rs-native-replay-id',
+            payload: {
+              nativeMethod: 'item/reasoning/delta',
+              text: 'Replay-only reasoning after canonical final',
+            },
+          },
+        ],
+      });
+    }
     if (url.pathname.endsWith('/stream')) {
       return route.fulfill({
         status: 200,

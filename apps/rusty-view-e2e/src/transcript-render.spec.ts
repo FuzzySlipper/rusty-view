@@ -227,6 +227,12 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(profile).toBeVisible({ timeout: 10_000 });
   await profile.click();
 
+  const sessionStatus = page.getByTestId('session-status-bar');
+  await expect(sessionStatus).toHaveAttribute('data-surface', 'profile');
+  await expect(sessionStatus).toHaveAttribute('data-activity', 'idle');
+  await expect(sessionStatus).toContainText('Crew profile');
+  await expect(sessionStatus).toContainText('Profile: rp');
+
   // The real assertion: message ROWS render, not just the viewport shell.
   const items = page.locator('.rv-transcript__item');
   await expect(items).toHaveCount(3, { timeout: 10_000 });

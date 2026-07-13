@@ -242,6 +242,76 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages[0]?.blocks[0]?.content).toBe('Finished response');
   });
 
+  it('keeps a completed snapshot final answer after unmatched replay rows', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6-sol',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1_000,
+            items: [
+              {
+                itemId: 'snapshot-reasoning',
+                kind: 'reasoning',
+                text: 'Canonical reasoning',
+              },
+              {
+                itemId: 'snapshot-final',
+                kind: 'agentMessage',
+                text: 'Canonical final answer',
+                messagePhase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+      [
+        {
+          ...event('10', 'reasoning_delta', {
+            nativeMethod: 'item/reasoning/delta',
+            text: 'Replay-only reasoning with a different native id',
+          }),
+          itemId: 'rs-native-id',
+          nativeTurnId: 'turn-1',
+        },
+        {
+          ...event('11', 'command_activity', {
+            nativeMethod: 'item/commandExecution/completed',
+            command: 'den/get_task',
+            output: 'completed',
+            status: 'completed',
+          }),
+          itemId: 'exec-native-id',
+          nativeTurnId: 'turn-1',
+        },
+      ],
+    );
+
+    expect(messages.map((message) => message.blocks[0]?.content)).toEqual([
+      'Canonical reasoning',
+      'Canonical final answer',
+    ]);
+    expect(messages.at(-1)?.metadata?.['messagePhase']).toBe('final_answer');
+  });
+
   it('keeps later text and command items after an in-progress snapshot', () => {
     const events = [
       {

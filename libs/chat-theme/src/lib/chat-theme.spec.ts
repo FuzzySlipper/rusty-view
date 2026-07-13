@@ -62,12 +62,14 @@ describe('ChatTheme', () => {
 
     await theme.update({
       showMessageActions: false,
+      showSessionStatusBar: false,
       showProfiles: false,
       showInspector: false,
     });
 
     expect(await storage.load()).toMatchObject({
       showMessageActions: false,
+      showSessionStatusBar: false,
       showProfiles: false,
       showInspector: false,
     });

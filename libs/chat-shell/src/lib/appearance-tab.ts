@@ -194,6 +194,10 @@ export class AppearanceTabComponent {
     this.updateBoolean('showMessageActions', event);
   }
 
+  protected toggleShowSessionStatusBar(event: Event): void {
+    this.updateBoolean('showSessionStatusBar', event);
+  }
+
   protected colorValue(field: keyof AppearanceColors): string {
     const override = this.theme.settings().colors[field];
     if (override !== undefined) return this.colorInputValue(override);
@@ -238,7 +242,8 @@ export class AppearanceTabComponent {
       | 'disableShadows'
       | 'showTimestamps'
       | 'showMessageIds'
-      | 'showMessageActions',
+      | 'showMessageActions'
+      | 'showSessionStatusBar',
     event: Event,
   ): void {
     const target = event.target;

@@ -93,27 +93,75 @@
           Return to active
         </button>
       </div>
-      } @if (hasConversation()) { @if (externalSelected()) {
+      } @if (hasConversation()) { @if (externalSelected()) { @for (interaction
+      of external.selectedInteractions(); track interaction.interactionId) { @if
+      (interaction.status === 'pending') {
+      <rv-external-interaction-card [interaction]="interaction" /> } } }
+      <div class="rv-debug__transcript" data-testid="transcript-shell">
+        <rv-transcript-viewport
+          [messages]="displayedMessages()"
+          [searchEnabled]="showTranscriptSearch()"
+          [branches]="externalSelected() ? [] : store.branches()"
+          [activeBranchId]="externalSelected() ? undefined : store.activeBranchId()"
+          [snapshots]="externalSelected() ? [] : store.snapshots()"
+          [revisionCapabilities]="revisionCapabilities"
+          [showRevisionActions]="theme.settings().showMessageActions"
+          (activeBranchSelected)="onActiveBranchSelected($event)"
+          (revisionRequested)="onRevisionRequested($event)"
+        />
+      </div>
+      @if (!isViewingHistorical() || externalSelected()) { @if
+      (showSessionStatusBar()) {
       <div
-        class="rv-debug__external-status"
-        data-testid="external-turn-status"
-        [attr.data-turn-phase]="external.turnPhase()"
-        [attr.data-active-turn-id]="external.activeTurnId()"
-        [attr.data-event-count]="external.events().length"
-        [attr.data-latest-sequence]="external.events().at(-1)?.sequenceId"
+        class="rv-debug__session-status"
+        data-testid="session-status-bar"
+        [attr.data-activity]="sessionActivity()"
+        [attr.data-surface]="externalSelected() ? 'agent' : 'profile'"
+        [attr.data-turn-phase]="externalSelected() ? external.turnPhase() : null"
+        [attr.data-active-turn-id]="externalSelected() ? external.activeTurnId() : null"
       >
+        <strong class="rv-debug__session-activity">
+          <span
+            class="rv-debug__session-activity-dot"
+            aria-hidden="true"
+          ></span>
+          {{ sessionActivityLabel() }}
+        </strong>
+        <span>{{ externalSelected() ? 'Codex agent' : 'Crew profile' }}</span>
+        <span data-testid="session-status-model"
+          >Model: @if (externalSelected()) {
+          <span data-testid="external-current-model"
+            >{{ selectedModel() }}</span
+          >
+          } @else { {{ selectedModel() }} }</span
+        >
+        @if (externalSelected()) {
         <span
+          data-testid="external-turn-status"
+          [attr.data-turn-phase]="external.turnPhase()"
+          [attr.data-active-turn-id]="external.activeTurnId()"
+          [attr.data-event-count]="external.events().length"
+          [attr.data-latest-sequence]="external.events().at(-1)?.sequenceId"
           >{{ external.turnPhase() ?? external.selectedThread()?.status ??
           'idle' }}</span
         >
+        <span>Provider: {{ external.selectedThread()?.modelProvider }}</span>
         @if (external.commandCatalog(); as catalog) {
-        <span data-testid="external-current-model"
-          >{{ catalog.settings.model }}</span
-        >
         <span data-testid="external-current-effort"
-          >{{ catalog.settings.effort ?? 'default' }}</span
+          >Effort: {{ catalog.settings.effort ?? 'default' }}</span
         >
-        }
+        } } @else {
+        <span>Profile: {{ store.selectedProfileId() }}</span>
+        <span>Session: {{ store.activeSession()?.kind ?? 'unknown' }}</span>
+        @if (store.contextUsage(); as context) {
+        <span>Provider: {{ context.provider.alias }}</span>
+        } }
+      </div>
+      } @if (externalSelected()) {
+      <div
+        class="rv-debug__composer-controls"
+        data-testid="external-composer-controls"
+      >
         <select
           aria-label="External message mode"
           [value]="external.composerMode()"
@@ -133,23 +181,7 @@
           Interrupt
         </button>
       </div>
-      @for (interaction of external.selectedInteractions(); track
-      interaction.interactionId) { @if (interaction.status === 'pending') {
-      <rv-external-interaction-card [interaction]="interaction" /> } } }
-      <div class="rv-debug__transcript" data-testid="transcript-shell">
-        <rv-transcript-viewport
-          [messages]="displayedMessages()"
-          [searchEnabled]="showTranscriptSearch()"
-          [branches]="externalSelected() ? [] : store.branches()"
-          [activeBranchId]="externalSelected() ? undefined : store.activeBranchId()"
-          [snapshots]="externalSelected() ? [] : store.snapshots()"
-          [revisionCapabilities]="revisionCapabilities"
-          [showRevisionActions]="theme.settings().showMessageActions"
-          (activeBranchSelected)="onActiveBranchSelected($event)"
-          (revisionRequested)="onRevisionRequested($event)"
-        />
-      </div>
-      @if (!isViewingHistorical() || externalSelected()) {
+      }
       <rv-message-input
         [disabled]="inputDisabled()"
         [commands]="inputCommands()"

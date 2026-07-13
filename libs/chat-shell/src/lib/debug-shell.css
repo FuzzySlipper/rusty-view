@@ -104,19 +104,63 @@
   border-radius: 50%;
   background: var(--rv-color-warning);
 }
-.rv-debug__external-status {
+.rv-debug__session-status,
+.rv-debug__composer-controls {
   display: flex;
   align-items: center;
   gap: var(--rv-space-sm);
-  min-height: 36px;
-  padding: 0 var(--rv-space-sm);
-  border-bottom: 1px solid var(--rv-color-border);
+  min-height: 30px;
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
   background: var(--rv-color-surface-raised);
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-debug__session-status {
+  flex-wrap: wrap;
+}
+
+.rv-debug__session-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-primary);
   text-transform: uppercase;
 }
-.rv-debug__external-status select {
+
+.rv-debug__session-activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rv-color-text-muted);
+}
+
+.rv-debug__session-status[data-activity='working']
+  .rv-debug__session-activity-dot {
+  background: var(--rv-color-success);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--rv-color-success) 20%, transparent);
+}
+
+.rv-debug__session-status[data-activity='waiting']
+  .rv-debug__session-activity-dot,
+.rv-debug__session-status[data-activity='loading']
+  .rv-debug__session-activity-dot {
+  background: var(--rv-color-warning);
+}
+
+.rv-debug__session-status[data-activity='error']
+  .rv-debug__session-activity-dot {
+  background: var(--rv-color-danger);
+}
+
+.rv-debug__composer-controls {
+  justify-content: flex-end;
+}
+
+.rv-debug__composer-controls select {
   margin-left: auto;
   max-width: 190px;
 }

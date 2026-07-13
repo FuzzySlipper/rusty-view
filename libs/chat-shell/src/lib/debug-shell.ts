@@ -130,6 +130,9 @@ export class DebugShellComponent {
   protected readonly showProfiles = computed(
     () => this.theme.settings().showProfiles,
   );
+  protected readonly showSessionStatusBar = computed(
+    () => this.theme.settings().showSessionStatusBar,
+  );
   protected readonly showTranscriptSearch = signal(false);
   protected readonly sidebarMode = signal<'profiles' | 'agents'>('profiles');
   /** Which inspector tab is shown: the raw event log or context diagnostics. */
@@ -173,6 +176,59 @@ export class DebugShellComponent {
     this.external
       .sessions()
       .some((session) => session.needsAttention || session.unread),
+  );
+
+  protected readonly sessionActivity = computed<
+    'working' | 'waiting' | 'idle' | 'error' | 'loading'
+  >(() => {
+    if (this.externalSelected()) {
+      if (this.external.loading()) return 'loading';
+      const phase = this.external.turnPhase();
+      if (phase === 'waiting_interaction') return 'waiting';
+      if (
+        this.external.pending() ||
+        this.external.activeTurnId() !== undefined ||
+        phase === 'accepted' ||
+        phase === 'starting' ||
+        phase === 'active'
+      ) {
+        return 'working';
+      }
+      if (phase === 'failed' || phase === 'outcome_unknown') return 'error';
+      if (
+        phase === undefined &&
+        this.external.selectedThread()?.status === 'active'
+      ) {
+        return 'working';
+      }
+      return 'idle';
+    }
+    if (this.store.isGenerating() || this.store.isSubmitting())
+      return 'working';
+    if (this.store.activeSession()?.status === 'blocked') return 'waiting';
+    if (this.store.connectionState().status === 'error') return 'error';
+    return 'idle';
+  });
+
+  protected readonly sessionActivityLabel = computed(() => {
+    switch (this.sessionActivity()) {
+      case 'working':
+        return 'Working';
+      case 'waiting':
+        return 'Waiting';
+      case 'error':
+        return 'Error';
+      case 'loading':
+        return 'Loading';
+      case 'idle':
+        return 'Idle';
+    }
+  });
+
+  protected readonly selectedModel = computed(() =>
+    this.externalSelected()
+      ? (this.external.selectedThread()?.effectiveModel ?? 'Unavailable')
+      : (this.store.contextUsage()?.provider.model_id ?? 'Unavailable'),
   );
 
   protected readonly inputCommands = computed<
