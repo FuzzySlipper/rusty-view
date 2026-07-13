@@ -190,6 +190,10 @@ export class AppearanceTabComponent {
     this.updateBoolean('showMessageIds', event);
   }
 
+  protected toggleShowMessageActions(event: Event): void {
+    this.updateBoolean('showMessageActions', event);
+  }
+
   protected colorValue(field: keyof AppearanceColors): string {
     const override = this.theme.settings().colors[field];
     if (override !== undefined) return this.colorInputValue(override);
@@ -233,7 +237,8 @@ export class AppearanceTabComponent {
       | 'reducedMotion'
       | 'disableShadows'
       | 'showTimestamps'
-      | 'showMessageIds',
+      | 'showMessageIds'
+      | 'showMessageActions',
     event: Event,
   ): void {
     const target = event.target;

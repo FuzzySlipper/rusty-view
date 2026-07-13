@@ -45,6 +45,7 @@ export class MessageItemComponent {
   readonly searchActive = input<boolean>(false);
   readonly alternateSlot = input<MessageAlternateSlot | undefined>(undefined);
   readonly revisionCapabilities = input<MessageRevisionCapabilities>({});
+  readonly showRevisionActions = input<boolean>(true);
   readonly revisionAction = output<MessageRevisionAction>();
 
   protected readonly decoration = computed<ChatMessageDecoration>(() => {
@@ -136,6 +137,13 @@ export class MessageItemComponent {
             ? 'Agent message'
             : '';
   });
+
+  protected readonly showRevisionControls = computed(
+    () =>
+      this.message().author.role === 'assistant' &&
+      (this.showRevisionActions() ||
+        (this.alternateSlot()?.alternates.length ?? 0) > 0),
+  );
 
   protected onRevisionAction(action: MessageRevisionAction): void {
     this.revisionAction.emit(action);

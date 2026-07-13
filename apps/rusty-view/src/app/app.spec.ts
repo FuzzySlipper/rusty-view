@@ -9,6 +9,11 @@ import {
   IndexedDbChatStorage,
 } from '@rusty-view/chat-store';
 import type { ChatSessionPage } from '@rusty-view/protocol';
+import {
+  CHAT_SETTINGS_STORAGE,
+  ChatTheme,
+  InMemoryChatSettingsStorage,
+} from '@rusty-view/chat-theme';
 
 import { App } from './app';
 
@@ -109,6 +114,11 @@ describe('App', () => {
         provideRouter([]),
         { provide: ChatTransport, useValue: mockTransport },
         { provide: CHAT_STORAGE_ADAPTER, useValue: new IndexedDbChatStorage() },
+        {
+          provide: CHAT_SETTINGS_STORAGE,
+          useValue: new InMemoryChatSettingsStorage(),
+        },
+        ChatTheme,
         ChatStore,
         AdminStore,
       ],

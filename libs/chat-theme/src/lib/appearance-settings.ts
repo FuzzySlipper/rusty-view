@@ -192,6 +192,12 @@ export interface AppearanceSettings {
   readonly disableShadows: boolean;
   readonly showTimestamps: boolean;
   readonly showMessageIds: boolean;
+  /** Whether generic assistant-message action buttons are rendered. */
+  readonly showMessageActions: boolean;
+  /** Whether the reusable debug shell's profiles/agents sidebar is visible. */
+  readonly showProfiles: boolean;
+  /** Whether the reusable debug shell's inspector pane is visible. */
+  readonly showInspector: boolean;
   readonly backgroundPreset: AppearanceBackgroundPreset;
   readonly colors: AppearanceColors;
   /**
@@ -269,6 +275,9 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   disableShadows: false,
   showTimestamps: false,
   showMessageIds: false,
+  showMessageActions: true,
+  showProfiles: true,
+  showInspector: true,
   backgroundPreset: 'none',
   colors: {},
   textRenderMode: 'auto',

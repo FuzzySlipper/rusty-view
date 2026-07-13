@@ -121,6 +121,15 @@ async function installHistoryFixture(page: Page): Promise<void> {
       completedAt: 2,
       durationMs: 1,
       items: [
+        ...Array.from({ length: 180 }, (_, index) => ({
+          itemId: `reasoning-${index}`,
+          kind: 'reasoning',
+          summary: [
+            `Reasoning checkpoint ${index}`,
+            'This deliberately tall refreshed-history item forces the autosize strategy to revise its provisional tail estimate.',
+            'The final answer after this history must be materially rendered, not merely present in the snapshot.',
+          ],
+        })),
         {
           itemId: 'commentary',
           kind: 'agentMessage',

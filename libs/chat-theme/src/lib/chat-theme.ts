@@ -262,6 +262,11 @@ export class ChatTheme {
       disableShadows: settings.disableShadows === true,
       showTimestamps: settings.showTimestamps === true,
       showMessageIds: settings.showMessageIds === true,
+      // Persisted objects from before task #5745 do not contain these fields;
+      // absence must preserve the established visible-by-default shell.
+      showMessageActions: settings.showMessageActions !== false,
+      showProfiles: settings.showProfiles !== false,
+      showInspector: settings.showInspector !== false,
       backgroundPreset: normalizeBackgroundPreset(settings.backgroundPreset),
       colors: normalizeColors(settings.colors),
       textRenderMode: normalizeTextRenderMode(settings.textRenderMode),

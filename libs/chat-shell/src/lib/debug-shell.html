@@ -136,6 +136,7 @@
           [activeBranchId]="externalSelected() ? undefined : store.activeBranchId()"
           [snapshots]="externalSelected() ? [] : store.snapshots()"
           [revisionCapabilities]="revisionCapabilities"
+          [showRevisionActions]="theme.settings().showMessageActions"
           (activeBranchSelected)="onActiveBranchSelected($event)"
           (revisionRequested)="onRevisionRequested($event)"
         />

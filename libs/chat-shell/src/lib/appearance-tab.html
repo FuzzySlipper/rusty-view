@@ -157,6 +157,15 @@
       <label class="rv-appearance__check">
         <input
           type="checkbox"
+          data-testid="appearance-message-actions"
+          [checked]="theme.settings().showMessageActions"
+          (change)="toggleShowMessageActions($event)"
+        />
+        <span>Message action buttons</span>
+      </label>
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
           [checked]="theme.settings().reducedMotion"
           (change)="toggleReducedMotion($event)"
         />

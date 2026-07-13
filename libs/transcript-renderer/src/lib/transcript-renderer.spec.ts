@@ -615,6 +615,20 @@ describe('MessageItemComponent', () => {
     expect(host.textContent).toContain('The door creaks.');
   });
 
+  it('removes action-row spacing when actions are disabled', async () => {
+    const fixture = await createMessage(
+      makeMessage({ author: { role: 'assistant', displayName: 'Agent' } }),
+    );
+    fixture.componentRef.setInput('showRevisionActions', false);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="message-revision-controls"]',
+      ),
+    ).toBeNull();
+  });
+
   it('labels commentary and final-answer presentation without changing turn status', async () => {
     const commentary = await createMessage(
       makeMessage({
@@ -775,6 +789,7 @@ describe('MessageRevisionControlsComponent', () => {
       readonly activeVariantId?: string | null;
       readonly alternateCount?: number;
       readonly capabilities?: Record<string, boolean>;
+      readonly showActions?: boolean;
     } = {},
   ) {
     await TestBed.configureTestingModule({
@@ -824,6 +839,9 @@ describe('MessageRevisionControlsComponent', () => {
     fixture.componentRef.setInput('slot', slot);
     if (options.capabilities !== undefined) {
       fixture.componentRef.setInput('capabilities', options.capabilities);
+    }
+    if (options.showActions !== undefined) {
+      fixture.componentRef.setInput('showActions', options.showActions);
     }
     fixture.detectChanges();
     return fixture;
@@ -922,6 +940,14 @@ describe('MessageRevisionControlsComponent', () => {
     expect(host.querySelector('[data-testid="variant-count"]')).toBeNull();
     expect(host.querySelector('[data-testid="variant-previous"]')).toBeNull();
     expect(host.querySelector('[data-testid="variant-next"]')).toBeNull();
+  });
+
+  it('keeps variant controls while removing disabled message actions', async () => {
+    const fixture = await createRevisionControls({ showActions: false });
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.querySelector('.rv-revision__actions')).toBeNull();
+    expect(host.querySelector('[data-testid="variant-count"]')).not.toBeNull();
   });
 
   it('supports arrow-key navigation on the variant carousel', async () => {

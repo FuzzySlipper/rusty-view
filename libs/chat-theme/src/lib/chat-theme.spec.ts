@@ -57,6 +57,22 @@ describe('ChatTheme', () => {
     expect((await storage.load())?.composerHeightPx).toBe(320);
   });
 
+  it('persists shell visibility and message-action preferences', async () => {
+    const theme = TestBed.inject(ChatTheme);
+
+    await theme.update({
+      showMessageActions: false,
+      showProfiles: false,
+      showInspector: false,
+    });
+
+    expect(await storage.load()).toMatchObject({
+      showMessageActions: false,
+      showProfiles: false,
+      showInspector: false,
+    });
+  });
+
   it('honors provideChatTheme defaults before persisted settings load', () => {
     TestBed.resetTestingModule();
     configure({

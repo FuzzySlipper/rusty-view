@@ -17,6 +17,8 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
     )
     .toBe('160px');
 
+  await page.getByTestId('appearance-message-actions').uncheck();
+
   await page.locator('.rv-tab-strip__tab', { hasText: 'Hotkeys' }).click();
   const nextRow = page.locator('[data-hotkey-action="nextSession"]');
   await nextRow.getByTestId('hotkey-record').click();
@@ -24,8 +26,20 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
   await expect(nextRow.getByTestId('hotkey-binding')).toHaveText('Alt+N');
 
   await page.locator('.rv-options__close').click();
+  await page.getByTestId('profiles-toggle').click();
+  await page.getByTestId('inspector-toggle').click();
+  await expect
+    .poll(() => readAppearanceSetting(page, 'showInspector'))
+    .toBe(false);
   await page.reload();
+  await expect(page.getByTestId('profiles-toggle')).toHaveText('Show Profiles');
+  await expect(page.getByTestId('inspector-toggle')).toHaveText(
+    'Show Inspector',
+  );
   await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await expect(
+    page.getByTestId('appearance-message-actions'),
+  ).not.toBeChecked();
   await page.locator('.rv-tab-strip__tab', { hasText: 'Hotkeys' }).click();
   await expect(
     page
@@ -34,6 +48,31 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
   ).toHaveText('Alt+N');
   await page.getByTestId('hotkeys-reset-all').click();
 });
+
+async function readAppearanceSetting(
+  page: Page,
+  key: 'showInspector',
+): Promise<unknown> {
+  return page.evaluate(
+    (settingKey) =>
+      new Promise<unknown>((resolve, reject) => {
+        const request = indexedDB.open('rusty-view-chat', 2);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const transaction = db.transaction('settings', 'readonly');
+          const get = transaction.objectStore('settings').get('appearance');
+          get.onerror = () => reject(get.error);
+          get.onsuccess = () => {
+            const settings = get.result as Record<string, unknown> | undefined;
+            resolve(settings?.[settingKey]);
+            db.close();
+          };
+        };
+      }),
+    key,
+  );
+}
 
 test('requested shortcuts cycle non-archived sessions and erase a composer word', async ({
   page,

@@ -9,6 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { ChatStore, ExternalAgentStore } from '@rusty-view/chat-store';
+import { ChatTheme } from '@rusty-view/chat-theme';
 import type { MessageBlock } from '@rusty-view/chat-domain';
 import {
   ContextDiagnosticsComponent,
@@ -116,13 +117,18 @@ export class DebugShellComponent {
   protected readonly store = inject(ChatStore);
   protected readonly external = inject(ExternalAgentStore);
   protected readonly hotkeys = inject(HotkeySettingsService);
+  protected readonly theme = inject(ChatTheme);
   private readonly destroyRef = inject(DestroyRef);
   private readonly slashCommands =
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
   private readonly transcriptViewport = viewChild(TranscriptViewportComponent);
 
-  protected readonly showInspector = signal(true);
-  protected readonly showProfiles = signal(true);
+  protected readonly showInspector = computed(
+    () => this.theme.settings().showInspector,
+  );
+  protected readonly showProfiles = computed(
+    () => this.theme.settings().showProfiles,
+  );
   protected readonly showTranscriptSearch = signal(false);
   protected readonly sidebarMode = signal<'profiles' | 'agents'>('profiles');
   /** Which inspector tab is shown: the raw event log or context diagnostics. */
@@ -249,11 +255,11 @@ export class DebugShellComponent {
   }
 
   protected toggleInspector(): void {
-    this.showInspector.update((v) => !v);
+    void this.theme.update({ showInspector: !this.showInspector() });
   }
 
   protected toggleProfiles(): void {
-    this.showProfiles.update((v) => !v);
+    void this.theme.update({ showProfiles: !this.showProfiles() });
   }
 
   protected showSidebar(mode: 'profiles' | 'agents'): void {

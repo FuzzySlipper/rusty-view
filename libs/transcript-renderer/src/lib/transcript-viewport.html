@@ -152,6 +152,7 @@
       [searchActive]="activeSearchMessageId() === message.id"
       [alternateSlot]="alternateSlotFor(message.id)"
       [revisionCapabilities]="revisionCapabilities()"
+      [showRevisionActions]="showRevisionActions()"
       (revisionAction)="onRevisionAction($event)"
     />
   </div>

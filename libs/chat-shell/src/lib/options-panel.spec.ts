@@ -52,6 +52,7 @@ describe('OptionsPanelComponent', () => {
     expect(host.textContent).toContain('Chat Width');
     expect(host.textContent).toContain('Composer Height');
     expect(host.textContent).toContain('Message IDs');
+    expect(host.textContent).toContain('Message action buttons');
 
     const messageIds = Array.from(host.querySelectorAll('label')).find(
       (label) => label.textContent?.includes('Message IDs') ?? false,
@@ -61,6 +62,13 @@ describe('OptionsPanelComponent', () => {
     fixture.detectChanges();
 
     expect(theme.settings().showMessageIds).toBe(true);
+
+    const messageActions = host.querySelector<HTMLInputElement>(
+      '[data-testid="appearance-message-actions"]',
+    );
+    messageActions?.click();
+    fixture.detectChanges();
+    expect(theme.settings().showMessageActions).toBe(false);
   });
 
   it('updates and resets the persisted composer height preference', async () => {

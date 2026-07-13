@@ -104,6 +104,9 @@ export class TranscriptViewportComponent {
   /** Supported revision actions for the host/backend. Unsupported buttons stay disabled. */
   readonly revisionCapabilities = input<MessageRevisionCapabilities>({});
 
+  /** Whether generic message actions are rendered. Variant navigation remains available. */
+  readonly showRevisionActions = input<boolean>(true);
+
   /** Emits when the user asks the transcript to jump to a tree target. */
   readonly navigationRequested = output<ConversationNavigationTarget>();
   readonly activeBranchSelected = output<string>();
@@ -574,7 +577,14 @@ export class TranscriptViewportComponent {
       this.pendingSeekTimers.delete(timer);
       this.afterNextRender(() => {
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
-        if (bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
+        // Autosize may temporarily report a zero bottom offset while its
+        // estimator still has not materialized the actual last row. Stopping
+        // at that provisional bottom is what could hide a final_answer after
+        // a long refreshed transcript. Only settle once the tail row exists.
+        if (
+          bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX &&
+          this.isTailMaterialized()
+        ) {
           this.isAtBottom.set(true);
           return;
         }
@@ -583,6 +593,14 @@ export class TranscriptViewportComponent {
       });
     }, 50);
     this.pendingSeekTimers.add(timer);
+  }
+
+  private isTailMaterialized(): boolean {
+    const lastMessage = this.renderMessages().at(-1);
+    return (
+      lastMessage === undefined ||
+      this.findRenderedMessageElement(lastMessage.id) !== null
+    );
   }
 
   /**

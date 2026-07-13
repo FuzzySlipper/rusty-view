@@ -54,6 +54,7 @@ export class MessageRevisionControlsComponent {
   readonly message = input.required<ChatMessage>();
   readonly slot = input<MessageAlternateSlot | undefined>(undefined);
   readonly capabilities = input<MessageRevisionCapabilities>({});
+  readonly showActions = input<boolean>(true);
   readonly action = output<MessageRevisionAction>();
 
   protected readonly variants = computed(() => {
