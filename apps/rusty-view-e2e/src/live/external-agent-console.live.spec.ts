@@ -493,6 +493,11 @@ async function inspectRawNativeEvent(
   kind: string,
   nativeMethod: string,
 ): Promise<void> {
+  const loadHistory = page.getByTestId('load-external-event-history');
+  if (await loadHistory.isVisible()) {
+    await loadHistory.click();
+    await expect(loadHistory).toBeHidden({ timeout: 30_000 });
+  }
   const events = page.locator(
     `[data-testid="event-row"][data-event-kind="${kind}"]`,
   );

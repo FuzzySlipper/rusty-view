@@ -228,7 +228,20 @@
           Context
         </button>
       </nav>
-      @if (inspectorTab() === 'events') {
+      @if (inspectorTab() === 'events') { @if (externalSelected() &&
+      !external.eventHistoryLoaded()) {
+      <div class="rv-debug__event-history">
+        <button
+          type="button"
+          data-testid="load-external-event-history"
+          [disabled]="external.eventHistoryLoading()"
+          (click)="loadExternalEventHistory()"
+        >
+          {{ external.eventHistoryLoading() ? 'Loading history…' : 'Load event
+          history' }}
+        </button>
+      </div>
+      }
       <rv-event-inspector
         [events]="externalSelected() ? external.events() : store.rawEvents()"
         [selectedEventId]="selectedEventId()"

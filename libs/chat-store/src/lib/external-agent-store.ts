@@ -59,6 +59,13 @@ interface RuntimeThread {
   readonly thread: ExternalThreadProjection;
 }
 
+interface CachedInactiveThread {
+  readonly updatedAt: number;
+  readonly thread: ExternalThreadProjection;
+}
+
+const INACTIVE_THREAD_CACHE_CAPACITY = 8;
+
 @Injectable({ providedIn: 'root' })
 export class ExternalAgentStore {
   private readonly transport = inject(ChatTransport);
@@ -69,8 +76,13 @@ export class ExternalAgentStore {
   private readonly refreshIdleWaiters: Array<() => void> = [];
   private interactionsPolling = false;
   private bindingMutationRevision = 0;
+  private selectionRevision = 0;
   private selectedRuntimeEventCursor: number | undefined;
   private readonly fleetCursors = new Map<string, number>();
+  private readonly inactiveThreadCache = new Map<
+    string,
+    CachedInactiveThread
+  >();
   private readonly threadCursors = signal<
     Readonly<Record<string, string | null>>
   >({});
@@ -105,6 +117,8 @@ export class ExternalAgentStore {
     undefined,
   );
   readonly loading = signal(false);
+  readonly eventHistoryLoading = signal(false);
+  readonly eventHistoryLoaded = signal(false);
   readonly pending = signal(false);
   readonly loadingMore = signal(false);
   readonly creatingSession = signal(false);
@@ -234,10 +248,17 @@ export class ExternalAgentStore {
     if (this.selectedInteractions().some((item) => item.status === 'pending')) {
       return 'waiting_interaction';
     }
-    return latestExternalTurnPhase(this.events());
+    return (
+      latestExternalTurnPhase(this.events()) ??
+      latestSnapshotTurnPhase(this.selectedThread())
+    );
   });
 
-  readonly activeTurnId = computed(() => activeExternalTurnId(this.events()));
+  readonly activeTurnId = computed(
+    () =>
+      activeExternalTurnId(this.events()) ??
+      activeSnapshotTurnId(this.selectedThread()),
+  );
 
   readonly isTurnActive = computed(() => {
     return (
@@ -518,11 +539,14 @@ export class ExternalAgentStore {
   }
 
   private selectCreatedSession(result: ExternalAgentSessionCreateResult): void {
+    this.selectionRevision += 1;
     this.stream?.close();
     const runtimeId = result.runtime.runtimeId;
     const threadId = result.thread.threadId;
     this.selectedRuntimeEventCursor = this.fleetCursors.get(runtimeId);
     this.events.set([]);
+    this.eventHistoryLoading.set(false);
+    this.eventHistoryLoaded.set(false);
     this.selectedRuntimeId.set(runtimeId);
     this.selectedThreadId.set(threadId);
     this.selectedThread.set(result.thread);
@@ -535,10 +559,16 @@ export class ExternalAgentStore {
   }
 
   async selectSession(session: ExternalAgentSession): Promise<boolean> {
+    const revision = ++this.selectionRevision;
     this.stream?.close();
+    this.stream = undefined;
     this.selectedRuntimeEventCursor = undefined;
     this.events.set([]);
-    this.selectedThread.set(undefined);
+    this.eventHistoryLoading.set(false);
+    this.eventHistoryLoaded.set(false);
+    const active = isActiveExternalSession(session);
+    const cached = active ? undefined : this.cachedInactiveThread(session);
+    this.selectedThread.set(cached?.thread);
     this.commandCatalog.set(undefined);
     this.commandResult.set(undefined);
     this.commandError.set(undefined);
@@ -548,43 +578,112 @@ export class ExternalAgentStore {
       ...seen,
       [session.key]: session.thread.updatedAt,
     }));
-    this.loading.set(true);
+    this.loading.set(cached === undefined);
     try {
+      const runtimeId = session.runtime.runtimeId;
+      const fleetCursor = this.fleetCursors.get(runtimeId);
+      if (cached !== undefined) {
+        this.selectedRuntimeEventCursor = fleetCursor;
+        this.startStream(runtimeId, fleetCursor);
+        await this.refreshSelectedCommands();
+        if (!this.isCurrentSelection(revision, session.key)) return false;
+        this.error.set(undefined);
+        return true;
+      }
+
+      const replayHistory = fleetCursor === undefined;
       const [read, page] = await Promise.all([
-        this.transport.external.readThread(session.runtime.runtimeId, {
+        this.transport.external.readThread(runtimeId, {
           threadId: session.thread.threadId,
           includeTurns: true,
         }),
-        this.listAllEvents(session.runtime.runtimeId),
+        replayHistory ? this.listAllEvents(runtimeId) : Promise.resolve([]),
       ]);
+      if (!this.isCurrentSelection(revision, session.key)) return false;
       this.selectedThread.set(read.thread);
       const events = page.filter(
         (event) => event.nativeThreadId === session.thread.threadId,
       );
-      this.selectedRuntimeEventCursor = page.at(-1)?.sequenceId;
+      this.selectedRuntimeEventCursor = page.at(-1)?.sequenceId ?? fleetCursor;
       this.events.set(events);
-      this.startStream(
-        session.runtime.runtimeId,
-        this.selectedRuntimeEventCursor,
-      );
+      this.eventHistoryLoaded.set(replayHistory);
+      if (!active) {
+        this.cacheInactiveThread(
+          session.key,
+          session.thread.updatedAt,
+          read.thread,
+        );
+      }
+      this.startStream(runtimeId, this.selectedRuntimeEventCursor);
       await this.refreshSelectedCommands();
+      if (!this.isCurrentSelection(revision, session.key)) return false;
       this.error.set(undefined);
       return true;
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (this.isCurrentSelection(revision, session.key)) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
       return false;
     } finally {
-      this.loading.set(false);
+      if (this.isCurrentSelection(revision, session.key)) {
+        this.loading.set(false);
+      }
+    }
+  }
+
+  async loadSelectedEventHistory(): Promise<boolean> {
+    const runtimeId = this.selectedRuntimeId();
+    const threadId = this.selectedThreadId();
+    const key = this.selectedSessionKey();
+    if (
+      runtimeId === undefined ||
+      threadId === undefined ||
+      key === undefined ||
+      this.eventHistoryLoading() ||
+      this.eventHistoryLoaded()
+    ) {
+      return false;
+    }
+    const revision = this.selectionRevision;
+    this.eventHistoryLoading.set(true);
+    try {
+      const page = await this.listAllEvents(runtimeId);
+      if (!this.isCurrentSelection(revision, key)) return false;
+      const selected = page.filter(
+        (event) => event.nativeThreadId === threadId,
+      );
+      const lastSequence = page.at(-1)?.sequenceId;
+      if (lastSequence !== undefined) {
+        this.selectedRuntimeEventCursor = Math.max(
+          this.selectedRuntimeEventCursor ?? lastSequence,
+          lastSequence,
+        );
+      }
+      this.mergeEvents(selected);
+      this.eventHistoryLoaded.set(true);
+      return true;
+    } catch (error) {
+      if (this.isCurrentSelection(revision, key)) {
+        this.error.set(`Loading event history failed: ${errorMessage(error)}`);
+      }
+      return false;
+    } finally {
+      if (this.isCurrentSelection(revision, key)) {
+        this.eventHistoryLoading.set(false);
+      }
     }
   }
 
   clearSelection(): void {
+    this.selectionRevision += 1;
     this.stream?.close();
     this.stream = undefined;
     this.selectedRuntimeId.set(undefined);
     this.selectedThreadId.set(undefined);
     this.selectedThread.set(undefined);
     this.events.set([]);
+    this.eventHistoryLoading.set(false);
+    this.eventHistoryLoaded.set(false);
     this.selectedRuntimeEventCursor = undefined;
     this.commandCatalog.set(undefined);
     this.commandResult.set(undefined);
@@ -858,6 +957,7 @@ export class ExternalAgentStore {
         },
       );
       this.bindingMutationRevision += 1;
+      this.inactiveThreadCache.delete(session.key);
       this.bindings.update((bindings) =>
         bindings.map((candidate) =>
           candidate.bindingId === saved.bindingId ? saved : candidate,
@@ -920,6 +1020,7 @@ export class ExternalAgentStore {
             ? await this.transport.external.unarchiveThread(runtimeId, threadId)
             : await this.transport.external.deleteThread(runtimeId, threadId);
       if (this.selectedSessionKey() === session.key) this.clearSelection();
+      this.inactiveThreadCache.delete(session.key);
       this.lifecycleNotice.set(
         `${action === 'unarchive' ? 'Restored' : action === 'archive' ? 'Archived' : 'Deleted'} native Codex thread ${threadId} (${receipt.outcome}).`,
       );
@@ -955,6 +1056,8 @@ export class ExternalAgentStore {
             event.sequenceId,
           );
           if (event.nativeThreadId === this.selectedThreadId()) {
+            const key = this.selectedSessionKey();
+            if (key !== undefined) this.inactiveThreadCache.delete(key);
             this.appendEvents([event]);
             const settings = event.payload.settings;
             if (settings !== undefined) {
@@ -1020,6 +1123,56 @@ export class ExternalAgentStore {
         ...incoming.filter((event) => !known.has(event.eventId)),
       ];
     });
+  }
+
+  private mergeEvents(
+    incoming: readonly NormalizedExternalRuntimeEvent[],
+  ): void {
+    if (incoming.length === 0) return;
+    this.events.update((events) => {
+      const merged = new Map(
+        [...events, ...incoming].map((event) => [event.eventId, event]),
+      );
+      return [...merged.values()].sort(
+        (left, right) => left.sequenceId - right.sequenceId,
+      );
+    });
+  }
+
+  private cachedInactiveThread(
+    session: ExternalAgentSession,
+  ): CachedInactiveThread | undefined {
+    const cached = this.inactiveThreadCache.get(session.key);
+    if (cached?.updatedAt !== session.thread.updatedAt) {
+      if (cached !== undefined) this.inactiveThreadCache.delete(session.key);
+      return undefined;
+    }
+    this.inactiveThreadCache.delete(session.key);
+    this.inactiveThreadCache.set(session.key, cached);
+    return cached;
+  }
+
+  private cacheInactiveThread(
+    key: string,
+    updatedAt: number,
+    thread: ExternalThreadProjection,
+  ): void {
+    this.inactiveThreadCache.delete(key);
+    this.inactiveThreadCache.set(key, {
+      updatedAt,
+      thread,
+    });
+    while (this.inactiveThreadCache.size > INACTIVE_THREAD_CACHE_CAPACITY) {
+      const oldest = this.inactiveThreadCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.inactiveThreadCache.delete(oldest);
+    }
+  }
+
+  private isCurrentSelection(revision: number, key: string): boolean {
+    return (
+      revision === this.selectionRevision && this.selectedSessionKey() === key
+    );
   }
 
   private async listAllEvents(
@@ -1168,6 +1321,24 @@ export function activeExternalTurnId(
   return [...latestByTurn.entries()]
     .filter(([, value]) => !isTerminalPhase(value.phase))
     .sort((left, right) => right[1].sequenceId - left[1].sequenceId)[0]?.[0];
+}
+
+function latestSnapshotTurnPhase(
+  thread: ExternalThreadProjection | undefined,
+): ExternalTurnPhase | undefined {
+  const latest = thread?.turns.at(-1);
+  return latest === undefined ? undefined : phaseValue(latest.status);
+}
+
+function activeSnapshotTurnId(
+  thread: ExternalThreadProjection | undefined,
+): string | undefined {
+  const latest = thread?.turns.at(-1);
+  if (latest === undefined) return undefined;
+  const phase = phaseValue(latest.status);
+  return phase !== undefined && !isTerminalPhase(phase)
+    ? latest.turnId
+    : undefined;
 }
 
 function isTerminalPhase(phase: ExternalTurnPhase): boolean {

@@ -368,6 +368,10 @@ export class DebugShellComponent {
     this.inspectorTab.set(tab);
   }
 
+  protected loadExternalEventHistory(): void {
+    void this.external.loadSelectedEventHistory();
+  }
+
   protected async onRefreshContext(): Promise<void> {
     this.contextLoading.set(true);
     try {

@@ -592,6 +592,198 @@ describe('ExternalAgentStore', () => {
     expect(store.events()).toEqual([freshEvent]);
   });
 
+  it('loads an inactive thread from its snapshot without replaying runtime history and caches it', async () => {
+    let updatedAt = 10;
+    const runtime = registration('runtime-1');
+    const historicalEvent = {
+      ...event(100, 'old-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    };
+    const listEvents = vi.fn(
+      async (_runtimeId: string, query?: { after?: number }) => ({
+        events: query?.after === 100 ? [] : [historicalEvent],
+      }),
+    );
+    const readThread = vi.fn(async () => ({
+      thread: { ...thread('thread-1', updatedAt), status: 'idle' },
+    }));
+    const store = setupStore({
+      runtimes: [runtime],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () =>
+        page([{ ...thread('thread-1', updatedAt), status: 'idle' }], null),
+      ),
+      listEvents,
+      readThread,
+    });
+    await store.refresh();
+    const first = store.sessions()[0];
+    if (first === undefined) throw new Error('expected inactive session');
+
+    await store.selectSession(first);
+    await store.selectSession(first);
+
+    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(readThread).toHaveBeenCalledTimes(1);
+    expect(store.selectedThread()?.threadId).toBe('thread-1');
+    expect(store.eventHistoryLoaded()).toBe(false);
+
+    updatedAt = 20;
+    await store.refresh();
+    const changed = store.sessions()[0];
+    if (changed === undefined) throw new Error('expected changed session');
+    await store.selectSession(changed);
+
+    expect(readThread).toHaveBeenCalledTimes(2);
+    expect(store.selectedThread()?.updatedAt).toBe(20);
+  });
+
+  it('keeps the newest session selected when an older thread read finishes late', async () => {
+    const runtime = registration('runtime-1');
+    const firstRead = deferred<{ readonly thread: ExternalThreadProjection }>();
+    const secondRead = deferred<{
+      readonly thread: ExternalThreadProjection;
+    }>();
+    const readThread = vi
+      .fn()
+      .mockImplementationOnce(() => firstRead.promise)
+      .mockImplementationOnce(() => secondRead.promise);
+    const listedThreads = [
+      { ...thread('thread-1', 10), status: 'idle' },
+      { ...thread('thread-2', 20), status: 'idle' },
+    ];
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page(listedThreads, null)),
+      listEvents: vi.fn(async (_runtimeId, query?: { after?: number }) => ({
+        events:
+          query?.after === undefined
+            ? [
+                {
+                  ...event(100, 'old-turn', 'completed'),
+                  nativeThreadId: 'other-thread',
+                },
+              ]
+            : [],
+      })),
+      readThread,
+    });
+    await store.refresh();
+    const [first, second] = store.sessions();
+    if (first === undefined || second === undefined) {
+      throw new Error('expected two sessions');
+    }
+
+    const selectingFirst = store.selectSession(first);
+    const selectingSecond = store.selectSession(second);
+    secondRead.resolve({
+      thread: listedThreads[1] as ExternalThreadProjection,
+    });
+    await expect(selectingSecond).resolves.toBe(true);
+    firstRead.resolve({ thread: listedThreads[0] as ExternalThreadProjection });
+    await expect(selectingFirst).resolves.toBe(false);
+
+    expect(store.selectedSessionKey()).toBe('runtime-1:thread-2');
+    expect(store.selectedThread()?.threadId).toBe('thread-2');
+  });
+
+  it('loads inactive raw event history only when explicitly requested', async () => {
+    const runtime = registration('runtime-1');
+    const selectedThread = { ...thread('thread-1', 10), status: 'idle' };
+    const selectedEvent = event(90, 'turn-1', 'completed');
+    const fleetTail = {
+      ...event(100, 'old-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    };
+    const listEvents = vi
+      .fn()
+      .mockResolvedValueOnce({ events: [fleetTail] })
+      .mockResolvedValueOnce({ events: [selectedEvent, fleetTail] });
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([selectedThread], null)),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: selectedThread })),
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected inactive session');
+    await store.selectSession(session);
+
+    expect(store.events()).toEqual([]);
+    await expect(store.loadSelectedEventHistory()).resolves.toBe(true);
+
+    expect(listEvents).toHaveBeenCalledTimes(2);
+    expect(store.events()).toEqual([selectedEvent]);
+    expect(store.eventHistoryLoaded()).toBe(true);
+  });
+
+  it('hydrates an active turn from its snapshot and catches up from the fleet cursor', async () => {
+    const runtime = registration('runtime-1');
+    const snapshot = {
+      ...thread('thread-1', 10),
+      turns: [
+        {
+          turnId: 'turn-live',
+          status: 'inProgress',
+          startedAt: 10,
+          completedAt: null,
+          durationMs: null,
+          items: [],
+        },
+      ],
+    };
+    const fleetTail = {
+      ...event(100, 'old-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    };
+    const listEvents = vi.fn(async () => ({ events: [fleetTail] }));
+    const streamExternalRuntimeEvents = vi.fn(() => ({
+      close: vi.fn(),
+      async *events() {
+        yield* [];
+      },
+    }));
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([snapshot], null)),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: snapshot })),
+      streamExternalRuntimeEvents,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected active session');
+
+    await store.selectSession(session);
+
+    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(streamExternalRuntimeEvents).toHaveBeenCalledWith('runtime-1', 100);
+    expect(store.activeTurnId()).toBe('turn-live');
+    expect(store.turnPhase()).toBe('active');
+    expect(store.eventHistoryLoaded()).toBe(false);
+  });
+
+  it('derives the active turn from a native snapshot before live events arrive', () => {
+    const store = setupStore({ runtimes: [], listThreads: vi.fn() });
+    store.selectedThread.set({
+      ...thread('thread-1', 10),
+      turns: [
+        {
+          turnId: 'turn-live',
+          status: 'inProgress',
+          startedAt: 10,
+          completedAt: null,
+          durationMs: null,
+          items: [],
+        },
+      ],
+    });
+
+    expect(store.activeTurnId()).toBe('turn-live');
+    expect(store.turnPhase()).toBe('active');
+  });
+
   it('creates, indexes, and selects a browser-created external session', async () => {
     const runtime = registration('runtime-1');
     const createdThread = thread('thread-created', 30);
@@ -726,6 +918,7 @@ function setupStore(options: {
   listCommands?: ReturnType<typeof vi.fn>;
   executeCommand?: ReturnType<typeof vi.fn>;
   updateBindingMetadata?: ReturnType<typeof vi.fn>;
+  streamExternalRuntimeEvents?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
     listRuntimes: vi.fn(async () => ({
@@ -763,12 +956,14 @@ function setupStore(options: {
             limit: 100,
             offset: 0,
           })),
-          streamExternalRuntimeEvents: vi.fn(() => ({
-            close: vi.fn(),
-            async *events() {
-              yield* [];
-            },
-          })),
+          streamExternalRuntimeEvents:
+            options.streamExternalRuntimeEvents ??
+            vi.fn(() => ({
+              close: vi.fn(),
+              async *events() {
+                yield* [];
+              },
+            })),
         } as unknown as ChatTransport,
       },
     ],

@@ -62,7 +62,9 @@ export function projectExternalAgentTranscript(
   const grouped = new Map<string, NormalizedExternalRuntimeEvent[]>();
   for (const event of events) {
     const key = eventGroupKey(event);
-    grouped.set(key, [...(grouped.get(key) ?? []), event]);
+    const group = grouped.get(key);
+    if (group === undefined) grouped.set(key, [event]);
+    else group.push(event);
   }
   for (const [key, group] of grouped) {
     const first = group[0];

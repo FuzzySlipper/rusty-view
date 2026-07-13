@@ -376,6 +376,10 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(page.getByTestId('external-current-effort')).toHaveText(
     'Effort: medium',
   );
+  const loadEventHistory = page.getByTestId('load-external-event-history');
+  await expect(loadEventHistory).toBeVisible();
+  await loadEventHistory.click();
+  await expect(loadEventHistory).toBeHidden();
   await page.getByTestId('message-input-field').fill('/');
   await expect(
     page.getByTestId('message-command-hint').filter({ hasText: 'model' }),

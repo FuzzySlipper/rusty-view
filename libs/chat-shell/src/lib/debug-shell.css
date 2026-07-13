@@ -246,6 +246,17 @@
   font-weight: var(--rv-font-weight-bold);
 }
 
+.rv-debug__event-history {
+  flex: 0 0 auto;
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border-bottom: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-debug__event-history button {
+  width: 100%;
+}
+
 .rv-debug__inspector > rv-event-inspector,
 .rv-debug__inspector > rv-context-diagnostics {
   flex: 1;
