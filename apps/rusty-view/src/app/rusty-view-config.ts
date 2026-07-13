@@ -35,18 +35,26 @@ export interface RustyViewConfig {
   readonly bearerToken?: string;
 }
 
-/** Default rusty-crew HTTP port, used when deriving the URL from the page host. */
+/** Default rusty-crew HTTP port used by the recognized split dev topology. */
 const DEFAULT_API_PORT = 9347;
-const CREW_SERVICE_PORTS = new Set(['9347', '9348']);
+const SPLIT_DEV_SERVER_PORTS = new Set(['4200', '4210']);
 
 /**
  * Optional deploy-time config injected on `window` (e.g. via a `<script>` in
  * index.html or a config.js). Lets a deployment pin the backend without a
  * rebuild.
  */
-interface RustyViewWindowConfig {
+export interface RustyViewWindowConfig {
   readonly baseUrl?: string;
   readonly bearerToken?: string;
+}
+
+export interface RustyViewRuntimeWindow {
+  readonly location: Pick<
+    Location,
+    'origin' | 'port' | 'protocol' | 'hostname' | 'search'
+  >;
+  readonly __RUSTY_VIEW_CONFIG__?: RustyViewWindowConfig;
 }
 
 declare global {
@@ -61,19 +69,22 @@ declare global {
  *
  *   1. `?api=<url>` query param — explicit, ephemeral; handy for testing.
  *   2. `window.__RUSTY_VIEW_CONFIG__.baseUrl` — injected at deploy time.
- *   3. Same origin when served by a known rusty-crew service port (`9347` live
- *      or `9348` debug/test).
- *   4. Same host that served the page, on the default API port — e.g. the view
- *      loaded from `http://den-k8:4321` talks to `http://den-k8:9347`.
+ *   3. The serving origin for normal deployments, including standard HTTP/TLS
+ *      reverse proxies and direct rusty-crew ports (`9347` live or `9348`
+ *      debug/test).
+ *   4. The serving host on `9347` only for this repo's recognized HTTP dev
+ *      server ports (`4200` and `4210`).
  *
  * The previous hardcoded `http://127.0.0.1:9347` only worked when the browser
  * ran on the same machine as rusty-crew; any LAN/remote user (the normal case —
  * browser on a workstation, rusty-crew on a headless box) got "No sessions"
  * because `127.0.0.1` resolved to their own device.
  */
-export function resolveRustyViewConfig(): RustyViewConfig {
-  const windowConfig = window.__RUSTY_VIEW_CONFIG__;
-  const queryBaseUrl = new URLSearchParams(window.location.search)
+export function resolveRustyViewConfig(
+  runtimeWindow: RustyViewRuntimeWindow = window,
+): RustyViewConfig {
+  const windowConfig = runtimeWindow.__RUSTY_VIEW_CONFIG__;
+  const queryBaseUrl = new URLSearchParams(runtimeWindow.location.search)
     .get('api')
     ?.trim();
 
@@ -82,7 +93,7 @@ export function resolveRustyViewConfig(): RustyViewConfig {
       ? queryBaseUrl
       : undefined) ??
     windowConfig?.baseUrl ??
-    deriveBaseUrlFromLocation();
+    deriveBaseUrlFromLocationParts(runtimeWindow.location);
 
   return {
     baseUrl,
@@ -92,17 +103,14 @@ export function resolveRustyViewConfig(): RustyViewConfig {
   };
 }
 
-/** Derive the backend URL from the serving origin. */
-function deriveBaseUrlFromLocation(): string {
-  return deriveBaseUrlFromLocationParts(window.location);
-}
-
 export function deriveBaseUrlFromLocationParts(
   location: Pick<Location, 'origin' | 'port' | 'protocol' | 'hostname'>,
 ): string {
   const { origin, port, protocol, hostname } = location;
-  if (CREW_SERVICE_PORTS.has(port)) return origin;
-  return `${protocol}//${hostname}:${DEFAULT_API_PORT}`;
+  if (protocol === 'http:' && SPLIT_DEV_SERVER_PORTS.has(port)) {
+    return `${protocol}//${hostname}:${DEFAULT_API_PORT}`;
+  }
+  return origin;
 }
 
 /**
