@@ -3,11 +3,27 @@
 }
 
 .rv-message {
+  --rv-message-actions-opacity: 0;
+  --rv-message-actions-pointer-events: none;
+
   display: grid;
   grid-template-columns: var(--rv-density-row) minmax(0, 1fr);
   gap: var(--rv-space-md);
   padding: var(--rv-message-padding-y) var(--rv-space-lg);
   border-bottom: 1px solid var(--rv-color-border);
+}
+
+.rv-message:hover,
+.rv-message:focus-within {
+  --rv-message-actions-opacity: 1;
+  --rv-message-actions-pointer-events: auto;
+}
+
+@media (hover: none) {
+  .rv-message {
+    --rv-message-actions-opacity: 1;
+    --rv-message-actions-pointer-events: auto;
+  }
 }
 
 .rv-message--search-match {

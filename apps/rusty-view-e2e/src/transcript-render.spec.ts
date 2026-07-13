@@ -241,6 +241,17 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(page.locator('.rv-message--user')).toHaveCount(2);
   await expect(page.locator('.rv-message--assistant')).toHaveCount(1);
 
+  // Message actions stay visually quiet until their owning message is hovered.
+  // The action row remains in the DOM so keyboard focus can reveal it via the
+  // message's :focus-within state.
+  const assistantMessage = page.locator('.rv-message--assistant');
+  const messageActions = assistantMessage.locator('.rv-revision__actions');
+  await expect(messageActions).toHaveCSS('opacity', '0');
+  await assistantMessage.hover();
+  await expect(messageActions).toHaveCSS('opacity', '1');
+  await page.locator('.rv-message--user').first().hover();
+  await expect(messageActions).toHaveCSS('opacity', '0');
+
   // The tool call renders inline as a collapsible block with name + status,
   // collapsed by default (no huge result JSON dumped).
   const toolBlock = page.locator('.rv-block--tool');

@@ -19,6 +19,12 @@
   gap: var(--rv-space-xs);
 }
 
+.rv-revision__actions {
+  opacity: var(--rv-message-actions-opacity, 1);
+  pointer-events: var(--rv-message-actions-pointer-events, auto);
+  transition: opacity 0.15s ease;
+}
+
 .rv-revision__button,
 .rv-revision__select {
   min-height: var(--rv-density-control-sm);
