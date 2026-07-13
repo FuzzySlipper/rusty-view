@@ -265,6 +265,7 @@ export class ChatTheme {
       // Persisted objects from before task #5745 do not contain these fields;
       // absence must preserve the established visible-by-default shell.
       showMessageActions: settings.showMessageActions !== false,
+      autoExpandReasoning: settings.autoExpandReasoning === true,
       showSessionStatusBar: settings.showSessionStatusBar !== false,
       showProfiles: settings.showProfiles !== false,
       showInspector: settings.showInspector !== false,

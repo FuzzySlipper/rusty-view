@@ -137,6 +137,9 @@
   class="rv-transcript"
   data-testid="transcript-viewport"
   (scroll)="onScroll()"
+  (wheel)="onWheel($event)"
+  (touchstart)="onTouchStart()"
+  (pointerdown)="onPointerDown($event)"
 >
   <div
     *cdkVirtualFor="let message of renderMessages(); trackBy: trackByMessageId"
@@ -153,6 +156,7 @@
       [alternateSlot]="alternateSlotFor(message.id)"
       [revisionCapabilities]="revisionCapabilities()"
       [showRevisionActions]="showRevisionActions()"
+      [autoExpandReasoning]="autoExpandReasoning()"
       (revisionAction)="onRevisionAction($event)"
     />
   </div>

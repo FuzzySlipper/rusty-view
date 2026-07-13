@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ChatMessage } from '@rusty-view/chat-domain';
+import { transcriptTailChanged } from './transcript-viewport';
 
 /**
  * Unit tests for the scroll anchor preservation logic.
@@ -126,5 +127,35 @@ describe('countPrependedMessages', () => {
     for (let i = 0; i < 100; i++) current.push(makeMessage(`m${i}`));
 
     expect(countPrependedMessages(prev, current)).toBe(50);
+  });
+});
+
+describe('transcriptTailChanged', () => {
+  it('ignores idle projection refreshes with fresh but identical objects', () => {
+    const previous = [makeMessage('a'), makeMessage('b')];
+    const refreshed = [makeMessage('a'), makeMessage('b')];
+
+    expect(transcriptTailChanged(previous, refreshed)).toBe(false);
+  });
+
+  it('detects streamed content growth at the tail', () => {
+    const original = makeMessage('a');
+    const originalBlock = original.blocks[0];
+    if (originalBlock === undefined) throw new Error('expected message block');
+    const previous = [original];
+    const current: ChatMessage[] = [
+      {
+        ...original,
+        status: 'streaming',
+        blocks: [
+          {
+            ...originalBlock,
+            content: 'Message a plus a streamed delta',
+          },
+        ],
+      },
+    ];
+
+    expect(transcriptTailChanged(previous, current)).toBe(true);
   });
 });

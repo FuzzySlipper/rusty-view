@@ -138,6 +138,8 @@ export class MessageBlockComponent {
   protected readonly markdownPolicy = inject(TRANSCRIPT_MARKDOWN_POLICY);
   private lastToolDebugKey: string | undefined;
   private lastBlockDetailKey: string | undefined;
+  private lastExpansionBlockId: string | undefined;
+  private lastAutoExpandReasoning = false;
 
   readonly block = input.required<MessageBlock>();
   readonly message = input<ChatMessage | undefined>(undefined);
@@ -146,6 +148,7 @@ export class MessageBlockComponent {
   readonly workerThreshold = input<number>(2_000);
   readonly searchQuery = input<string>('');
   readonly searchMatched = input<boolean>(false);
+  readonly autoExpandReasoning = input<boolean>(false);
 
   protected readonly expanded = signal(false);
   /** Per-block override: when true, show raw text regardless of global mode. */
@@ -310,6 +313,24 @@ export class MessageBlockComponent {
   );
 
   constructor() {
+    // Apply the reasoning preference only when this view starts rendering a
+    // different block, or when the preference itself changes. Streaming
+    // content updates keep the same block id, so a manual collapse is not
+    // immediately undone by the next reasoning delta.
+    effect(() => {
+      const block = this.block();
+      const autoExpand = this.autoExpandReasoning();
+      if (block.id !== this.lastExpansionBlockId) {
+        this.lastExpansionBlockId = block.id;
+        this.lastAutoExpandReasoning = autoExpand;
+        if (block.kind === 'reasoning') this.expanded.set(autoExpand);
+        return;
+      }
+      if (autoExpand === this.lastAutoExpandReasoning) return;
+      this.lastAutoExpandReasoning = autoExpand;
+      if (block.kind === 'reasoning') this.expanded.set(autoExpand);
+    });
+
     // When the text block content changes OR the render mode changes,
     // render (or clear) formatted content accordingly.
     effect(() => {

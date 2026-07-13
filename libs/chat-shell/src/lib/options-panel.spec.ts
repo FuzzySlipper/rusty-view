@@ -53,6 +53,7 @@ describe('OptionsPanelComponent', () => {
     expect(host.textContent).toContain('Composer Height');
     expect(host.textContent).toContain('Message IDs');
     expect(host.textContent).toContain('Message action buttons');
+    expect(host.textContent).toContain('Auto-expand reasoning blocks');
 
     const messageIds = Array.from(host.querySelectorAll('label')).find(
       (label) => label.textContent?.includes('Message IDs') ?? false,
@@ -69,6 +70,14 @@ describe('OptionsPanelComponent', () => {
     messageActions?.click();
     fixture.detectChanges();
     expect(theme.settings().showMessageActions).toBe(false);
+
+    const autoExpandReasoning = host.querySelector<HTMLInputElement>(
+      '[data-testid="appearance-auto-expand-reasoning"]',
+    );
+    autoExpandReasoning?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(theme.settings().autoExpandReasoning).toBe(true);
   });
 
   it('updates and resets the persisted composer height preference', async () => {

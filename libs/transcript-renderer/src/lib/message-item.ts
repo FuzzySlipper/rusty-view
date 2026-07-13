@@ -46,6 +46,7 @@ export class MessageItemComponent {
   readonly alternateSlot = input<MessageAlternateSlot | undefined>(undefined);
   readonly revisionCapabilities = input<MessageRevisionCapabilities>({});
   readonly showRevisionActions = input<boolean>(true);
+  readonly autoExpandReasoning = input<boolean>(false);
   readonly revisionAction = output<MessageRevisionAction>();
 
   protected readonly decoration = computed<ChatMessageDecoration>(() => {

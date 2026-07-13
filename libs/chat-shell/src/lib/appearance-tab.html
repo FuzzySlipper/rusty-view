@@ -166,6 +166,15 @@
       <label class="rv-appearance__check">
         <input
           type="checkbox"
+          data-testid="appearance-auto-expand-reasoning"
+          [checked]="theme.settings().autoExpandReasoning"
+          (change)="toggleAutoExpandReasoning($event)"
+        />
+        <span>Auto-expand reasoning blocks</span>
+      </label>
+      <label class="rv-appearance__check">
+        <input
+          type="checkbox"
           data-testid="appearance-session-status-bar"
           [checked]="theme.settings().showSessionStatusBar"
           (change)="toggleShowSessionStatusBar($event)"

@@ -194,6 +194,8 @@ export interface AppearanceSettings {
   readonly showMessageIds: boolean;
   /** Whether generic assistant-message action buttons are rendered. */
   readonly showMessageActions: boolean;
+  /** Whether reasoning blocks open automatically when first rendered. */
+  readonly autoExpandReasoning: boolean;
   /** Whether the selected session status bar is shown above the composer. */
   readonly showSessionStatusBar: boolean;
   /** Whether the reusable debug shell's profiles/agents sidebar is visible. */
@@ -278,6 +280,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   showTimestamps: false,
   showMessageIds: false,
   showMessageActions: true,
+  autoExpandReasoning: false,
   showSessionStatusBar: true,
   showProfiles: true,
   showInspector: true,

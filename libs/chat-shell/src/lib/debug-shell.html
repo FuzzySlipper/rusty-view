@@ -106,6 +106,7 @@
           [snapshots]="externalSelected() ? [] : store.snapshots()"
           [revisionCapabilities]="revisionCapabilities"
           [showRevisionActions]="theme.settings().showMessageActions"
+          [autoExpandReasoning]="theme.settings().autoExpandReasoning"
           (activeBranchSelected)="onActiveBranchSelected($event)"
           (revisionRequested)="onRevisionRequested($event)"
         />

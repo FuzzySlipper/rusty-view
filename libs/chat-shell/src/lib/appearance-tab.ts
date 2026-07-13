@@ -194,6 +194,10 @@ export class AppearanceTabComponent {
     this.updateBoolean('showMessageActions', event);
   }
 
+  protected toggleAutoExpandReasoning(event: Event): void {
+    this.updateBoolean('autoExpandReasoning', event);
+  }
+
   protected toggleShowSessionStatusBar(event: Event): void {
     this.updateBoolean('showSessionStatusBar', event);
   }
@@ -243,6 +247,7 @@ export class AppearanceTabComponent {
       | 'showTimestamps'
       | 'showMessageIds'
       | 'showMessageActions'
+      | 'autoExpandReasoning'
       | 'showSessionStatusBar',
     event: Event,
   ): void {

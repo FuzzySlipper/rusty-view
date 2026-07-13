@@ -107,6 +107,9 @@ export class TranscriptViewportComponent {
   /** Whether generic message actions are rendered. Variant navigation remains available. */
   readonly showRevisionActions = input<boolean>(true);
 
+  /** Whether reasoning blocks should open when first rendered. */
+  readonly autoExpandReasoning = input<boolean>(false);
+
   /** Emits when the user asks the transcript to jump to a tree target. */
   readonly navigationRequested = output<ConversationNavigationTarget>();
   readonly activeBranchSelected = output<string>();
@@ -121,6 +124,7 @@ export class TranscriptViewportComponent {
   private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
 
   protected readonly isAtBottom = signal(true);
+  private readonly followingTail = signal(true);
   protected readonly showScrollToBottom = computed(
     () => this.renderMessages().length > 0 && !this.isAtBottom(),
   );
@@ -131,6 +135,9 @@ export class TranscriptViewportComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly pendingSeekTimers = new Set<ReturnType<typeof setTimeout>>();
+  private tailSettleTimer: ReturnType<typeof setTimeout> | undefined;
+  private tailFollowGeneration = 0;
+  private tailFollowRenderPending = false;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -243,6 +250,9 @@ export class TranscriptViewportComponent {
         clearTimeout(timer);
       }
       this.pendingSeekTimers.clear();
+      if (this.tailSettleTimer !== undefined) {
+        clearTimeout(this.tailSettleTimer);
+      }
     });
 
     // Keep the rendered data in sync with the input once the viewport is ready.
@@ -291,13 +301,15 @@ export class TranscriptViewportComponent {
       if (msgs.length === 0) return;
 
       const prependedCount = countPrependedMessages(prev, msgs);
+      const tailChanged = transcriptTailChanged(prev, msgs);
 
       const replaced = messagesWereReplaced(prev, msgs);
       if (replaced) {
         this.isAtBottom.set(true);
+        this.resumeTailFollow();
       }
 
-      if (prependedCount > 0 && !this.isAtBottom()) {
+      if (prependedCount > 0 && !this.followingTail()) {
         // Older history was prepended above the viewport. Preserve the anchor
         // so the user doesn't see a jump.
         this.afterNextRender(() => {
@@ -306,10 +318,8 @@ export class TranscriptViewportComponent {
         return;
       }
 
-      if (this.tailFollow() && this.isAtBottom()) {
-        this.afterNextRender(() => {
-          this.scrollToBottom();
-        });
+      if (tailChanged && this.tailFollow() && this.followingTail()) {
+        this.requestTailFollow();
       }
     });
 
@@ -349,6 +359,29 @@ export class TranscriptViewportComponent {
   /** Called on viewport scroll to track whether the user is at the bottom. */
   protected onScroll(): void {
     this.recomputeBottomState();
+    if (this.isAtBottom() && !this.followingTail()) {
+      this.followingTail.set(true);
+    }
+  }
+
+  /** An upward wheel gesture is an explicit request to inspect older content. */
+  protected onWheel(event: WheelEvent): void {
+    if (event.deltaY < 0) this.pauseTailFollow();
+  }
+
+  /** Touch scrolling always begins under user control. */
+  protected onTouchStart(): void {
+    this.pauseTailFollow();
+  }
+
+  /** Stop pending tail settlement before a native scrollbar drag begins. */
+  protected onPointerDown(event: PointerEvent): void {
+    const host = this.viewport().elementRef.nativeElement;
+    const bounds = host.getBoundingClientRect();
+    const scrollbarWidth = Math.max(16, host.offsetWidth - host.clientWidth);
+    if (event.clientX >= bounds.right - scrollbarWidth) {
+      this.pauseTailFollow();
+    }
   }
 
   private recomputeBottomState(): void {
@@ -363,8 +396,44 @@ export class TranscriptViewportComponent {
   scrollToBottom(): void {
     this.cancelPendingSeeks();
     this.isAtBottom.set(true);
+    this.resumeTailFollow();
+    const generation = this.tailFollowGeneration;
     this.scrollToBottomOffset();
-    this.settleScrollToBottom(0);
+    this.settleScrollToBottom(0, generation);
+  }
+
+  private requestTailFollow(): void {
+    if (this.tailFollowRenderPending) return;
+    const generation = this.tailFollowGeneration;
+    this.tailFollowRenderPending = true;
+    this.afterNextRender(() => {
+      if (generation !== this.tailFollowGeneration) return;
+      this.tailFollowRenderPending = false;
+      if (!this.tailFollow() || !this.followingTail()) return;
+      this.scrollToBottomOffset();
+      this.settleScrollToBottom(0, generation);
+    });
+  }
+
+  private pauseTailFollow(): void {
+    if (!this.followingTail()) return;
+    this.followingTail.set(false);
+    this.cancelTailFollowWork();
+    this.cancelPendingSeeks();
+  }
+
+  private resumeTailFollow(): void {
+    this.cancelTailFollowWork();
+    this.followingTail.set(true);
+  }
+
+  private cancelTailFollowWork(): void {
+    this.tailFollowGeneration += 1;
+    this.tailFollowRenderPending = false;
+    if (this.tailSettleTimer !== undefined) {
+      clearTimeout(this.tailSettleTimer);
+      this.tailSettleTimer = undefined;
+    }
   }
 
   private scrollToBottomOffset(): void {
@@ -375,6 +444,7 @@ export class TranscriptViewportComponent {
   }
 
   scrollToMessageId(messageId: string): void {
+    this.pauseTailFollow();
     this.cancelPendingSeeks();
     const msgs = this.currentMessagesForScroll();
     const index = msgs.findIndex((m) => m.id === messageId);
@@ -571,11 +641,21 @@ export class TranscriptViewportComponent {
     return null;
   }
 
-  private settleScrollToBottom(attempt: number): void {
+  private settleScrollToBottom(attempt: number, generation: number): void {
     if (attempt >= 12) return;
-    const timer = setTimeout(() => {
-      this.pendingSeekTimers.delete(timer);
+    if (this.tailSettleTimer !== undefined) {
+      clearTimeout(this.tailSettleTimer);
+    }
+    this.tailSettleTimer = setTimeout(() => {
+      this.tailSettleTimer = undefined;
       this.afterNextRender(() => {
+        if (
+          generation !== this.tailFollowGeneration ||
+          !this.tailFollow() ||
+          !this.followingTail()
+        ) {
+          return;
+        }
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
         // Autosize may temporarily report a zero bottom offset while its
         // estimator still has not materialized the actual last row. Stopping
@@ -599,10 +679,9 @@ export class TranscriptViewportComponent {
         } else {
           this.scrollToBottomOffset();
         }
-        this.settleScrollToBottom(attempt + 1);
+        this.settleScrollToBottom(attempt + 1, generation);
       });
     }, 50);
-    this.pendingSeekTimers.add(timer);
   }
 
   private isTailMaterialized(): boolean {
@@ -647,6 +726,34 @@ export class TranscriptViewportComponent {
     // remeasured and repositioned items after the data change.
     vp.scrollToOffset(scrollOffsetFromTop);
   }
+}
+
+/**
+ * Detect changes that can alter the transcript tail's height or identity.
+ * Polling/projection layers may emit fresh arrays containing identical data;
+ * those idle refreshes must not restart auto-scroll settlement.
+ */
+export function transcriptTailChanged(
+  previous: readonly ChatMessage[],
+  current: readonly ChatMessage[],
+): boolean {
+  if (previous.length !== current.length) return true;
+  const before = previous.at(-1);
+  const after = current.at(-1);
+  if (before === after) return false;
+  if (before === undefined || after === undefined) return before !== after;
+  if (before.id !== after.id || before.status !== after.status) return true;
+  if (before.blocks.length !== after.blocks.length) return true;
+  return before.blocks.some((block, index) => {
+    const next = after.blocks[index];
+    return (
+      next === undefined ||
+      block.id !== next.id ||
+      block.kind !== next.kind ||
+      block.content !== next.content ||
+      block.renderPolicy !== next.renderPolicy
+    );
+  });
 }
 
 /** Detect a session/thread replacement so the new transcript opens at its tail. */

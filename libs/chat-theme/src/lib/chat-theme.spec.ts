@@ -62,6 +62,7 @@ describe('ChatTheme', () => {
 
     await theme.update({
       showMessageActions: false,
+      autoExpandReasoning: true,
       showSessionStatusBar: false,
       showProfiles: false,
       showInspector: false,
@@ -69,6 +70,7 @@ describe('ChatTheme', () => {
 
     expect(await storage.load()).toMatchObject({
       showMessageActions: false,
+      autoExpandReasoning: true,
       showSessionStatusBar: false,
       showProfiles: false,
       showInspector: false,

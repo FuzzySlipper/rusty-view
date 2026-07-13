@@ -154,6 +154,36 @@ describe('MessageBlockComponent', () => {
     expect(host.textContent).toContain('tool_call');
   });
 
+  it('auto-expands reasoning without overriding a manual streaming collapse', async () => {
+    const block = makeBlock({
+      id: 'reasoning-1',
+      kind: 'reasoning',
+      content: 'Initial reasoning',
+      renderPolicy: 'collapsed',
+    });
+    const fixture = await createBlock(block);
+    fixture.componentRef.setInput('autoExpandReasoning', true);
+    fixture.detectChanges();
+
+    const toggle = fixture.nativeElement.querySelector(
+      '[data-testid="reasoning-toggle"]',
+    ) as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.textContent).toContain('Initial reasoning');
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    fixture.componentRef.setInput('block', {
+      ...block,
+      content: 'Initial reasoning plus a streamed delta',
+    });
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(fixture.nativeElement.textContent).not.toContain('streamed delta');
+  });
+
   it('renders service notices as distinct non-collapsible blocks', async () => {
     const fixture = await createBlock(
       makeBlock({

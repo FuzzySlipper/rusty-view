@@ -55,7 +55,7 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
 
 async function readAppearanceSetting(
   page: Page,
-  key: 'showInspector',
+  key: 'showInspector' | 'autoExpandReasoning',
 ): Promise<unknown> {
   return page.evaluate(
     (settingKey) =>
@@ -152,6 +152,28 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
   const latest = page.getByTestId('transcript-scroll-to-bottom');
   await expect(latest).toBeVisible();
   await latest.evaluate((button: HTMLButtonElement) => button.click());
+  await transcript.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    element.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: bounds.right - 1,
+        clientY: bounds.top + 20,
+      }),
+    );
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  const heldScrollTop = await transcript.evaluate(
+    (element) =>
+      new Promise<number>((resolve) => {
+        setTimeout(() => resolve(element.scrollTop), 750);
+      }),
+  );
+  expect(heldScrollTop).toBeLessThanOrEqual(1);
+  await expect(latest).toBeVisible();
+
+  await latest.evaluate((button: HTMLButtonElement) => button.click());
   await expect
     .poll(() =>
       transcript.evaluate(
@@ -191,6 +213,40 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
     .toBe(true);
 });
 
+test('auto-expand reasoning is live, manually collapsible, and persisted', async ({
+  page,
+}) => {
+  await installExternalSessionFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-1"]').click();
+
+  const reasoningToggle = page.getByTestId('reasoning-toggle').last();
+  await expect(reasoningToggle).toHaveAttribute('aria-expanded', 'false');
+
+  await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await page.getByTestId('appearance-auto-expand-reasoning').check();
+  await page.locator('.rv-options__close').click();
+  await expect(reasoningToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('reasoning-content').last()).toContainText(
+    'Inspect the final state',
+  );
+
+  await reasoningToggle.click();
+  await expect(reasoningToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect
+    .poll(() => readAppearanceSetting(page, 'autoExpandReasoning'))
+    .toBe(true);
+
+  await page.reload();
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-1"]').click();
+  await expect(page.getByTestId('reasoning-toggle').last()).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+});
+
 async function installExternalSessionFixture(page: Page): Promise<void> {
   const runtime = {
     runtimeId: 'runtime-1',
@@ -228,6 +284,11 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
     kind: 'agentMessage',
     text: `Transcript row ${index}: ${'content '.repeat(12)}`,
   }));
+  longItems.push({
+    itemId: 'reasoning-visible',
+    kind: 'reasoning',
+    text: 'Inspect the final state before answering.',
+  });
   const threads = [
     {
       ...baseThread,
