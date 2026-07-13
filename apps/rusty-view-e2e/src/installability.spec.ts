@@ -58,11 +58,14 @@ test('advertises an installable same-origin standalone web app without offline c
   await pageSession.detach();
 });
 
-test('installs, launches, and refreshes the Crew-backed standalone app @pwa-install-live', async (_fixtures, testInfo) => {
+test('installs, launches, and refreshes the Crew-backed standalone app @pwa-install-live', async ({
+  browserName,
+}, testInfo) => {
   test.skip(
     process.env['RV_PWA_INSTALL_RUN'] !== '1',
     'Set RV_PWA_INSTALL_RUN=1 and run headed under Xvfb for native install proof.',
   );
+  expect(browserName).toBe('chromium');
 
   const origin = new URL(testInfo.project.use.baseURL as string).origin;
   const profileDirectory = testInfo.outputPath('chromium-profile');
