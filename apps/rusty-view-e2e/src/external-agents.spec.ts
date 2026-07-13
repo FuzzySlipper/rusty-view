@@ -286,6 +286,11 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     .filter({ hasText: '#5516' });
   await expect(row).toContainText('#5516');
   await expect(row).toContainText('/home/dev/rusty-view');
+  await expect(row).toContainText('rusty-view · #5516');
+  await expect(row.locator('.rv-agent__cwd')).toHaveText(
+    '/home/dev/rusty-view',
+  );
+  await expect(row).not.toContainText('runtime-1');
   await row.click();
 
   await expect(page.getByTestId('external-turn-status')).toContainText(

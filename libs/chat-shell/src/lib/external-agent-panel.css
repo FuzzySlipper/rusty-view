@@ -153,14 +153,20 @@
   border-radius: 50%;
   background: var(--rv-color-accent);
 }
-.rv-agent__meta,
-.rv-agent__runtime {
+.rv-agent__meta {
   overflow: hidden;
   color: var(--rv-color-text-muted);
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.rv-agent__cwd {
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .rv-agents__error,
 .rv-agents__notice,

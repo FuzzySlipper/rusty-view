@@ -15,6 +15,7 @@ import {
 
 interface PanelApi {
   readonly cwd: WritableSignal<string>;
+  taskRefLabel(session: ExternalAgentSession): string;
   openCreator(): void;
   closeCreator(): void;
   updateDraft(target: WritableSignal<string>, event: Event): void;
@@ -27,6 +28,7 @@ function input(value: string): Event {
 
 async function createPanel(
   createSession: (request: ExternalAgentSessionCreateWrite) => Promise<unknown>,
+  sessions: readonly ExternalAgentSession[] = [],
 ) {
   const store = {
     readyRuntimes: signal([{ runtimeId: 'runtime-1' }]),
@@ -34,8 +36,12 @@ async function createPanel(
     selectedThread: signal(undefined),
     creatingSession: signal(false),
     creationError: signal<string | undefined>(undefined),
-    sessions: signal([]),
-    inventorySessions: signal([]),
+    error: signal<string | undefined>(undefined),
+    loading: signal(false),
+    loadingMore: signal(false),
+    hasMoreThreads: signal(false),
+    sessions: signal(sessions),
+    inventorySessions: signal(sessions),
     inventoryMode: signal('managed'),
     selectedSessionKey: signal(undefined),
     lifecyclePendingThreadIds: signal(new Set<string>()),
@@ -154,6 +160,39 @@ describe('ExternalAgentPanelComponent creation retries', () => {
 });
 
 describe('ExternalAgentPanelComponent inventory modes', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('uses a dedicated full-directory line instead of repeated runtime details', async () => {
+    const base = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    if (base.binding === undefined) throw new Error('expected bound session');
+    const session: ExternalAgentSession = {
+      ...base,
+      binding: {
+        ...base.binding,
+        taskRef: { project_id: 'rusty-view', task_id: '5764' },
+      },
+    };
+    const { fixture, panel } = await createPanel(
+      async () => undefined,
+      [session],
+    );
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector(
+      '[data-testid="external-agent-row"]',
+    ) as HTMLElement;
+    const cwd = row.querySelector('.rv-agent__cwd') as HTMLElement;
+    expect(panel.taskRefLabel(session)).toBe('rusty-view · #5764');
+    expect(row.textContent).toContain('rusty-view · #5764');
+    expect(cwd.textContent).toContain('/home/dev/rusty-view');
+    expect(cwd.title).toBe('/home/dev/rusty-view');
+    expect(row.textContent).not.toContain('runtime-1');
+  });
+
   it('keeps managed and attention-bearing sessions quiet across a 150-thread inventory', () => {
     const sessions = Array.from({ length: 150 }, (_, index) =>
       inventorySession(index, {

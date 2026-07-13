@@ -97,6 +97,17 @@ export class ExternalAgentPanelComponent {
     void this.store.selectSession(session);
   }
 
+  protected taskRefLabel(session: ExternalAgentSession): string {
+    const taskRef = session.binding?.taskRef;
+    if (taskRef === undefined || taskRef === null) return 'unmapped';
+    const projectId = taskRef.project_id?.trim();
+    const taskId = taskRef.task_id?.trim();
+    if (projectId && taskId) return `${projectId} · #${taskId}`;
+    if (projectId) return projectId;
+    if (taskId) return `#${taskId}`;
+    return 'unmapped';
+  }
+
   protected updateQuery(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
   }
