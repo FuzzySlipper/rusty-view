@@ -1,0 +1,287 @@
+import { expect, test, type Page } from '@playwright/test';
+
+test('focuses a large native inventory and archives then restores through Crew', async ({
+  page,
+}) => {
+  await installHistoryFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.getByTestId('external-agents-tab').click();
+
+  await expect(page.getByTestId('external-agent-row')).toHaveCount(3);
+  await expect(page.getByTestId('external-agent-counts')).toContainText(
+    'Loaded: 2 managed · 98 native-only · 1 attention',
+  );
+  await expect(page.locator('[data-thread-id="thread-0"]')).toContainText(
+    'Crew active',
+  );
+  const attentionArchive = page
+    .locator('[data-thread-id="thread-99"]')
+    .getByTestId('external-agent-archive');
+  await expect(attentionArchive).toBeDisabled();
+  await expect(attentionArchive).toHaveAttribute(
+    'title',
+    'Resolve the pending interaction first.',
+  );
+
+  await page.getByTestId('external-agent-mode-all').click();
+  await expect(page.getByTestId('external-agent-row')).toHaveCount(100);
+  await page.getByTestId('external-agent-load-more').click();
+  await expect(page.getByTestId('external-agent-row')).toHaveCount(105);
+
+  const disposable = page.locator('[data-thread-id="thread-50"]');
+  page.once('dialog', (dialog) => dialog.accept());
+  await disposable.getByTestId('external-agent-archive').click();
+  await expect(disposable).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText(
+    'Archived native Codex thread thread-50',
+  );
+
+  await page.getByTestId('external-agent-mode-archived').click();
+  const archived = page.locator('[data-thread-id="thread-50"]');
+  await expect(archived).toBeVisible();
+  await archived.getByTestId('external-agent-restore').click();
+  await expect(archived).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText(
+    'Restored native Codex thread thread-50',
+  );
+
+  await page.getByTestId('external-agent-mode-all').click();
+  const deletable = page.locator('[data-thread-id="thread-51"]');
+  page.once('dialog', (dialog) => dialog.accept());
+  await deletable.getByTestId('external-agent-archive').click();
+  await page.getByTestId('external-agent-mode-archived').click();
+  const permanentlyDelete = page.locator('[data-thread-id="thread-51"]');
+  page.once('dialog', (dialog) => dialog.accept('thread-51'));
+  await permanentlyDelete.getByTestId('external-agent-delete').click();
+  await expect(permanentlyDelete).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText(
+    'Deleted native Codex thread thread-51',
+  );
+});
+
+test('renders commentary, activity, and one final answer identically after reload', async ({
+  page,
+}) => {
+  await installHistoryFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-0"]').click();
+
+  const phases = page.locator('[data-message-phase]');
+  await expect(phases).toHaveCount(2);
+  await expect(phases.nth(0)).toHaveAttribute(
+    'data-message-phase',
+    'commentary',
+  );
+  await expect(page.locator('[data-block-kind="command"]')).toBeVisible();
+  await expect(phases.nth(1)).toHaveAttribute(
+    'data-message-phase',
+    'final_answer',
+  );
+  await expect(phases.nth(1)).toContainText('Final answer from Codex.');
+
+  const before = await page
+    .getByTestId('transcript-viewport')
+    .evaluate((element) => element.textContent ?? '');
+  await page.reload();
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-0"]').click();
+  await expect(page.locator('[data-message-phase]')).toHaveCount(2);
+  await expect(page.getByTestId('transcript-viewport')).toHaveText(before);
+});
+
+async function installHistoryFixture(page: Page): Promise<void> {
+  const runtime = {
+    runtimeId: 'runtime-1',
+    kind: 'codex_app_server',
+    desiredState: 'enabled',
+    observedState: 'ready',
+    processOwnership: 'attached',
+    endpoint: { transport: 'unix_web_socket', address: '/run/codex.sock' },
+    executableSha256: 'exe',
+    protocolSchemaSha256: 'schema',
+    expectedCliVersion: '0.144.1',
+    revision: 1,
+    createdAt: '2026-07-12T00:00:00Z',
+    updatedAt: '2026-07-12T00:00:00Z',
+  };
+  const controller = {
+    runtimeId: 'runtime-1',
+    driverState: 'ready',
+    controllerInstanceId: 'controller-1',
+    controllerGeneration: 1,
+    leaseExpiresAt: '2026-07-12T01:00:00Z',
+    bindingResumeFailures: [],
+  };
+  const phaseTurns = [
+    {
+      turnId: 'turn-phase',
+      status: 'completed',
+      startedAt: 1,
+      completedAt: 2,
+      durationMs: 1,
+      items: [
+        {
+          itemId: 'commentary',
+          kind: 'agentMessage',
+          text: 'Checking the browser state.',
+          messagePhase: 'commentary',
+        },
+        {
+          itemId: 'command',
+          kind: 'commandExecution',
+          text: 'pnpm test\n42 passed',
+          status: 'completed',
+        },
+        {
+          itemId: 'final',
+          kind: 'agentMessage',
+          text: 'Final answer from Codex.',
+          messagePhase: 'final_answer',
+        },
+      ],
+    },
+  ];
+  let activeThreads = Array.from({ length: 105 }, (_, index) => ({
+    threadId: `thread-${index}`,
+    sessionId: `session-${index}`,
+    parentThreadId: null,
+    preview: `Native Codex history ${index}`,
+    ephemeral: false,
+    modelProvider: 'openai',
+    createdAt: index + 1,
+    updatedAt: index + 1,
+    status: 'idle',
+    cwd: '/home/dev/rusty-view',
+    cliVersion: '0.144.1',
+    name: index < 2 ? `Managed agent ${index}` : null,
+    agentNickname: null,
+    agentRole: null,
+    turns: index === 0 ? phaseTurns : [],
+  }));
+  let archivedThreads: typeof activeThreads = [];
+  const bindings = activeThreads.slice(0, 2).map((thread, index) => ({
+    bindingId: `binding-${index}`,
+    runtimeId: 'runtime-1',
+    nativeThreadId: thread.threadId,
+    sessionId: thread.sessionId,
+    agentId: `agent-${index}`,
+    purpose: 'crew_agent',
+    status: 'active',
+    cwd: thread.cwd,
+    taskRef: { project_id: 'rusty-view', task_id: '5696' },
+    effectiveConfigFingerprint: 'config',
+    revision: 1,
+    createdAt: '2026-07-12T00:00:00Z',
+    updatedAt: '2026-07-12T00:00:00Z',
+  }));
+
+  await page.route('http://crew.test/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const ok = (data: unknown) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          data,
+          meta: { request_id: 'req', schema_version: 1 },
+        }),
+      });
+    if (url.pathname === '/v1/admin/profiles/registry') {
+      return ok({ items: [], total: 0, limit: 100, offset: 0 });
+    }
+    if (url.pathname === '/v1/external-runtimes') {
+      return ok({ runtimes: [runtime], controllers: [controller] });
+    }
+    if (url.pathname === '/v1/external-bindings') return ok({ bindings });
+    if (url.pathname === '/v1/external-interactions') {
+      return ok({
+        interactions: [
+          {
+            interactionId: 'attention-1',
+            runtimeId: 'runtime-1',
+            bindingId: 'native-only',
+            requestId: 'request-1',
+            nativeThreadId: 'thread-99',
+            kind: 'request_user_input',
+            prompt: { questions: [] },
+            allowedResponses: ['answers'],
+            status: 'pending',
+            requestedAt: '2026-07-12T00:00:00Z',
+            revision: 1,
+          },
+        ],
+      });
+    }
+    if (url.pathname.endsWith('/threads/read')) {
+      const body = request.postDataJSON() as { threadId?: string };
+      return ok({
+        thread: [...activeThreads, ...archivedThreads].find(
+          (thread) => thread.threadId === body.threadId,
+        ),
+      });
+    }
+    if (/\/threads\/[^/]+\/(archive|unarchive|delete)$/.test(url.pathname)) {
+      const parts = url.pathname.split('/');
+      const action = parts.at(-1) as 'archive' | 'unarchive' | 'delete';
+      const threadId = decodeURIComponent(parts.at(-2) ?? '');
+      if (action === 'archive') {
+        const thread = activeThreads.find((item) => item.threadId === threadId);
+        activeThreads = activeThreads.filter(
+          (item) => item.threadId !== threadId,
+        );
+        if (thread !== undefined)
+          archivedThreads = [...archivedThreads, thread];
+      } else if (action === 'unarchive') {
+        const thread = archivedThreads.find(
+          (item) => item.threadId === threadId,
+        );
+        archivedThreads = archivedThreads.filter(
+          (item) => item.threadId !== threadId,
+        );
+        if (thread !== undefined) activeThreads = [...activeThreads, thread];
+      } else {
+        archivedThreads = archivedThreads.filter(
+          (item) => item.threadId !== threadId,
+        );
+      }
+      return ok({
+        runtimeId: 'runtime-1',
+        threadId,
+        action,
+        outcome: 'applied',
+        ...(action === 'delete'
+          ? { nativeDeleted: true }
+          : { nativeArchived: action === 'archive' }),
+        bindings: [],
+      });
+    }
+    if (url.pathname.endsWith('/threads')) {
+      const source =
+        url.searchParams.get('archived') === 'true'
+          ? archivedThreads
+          : activeThreads;
+      const offset = Number(url.searchParams.get('cursor') ?? 0);
+      const items = source.slice(offset, offset + 100);
+      return ok({
+        items,
+        nextCursor:
+          offset + items.length < source.length
+            ? String(offset + items.length)
+            : null,
+        backwardsCursor: null,
+      });
+    }
+    if (url.pathname.endsWith('/events')) return ok({ events: [] });
+    if (url.pathname.endsWith('/stream')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: ': connected\n\n',
+      });
+    }
+    return route.fulfill({ status: 404, body: 'not mocked' });
+  });
+}

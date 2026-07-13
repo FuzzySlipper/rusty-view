@@ -615,6 +615,39 @@ describe('MessageItemComponent', () => {
     expect(host.textContent).toContain('The door creaks.');
   });
 
+  it('labels commentary and final-answer presentation without changing turn status', async () => {
+    const commentary = await createMessage(
+      makeMessage({
+        author: { role: 'assistant', displayName: 'Agent' },
+        status: 'completed',
+        metadata: { messagePhase: 'commentary' },
+      }),
+    );
+    const commentaryRow = commentary.nativeElement.querySelector(
+      '[data-testid="message-row"]',
+    ) as HTMLElement;
+    expect(commentaryRow.dataset['messagePhase']).toBe('commentary');
+    expect(commentaryRow.classList).toContain('rv-message--commentary');
+    expect(commentary.nativeElement.textContent).toContain('Commentary');
+
+    commentary.destroy();
+    TestBed.resetTestingModule();
+    const finalAnswer = await createMessage(
+      makeMessage({
+        author: { role: 'assistant', displayName: 'Agent' },
+        status: 'streaming',
+        metadata: { messagePhase: 'final_answer' },
+      }),
+    );
+    const finalRow = finalAnswer.nativeElement.querySelector(
+      '[data-testid="message-row"]',
+    ) as HTMLElement;
+    expect(finalRow.dataset['messagePhase']).toBe('final_answer');
+    expect(finalRow.classList).toContain('rv-message--final-answer');
+    expect(finalAnswer.nativeElement.textContent).toContain('Final answer');
+    expect(finalAnswer.nativeElement.textContent).toContain('typing');
+  });
+
   it('renders speaker avatar images with accessible labels', async () => {
     const fixture = await createMessage(
       makeMessage({

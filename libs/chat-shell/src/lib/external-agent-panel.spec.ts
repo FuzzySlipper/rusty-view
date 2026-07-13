@@ -1,10 +1,17 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ExternalAgentStore } from '@rusty-view/chat-store';
+import {
+  ExternalAgentStore,
+  type ExternalAgentSession,
+} from '@rusty-view/chat-store';
 import type { ExternalAgentSessionCreateWrite } from '@rusty-view/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ExternalAgentPanelComponent } from './external-agent-panel';
+import {
+  ExternalAgentPanelComponent,
+  filterExternalAgentSessions,
+  summarizeExternalAgentSessions,
+} from './external-agent-panel';
 
 interface PanelApi {
   readonly cwd: WritableSignal<string>;
@@ -28,6 +35,14 @@ async function createPanel(
     creatingSession: signal(false),
     creationError: signal<string | undefined>(undefined),
     sessions: signal([]),
+    selectedSessionKey: signal(undefined),
+    lifecyclePendingThreadIds: signal(new Set<string>()),
+    lifecycleNotice: signal(undefined),
+    interactions: signal([]),
+    setArchivedInventory: vi.fn(),
+    archiveThread: vi.fn(),
+    unarchiveThread: vi.fn(),
+    deleteThread: vi.fn(),
     refresh: vi.fn(),
     refreshCreationProfiles: vi.fn(),
     createSession: vi.fn(createSession),
@@ -134,3 +149,89 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     });
   });
 });
+
+describe('ExternalAgentPanelComponent inventory modes', () => {
+  it('keeps managed and attention-bearing sessions quiet across a 150-thread inventory', () => {
+    const sessions = Array.from({ length: 150 }, (_, index) =>
+      inventorySession(index, {
+        bound: index < 3,
+        attention: index === 120,
+        active: index === 121,
+      }),
+    );
+
+    expect(filterExternalAgentSessions(sessions, 'managed')).toHaveLength(5);
+    expect(filterExternalAgentSessions(sessions, 'attention')).toHaveLength(2);
+    expect(filterExternalAgentSessions(sessions, 'all')).toHaveLength(150);
+    expect(
+      filterExternalAgentSessions(sessions, 'managed', sessions[149]?.key),
+    ).toHaveLength(6);
+    expect(summarizeExternalAgentSessions(sessions)).toEqual({
+      bound: 3,
+      nativeOnly: 147,
+      attention: 1,
+      active: 1,
+    });
+  });
+});
+
+function inventorySession(
+  index: number,
+  options: { bound: boolean; attention: boolean; active: boolean },
+): ExternalAgentSession {
+  const threadId = `thread-${index}`;
+  return {
+    key: `runtime-1:${threadId}`,
+    runtime: {
+      runtimeId: 'runtime-1',
+      kind: 'codex_app_server',
+      desiredState: 'enabled',
+      observedState: 'ready',
+      processOwnership: 'attached',
+      endpoint: { transport: 'unix_web_socket', address: '/run/codex.sock' },
+      executableSha256: 'exe',
+      protocolSchemaSha256: 'schema',
+      expectedCliVersion: '0.144.1',
+      revision: 1,
+      createdAt: '',
+      updatedAt: '',
+    },
+    thread: {
+      threadId,
+      sessionId: `session-${index}`,
+      parentThreadId: null,
+      preview: threadId,
+      ephemeral: false,
+      modelProvider: 'openai',
+      createdAt: index,
+      updatedAt: index,
+      status: options.active ? 'active' : 'idle',
+      cwd: '/home/dev/rusty-view',
+      cliVersion: '0.144.1',
+      name: null,
+      agentNickname: null,
+      agentRole: null,
+      turns: [],
+    },
+    ...(options.bound
+      ? {
+          binding: {
+            bindingId: `binding-${index}`,
+            runtimeId: 'runtime-1',
+            nativeThreadId: threadId,
+            sessionId: `session-${index}`,
+            agentId: `agent-${index}`,
+            purpose: 'crew_agent',
+            status: 'active',
+            cwd: '/home/dev/rusty-view',
+            effectiveConfigFingerprint: 'config',
+            revision: 1,
+            createdAt: '',
+            updatedAt: '',
+          },
+        }
+      : {}),
+    unread: false,
+    needsAttention: options.attention,
+  };
+}

@@ -56,6 +56,8 @@ export class ExternalAgentStore {
   private readonly destroyRef = inject(DestroyRef);
   private stream: ExternalRuntimeEventStream | undefined;
   private polling = false;
+  private refreshQueued = false;
+  private readonly refreshIdleWaiters: Array<() => void> = [];
   private interactionsPolling = false;
   private bindingMutationRevision = 0;
   private selectedRuntimeEventCursor: number | undefined;
@@ -96,6 +98,9 @@ export class ExternalAgentStore {
   readonly creatingSession = signal(false);
   readonly creationError = signal<string | undefined>(undefined);
   readonly error = signal<string | undefined>(undefined);
+  readonly archivedInventory = signal(false);
+  readonly lifecyclePendingThreadIds = signal<ReadonlySet<string>>(new Set());
+  readonly lifecycleNotice = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
   readonly composerMode = signal<ExternalComposerMode>('auto');
 
@@ -219,8 +224,15 @@ export class ExternalAgentStore {
   }
 
   async refresh(): Promise<void> {
-    if (this.polling) return;
+    if (this.polling) {
+      this.refreshQueued = true;
+      await new Promise<void>((resolve) =>
+        this.refreshIdleWaiters.push(resolve),
+      );
+      return;
+    }
     this.polling = true;
+    const archivedInventory = this.archivedInventory();
     const bindingRevisionAtStart = this.bindingMutationRevision;
     this.loading.set(this.runtimes().length === 0);
     try {
@@ -255,6 +267,7 @@ export class ExternalAgentStore {
           const [listed, events] = await Promise.all([
             this.transport.external.listThreads(runtime.runtimeId, {
               limit: 100,
+              archived: archivedInventory,
             }),
             this.listAllEvents(
               runtime.runtimeId,
@@ -280,16 +293,18 @@ export class ExternalAgentStore {
               .flatMap((controller) => controller.bindingResumeFailures)
               .map((failure) => failure.bindingId),
           );
-          const missingBoundIds = refreshedBindings
-            .filter(
-              (binding) =>
-                binding.runtimeId === runtime.runtimeId &&
-                binding.nativeThreadId != null &&
-                !known.has(binding.nativeThreadId) &&
-                !failedResumeBindingIds.has(binding.bindingId),
-            )
-            .map((binding) => binding.nativeThreadId)
-            .filter((threadId): threadId is string => threadId != null);
+          const missingBoundIds = archivedInventory
+            ? []
+            : refreshedBindings
+                .filter(
+                  (binding) =>
+                    binding.runtimeId === runtime.runtimeId &&
+                    binding.nativeThreadId != null &&
+                    !known.has(binding.nativeThreadId) &&
+                    !failedResumeBindingIds.has(binding.bindingId),
+                )
+                .map((binding) => binding.nativeThreadId)
+                .filter((threadId): threadId is string => threadId != null);
           const recoveredReads = await Promise.allSettled(
             [...new Set(missingBoundIds)].map(async (threadId) =>
               this.transport.external.readThread(runtime.runtimeId, {
@@ -311,6 +326,7 @@ export class ExternalAgentStore {
           };
         }),
       );
+      if (archivedInventory !== this.archivedInventory()) return;
       this.threadCursors.update((current) =>
         Object.fromEntries(
           Object.entries(nextThreadCursors).map(([runtimeId, nextCursor]) => [
@@ -356,7 +372,23 @@ export class ExternalAgentStore {
     } finally {
       this.loading.set(false);
       this.polling = false;
+      if (this.refreshQueued) {
+        this.refreshQueued = false;
+        void this.refresh();
+      } else {
+        for (const resolve of this.refreshIdleWaiters.splice(0)) resolve();
+      }
     }
+  }
+
+  async setArchivedInventory(archived: boolean): Promise<void> {
+    if (this.archivedInventory() === archived) return;
+    this.archivedInventory.set(archived);
+    this.runtimeThreads.set([]);
+    this.threadCursors.set({});
+    this.fleetEvents.set([]);
+    this.loading.set(true);
+    await this.refresh();
   }
 
   async refreshInteractions(): Promise<void> {
@@ -607,6 +639,7 @@ export class ExternalAgentStore {
       (entry): entry is [string, string] => entry[1] !== null,
     );
     if (pending.length === 0) return;
+    const archivedInventory = this.archivedInventory();
     this.loadingMore.set(true);
     try {
       const pages = await Promise.all(
@@ -615,9 +648,11 @@ export class ExternalAgentStore {
           page: await this.transport.external.listThreads(runtimeId, {
             limit: 100,
             cursor,
+            archived: archivedInventory,
           }),
         })),
       );
+      if (archivedInventory !== this.archivedInventory()) return;
       this.runtimeThreads.update((current) => {
         let next = [...current];
         for (const { runtimeId, page } of pages) {
@@ -651,6 +686,61 @@ export class ExternalAgentStore {
       this.error.set(`Loading more sessions failed: ${errorMessage(error)}`);
     } finally {
       this.loadingMore.set(false);
+    }
+  }
+
+  async archiveThread(session: ExternalAgentSession): Promise<boolean> {
+    return this.mutateThreadLifecycle(session, 'archive');
+  }
+
+  async unarchiveThread(session: ExternalAgentSession): Promise<boolean> {
+    return this.mutateThreadLifecycle(session, 'unarchive');
+  }
+
+  async deleteThread(session: ExternalAgentSession): Promise<boolean> {
+    return this.mutateThreadLifecycle(session, 'delete');
+  }
+
+  private async mutateThreadLifecycle(
+    session: ExternalAgentSession,
+    action: 'archive' | 'unarchive' | 'delete',
+  ): Promise<boolean> {
+    const threadId = session.thread.threadId;
+    if (this.lifecyclePendingThreadIds().has(threadId)) return false;
+    this.lifecyclePendingThreadIds.update(
+      (current) => new Set([...current, threadId]),
+    );
+    try {
+      this.error.set(undefined);
+      this.lifecycleNotice.set(undefined);
+      const runtimeId = session.runtime.runtimeId;
+      const receipt =
+        action === 'archive'
+          ? await this.transport.external.archiveThread(runtimeId, threadId)
+          : action === 'unarchive'
+            ? await this.transport.external.unarchiveThread(runtimeId, threadId)
+            : await this.transport.external.deleteThread(runtimeId, threadId);
+      if (this.selectedSessionKey() === session.key) this.clearSelection();
+      this.lifecycleNotice.set(
+        `${action === 'unarchive' ? 'Restored' : action === 'archive' ? 'Archived' : 'Deleted'} native Codex thread ${threadId} (${receipt.outcome}).`,
+      );
+      this.runtimeThreads.update((threads) =>
+        threads.filter(
+          (entry) =>
+            entry.runtimeId !== runtimeId || entry.thread.threadId !== threadId,
+        ),
+      );
+      await this.refresh();
+      return true;
+    } catch (error) {
+      this.error.set(`${capitalize(action)} failed: ${errorMessage(error)}`);
+      return false;
+    } finally {
+      this.lifecyclePendingThreadIds.update((current) => {
+        const next = new Set(current);
+        next.delete(threadId);
+        return next;
+      });
     }
   }
 
@@ -793,6 +883,10 @@ function mergeBindings(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function capitalize(value: string): string {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }
 
 export function latestExternalTurnPhase(

@@ -84,12 +84,50 @@ describe('ExternalRuntimeHttpTransport', () => {
       controllers: [],
     });
     await expect(
-      transport.listThreads('runtime/a', { limit: 100, cursor: 'next' }),
+      transport.listThreads('runtime/a', {
+        limit: 100,
+        cursor: 'next',
+        archived: true,
+      }),
     ).resolves.toMatchObject({ items: [] });
     await expect(
       transport.submitControl('b', { kind: 'interrupt_turn', payload: {} }),
     ).resolves.toMatchObject({ status: 'applied' });
     expect(String(fetchImpl.mock.calls[1]?.[0])).toContain('runtime%2Fa');
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toContain('archived=true');
+  });
+
+  it('uses the generated native thread lifecycle routes', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input) => {
+        const action = new URL(String(input)).pathname.split('/').at(-1);
+        return json({
+          ok: true,
+          data: {
+            runtimeId: 'runtime/a',
+            threadId: 'thread/b',
+            action,
+            outcome: 'applied',
+            ...(action === 'delete'
+              ? { nativeDeleted: true }
+              : { nativeArchived: action === 'archive' }),
+            bindings: [],
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await transport.archiveThread('runtime/a', 'thread/b');
+    await transport.unarchiveThread('runtime/a', 'thread/b');
+    await transport.deleteThread('runtime/a', 'thread/b');
+
+    expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual([
+      'http://crew.test/v1/external-runtimes/runtime%2Fa/threads/thread%2Fb/archive',
+      'http://crew.test/v1/external-runtimes/runtime%2Fa/threads/thread%2Fb/unarchive',
+      'http://crew.test/v1/external-runtimes/runtime%2Fa/threads/thread%2Fb/delete',
+    ]);
   });
 
   it('reconnects an external event stream from its last sequence cursor', async () => {

@@ -94,6 +94,119 @@ describe('ExternalAgentStore', () => {
     ]);
   });
 
+  it('switches between active and archived paginated inventories explicitly', async () => {
+    const listThreads = vi.fn(
+      async (_runtimeId: string, query?: { archived?: boolean }) =>
+        page(
+          [thread(query?.archived ? 'thread-archived' : 'thread-active', 10)],
+          null,
+        ),
+    );
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads,
+    });
+
+    await store.refresh();
+    await store.setArchivedInventory(true);
+    expect(store.threads().map((item) => item.threadId)).toEqual([
+      'thread-archived',
+    ]);
+    expect(listThreads).toHaveBeenLastCalledWith(
+      'runtime-1',
+      expect.objectContaining({ archived: true }),
+    );
+
+    await store.setArchivedInventory(false);
+    expect(store.threads().map((item) => item.threadId)).toEqual([
+      'thread-active',
+    ]);
+  });
+
+  it('does not let a deferred active refresh overwrite an archived inventory switch', async () => {
+    const activePage = deferred<ReturnType<typeof page>>();
+    const listThreads = vi
+      .fn()
+      .mockImplementationOnce(() => activePage.promise)
+      .mockImplementationOnce(() =>
+        Promise.resolve(page([thread('thread-archived', 20)], null)),
+      );
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads,
+    });
+
+    const activeRefresh = store.refresh();
+    const archivedSwitch = store.setArchivedInventory(true);
+    activePage.resolve(page([thread('thread-active', 10)], null));
+    await Promise.all([activeRefresh, archivedSwitch]);
+
+    expect(store.threads().map((item) => item.threadId)).toEqual([
+      'thread-archived',
+    ]);
+    expect(listThreads).toHaveBeenLastCalledWith(
+      'runtime-1',
+      expect.objectContaining({ archived: true }),
+    );
+  });
+
+  it('does not append a deferred active page after switching to archived history', async () => {
+    const activePageTwo = deferred<ReturnType<typeof page>>();
+    const listThreads = vi
+      .fn()
+      .mockResolvedValueOnce(page([thread('thread-active-1', 10)], 'page-2'))
+      .mockImplementationOnce(() => activePageTwo.promise)
+      .mockResolvedValueOnce(page([thread('thread-archived', 30)], null));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads,
+    });
+    await store.refresh();
+
+    const loadMore = store.loadMoreThreads();
+    await store.setArchivedInventory(true);
+    activePageTwo.resolve(page([thread('thread-active-2', 20)], null));
+    await loadMore;
+
+    expect(store.threads().map((item) => item.threadId)).toEqual([
+      'thread-archived',
+    ]);
+  });
+
+  it('archives through Crew, clears selection, and reconciles the active list', async () => {
+    let archived = false;
+    const archiveThread = vi.fn(async () => {
+      archived = true;
+      return {
+        runtimeId: 'runtime-1',
+        threadId: 'thread-1',
+        action: 'archive' as const,
+        outcome: 'applied' as const,
+        nativeArchived: true,
+        bindings: [],
+      };
+    });
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () =>
+        page(archived ? [] : [thread('thread-1', 10)], null),
+      ),
+      archiveThread,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected refreshed session');
+    await store.selectSession(session);
+
+    await expect(store.archiveThread(session)).resolves.toBe(true);
+
+    expect(archiveThread).toHaveBeenCalledWith('runtime-1', 'thread-1');
+    expect(store.selectedSessionKey()).toBeUndefined();
+    expect(store.sessions()).toEqual([]);
+    expect(store.lifecycleNotice()).toContain('Archived native Codex thread');
+  });
+
   it('keeps healthy sessions when a stale binding thread cannot be recovered', async () => {
     const staleBinding = {
       ...externalBinding(),
@@ -198,6 +311,7 @@ describe('ExternalAgentStore', () => {
     expect(listThreads).toHaveBeenLastCalledWith('runtime-1', {
       limit: 100,
       cursor: 'page-3',
+      archived: false,
     });
     expect(store.threads().map((item) => item.threadId)).toEqual([
       'thread-1',
@@ -449,6 +563,9 @@ function setupStore(options: {
   listEvents?: ReturnType<typeof vi.fn>;
   readThread?: ReturnType<typeof vi.fn>;
   createAgentSession?: ReturnType<typeof vi.fn>;
+  archiveThread?: ReturnType<typeof vi.fn>;
+  unarchiveThread?: ReturnType<typeof vi.fn>;
+  deleteThread?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
     listRuntimes: vi.fn(async () => ({
@@ -465,6 +582,9 @@ function setupStore(options: {
     createAgentSession: options.createAgentSession ?? vi.fn(),
     sendMessage: options.sendMessage ?? vi.fn(),
     submitControl: options.submitControl ?? vi.fn(),
+    archiveThread: options.archiveThread ?? vi.fn(),
+    unarchiveThread: options.unarchiveThread ?? vi.fn(),
+    deleteThread: options.deleteThread ?? vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [

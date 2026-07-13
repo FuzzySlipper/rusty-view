@@ -20,6 +20,7 @@ type ExternalAgentSessionCreateIntent = Omit<
   ExternalAgentSessionCreateWrite,
   'idempotencyKey'
 >;
+type ExternalAgentInventoryMode = 'managed' | 'attention' | 'all' | 'archived';
 
 @Component({
   selector: 'rv-external-agent-panel',
@@ -29,6 +30,12 @@ type ExternalAgentSessionCreateIntent = Omit<
 })
 export class ExternalAgentPanelComponent {
   protected readonly store = inject(ExternalAgentStore);
+  protected readonly inventoryModes: readonly ExternalAgentInventoryMode[] = [
+    'managed',
+    'attention',
+    'all',
+    'archived',
+  ];
   protected readonly query = signal('');
   protected readonly creating = signal(false);
   protected readonly runtimeId = signal('');
@@ -38,6 +45,8 @@ export class ExternalAgentPanelComponent {
   protected readonly taskProjectId = signal('');
   protected readonly taskId = signal('');
   protected readonly attempted = signal(false);
+  protected readonly inventoryMode =
+    signal<ExternalAgentInventoryMode>('managed');
   private readonly creationAttemptKeys = loadCreationAttemptKeys();
 
   protected readonly cwdValidationError = computed(() => {
@@ -60,9 +69,14 @@ export class ExternalAgentPanelComponent {
   );
   protected readonly sessions = computed(() => {
     const query = this.query().trim().toLowerCase();
+    const filtered = filterExternalAgentSessions(
+      this.store.sessions(),
+      this.inventoryMode(),
+      this.store.selectedSessionKey(),
+    );
     return query === ''
-      ? this.store.sessions()
-      : this.store.sessions().filter((session) =>
+      ? filtered
+      : filtered.filter((session) =>
           [
             session.thread.name,
             session.thread.preview,
@@ -75,6 +89,9 @@ export class ExternalAgentPanelComponent {
           ),
         );
   });
+  protected readonly inventoryCounts = computed(() =>
+    summarizeExternalAgentSessions(this.store.sessions()),
+  );
 
   constructor() {
     void this.store.refresh();
@@ -87,6 +104,67 @@ export class ExternalAgentPanelComponent {
 
   protected updateQuery(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  protected async setInventoryMode(
+    mode: ExternalAgentInventoryMode,
+  ): Promise<void> {
+    if (this.inventoryMode() === mode) return;
+    this.inventoryMode.set(mode);
+    await this.store.setArchivedInventory(mode === 'archived');
+  }
+
+  protected lifecycleDisabledReason(
+    session: ExternalAgentSession,
+  ): string | undefined {
+    if (this.store.lifecyclePendingThreadIds().has(session.thread.threadId)) {
+      return 'A lifecycle request is already running.';
+    }
+    if (session.controller?.driverState !== 'ready') {
+      return 'The runtime controller is not ready.';
+    }
+    if (isActiveExternalSession(session)) {
+      return 'Finish or interrupt the active turn first.';
+    }
+    const hasPendingInteraction = this.store
+      .interactions()
+      .some(
+        (interaction) =>
+          interaction.runtimeId === session.runtime.runtimeId &&
+          interaction.nativeThreadId === session.thread.threadId &&
+          interaction.status === 'pending',
+      );
+    return hasPendingInteraction
+      ? 'Resolve the pending interaction first.'
+      : undefined;
+  }
+
+  protected async archive(session: ExternalAgentSession): Promise<void> {
+    const warning = session.binding
+      ? 'This also archives the associated Crew binding.'
+      : 'This thread has no Crew binding.';
+    if (
+      !globalThis.confirm(
+        `Archive native Codex thread ${session.thread.threadId}?\n\n${warning}\n${session.thread.cwd}`,
+      )
+    ) {
+      return;
+    }
+    await this.store.archiveThread(session);
+  }
+
+  protected async restore(session: ExternalAgentSession): Promise<void> {
+    await this.store.unarchiveThread(session);
+  }
+
+  protected async deletePermanently(
+    session: ExternalAgentSession,
+  ): Promise<void> {
+    const confirmation = globalThis.prompt(
+      `Permanently delete native Codex thread and archive related Crew bindings?\n\n${session.thread.cwd}\n\nType the thread ID to confirm:`,
+    );
+    if (confirmation !== session.thread.threadId) return;
+    await this.store.deleteThread(session);
   }
 
   protected openCreator(): void {
@@ -171,6 +249,46 @@ export class ExternalAgentPanelComponent {
     this.attempted.set(false);
     this.store.creationError.set(undefined);
   }
+}
+
+export function filterExternalAgentSessions(
+  sessions: readonly ExternalAgentSession[],
+  mode: ExternalAgentInventoryMode,
+  selectedKey?: string,
+): readonly ExternalAgentSession[] {
+  if (mode === 'all' || mode === 'archived') return sessions;
+  return sessions.filter((session) => {
+    if (session.key === selectedKey) return true;
+    const active = isActiveExternalSession(session);
+    return mode === 'attention'
+      ? session.needsAttention || active
+      : session.binding !== undefined || session.needsAttention || active;
+  });
+}
+
+export function summarizeExternalAgentSessions(
+  sessions: readonly ExternalAgentSession[],
+): {
+  readonly bound: number;
+  readonly nativeOnly: number;
+  readonly attention: number;
+  readonly active: number;
+} {
+  return {
+    bound: sessions.filter((session) => session.binding !== undefined).length,
+    nativeOnly: sessions.filter((session) => session.binding === undefined)
+      .length,
+    attention: sessions.filter((session) => session.needsAttention).length,
+    active: sessions.filter(isActiveExternalSession).length,
+  };
+}
+
+function isActiveExternalSession(session: ExternalAgentSession): boolean {
+  return (
+    session.phase === 'active' ||
+    session.phase === 'waiting_interaction' ||
+    session.thread.status === 'active'
+  );
 }
 
 function loadCreationAttemptKeys(): Record<string, string> {

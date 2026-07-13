@@ -4,6 +4,9 @@
   [attr.data-message-id]="message().id"
   [attr.data-message-role]="message().author.role"
   [attr.data-message-status]="message().status"
+  [attr.data-message-phase]="messagePhase()"
+  [class.rv-message--commentary]="messagePhase() === 'commentary'"
+  [class.rv-message--final-answer]="messagePhase() === 'final_answer'"
   [class]="roleClass()"
   [class.rv-message--decorated]="decoration().className !== undefined"
   [class.rv-message--search-match]="searchMatched()"
@@ -33,6 +36,11 @@
       <span class="rv-message__author" data-testid="message-author"
         >{{ authorLabel() }}</span
       >
+      @if (messagePhaseLabel()) {
+      <span class="rv-message__phase" data-testid="message-phase"
+        >{{ messagePhaseLabel() }}</span
+      >
+      }
       <time
         class="rv-message__timestamp"
         data-testid="message-timestamp"

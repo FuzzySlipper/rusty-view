@@ -115,6 +115,28 @@ export class MessageItemComponent {
     return '';
   });
 
+  protected readonly messagePhase = computed(() => {
+    const phase = this.message().metadata?.['messagePhase'];
+    return phase === 'commentary' ||
+      phase === 'final_answer' ||
+      phase === 'unknown'
+      ? phase
+      : undefined;
+  });
+
+  protected readonly messagePhaseLabel = computed(() => {
+    const phase = this.messagePhase();
+    return phase === 'commentary'
+      ? 'Commentary'
+      : phase === 'final_answer'
+        ? 'Final answer'
+        : phase === 'unknown'
+          ? 'Agent message'
+          : this.message().metadata?.['externalAgentText'] === true
+            ? 'Agent message'
+            : '';
+  });
+
   protected onRevisionAction(action: MessageRevisionAction): void {
     this.revisionAction.emit(action);
   }

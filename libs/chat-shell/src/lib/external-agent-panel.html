@@ -149,6 +149,25 @@
     </button>
   </form>
   } @else {
+  <div class="rv-agents__modes" role="group" aria-label="Agent inventory view">
+    @for (mode of inventoryModes; track mode) {
+    <button
+      type="button"
+      [attr.data-testid]="'external-agent-mode-' + mode"
+      [class.rv-agents__mode--active]="inventoryMode() === mode"
+      [attr.aria-pressed]="inventoryMode() === mode"
+      (click)="setInventoryMode(mode)"
+    >
+      {{ mode === 'managed' ? 'Managed' : mode === 'attention' ? 'Attention' :
+      mode === 'all' ? 'All history' : 'Archived' }}
+    </button>
+    }
+  </div>
+  <div class="rv-agents__counts" data-testid="external-agent-counts">
+    Loaded: {{ inventoryCounts().bound }} managed · {{
+    inventoryCounts().nativeOnly }} native-only · {{ inventoryCounts().attention
+    }} attention · {{ inventoryCounts().active }} active
+  </div>
   <input
     class="rv-agents__search"
     type="search"
@@ -159,39 +178,80 @@
   />
   @if (store.error()) {
   <div class="rv-agents__error" role="alert">{{ store.error() }}</div>
+  } @if (store.lifecycleNotice()) {
+  <div class="rv-agents__notice" role="status">
+    {{ store.lifecycleNotice() }}
+  </div>
   }
   <div class="rv-agents__list">
     @for (session of sessions(); track session.key) {
-    <button
-      type="button"
+    <div
       class="rv-agent"
       data-testid="external-agent-row"
       [class.rv-agent--selected]="store.selectedSessionKey() === session.key"
       [attr.data-runtime-id]="session.runtime.runtimeId"
       [attr.data-thread-id]="session.thread.threadId"
       [attr.data-status]="session.phase ?? session.thread.status"
-      (click)="select(session)"
     >
-      <span class="rv-agent__title"
-        >{{ session.thread.name ?? session.thread.preview }}</span
-      >
-      <span class="rv-agent__state">
-        <span>{{ session.phase ?? session.thread.status }}</span>
-        @if (session.needsAttention) {
-        <span class="rv-agent__attention">attention</span> } @if
-        (session.unread) {
-        <span class="rv-agent__unread" aria-label="Unread activity"></span> }
-      </span>
-      <span class="rv-agent__meta"
-        >{{ session.binding?.taskRef?.task_id ? '#' +
-        session.binding?.taskRef?.task_id : 'unmapped' }} · {{
-        session.thread.cwd }}</span
-      >
-      <span class="rv-agent__runtime"
-        >{{ session.runtime.runtimeId }} · {{ session.controller?.driverState ??
-        session.runtime.observedState }}</span
-      >
-    </button>
+      <button type="button" class="rv-agent__select" (click)="select(session)">
+        <span class="rv-agent__title"
+          >{{ session.thread.name ?? session.thread.preview }}</span
+        >
+        <span class="rv-agent__state">
+          <span>{{ session.phase ?? session.thread.status }}</span>
+          <span
+            >{{ session.binding ? 'Crew ' + session.binding.status : 'Native
+            only' }}</span
+          >
+          @if (session.needsAttention) {
+          <span class="rv-agent__attention">attention</span> } @if
+          (session.unread) {
+          <span class="rv-agent__unread" aria-label="Unread activity"></span> }
+        </span>
+        <span class="rv-agent__meta"
+          >{{ session.binding?.taskRef?.task_id ? '#' +
+          session.binding?.taskRef?.task_id : 'unmapped' }} · {{
+          session.thread.cwd }}</span
+        >
+        <span class="rv-agent__runtime"
+          >{{ session.runtime.runtimeId }} · {{ session.controller?.driverState
+          ?? session.runtime.observedState }}</span
+        >
+      </button>
+      <div class="rv-agent__actions">
+        @if (inventoryMode() === 'archived') {
+        <button
+          type="button"
+          data-testid="external-agent-restore"
+          [disabled]="lifecycleDisabledReason(session) !== undefined"
+          [title]="lifecycleDisabledReason(session) ?? 'Restore native Codex thread'"
+          (click)="restore(session)"
+        >
+          Restore
+        </button>
+        <button
+          type="button"
+          class="rv-agent__delete"
+          data-testid="external-agent-delete"
+          [disabled]="lifecycleDisabledReason(session) !== undefined"
+          [title]="lifecycleDisabledReason(session) ?? 'Permanently delete native Codex thread'"
+          (click)="deletePermanently(session)"
+        >
+          Delete
+        </button>
+        } @else {
+        <button
+          type="button"
+          data-testid="external-agent-archive"
+          [disabled]="lifecycleDisabledReason(session) !== undefined"
+          [title]="lifecycleDisabledReason(session) ?? 'Archive native Codex thread'"
+          (click)="archive(session)"
+        >
+          Archive
+        </button>
+        }
+      </div>
+    </div>
     } @empty {
     <div class="rv-agents__empty">
       {{ store.loading() ? 'Loading agent sessions…' : 'No external agent

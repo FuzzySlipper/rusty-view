@@ -1,5 +1,7 @@
 import type {
+  ArchiveExternalRuntimeThreadResponse,
   CreateExternalAgentSessionResponse,
+  DeleteExternalRuntimeThreadResponse,
   ExternalAgentBinding,
   ExternalAgentSessionCreateResult,
   ExternalAgentSessionCreateWrite,
@@ -26,6 +28,7 @@ import type {
   ResolveExternalInteractionResponse,
   SendExternalBindingMessageResponse,
   SubmitExternalBindingControlResponse,
+  UnarchiveExternalRuntimeThreadResponse,
 } from '@rusty-view/protocol';
 
 import { ChatTransportError, classifyFetchError } from './chat-transport-error';
@@ -72,7 +75,11 @@ export class ExternalRuntimeHttpTransport {
 
   async listThreads(
     runtimeId: string,
-    query?: { readonly limit?: number; readonly cursor?: string },
+    query?: {
+      readonly limit?: number;
+      readonly cursor?: string;
+      readonly archived?: boolean;
+    },
   ): Promise<ExternalThreadPage> {
     return unwrap(
       await this.request<ListExternalRuntimeThreadsResponse>(
@@ -80,6 +87,42 @@ export class ExternalRuntimeHttpTransport {
         `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/threads`,
         undefined,
         query,
+      ),
+    );
+  }
+
+  async archiveThread(
+    runtimeId: string,
+    threadId: string,
+  ): Promise<ArchiveExternalRuntimeThreadResponse['data']> {
+    return unwrap(
+      await this.request<ArchiveExternalRuntimeThreadResponse>(
+        'POST',
+        threadLifecyclePath(runtimeId, threadId, 'archive'),
+      ),
+    );
+  }
+
+  async unarchiveThread(
+    runtimeId: string,
+    threadId: string,
+  ): Promise<UnarchiveExternalRuntimeThreadResponse['data']> {
+    return unwrap(
+      await this.request<UnarchiveExternalRuntimeThreadResponse>(
+        'POST',
+        threadLifecyclePath(runtimeId, threadId, 'unarchive'),
+      ),
+    );
+  }
+
+  async deleteThread(
+    runtimeId: string,
+    threadId: string,
+  ): Promise<DeleteExternalRuntimeThreadResponse['data']> {
+    return unwrap(
+      await this.request<DeleteExternalRuntimeThreadResponse>(
+        'POST',
+        threadLifecyclePath(runtimeId, threadId, 'delete'),
       ),
     );
   }
@@ -231,6 +274,14 @@ export class ExternalRuntimeHttpTransport {
     }
     return parsed as T;
   }
+}
+
+function threadLifecyclePath(
+  runtimeId: string,
+  threadId: string,
+  action: 'archive' | 'unarchive' | 'delete',
+): string {
+  return `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/threads/${encodeURIComponent(threadId)}/${action}`;
 }
 
 function unwrap<T>(envelope: SuccessEnvelope<T>): T {

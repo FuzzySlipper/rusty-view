@@ -28,6 +28,15 @@
   background: var(--rv-color-bg);
 }
 
+.rv-message--commentary {
+  border-left: 3px solid var(--rv-color-border-strong);
+  background: var(--rv-color-surface);
+}
+
+.rv-message--final-answer {
+  border-left: 3px solid var(--rv-color-accent);
+}
+
 .rv-message--system,
 .rv-message--tool {
   background: var(--rv-color-surface-raised);
@@ -88,6 +97,21 @@
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-stream);
+}
+
+.rv-message__phase {
+  padding: 1px var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border-strong);
+  border-radius: var(--rv-radius);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+  text-transform: uppercase;
+}
+
+.rv-message--final-answer .rv-message__phase {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-accent);
 }
 
 .rv-message__timestamp,

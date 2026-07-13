@@ -100,6 +100,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/external-runtimes/{runtime_id}/threads/{thread_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["archiveExternalRuntimeThread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/external-runtimes/{runtime_id}/threads/{thread_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["deleteExternalRuntimeThread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/external-runtimes/{runtime_id}/threads/{thread_id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["unarchiveExternalRuntimeThread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-runtimes/{runtime_id}/events": {
         parameters: {
             query?: never;
@@ -222,6 +270,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["resolveExternalInteraction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/external-turns/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readExternalTurn"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1521,6 +1585,8 @@ export interface components {
             tool?: string;
             success?: boolean;
             summary?: string[];
+            /** @enum {string} */
+            messagePhase?: "commentary" | "final_answer" | "unknown";
             fileChanges?: {
                 path?: string;
                 kind?: string;
@@ -1552,6 +1618,8 @@ export interface components {
             status?: string;
             text?: string;
             summary?: string[];
+            /** @enum {string} */
+            messagePhase?: "commentary" | "final_answer" | "unknown";
         };
         ExternalThreadTurnProjection: {
             turnId: string;
@@ -1585,6 +1653,33 @@ export interface components {
         };
         ExternalThreadReadResult: {
             thread: components["schemas"]["ExternalThreadProjection"];
+        };
+        ExternalThreadLifecycleBindingTransition: {
+            bindingId: string;
+            previousStatus: string;
+            currentStatus: string;
+            revision: number;
+        };
+        ExternalThreadLifecycleReceipt: {
+            runtimeId: string;
+            threadId: string;
+            /** @enum {string} */
+            action: "archive" | "unarchive";
+            /** @enum {string} */
+            outcome: "applied" | "already_archived" | "already_active";
+            nativeArchived: boolean;
+            bindings: components["schemas"]["ExternalThreadLifecycleBindingTransition"][];
+        };
+        ExternalThreadDeleteReceipt: {
+            runtimeId: string;
+            threadId: string;
+            /** @enum {string} */
+            action: "delete";
+            /** @enum {string} */
+            outcome: "applied" | "already_deleted";
+            /** @constant */
+            nativeDeleted: true;
+            bindings: components["schemas"]["ExternalThreadLifecycleBindingTransition"][];
         };
     };
     responses: never;
@@ -1782,6 +1877,7 @@ export interface operations {
             query?: {
                 cursor?: string;
                 limit?: number;
+                archived?: boolean;
             };
             header?: never;
             path: {
@@ -1841,6 +1937,117 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalThreadReadResult"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    archiveExternalRuntimeThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runtime_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalThreadLifecycleReceipt"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteExternalRuntimeThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runtime_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalThreadDeleteReceipt"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    unarchiveExternalRuntimeThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runtime_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalThreadLifecycleReceipt"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };
@@ -2174,6 +2381,42 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalInteractionRecord"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readExternalTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalTurnCorrelation"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };

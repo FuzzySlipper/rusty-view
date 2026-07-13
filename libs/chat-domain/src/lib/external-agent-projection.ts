@@ -47,6 +47,12 @@ export function projectExternalAgentTranscript(
               nativeThreadId: thread.threadId,
               nativeTurnId: turn.turnId,
               itemId: item.itemId,
+              ...(item.kind === 'agentMessage'
+                ? { externalAgentText: true }
+                : {}),
+              ...(item.messagePhase === undefined
+                ? {}
+                : { messagePhase: item.messagePhase }),
             },
           ),
         );
@@ -71,6 +77,13 @@ export function projectExternalAgentTranscript(
       group,
     );
     if (reconciliation.covered) {
+      if (reconciliation.item !== undefined) {
+        applyMessagePhase(
+          messages,
+          reconciliation.item.messageIndex,
+          reconciliation.messagePhase,
+        );
+      }
       if (
         reconciliation.item !== undefined &&
         reconciliation.uncoveredContent !== undefined
@@ -99,6 +112,12 @@ export function projectExternalAgentTranscript(
           runtimeId: first.runtimeId,
           nativeThreadId: first.nativeThreadId,
           nativeTurnId: first.nativeTurnId,
+          ...(blocks.some((block) => block.kind === 'text')
+            ? { externalAgentText: true }
+            : {}),
+          ...(messagePhaseForEvents(group) === undefined
+            ? {}
+            : { messagePhase: messagePhaseForEvents(group) }),
         },
       ),
     );
@@ -122,6 +141,7 @@ interface SnapshotEventReconciliation {
   readonly covered: boolean;
   readonly item?: SnapshotItemCoverage;
   readonly uncoveredContent?: string;
+  readonly messagePhase?: 'commentary' | 'final_answer' | 'unknown';
 }
 
 function reconcileSnapshotEventGroup(
@@ -136,6 +156,7 @@ function reconcileSnapshotEventGroup(
     (item) => item.itemId === itemId && item.kind === projected.kind,
   );
   if (sameItem !== undefined) {
+    const messagePhase = messagePhaseForEvents(events);
     const snapshotContent = normalizeLineEndings(sameItem.content);
     const eventContent = normalizeLineEndings(projected.content);
     const normalizedEventContent = normalizeCoverageContent(eventContent);
@@ -146,24 +167,34 @@ function reconcileSnapshotEventGroup(
           normalizedEventContent,
         ))
     ) {
-      return { covered: true };
+      return {
+        covered: true,
+        item: sameItem,
+        ...(messagePhase === undefined ? {} : { messagePhase }),
+      };
     }
     const overlap = suffixPrefixOverlap(snapshotContent, eventContent);
     return {
       covered: true,
       item: sameItem,
       uncoveredContent: eventContent.slice(overlap),
+      ...(messagePhase === undefined ? {} : { messagePhase }),
     };
   }
   const eventContent = normalizeCoverageContent(projected.content);
-  const semanticallyCovered = snapshot.items.some(
+  const semanticallyCovered = snapshot.items.find(
     (item) =>
       item.kind === projected.kind &&
       snapshot.terminal &&
       eventContent !== '' &&
       normalizeCoverageContent(item.content) === eventContent,
   );
-  return { covered: semanticallyCovered };
+  const messagePhase = messagePhaseForEvents(events);
+  return {
+    covered: semanticallyCovered !== undefined,
+    ...(semanticallyCovered === undefined ? {} : { item: semanticallyCovered }),
+    ...(messagePhase === undefined ? {} : { messagePhase }),
+  };
 }
 
 function snapshotProjectionForEvents(
@@ -176,6 +207,17 @@ function snapshotProjectionForEvents(
     return {
       kind: 'agentMessage',
       content: assistant.map((event) => event.payload.text ?? '').join(''),
+    };
+  }
+  const phasedAssistant = events.filter(
+    (event) =>
+      event.payload.messagePhase !== undefined &&
+      event.payload.text !== undefined,
+  );
+  if (phasedAssistant.length > 0) {
+    return {
+      kind: 'agentMessage',
+      content: phasedAssistant.at(-1)?.payload.text ?? '',
     };
   }
   const reasoning = events.filter((event) => event.kind === 'reasoning_delta');
@@ -263,6 +305,22 @@ function appendSnapshotContinuation(
   };
 }
 
+function applyMessagePhase(
+  messages: ChatMessage[],
+  messageIndex: number,
+  phase: 'commentary' | 'final_answer' | 'unknown' | undefined,
+): void {
+  if (phase === undefined) return;
+  const message = messages[messageIndex];
+  if (message === undefined || message.metadata?.['messagePhase'] === phase) {
+    return;
+  }
+  messages[messageIndex] = {
+    ...message,
+    metadata: { ...message.metadata, messagePhase: phase },
+  };
+}
+
 function isTerminalStatus(status: string): boolean {
   return ['completed', 'failed', 'interrupted'].includes(status);
 }
@@ -282,6 +340,21 @@ function blocksForGroup(
         textEvents[0]?.eventId ?? first.eventId,
         'text',
         textEvents.map((event) => event.payload.text ?? '').join(''),
+      ),
+    ];
+  }
+  const phasedTextEvents = events.filter(
+    (event) =>
+      event.payload.messagePhase !== undefined &&
+      event.payload.text !== undefined,
+  );
+  if (phasedTextEvents.length > 0) {
+    const latest = phasedTextEvents.at(-1);
+    return [
+      simpleBlock(
+        latest?.eventId ?? first.eventId,
+        'text',
+        latest?.payload.text ?? '',
       ),
     ];
   }
@@ -639,6 +712,14 @@ function terminalStatusesByTurn(
     }
   }
   return new Map([...latest].map(([turnId, value]) => [turnId, value.status]));
+}
+
+function messagePhaseForEvents(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): 'commentary' | 'final_answer' | 'unknown' | undefined {
+  return events
+    .filter((event) => event.payload.messagePhase !== undefined)
+    .at(-1)?.payload.messagePhase;
 }
 
 function messageStatus(status: string | undefined): ChatMessage['status'] {

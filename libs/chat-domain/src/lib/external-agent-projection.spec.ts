@@ -324,6 +324,114 @@ describe('projectExternalAgentTranscript', () => {
 
     expect(messages).toEqual([]);
   });
+
+  it('preserves commentary and final-answer phases from completed snapshots', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'commentary',
+                kind: 'agentMessage',
+                text: 'I am checking the runtime.',
+                messagePhase: 'commentary',
+              },
+              {
+                itemId: 'command',
+                kind: 'commandExecution',
+                text: 'pnpm test',
+              },
+              {
+                itemId: 'final',
+                kind: 'agentMessage',
+                text: 'The runtime is healthy.',
+                messagePhase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(
+      messages.map((message) => message.metadata?.['messagePhase']),
+    ).toEqual(['commentary', undefined, 'final_answer']);
+    expect(messages.map((message) => message.blocks[0]?.content)).toEqual([
+      'I am checking the runtime.',
+      'pnpm test',
+      'The runtime is healthy.',
+    ]);
+  });
+
+  it('uses full lifecycle phase without making phase-less deltas terminal', () => {
+    const events = [
+      {
+        ...event('1', 'item_lifecycle', {
+          nativeMethod: 'item/started',
+          text: 'Working',
+          messagePhase: 'commentary',
+        }),
+        itemId: 'message-1',
+      },
+      {
+        ...event('2', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'Working',
+        }),
+        itemId: 'message-1',
+      },
+      {
+        ...event('3', 'item_lifecycle', {
+          nativeMethod: 'item/completed',
+          text: 'Working',
+          messagePhase: 'commentary',
+        }),
+        itemId: 'message-1',
+      },
+      {
+        ...event('4', 'item_lifecycle', {
+          nativeMethod: 'item/completed',
+          text: 'Done',
+          messagePhase: 'final_answer',
+        }),
+        itemId: 'message-2',
+      },
+      event('5', 'turn_lifecycle', {
+        nativeMethod: 'turn/completed',
+        status: 'completed',
+      }),
+    ];
+
+    const messages = projectExternalAgentTranscript(undefined, events);
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.metadata?.['messagePhase']).toBe('commentary');
+    expect(messages[1]?.metadata?.['messagePhase']).toBe('final_answer');
+    expect(messages.every((message) => message.status === 'completed')).toBe(
+      true,
+    );
+  });
 });
 
 function event(

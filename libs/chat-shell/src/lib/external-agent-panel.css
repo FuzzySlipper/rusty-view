@@ -47,27 +47,84 @@
   background: var(--rv-color-surface-raised);
   color: inherit;
 }
+.rv-agents__modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: var(--rv-space-sm) var(--rv-space-sm) 0;
+}
+.rv-agents__modes button {
+  min-width: 0;
+  padding: var(--rv-space-xs) 2px;
+  border: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+  cursor: pointer;
+}
+.rv-agents__modes .rv-agents__mode--active {
+  border-color: var(--rv-color-accent);
+  color: var(--rv-color-accent);
+}
+.rv-agents__counts {
+  padding: var(--rv-space-xs) var(--rv-space-sm) 0;
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-xs);
+}
 .rv-agents__list {
   flex: 1;
   overflow: auto;
   min-height: 0;
 }
 .rv-agent {
+  position: relative;
   display: flex;
+  width: 100%;
+  border-bottom: 1px solid var(--rv-color-border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.rv-agent:hover,
+.rv-agent--selected {
+  background: var(--rv-color-surface-raised);
+}
+.rv-agent__select {
+  display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 4px;
-  width: 100%;
+  min-width: 0;
   padding: var(--rv-space-sm) var(--rv-space-md);
   border: 0;
-  border-bottom: 1px solid var(--rv-color-border);
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
-.rv-agent:hover,
-.rv-agent--selected {
+.rv-agent__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--rv-space-xs);
+  padding: var(--rv-space-xs);
+}
+.rv-agent__actions button {
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+  cursor: pointer;
+}
+.rv-agent__actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.rv-agent__actions .rv-agent__delete {
+  color: var(--rv-color-danger);
 }
 .rv-agent--selected {
   border-left: 3px solid var(--rv-color-accent);
@@ -106,6 +163,7 @@
   white-space: nowrap;
 }
 .rv-agents__error,
+.rv-agents__notice,
 .rv-agents__empty,
 .rv-agents__prerequisite {
   padding: var(--rv-space-md);
@@ -114,6 +172,9 @@
 }
 .rv-agents__error {
   color: var(--rv-color-danger);
+}
+.rv-agents__notice {
+  color: var(--rv-color-accent);
 }
 .rv-agents__prerequisite {
   border-bottom: 1px solid var(--rv-color-border);
