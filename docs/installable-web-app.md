@@ -12,3 +12,25 @@ operator console; stale offline state would be misleading.
 When using the normal local deployments on ports `9347` or `9348`, the app and
 Crew API share an origin. The development-only `?api=` override remains
 ephemeral and is not embedded in the manifest or persisted as an install URL.
+
+## Install and standalone certification
+
+The normal Chromium test checks the parsed manifest and Chromium's
+installability errors. A separate live certification uses a persistent browser
+profile, invokes Chromium's `navigator.install()` flow, accepts the native
+install dialog, verifies `display-mode: standalone`, observes a same-origin Crew
+session request, and repeats those checks after refresh:
+
+```sh
+RV_PWA_INSTALL_RUN=1 xvfb-run -a pnpm exec playwright test \
+  --config apps/rusty-view-e2e/playwright.config.mts \
+  --project=chromium --headed --workers=1 \
+  --grep @pwa-install-live
+```
+
+This Linux certification requires a C compiler plus X11 and XTest development
+libraries. The small X11 helper only confirms Chromium's native install dialog;
+all install, launch, display-mode, URL, refresh, and Crew assertions remain in
+Playwright. Standard desktop Chromium builds do not expose the ChromeOS-only
+`PWA.install` CDP lifecycle domain, so the test deliberately exercises the real
+desktop install UI instead.

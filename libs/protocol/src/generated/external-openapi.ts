@@ -398,11 +398,29 @@ export interface components {
             roundId: string;
             senderAgentId: string;
             senderRequestId?: string | null;
-            senderSessionId: string;
+            senderSessionId?: string | null;
             status: components["schemas"]["AgentRoundStatus"];
             terminalAt?: string | null;
             terminalReasonCode?: string | null;
         };
+        AgentDirectoryEntry: {
+            agentId: string;
+            bindingId?: string | null;
+            bindingStatus?: components["schemas"]["ExternalBindingStatus"] | null;
+            displayLabel: string;
+            profileId: string;
+            routabilityReasonCode?: string | null;
+            routable: boolean;
+            runtimeId?: string | null;
+            runtimeKind: components["schemas"]["AgentDirectoryRuntimeKind"];
+            sessionId: string;
+            sessionKind: components["schemas"]["SessionKind"];
+            sessionStatus: components["schemas"]["SessionStatus"];
+            taskRef?: components["schemas"]["DenRuntimeReference"] | null;
+            workdir?: string | null;
+        };
+        /** @enum {string} */
+        AgentDirectoryRuntimeKind: "direct_brain" | "codex_app_server";
         AgentMessage: {
             body: string;
             correlation_id?: string | null;

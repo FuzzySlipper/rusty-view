@@ -144,14 +144,15 @@ export class HotkeySettingsService {
 
   async reset(action: HotkeyAction): Promise<void> {
     const defaultBinding = DEFAULT_HOTKEY_SETTINGS.bindings[action];
-    const bindings = { ...this.current().bindings, [action]: defaultBinding };
-    for (const candidate of HOTKEY_ACTIONS) {
-      if (
-        candidate.id !== action &&
-        bindings[candidate.id] === defaultBinding
-      ) {
-        bindings[candidate.id] = DEFAULT_HOTKEY_SETTINGS.bindings[candidate.id];
-      }
+    const bindings = { ...this.current().bindings };
+    const previousBinding = bindings[action];
+    const conflict = HOTKEY_ACTIONS.find(
+      (candidate) =>
+        candidate.id !== action && bindings[candidate.id] === defaultBinding,
+    );
+    bindings[action] = defaultBinding;
+    if (conflict !== undefined) {
+      bindings[conflict.id] = previousBinding;
     }
     const next: HotkeySettings = { version: 1, bindings };
     this.revision += 1;

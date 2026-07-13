@@ -2,6 +2,7 @@ import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   ExternalAgentStore,
+  filterExternalAgentSessions,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
 import type { ExternalAgentSessionCreateWrite } from '@rusty-view/protocol';
@@ -9,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ExternalAgentPanelComponent,
-  filterExternalAgentSessions,
   summarizeExternalAgentSessions,
 } from './external-agent-panel';
 
@@ -35,11 +35,14 @@ async function createPanel(
     creatingSession: signal(false),
     creationError: signal<string | undefined>(undefined),
     sessions: signal([]),
+    inventorySessions: signal([]),
+    inventoryMode: signal('managed'),
     selectedSessionKey: signal(undefined),
     lifecyclePendingThreadIds: signal(new Set<string>()),
     lifecycleNotice: signal(undefined),
     interactions: signal([]),
     setArchivedInventory: vi.fn(),
+    setInventoryMode: vi.fn(),
     archiveThread: vi.fn(),
     unarchiveThread: vi.fn(),
     deleteThread: vi.fn(),

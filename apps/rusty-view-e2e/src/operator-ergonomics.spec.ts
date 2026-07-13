@@ -60,6 +60,9 @@ test('requested shortcuts cycle non-archived sessions and erase a composer word'
   await expect(
     page.locator('[data-thread-id="thread-archived"]'),
   ).not.toHaveClass(/rv-agent--selected/);
+  await expect(
+    page.locator('[data-thread-id="thread-native-hidden"]'),
+  ).toHaveCount(0);
 
   const composer = page.getByTestId('message-input-field');
   await composer.fill('hello brave world');
@@ -99,6 +102,35 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
       ),
     )
     .toBeLessThanOrEqual(80);
+  await page.waitForTimeout(200);
+
+  const originalHeight = await transcript.evaluate((element) => {
+    const height = element.getBoundingClientRect().height;
+    element.style.height = `${Math.max(80, height - 160)}px`;
+    return height;
+  });
+  await expect
+    .poll(async () => {
+      const bottomOffset = await transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      );
+      return bottomOffset <= 80 || (await latest.isVisible());
+    })
+    .toBe(true);
+
+  await transcript.evaluate((element, height) => {
+    element.style.height = `${height}px`;
+  }, originalHeight);
+  await expect
+    .poll(async () => {
+      const bottomOffset = await transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      );
+      return bottomOffset <= 80 || (await latest.isVisible());
+    })
+    .toBe(true);
 });
 
 async function installExternalSessionFixture(page: Page): Promise<void> {
@@ -160,22 +192,29 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
       preview: 'Archived session',
       status: 'archived',
     },
+    {
+      ...baseThread,
+      threadId: 'thread-native-hidden',
+      preview: 'Native history outside the managed inventory',
+    },
   ];
-  const bindings = threads.map((thread, index) => ({
-    bindingId: `binding-${index}`,
-    runtimeId: 'runtime-1',
-    nativeThreadId: thread.threadId,
-    sessionId: `session-${index}`,
-    agentId: `agent-${index}`,
-    purpose: 'crew_agent',
-    status: 'active',
-    cwd: '/home/dev/rusty-view',
-    taskRef: { project_id: 'rusty-view', task_id: '5703' },
-    effectiveConfigFingerprint: 'config',
-    revision: 1,
-    createdAt: '2026-07-12T00:00:00Z',
-    updatedAt: '2026-07-12T00:00:00Z',
-  }));
+  const bindings = threads
+    .filter((thread) => thread.threadId !== 'thread-native-hidden')
+    .map((thread, index) => ({
+      bindingId: `binding-${index}`,
+      runtimeId: 'runtime-1',
+      nativeThreadId: thread.threadId,
+      sessionId: `session-${index}`,
+      agentId: `agent-${index}`,
+      purpose: 'crew_agent',
+      status: 'active',
+      cwd: '/home/dev/rusty-view',
+      taskRef: { project_id: 'rusty-view', task_id: '5703' },
+      effectiveConfigFingerprint: 'config',
+      revision: 1,
+      createdAt: '2026-07-12T00:00:00Z',
+      updatedAt: '2026-07-12T00:00:00Z',
+    }));
 
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();

@@ -17,8 +17,11 @@ export { AdminStore } from './lib/admin-store';
 export {
   createExternalAgentRequestKey,
   ExternalAgentStore,
+  filterExternalAgentSessions,
+  isActiveExternalSession,
 } from './lib/external-agent-store';
 export type {
+  ExternalAgentInventoryMode,
   ExternalAgentProfileOption,
   ExternalAgentSession,
   ExternalComposerMode,

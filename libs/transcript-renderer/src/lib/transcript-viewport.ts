@@ -251,17 +251,25 @@ export class TranscriptViewportComponent {
     });
 
     // Emit the initial data once the viewport has a non-zero size. A
-    // ResizeObserver covers the case where the height lands after first render
-    // (behind an `@if`, or a CSS-grid cell resolving from 0 → its real height).
+    // ResizeObserver covers both initial sizing (behind an `@if`, or a CSS-grid
+    // cell resolving from 0 → its real height) and later layout changes. A ready
+    // viewport can move away from the tail when it shrinks without emitting a
+    // scroll event, so every resize also refreshes CDK's measurements and the
+    // tail-control state.
     this.afterNextRender(() => {
       const host = this.viewport().elementRef.nativeElement;
       const emitWhenSized = () => {
-        if (this.viewportReady || host.clientHeight === 0) return;
-        this.viewportReady = true;
-        this.renderMessages.set(this.messages());
+        if (!this.viewportReady && host.clientHeight > 0) {
+          this.viewportReady = true;
+          this.renderMessages.set(this.messages());
+        }
+        if (this.viewportReady) {
+          this.viewport().checkViewportSize();
+          this.recomputeBottomState();
+        }
       };
       emitWhenSized();
-      if (!this.viewportReady && typeof ResizeObserver !== 'undefined') {
+      if (typeof ResizeObserver !== 'undefined') {
         const observer = new ResizeObserver(() => emitWhenSized());
         observer.observe(host);
         this.destroyRef.onDestroy(() => observer.disconnect());
@@ -337,6 +345,10 @@ export class TranscriptViewportComponent {
 
   /** Called on viewport scroll to track whether the user is at the bottom. */
   protected onScroll(): void {
+    this.recomputeBottomState();
+  }
+
+  private recomputeBottomState(): void {
     const vp = this.viewport();
     const bottomOffset = vp.measureScrollOffset('bottom');
     this.isAtBottom.set(

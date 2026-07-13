@@ -154,8 +154,8 @@
     <button
       type="button"
       [attr.data-testid]="'external-agent-mode-' + mode"
-      [class.rv-agents__mode--active]="inventoryMode() === mode"
-      [attr.aria-pressed]="inventoryMode() === mode"
+      [class.rv-agents__mode--active]="store.inventoryMode() === mode"
+      [attr.aria-pressed]="store.inventoryMode() === mode"
       (click)="setInventoryMode(mode)"
     >
       {{ mode === 'managed' ? 'Managed' : mode === 'attention' ? 'Attention' :
@@ -219,7 +219,7 @@
         >
       </button>
       <div class="rv-agent__actions">
-        @if (inventoryMode() === 'archived') {
+        @if (store.inventoryMode() === 'archived') {
         <button
           type="button"
           data-testid="external-agent-restore"

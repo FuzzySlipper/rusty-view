@@ -210,7 +210,7 @@ export class DebugShellComponent {
   private cycleSession(direction: 1 | -1): void {
     if (this.sidebarMode() === 'agents') {
       const sessions = this.external
-        .sessions()
+        .inventorySessions()
         .filter((session) => canCycleExternalThread(session.thread.status));
       const target = cyclicTarget(
         sessions,

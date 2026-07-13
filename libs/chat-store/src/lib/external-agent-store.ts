@@ -28,6 +28,11 @@ import {
 } from '@rusty-view/transport';
 
 export type ExternalComposerMode = 'auto' | 'steer' | 'queue' | 'plan';
+export type ExternalAgentInventoryMode =
+  | 'managed'
+  | 'attention'
+  | 'all'
+  | 'archived';
 
 export interface ExternalAgentSession {
   readonly key: string;
@@ -99,6 +104,7 @@ export class ExternalAgentStore {
   readonly creationError = signal<string | undefined>(undefined);
   readonly error = signal<string | undefined>(undefined);
   readonly archivedInventory = signal(false);
+  readonly inventoryMode = signal<ExternalAgentInventoryMode>('managed');
   readonly lifecyclePendingThreadIds = signal<ReadonlySet<string>>(new Set());
   readonly lifecycleNotice = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
@@ -169,6 +175,14 @@ export class ExternalAgentStore {
       ];
     });
   });
+
+  readonly inventorySessions = computed(() =>
+    filterExternalAgentSessions(
+      this.sessions(),
+      this.inventoryMode(),
+      this.selectedSessionKey(),
+    ),
+  );
 
   readonly selectedBinding = computed(() => {
     const runtimeId = this.selectedRuntimeId();
@@ -255,10 +269,7 @@ export class ExternalAgentStore {
       );
       const previousThreadCursors = this.threadCursors();
       const nextThreadCursors: Record<string, string | null> = {};
-      for (const runtimeId of this.fleetCursors.keys()) {
-        if (!activeRuntimeIds.has(runtimeId))
-          this.fleetCursors.delete(runtimeId);
-      }
+      const nextFleetCursors = new Map<string, number>();
       const runtimeData = await Promise.all(
         fleet.runtimes.map(async (runtime) => {
           const existing = this.runtimeThreads()
@@ -275,8 +286,11 @@ export class ExternalAgentStore {
             ),
           ]);
           const lastSequence = events.at(-1)?.sequenceId;
-          if (lastSequence !== undefined)
-            this.fleetCursors.set(runtime.runtimeId, lastSequence);
+          const nextFleetCursor =
+            lastSequence ?? this.fleetCursors.get(runtime.runtimeId);
+          if (nextFleetCursor !== undefined) {
+            nextFleetCursors.set(runtime.runtimeId, nextFleetCursor);
+          }
           const knownThreads = mergeThreads(listed.items, existing);
           nextThreadCursors[runtime.runtimeId] = Object.hasOwn(
             previousThreadCursors,
@@ -327,6 +341,10 @@ export class ExternalAgentStore {
         }),
       );
       if (archivedInventory !== this.archivedInventory()) return;
+      this.fleetCursors.clear();
+      for (const [runtimeId, cursor] of nextFleetCursors) {
+        this.fleetCursors.set(runtimeId, cursor);
+      }
       this.threadCursors.update((current) =>
         Object.fromEntries(
           Object.entries(nextThreadCursors).map(([runtimeId, nextCursor]) => [
@@ -381,14 +399,20 @@ export class ExternalAgentStore {
     }
   }
 
-  async setArchivedInventory(archived: boolean): Promise<void> {
+  async setInventoryMode(mode: ExternalAgentInventoryMode): Promise<void> {
+    if (this.inventoryMode() === mode) return;
+    this.inventoryMode.set(mode);
+    const archived = mode === 'archived';
     if (this.archivedInventory() === archived) return;
     this.archivedInventory.set(archived);
     this.runtimeThreads.set([]);
     this.threadCursors.set({});
-    this.fleetEvents.set([]);
     this.loading.set(true);
     await this.refresh();
+  }
+
+  async setArchivedInventory(archived: boolean): Promise<void> {
+    await this.setInventoryMode(archived ? 'archived' : 'managed');
   }
 
   async refreshInteractions(): Promise<void> {
@@ -840,6 +864,31 @@ export class ExternalAgentStore {
 
 export function sessionKey(runtimeId: string, threadId: string): string {
   return `${runtimeId}:${threadId}`;
+}
+
+export function filterExternalAgentSessions(
+  sessions: readonly ExternalAgentSession[],
+  mode: ExternalAgentInventoryMode,
+  selectedKey?: string,
+): readonly ExternalAgentSession[] {
+  if (mode === 'all' || mode === 'archived') return sessions;
+  return sessions.filter((session) => {
+    if (session.key === selectedKey) return true;
+    const active = isActiveExternalSession(session);
+    return mode === 'attention'
+      ? session.needsAttention || active
+      : session.binding !== undefined || session.needsAttention || active;
+  });
+}
+
+export function isActiveExternalSession(
+  session: ExternalAgentSession,
+): boolean {
+  return (
+    session.phase === 'active' ||
+    session.phase === 'waiting_interaction' ||
+    session.thread.status === 'active'
+  );
 }
 
 export function createExternalAgentRequestKey(): string {

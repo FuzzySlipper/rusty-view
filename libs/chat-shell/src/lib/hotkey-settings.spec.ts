@@ -55,6 +55,30 @@ describe('HotkeySettingsService', () => {
       }),
     ).toBe(DEFAULT_HOTKEY_SETTINGS);
   });
+
+  it('swaps bindings atomically when one action is reset into a conflict', async () => {
+    const storage = new MemoryHotkeyStorage();
+    TestBed.configureTestingModule({
+      providers: [
+        HotkeySettingsService,
+        { provide: HOTKEY_SETTINGS_STORAGE, useValue: storage },
+      ],
+    });
+    const service = TestBed.inject(HotkeySettingsService);
+    await service.setBinding('nextSession', 'Alt+N');
+    await service.setBinding('previousSession', 'Alt+P');
+    await service.setBinding('erasePreviousWord', 'Ctrl+Shift+Tab');
+    await service.setBinding('nextSession', 'Ctrl+W');
+
+    await service.reset('erasePreviousWord');
+
+    expect(service.settings().bindings).toEqual({
+      nextSession: 'Ctrl+Shift+Tab',
+      previousSession: 'Alt+P',
+      erasePreviousWord: 'Ctrl+W',
+    });
+    expect(new Set(Object.values(service.settings().bindings))).toHaveLength(3);
+  });
 });
 
 describe('cyclicTarget', () => {

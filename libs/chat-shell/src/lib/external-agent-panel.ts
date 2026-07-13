@@ -9,6 +9,8 @@ import {
 import {
   createExternalAgentRequestKey,
   ExternalAgentStore,
+  isActiveExternalSession,
+  type ExternalAgentInventoryMode,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
 import type { ExternalAgentSessionCreateWrite } from '@rusty-view/protocol';
@@ -20,7 +22,6 @@ type ExternalAgentSessionCreateIntent = Omit<
   ExternalAgentSessionCreateWrite,
   'idempotencyKey'
 >;
-type ExternalAgentInventoryMode = 'managed' | 'attention' | 'all' | 'archived';
 
 @Component({
   selector: 'rv-external-agent-panel',
@@ -45,8 +46,6 @@ export class ExternalAgentPanelComponent {
   protected readonly taskProjectId = signal('');
   protected readonly taskId = signal('');
   protected readonly attempted = signal(false);
-  protected readonly inventoryMode =
-    signal<ExternalAgentInventoryMode>('managed');
   private readonly creationAttemptKeys = loadCreationAttemptKeys();
 
   protected readonly cwdValidationError = computed(() => {
@@ -69,11 +68,7 @@ export class ExternalAgentPanelComponent {
   );
   protected readonly sessions = computed(() => {
     const query = this.query().trim().toLowerCase();
-    const filtered = filterExternalAgentSessions(
-      this.store.sessions(),
-      this.inventoryMode(),
-      this.store.selectedSessionKey(),
-    );
+    const filtered = this.store.inventorySessions();
     return query === ''
       ? filtered
       : filtered.filter((session) =>
@@ -109,9 +104,7 @@ export class ExternalAgentPanelComponent {
   protected async setInventoryMode(
     mode: ExternalAgentInventoryMode,
   ): Promise<void> {
-    if (this.inventoryMode() === mode) return;
-    this.inventoryMode.set(mode);
-    await this.store.setArchivedInventory(mode === 'archived');
+    await this.store.setInventoryMode(mode);
   }
 
   protected lifecycleDisabledReason(
@@ -251,21 +244,6 @@ export class ExternalAgentPanelComponent {
   }
 }
 
-export function filterExternalAgentSessions(
-  sessions: readonly ExternalAgentSession[],
-  mode: ExternalAgentInventoryMode,
-  selectedKey?: string,
-): readonly ExternalAgentSession[] {
-  if (mode === 'all' || mode === 'archived') return sessions;
-  return sessions.filter((session) => {
-    if (session.key === selectedKey) return true;
-    const active = isActiveExternalSession(session);
-    return mode === 'attention'
-      ? session.needsAttention || active
-      : session.binding !== undefined || session.needsAttention || active;
-  });
-}
-
 export function summarizeExternalAgentSessions(
   sessions: readonly ExternalAgentSession[],
 ): {
@@ -281,14 +259,6 @@ export function summarizeExternalAgentSessions(
     attention: sessions.filter((session) => session.needsAttention).length,
     active: sessions.filter(isActiveExternalSession).length,
   };
-}
-
-function isActiveExternalSession(session: ExternalAgentSession): boolean {
-  return (
-    session.phase === 'active' ||
-    session.phase === 'waiting_interaction' ||
-    session.thread.status === 'active'
-  );
 }
 
 function loadCreationAttemptKeys(): Record<string, string> {

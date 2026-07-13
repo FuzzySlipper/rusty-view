@@ -150,6 +150,57 @@ describe('ExternalAgentStore', () => {
     );
   });
 
+  it('replays fleet events when an inventory switch races deferred thread and event reads', async () => {
+    const activePage = deferred<ReturnType<typeof page>>();
+    const activeEvents = deferred<{
+      readonly events: readonly NormalizedExternalRuntimeEvent[];
+    }>();
+    const completed = {
+      ...event(11, 'turn-native', 'completed'),
+      eventId: 'event-native-completed',
+      nativeThreadId: 'thread-native',
+    };
+    const listThreads = vi
+      .fn()
+      .mockResolvedValueOnce(page([thread('thread-1', 10)], null))
+      .mockImplementationOnce(() => activePage.promise)
+      .mockResolvedValueOnce(page([], null))
+      .mockResolvedValueOnce(page([thread('thread-native', 20)], null));
+    const listEvents = vi
+      .fn()
+      .mockResolvedValueOnce({ events: [event(10, 'turn-1', 'completed')] })
+      .mockImplementationOnce(() => activeEvents.promise)
+      .mockResolvedValueOnce({ events: [completed] })
+      .mockResolvedValueOnce({ events: [] });
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads,
+      listEvents,
+    });
+    await store.refresh();
+
+    const staleRefresh = store.refresh();
+    const archivedSwitch = store.setInventoryMode('archived');
+    activePage.resolve(page([thread('thread-stale', 15)], null));
+    activeEvents.resolve({ events: [completed] });
+    await Promise.all([staleRefresh, archivedSwitch]);
+
+    expect(listEvents).toHaveBeenNthCalledWith(3, 'runtime-1', {
+      after: 10,
+      limit: 1_000,
+    });
+
+    await store.setInventoryMode('managed');
+    const nativeSession = store
+      .inventorySessions()
+      .find((session) => session.thread.threadId === 'thread-native');
+    expect(nativeSession).toMatchObject({
+      phase: 'completed',
+      unread: true,
+      needsAttention: true,
+    });
+  });
+
   it('does not append a deferred active page after switching to archived history', async () => {
     const activePageTwo = deferred<ReturnType<typeof page>>();
     const listThreads = vi
