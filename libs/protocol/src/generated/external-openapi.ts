@@ -228,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/external-bindings/{binding_id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listExternalBindingCommands"];
+        put?: never;
+        post: operations["executeExternalBindingCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-bindings/{binding_id}/messages": {
         parameters: {
             query?: never;
@@ -920,7 +936,7 @@ export interface components {
         /** @enum {string} */
         ExternalCollaborationMode: "plan";
         /** @enum {string} */
-        ExternalControlKind: "start_or_resume_thread" | "start_turn" | "steer_turn" | "interrupt_turn" | "compact_thread" | "resolve_interaction" | "reconcile_runtime" | "archive_binding";
+        ExternalControlKind: "start_or_resume_thread" | "start_turn" | "steer_turn" | "interrupt_turn" | "compact_thread" | "execute_thread_command" | "resolve_interaction" | "reconcile_runtime" | "archive_binding";
         ExternalControlReceipt: {
             outcome?: unknown;
             reasonCode?: string | null;
@@ -1571,6 +1587,93 @@ export interface components {
             kind: components["schemas"]["ExternalControlKind"];
             payload?: unknown;
         };
+        ExternalRuntimeCommandWrite: {
+            input: string;
+            idempotencyKey: string;
+            expectedBindingRevision?: number;
+        };
+        ExternalRuntimeCommandDescriptor: {
+            name: string;
+            aliases: string[];
+            usage: string;
+            description: string;
+            mutates: boolean;
+            requiredCapabilities: string[];
+            available: boolean;
+            unavailableReasonCode: string | null;
+        };
+        ExternalRuntimeReasoningEffortOption: {
+            value: string;
+            description: string;
+        };
+        ExternalRuntimeModelOption: {
+            id: string;
+            model: string;
+            displayName: string;
+            description: string;
+            hidden: boolean;
+            isDefault: boolean;
+            defaultEffort: string;
+            supportedEfforts: components["schemas"]["ExternalRuntimeReasoningEffortOption"][];
+        };
+        ExternalThreadSettingsProjection: {
+            model: string;
+            modelProvider: string;
+            effort: string | null;
+        };
+        ExternalThreadUsageProjection: {
+            total: {
+                [key: string]: number;
+            };
+            last: {
+                [key: string]: number;
+            };
+            modelContextWindow: number | null;
+            contextWindowUsedPercent: number | null;
+        };
+        ExternalThreadCommandStatus: {
+            runtimeId: string;
+            runtimeKind: string;
+            runtimeObservedState: string;
+            controller: components["schemas"]["ExternalRuntimeControllerStatus"];
+            bindingId: string;
+            bindingRevision: number;
+            bindingStatus: string;
+            sessionId: string | null;
+            agentId: string | null;
+            nativeThreadId: string;
+            activeNativeTurnId: string | null;
+            settings: components["schemas"]["ExternalThreadSettingsProjection"];
+            usage: components["schemas"]["ExternalThreadUsageProjection"] | null;
+        };
+        ExternalRuntimeCommandCatalog: {
+            contractVersion: string;
+            runtimeId: string;
+            bindingId: string;
+            nativeThreadId: string;
+            commands: components["schemas"]["ExternalRuntimeCommandDescriptor"][];
+            settings: components["schemas"]["ExternalThreadSettingsProjection"];
+            models: components["schemas"]["ExternalRuntimeModelOption"][];
+        };
+        ExternalRuntimeCommandResultData: {
+            catalog?: components["schemas"]["ExternalRuntimeCommandCatalog"];
+            status?: components["schemas"]["ExternalThreadCommandStatus"];
+            settings?: components["schemas"]["ExternalThreadSettingsProjection"];
+            models?: components["schemas"]["ExternalRuntimeModelOption"][];
+            validEfforts?: components["schemas"]["ExternalRuntimeReasoningEffortOption"][];
+            nativeResult?: unknown;
+        };
+        ExternalRuntimeCommandExecutionResult: {
+            commandId: string;
+            input: string;
+            command: string;
+            argument: string | null;
+            status: components["schemas"]["ExternalControlStatus"];
+            reasonCode: string | null;
+            message: string;
+            result: components["schemas"]["ExternalRuntimeCommandResultData"];
+            receipt: components["schemas"]["ExternalControlReceipt"];
+        };
         ExternalBindingMessageWrite: {
             body: string;
             deliveryId?: string;
@@ -1595,6 +1698,9 @@ export interface components {
             text?: string;
             message?: string;
             command?: string;
+            argument?: string | null;
+            controlId?: string;
+            reasonCode?: string | null;
             cwd?: string;
             output?: string;
             exitCode?: number;
@@ -1610,8 +1716,15 @@ export interface components {
                 kind?: string;
                 status?: string;
             }[];
+            settings?: components["schemas"]["ExternalThreadSettingsProjection"];
             usage?: {
-                [key: string]: number;
+                total: {
+                    [key: string]: number;
+                };
+                last: {
+                    [key: string]: number;
+                };
+                modelContextWindow: number | null;
             };
         };
         ExternalRuntimeEventPage: {
@@ -1654,6 +1767,8 @@ export interface components {
             preview: string;
             ephemeral: boolean;
             modelProvider: string;
+            /** @description Exact model Codex will use for the next turn. Null means the thread is archived, unloaded, or its authoritative settings are unavailable; clients must not infer a model from modelProvider or other metadata. */
+            effectiveModel: string | null;
             createdAt: number;
             updatedAt: number;
             status: string;
@@ -2285,6 +2400,82 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalControlReceipt"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listExternalBindingCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeCommandCatalog"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    executeExternalBindingCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalRuntimeCommandWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeCommandExecutionResult"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };
