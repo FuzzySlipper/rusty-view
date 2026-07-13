@@ -3,8 +3,8 @@
 }
 
 .rv-message {
-  --rv-message-actions-opacity: 0;
-  --rv-message-actions-pointer-events: none;
+  --message-revision-actions-opacity: 0;
+  --message-revision-actions-pointer-events: none;
 
   display: grid;
   grid-template-columns: var(--rv-density-row) minmax(0, 1fr);
@@ -15,14 +15,14 @@
 
 .rv-message:hover,
 .rv-message:focus-within {
-  --rv-message-actions-opacity: 1;
-  --rv-message-actions-pointer-events: auto;
+  --message-revision-actions-opacity: 1;
+  --message-revision-actions-pointer-events: auto;
 }
 
 @media (hover: none) {
   .rv-message {
-    --rv-message-actions-opacity: 1;
-    --rv-message-actions-pointer-events: auto;
+    --message-revision-actions-opacity: 1;
+    --message-revision-actions-pointer-events: auto;
   }
 }
 

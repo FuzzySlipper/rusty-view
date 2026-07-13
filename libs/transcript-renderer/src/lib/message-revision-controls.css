@@ -20,8 +20,8 @@
 }
 
 .rv-revision__actions {
-  opacity: var(--rv-message-actions-opacity, 1);
-  pointer-events: var(--rv-message-actions-pointer-events, auto);
+  opacity: var(--message-revision-actions-opacity, 1);
+  pointer-events: var(--message-revision-actions-pointer-events, auto);
   transition: opacity 0.15s ease;
 }
 
