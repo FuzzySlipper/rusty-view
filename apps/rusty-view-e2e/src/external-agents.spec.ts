@@ -295,7 +295,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     'gpt-5.6',
   );
   await expect(page.getByTestId('external-current-effort')).toHaveText(
-    'medium',
+    'Effort: medium',
   );
   await page.getByTestId('message-input-field').fill('/');
   await expect(
@@ -529,6 +529,7 @@ const thread = {
   preview: 'Implement external agent console',
   ephemeral: false,
   modelProvider: 'openai',
+  effectiveModel: 'gpt-5.6',
   createdAt: 1783756800,
   updatedAt: 1783756810,
   status: 'active',
