@@ -2,7 +2,13 @@ import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 
-import { chromium, expect, test, type Route } from '@playwright/test';
+import {
+  chromium,
+  expect,
+  test,
+  type Page,
+  type Response,
+} from '@playwright/test';
 
 const execFileAsync = promisify(execFile);
 
@@ -87,21 +93,11 @@ test('installs, launches, and refreshes the Crew-backed standalone app @pwa-inst
     headless: false,
     args: ['--enable-features=WebAppInstallation'],
   });
-  const crewRequests: string[] = [];
   try {
-    await context.route(`${origin}/v1/**`, async (route) => {
-      crewRequests.push(new URL(route.request().url()).pathname);
-      const pathname = new URL(route.request().url()).pathname;
-      const data =
-        pathname === '/v1/chat/commands'
-          ? { commands: [] }
-          : { items: [], total: 0, limit: 100, offset: 0 };
-      await fulfillJson(route, data);
-    });
     const page = context.pages()[0] ?? (await context.newPage());
-    await page.goto(
-      `${origin}/?api=${encodeURIComponent(origin)}#standalone-certification`,
-    );
+    const initialCrewRead = waitForCrewSessionRead(page, origin);
+    await page.goto(`${origin}/#standalone-certification`);
+    await expectLiveCrewSessionRead(await initialCrewRead, origin);
     await expect
       .poll(() => page.evaluate(() => typeof navigator.install))
       .toBe('function');
@@ -155,10 +151,10 @@ test('installs, launches, and refreshes the Crew-backed standalone app @pwa-inst
         page.evaluate(() => window.__RUSTY_VIEW_TEST__?.getBackendBaseUrl()),
       )
       .toBe(origin);
-    await expect.poll(() => crewRequests).toContain('/v1/chat/sessions');
 
-    crewRequests.length = 0;
+    const refreshedCrewRead = waitForCrewSessionRead(page, origin);
     await page.reload();
+    await expectLiveCrewSessionRead(await refreshedCrewRead, origin);
     await expect
       .poll(() =>
         page.evaluate(() => matchMedia('(display-mode: standalone)').matches),
@@ -169,7 +165,6 @@ test('installs, launches, and refreshes the Crew-backed standalone app @pwa-inst
         page.evaluate(() => window.__RUSTY_VIEW_TEST__?.getBackendBaseUrl()),
       )
       .toBe(origin);
-    await expect.poll(() => crewRequests).toContain('/v1/chat/sessions');
 
     const screenshot = testInfo.outputPath('standalone-launch.png');
     await page.screenshot({ path: screenshot, fullPage: true });
@@ -182,14 +177,36 @@ test('installs, launches, and refreshes the Crew-backed standalone app @pwa-inst
   }
 });
 
-function fulfillJson(route: Route, data: unknown): Promise<void> {
-  return route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
-      ok: true,
-      data,
-      meta: { request_id: 'req_pwa', schema_version: 1 },
-    }),
+function waitForCrewSessionRead(page: Page, origin: string): Promise<Response> {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.origin === origin &&
+      url.pathname === '/v1/chat/sessions' &&
+      response.request().method() === 'GET'
+    );
+  });
+}
+
+async function expectLiveCrewSessionRead(
+  response: Response,
+  origin: string,
+): Promise<void> {
+  expect(response.url()).toBe(`${origin}/v1/chat/sessions`);
+  expect(response.ok()).toBe(true);
+  expect(response.fromServiceWorker()).toBe(false);
+  expect(response.headers()['content-type']).toContain('application/json');
+  expect(await response.json()).toMatchObject({
+    ok: true,
+    data: {
+      items: expect.any(Array),
+      total: expect.any(Number),
+      limit: expect.any(Number),
+      offset: expect.any(Number),
+    },
+    meta: {
+      request_id: expect.any(String),
+      schema_version: 1,
+    },
   });
 }

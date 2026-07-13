@@ -19,10 +19,12 @@ The normal Chromium test checks the parsed manifest and Chromium's
 installability errors. A separate live certification uses a persistent browser
 profile, invokes Chromium's `navigator.install()` flow, accepts the native
 install dialog, verifies `display-mode: standalone`, observes a same-origin Crew
-session request, and repeats those checks after refresh:
+session response from the deployed debug API, and repeats those checks after
+refresh. The certification does not intercept or synthesize Crew routes:
 
 ```sh
-RV_PWA_INSTALL_RUN=1 xvfb-run -a pnpm exec playwright test \
+BASE_URL=http://127.0.0.1:9348 RV_PWA_INSTALL_RUN=1 \
+  xvfb-run -a pnpm exec playwright test \
   --config apps/rusty-view-e2e/playwright.config.mts \
   --project=chromium --headed --workers=1 \
   --grep @pwa-install-live
