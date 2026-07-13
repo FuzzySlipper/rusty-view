@@ -10,6 +10,7 @@ import type {
   ExternalAgentBinding,
   ExternalAgentSessionCreateResult,
   ExternalAgentSessionCreateWrite,
+  ExternalBindingMetadataWrite,
   ExternalBindingMessageWrite,
   ExternalControlWrite,
   ExternalInteractionRecord,
@@ -24,6 +25,7 @@ import type {
   NormalizedExternalRuntimeEvent,
 } from '@rusty-view/protocol';
 import {
+  ChatTransportError,
   ChatTransport,
   type AdminProfileRegistryRecord,
   type ExternalRuntimeEventStream,
@@ -112,6 +114,9 @@ export class ExternalAgentStore {
   readonly inventoryMode = signal<ExternalAgentInventoryMode>('managed');
   readonly lifecyclePendingThreadIds = signal<ReadonlySet<string>>(new Set());
   readonly lifecycleNotice = signal<string | undefined>(undefined);
+  readonly metadataPendingBindingIds = signal<ReadonlySet<string>>(new Set());
+  readonly metadataError = signal<string | undefined>(undefined);
+  readonly metadataNotice = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
   readonly composerMode = signal<ExternalComposerMode>('auto');
   readonly commandCatalog = signal<ExternalRuntimeCommandCatalog | undefined>(
@@ -825,6 +830,74 @@ export class ExternalAgentStore {
 
   async deleteThread(session: ExternalAgentSession): Promise<boolean> {
     return this.mutateThreadLifecycle(session, 'delete');
+  }
+
+  async updateSessionMetadata(
+    session: ExternalAgentSession,
+    metadata: Pick<ExternalBindingMetadataWrite, 'label' | 'taskRef'>,
+  ): Promise<boolean> {
+    const binding = session.binding;
+    if (binding === undefined) {
+      this.metadataError.set(
+        'Session options are unavailable because this Codex thread has no Crew binding.',
+      );
+      return false;
+    }
+    if (this.metadataPendingBindingIds().has(binding.bindingId)) return false;
+    this.metadataPendingBindingIds.update(
+      (current) => new Set([...current, binding.bindingId]),
+    );
+    this.metadataError.set(undefined);
+    this.metadataNotice.set(undefined);
+    try {
+      const saved = await this.transport.external.updateBindingMetadata(
+        binding.bindingId,
+        {
+          expectedRevision: binding.revision,
+          ...metadata,
+        },
+      );
+      this.bindingMutationRevision += 1;
+      this.bindings.update((bindings) =>
+        bindings.map((candidate) =>
+          candidate.bindingId === saved.bindingId ? saved : candidate,
+        ),
+      );
+      const name = saved.label ?? null;
+      this.runtimeThreads.update((threads) =>
+        threads.map((entry) =>
+          entry.runtimeId === session.runtime.runtimeId &&
+          entry.thread.threadId === session.thread.threadId
+            ? { ...entry, thread: { ...entry.thread, name } }
+            : entry,
+        ),
+      );
+      if (this.selectedSessionKey() === session.key) {
+        this.selectedThread.update((thread) =>
+          thread === undefined ? thread : { ...thread, name },
+        );
+      }
+      this.metadataNotice.set('Session options saved.');
+      return true;
+    } catch (error) {
+      if (error instanceof ChatTransportError && error.statusCode === 409) {
+        this.metadataError.set(
+          'Session metadata changed elsewhere. The latest revision was loaded; review and save again.',
+        );
+        await this.refresh();
+      } else {
+        this.metadataError.set(
+          `Saving session options failed: ${errorMessage(error)}`,
+        );
+      }
+      return false;
+    } finally {
+      this.metadataPendingBindingIds.update((current) => {
+        const next = new Set(current);
+        next.delete(binding.bindingId);
+        return next;
+      });
+    }
   }
 
   private async mutateThreadLifecycle(

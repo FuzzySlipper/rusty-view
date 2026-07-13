@@ -43,6 +43,46 @@ describe('external agent lifecycle reduction', () => {
   });
 });
 
+describe('external agent metadata editing', () => {
+  it('revision-fences the write and updates the binding and visible title locally', async () => {
+    const original = externalBinding();
+    const updateBindingMetadata = vi.fn(async () => ({
+      ...original,
+      label: 'Planning follow-up',
+      taskRef: { project_id: 'rusty-crew', task_id: '5764' },
+      revision: 2,
+    }));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [original],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      updateBindingMetadata,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected session');
+
+    await expect(
+      store.updateSessionMetadata(session, {
+        label: 'Planning follow-up',
+        taskRef: { project_id: 'rusty-crew', task_id: '5764' },
+      }),
+    ).resolves.toBe(true);
+
+    expect(updateBindingMetadata).toHaveBeenCalledWith('binding-1', {
+      expectedRevision: 1,
+      label: 'Planning follow-up',
+      taskRef: { project_id: 'rusty-crew', task_id: '5764' },
+    });
+    expect(store.bindings()[0]).toMatchObject({
+      revision: 2,
+      label: 'Planning follow-up',
+    });
+    expect(store.sessions()[0]?.thread.name).toBe('Planning follow-up');
+    expect(store.metadataNotice()).toBe('Session options saved.');
+  });
+});
+
 describe('ExternalAgentStore', () => {
   it('projects a pending interaction as a waiting turn', () => {
     const store = setupStore({
@@ -685,6 +725,7 @@ function setupStore(options: {
   deleteThread?: ReturnType<typeof vi.fn>;
   listCommands?: ReturnType<typeof vi.fn>;
   executeCommand?: ReturnType<typeof vi.fn>;
+  updateBindingMetadata?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
     listRuntimes: vi.fn(async () => ({
@@ -707,6 +748,7 @@ function setupStore(options: {
     listCommands:
       options.listCommands ?? vi.fn(async () => externalCommandCatalog()),
     executeCommand: options.executeCommand ?? vi.fn(),
+    updateBindingMetadata: options.updateBindingMetadata ?? vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [

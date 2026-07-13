@@ -182,6 +182,10 @@
   <div class="rv-agents__notice" role="status">
     {{ store.lifecycleNotice() }}
   </div>
+  } @if (store.metadataNotice()) {
+  <div class="rv-agents__notice" role="status">
+    {{ store.metadataNotice() }}
+  </div>
   }
   <div class="rv-agents__list">
     @for (session of sessions(); track session.key) {
@@ -194,9 +198,7 @@
       [attr.data-status]="session.phase ?? session.thread.status"
     >
       <button type="button" class="rv-agent__select" (click)="select(session)">
-        <span class="rv-agent__title"
-          >{{ session.thread.name ?? session.thread.preview }}</span
-        >
+        <span class="rv-agent__title">{{ sessionTitle(session) }}</span>
         <span class="rv-agent__state">
           <span>{{ session.phase ?? session.thread.status }}</span>
           <span
@@ -244,10 +246,87 @@
         >
           Archive
         </button>
-        }
+        @if (session.binding) {
+        <button
+          type="button"
+          data-testid="external-agent-options"
+          [disabled]="metadataPending(session)"
+          (click)="openOptions(session)"
+        >
+          Options
+        </button>
+        } }
       </div>
     </div>
-    } @empty {
+    @if (session.binding && editingBindingId() === session.binding.bindingId) {
+    <form
+      class="rv-agent-options"
+      data-testid="external-agent-options-form"
+      (submit)="saveOptions(session, $event)"
+    >
+      <div class="rv-agent-options__heading">
+        <strong>Session options</strong>
+        <button
+          type="button"
+          [disabled]="metadataPending(session)"
+          (click)="closeOptions()"
+        >
+          Cancel
+        </button>
+      </div>
+      <label>
+        Label
+        <input
+          type="text"
+          maxlength="256"
+          placeholder="Use prompt preview when blank"
+          autocomplete="off"
+          [value]="metadataLabel()"
+          (input)="updateDraft(metadataLabel, $event)"
+        />
+      </label>
+      <div class="rv-agent-options__row">
+        <label>
+          Den project
+          <input
+            type="text"
+            placeholder="Optional"
+            autocomplete="off"
+            [value]="metadataProjectId()"
+            (input)="updateDraft(metadataProjectId, $event)"
+          />
+        </label>
+        <label>
+          Task
+          <input
+            type="text"
+            inputmode="numeric"
+            placeholder="Optional"
+            autocomplete="off"
+            [value]="metadataTaskId()"
+            (input)="updateDraft(metadataTaskId, $event)"
+          />
+        </label>
+      </div>
+      <div class="rv-agent-options__hint">
+        Clear fields to restore the prompt-derived title or remove the Den
+        mapping.
+      </div>
+      @if (store.metadataError()) {
+      <div class="rv-agents__error" role="alert">
+        {{ store.metadataError() }}
+      </div>
+      }
+      <button
+        class="rv-agent-options__save"
+        type="submit"
+        data-testid="external-agent-options-save"
+        [disabled]="metadataPending(session)"
+      >
+        {{ metadataPending(session) ? 'Saving…' : 'Save options' }}
+      </button>
+    </form>
+    } } @empty {
     <div class="rv-agents__empty">
       {{ store.loading() ? 'Loading agent sessions…' : 'No external agent
       sessions found.' }}

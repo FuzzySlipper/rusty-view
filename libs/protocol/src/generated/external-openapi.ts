@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/external-bindings/{binding_id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["writeExternalBindingMetadata"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-bindings/{binding_id}/controls": {
         parameters: {
             query?: never;
@@ -886,6 +902,7 @@ export interface components {
             createdAt: string;
             cwd?: string | null;
             effectiveConfigFingerprint: string;
+            label?: string | null;
             nativeThreadId?: string | null;
             purpose: components["schemas"]["ExternalBindingPurpose"];
             /** Format: uint64 */
@@ -893,6 +910,14 @@ export interface components {
             runtimeId: string;
             sessionId?: string | null;
             status: components["schemas"]["ExternalBindingStatus"];
+            taskRef?: components["schemas"]["DenRuntimeReference"] | null;
+            updatedAt: string;
+        };
+        ExternalAgentBindingMetadataWrite: {
+            bindingId: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            label?: string | null;
             taskRef?: components["schemas"]["DenRuntimeReference"] | null;
             updatedAt: string;
         };
@@ -1578,6 +1603,11 @@ export interface components {
         ExternalBindingWrite: {
             binding: components["schemas"]["ExternalAgentBinding"];
             expectedRevision?: number;
+        };
+        ExternalBindingMetadataWrite: {
+            expectedRevision: number;
+            label: string | null;
+            taskRef: components["schemas"]["DenRuntimeReference"] | null;
         };
         ExternalControlWrite: {
             controlId?: string;
@@ -2347,6 +2377,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ExternalBindingWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalAgentBinding"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    writeExternalBindingMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalBindingMetadataWrite"];
             };
         };
         responses: {

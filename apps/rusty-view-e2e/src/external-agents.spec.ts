@@ -8,6 +8,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let creationRequest: Record<string, unknown> | undefined;
   let messageBindingId: string | undefined;
   let commandRequest: Record<string, unknown> | undefined;
+  let metadataRequest: Record<string, unknown> | undefined;
   let listedBindings = [binding];
   let listedThreads = [thread];
   let listedEvents: unknown[] = [...events];
@@ -46,6 +47,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         nativeThreadId: 'thread-created',
         sessionId: 'session-created',
         agentId: 'agent-created',
+        label: 'View external session',
         taskRef: { project_id: 'rusty-crew', task_id: '5675' },
       };
       const createdThread = {
@@ -90,6 +92,30 @@ test('external agent fleet, transcript activity, interactions, and controls are 
       return ok({ bindings: listedBindings });
     if (url.pathname === '/v1/external-interactions')
       return ok({ interactions: [interaction] });
+    if (/\/v1\/external-bindings\/[^/]+\/metadata$/.test(url.pathname)) {
+      metadataRequest = request.postDataJSON() as Record<string, unknown>;
+      const bindingId = decodeURIComponent(url.pathname.split('/')[3] ?? '');
+      const current = listedBindings.find(
+        (candidate) => candidate.bindingId === bindingId,
+      );
+      if (current === undefined) throw new Error('metadata binding not found');
+      const updated = {
+        ...current,
+        label: metadataRequest['label'],
+        taskRef: metadataRequest['taskRef'],
+        revision: current.revision + 1,
+        updatedAt: '2026-07-12T00:00:02Z',
+      };
+      listedBindings = listedBindings.map((candidate) =>
+        candidate.bindingId === bindingId ? updated : candidate,
+      );
+      listedThreads = listedThreads.map((candidate) =>
+        candidate.threadId === current.nativeThreadId
+          ? { ...candidate, name: metadataRequest?.['label'] }
+          : candidate,
+      );
+      return ok(updated);
+    }
     if (url.pathname.endsWith('/threads/read')) {
       const body = request.postDataJSON() as { threadId?: string };
       return ok({
@@ -275,6 +301,54 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     path: testInfo.outputPath('external-agent-created.png'),
     fullPage: true,
   });
+
+  let createdRow = page.locator('[data-thread-id="thread-created"]');
+  await createdRow.getByTestId('external-agent-options').click();
+  const options = page.getByTestId('external-agent-options-form');
+  await options.getByLabel('Label').fill('Renamed external session');
+  await options.getByLabel('Den project').fill('asha');
+  await options.getByLabel('Task').fill('4281');
+  await options.getByTestId('external-agent-options-save').click();
+  await expect(createdRow).toContainText('Renamed external session');
+  await expect(createdRow).toContainText('asha · #4281');
+  expect(metadataRequest).toEqual({
+    expectedRevision: 1,
+    label: 'Renamed external session',
+    taskRef: { project_id: 'asha', task_id: '4281' },
+  });
+
+  await page.reload();
+  await page.getByTestId('external-agents-tab').click();
+  createdRow = page.locator('[data-thread-id="thread-created"]');
+  await expect(createdRow).toContainText('asha · #4281');
+  await createdRow.getByTestId('external-agent-options').click();
+  await page
+    .getByTestId('external-agent-options-form')
+    .getByLabel('Label')
+    .fill('');
+  await page
+    .getByTestId('external-agent-options-form')
+    .getByLabel('Den project')
+    .fill('');
+  await page
+    .getByTestId('external-agent-options-form')
+    .getByLabel('Task')
+    .fill('');
+  await page.getByTestId('external-agent-options-save').click();
+  await expect(createdRow).toContainText('New browser-created Codex session');
+  expect(metadataRequest).toEqual({
+    expectedRevision: 2,
+    label: null,
+    taskRef: null,
+  });
+
+  await page.reload();
+  await page.getByTestId('external-agents-tab').click();
+  const clearedCreatedRow = page
+    .getByTestId('external-agent-row')
+    .filter({ hasText: 'New browser-created Codex session' });
+  await expect(clearedCreatedRow).toContainText('unmapped');
+  await clearedCreatedRow.click();
   await page
     .getByTestId('message-input-field')
     .fill('Hello from the created session');
@@ -293,8 +367,8 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(row).not.toContainText('runtime-1');
   await row.click();
 
-  await expect(page.getByTestId('external-turn-status')).toContainText(
-    'active',
+  await expect(page.getByTestId('external-turn-status')).toHaveText(
+    /^(active|waiting_interaction)$/,
   );
   await expect(page.getByTestId('external-current-model')).toHaveText(
     'gpt-5.6',

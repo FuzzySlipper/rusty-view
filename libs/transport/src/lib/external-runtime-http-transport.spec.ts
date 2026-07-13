@@ -36,6 +36,46 @@ describe('ExternalRuntimeHttpTransport', () => {
     ).resolves.toMatchObject({ creation: { phase: 'ready' } });
   });
 
+  it('writes explicit nullable binding metadata through the encoded route', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-bindings/binding%2Fone/metadata',
+        );
+        expect(JSON.parse(String(init?.body))).toEqual({
+          expectedRevision: 4,
+          label: null,
+          taskRef: { project_id: 'rusty-crew', task_id: '5764' },
+        });
+        return json({
+          ok: true,
+          data: {
+            bindingId: 'binding/one',
+            runtimeId: 'runtime-1',
+            purpose: 'crew_agent',
+            status: 'active',
+            effectiveConfigFingerprint: 'config',
+            revision: 5,
+            createdAt: '',
+            updatedAt: '',
+            label: null,
+            taskRef: { project_id: 'rusty-crew', task_id: '5764' },
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(
+      transport.updateBindingMetadata('binding/one', {
+        expectedRevision: 4,
+        label: null,
+        taskRef: { project_id: 'rusty-crew', task_id: '5764' },
+      }),
+    ).resolves.toMatchObject({ revision: 5, label: null });
+  });
+
   it('uses generated endpoint shapes for fleets, pagination, and controls', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

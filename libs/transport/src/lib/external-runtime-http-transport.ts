@@ -7,6 +7,7 @@ import type {
   ExternalAgentSessionCreateWrite,
   ExternalBindingFleet,
   ExternalBindingMessageWrite,
+  ExternalBindingMetadataWrite,
   ExternalControlReceipt,
   ExternalControlWrite,
   ExternalInteractionAttention,
@@ -34,6 +35,7 @@ import type {
   SendExternalBindingMessageResponse,
   SubmitExternalBindingControlResponse,
   UnarchiveExternalRuntimeThreadResponse,
+  WriteExternalBindingMetadataResponse,
 } from '@rusty-view/protocol';
 
 import { ChatTransportError, classifyFetchError } from './chat-transport-error';
@@ -74,6 +76,19 @@ export class ExternalRuntimeHttpTransport {
       await this.request<ListExternalBindingsResponse>(
         'GET',
         '/v1/external-bindings',
+      ),
+    );
+  }
+
+  async updateBindingMetadata(
+    bindingId: string,
+    request: ExternalBindingMetadataWrite,
+  ): Promise<ExternalAgentBinding> {
+    return unwrap(
+      await this.request<WriteExternalBindingMetadataResponse>(
+        'POST',
+        `/v1/external-bindings/${encodeURIComponent(bindingId)}/metadata`,
+        request,
       ),
     );
   }

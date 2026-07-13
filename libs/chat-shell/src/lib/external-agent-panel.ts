@@ -45,6 +45,10 @@ export class ExternalAgentPanelComponent {
   protected readonly label = signal('');
   protected readonly taskProjectId = signal('');
   protected readonly taskId = signal('');
+  protected readonly editingBindingId = signal<string | undefined>(undefined);
+  protected readonly metadataLabel = signal('');
+  protected readonly metadataProjectId = signal('');
+  protected readonly metadataTaskId = signal('');
   protected readonly attempted = signal(false);
   private readonly creationAttemptKeys = loadCreationAttemptKeys();
 
@@ -106,6 +110,12 @@ export class ExternalAgentPanelComponent {
     if (projectId) return projectId;
     if (taskId) return `#${taskId}`;
     return 'unmapped';
+  }
+
+  protected sessionTitle(session: ExternalAgentSession): string {
+    return (
+      session.binding?.label ?? session.thread.name ?? session.thread.preview
+    );
   }
 
   protected updateQuery(event: Event): void {
@@ -171,6 +181,51 @@ export class ExternalAgentPanelComponent {
     await this.store.deleteThread(session);
   }
 
+  protected openOptions(session: ExternalAgentSession): void {
+    const binding = session.binding;
+    if (binding === undefined) return;
+    this.metadataLabel.set(binding.label ?? '');
+    this.metadataProjectId.set(binding.taskRef?.project_id ?? '');
+    this.metadataTaskId.set(binding.taskRef?.task_id ?? '');
+    this.store.metadataError.set(undefined);
+    this.store.metadataNotice.set(undefined);
+    this.editingBindingId.set(binding.bindingId);
+  }
+
+  protected closeOptions(): void {
+    this.editingBindingId.set(undefined);
+    this.store.metadataError.set(undefined);
+  }
+
+  protected metadataPending(session: ExternalAgentSession): boolean {
+    const bindingId = session.binding?.bindingId;
+    return (
+      bindingId !== undefined &&
+      this.store.metadataPendingBindingIds().has(bindingId)
+    );
+  }
+
+  protected async saveOptions(
+    session: ExternalAgentSession,
+    event: Event,
+  ): Promise<void> {
+    event.preventDefault();
+    const label = this.metadataLabel().trim();
+    const projectId = this.metadataProjectId().trim();
+    const taskId = this.metadataTaskId().trim();
+    const saved = await this.store.updateSessionMetadata(session, {
+      label: label === '' ? null : label,
+      taskRef:
+        projectId === '' && taskId === ''
+          ? null
+          : {
+              ...(projectId === '' ? {} : { project_id: projectId }),
+              ...(taskId === '' ? {} : { task_id: taskId }),
+            },
+    });
+    if (saved) this.editingBindingId.set(undefined);
+  }
+
   protected openCreator(): void {
     const runtime = this.store.readyRuntimes()[0];
     const profile = this.store.creationProfiles()[0];
@@ -195,6 +250,7 @@ export class ExternalAgentPanelComponent {
     if (target() === value) return;
     target.set(value);
     this.clearAttemptFeedback();
+    this.store.metadataError.set(undefined);
   }
 
   protected async create(event: Event): Promise<void> {

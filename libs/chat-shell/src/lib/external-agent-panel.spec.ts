@@ -15,11 +15,17 @@ import {
 
 interface PanelApi {
   readonly cwd: WritableSignal<string>;
+  readonly metadataLabel: WritableSignal<string>;
+  readonly metadataProjectId: WritableSignal<string>;
+  readonly metadataTaskId: WritableSignal<string>;
   taskRefLabel(session: ExternalAgentSession): string;
+  sessionTitle(session: ExternalAgentSession): string;
   openCreator(): void;
+  openOptions(session: ExternalAgentSession): void;
   closeCreator(): void;
   updateDraft(target: WritableSignal<string>, event: Event): void;
   create(event: Event): Promise<void>;
+  saveOptions(session: ExternalAgentSession, event: Event): Promise<void>;
 }
 
 function input(value: string): Event {
@@ -46,12 +52,16 @@ async function createPanel(
     selectedSessionKey: signal(undefined),
     lifecyclePendingThreadIds: signal(new Set<string>()),
     lifecycleNotice: signal(undefined),
+    metadataPendingBindingIds: signal(new Set<string>()),
+    metadataError: signal<string | undefined>(undefined),
+    metadataNotice: signal<string | undefined>(undefined),
     interactions: signal([]),
     setArchivedInventory: vi.fn(),
     setInventoryMode: vi.fn(),
     archiveThread: vi.fn(),
     unarchiveThread: vi.fn(),
     deleteThread: vi.fn(),
+    updateSessionMetadata: vi.fn(async () => true),
     refresh: vi.fn(),
     refreshCreationProfiles: vi.fn(),
     createSession: vi.fn(createSession),
@@ -191,6 +201,47 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     expect(cwd.textContent).toContain('/home/dev/rusty-view');
     expect(cwd.title).toBe('/home/dev/rusty-view');
     expect(row.textContent).not.toContain('runtime-1');
+  });
+
+  it('places Options below Archive and saves explicit nullable metadata', async () => {
+    const base = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    if (base.binding === undefined) throw new Error('expected bound session');
+    const session: ExternalAgentSession = {
+      ...base,
+      binding: {
+        ...base.binding,
+        label: 'Existing label',
+        taskRef: { project_id: 'rusty-view', task_id: '5764' },
+      },
+    };
+    const { fixture, panel, store } = await createPanel(
+      async () => undefined,
+      [session],
+    );
+    fixture.detectChanges();
+
+    const actionLabels = [
+      ...fixture.nativeElement.querySelectorAll('.rv-agent__actions button'),
+    ].map((button) => (button as HTMLButtonElement).textContent?.trim());
+    expect(actionLabels).toEqual(['Archive', 'Options']);
+    expect(panel.sessionTitle(session)).toBe('Existing label');
+
+    panel.openOptions(session);
+    panel.updateDraft(panel.metadataLabel, input(''));
+    panel.updateDraft(panel.metadataProjectId, input(''));
+    panel.updateDraft(panel.metadataTaskId, input(''));
+    await panel.saveOptions(session, {
+      preventDefault: vi.fn(),
+    } as unknown as Event);
+
+    expect(store.updateSessionMetadata).toHaveBeenCalledWith(session, {
+      label: null,
+      taskRef: null,
+    });
   });
 
   it('keeps managed and attention-bearing sessions quiet across a 150-thread inventory', () => {
