@@ -103,6 +103,16 @@ const BUILT_IN_PANEL_IDS = new Set<string>([
   HELP_PANEL_ID,
 ]);
 
+const DRAG_THRESHOLD_PX = 6;
+
+interface ActivePointerGesture {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  readonly startedInsidePanel: boolean;
+  dragged: boolean;
+}
+
 /**
  * Top menu: the modular menu bar plus the panels it can open.
  *
@@ -139,6 +149,8 @@ export class TopMenuComponent {
     optional: true,
   });
   private readonly controller = inject(TopMenuController);
+  private activePointerGesture: ActivePointerGesture | undefined;
+  private suppressNextOverlayClick = false;
 
   protected readonly items = computed<readonly ChatTopMenuItem[]>(() => {
     const merged = new Map<string, ChatTopMenuItem>();
@@ -223,12 +235,73 @@ export class TopMenuComponent {
     this.controller.closePanel();
   }
 
+  protected onPointerDown(event: PointerEvent): void {
+    this.suppressNextOverlayClick = false;
+    this.activePointerGesture = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startedInsidePanel: eventTargetIsInsidePanel(event.target),
+      dragged: false,
+    };
+  }
+
+  protected onPointerMove(event: PointerEvent): void {
+    this.updatePointerDragState(event);
+  }
+
+  protected onPointerUp(event: PointerEvent): void {
+    const gesture = this.updatePointerDragState(event);
+    if (gesture === undefined) return;
+    this.suppressNextOverlayClick =
+      gesture.startedInsidePanel || gesture.dragged;
+    this.activePointerGesture = undefined;
+  }
+
+  protected onPointerCancel(event: PointerEvent): void {
+    if (this.activePointerGesture?.pointerId !== event.pointerId) return;
+    this.activePointerGesture = undefined;
+    this.suppressNextOverlayClick = false;
+  }
+
+  protected onOverlayClick(event: MouseEvent): void {
+    if (this.suppressNextOverlayClick) {
+      this.suppressNextOverlayClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.target !== event.currentTarget) return;
+    this.closePanel();
+  }
+
+  private updatePointerDragState(
+    event: PointerEvent,
+  ): ActivePointerGesture | undefined {
+    const gesture = this.activePointerGesture;
+    if (gesture === undefined || gesture.pointerId !== event.pointerId) {
+      return undefined;
+    }
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (Math.hypot(deltaX, deltaY) >= DRAG_THRESHOLD_PX) {
+      gesture.dragged = true;
+    }
+    return gesture;
+  }
+
   @HostListener('document:keydown.escape', ['$event'])
   protected onEscape(event: Event): void {
     if (this.openPanelId() === null) return;
     event.preventDefault();
     this.closePanel();
   }
+}
+
+function eventTargetIsInsidePanel(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element && target.closest('.rv-top-menu__panel') !== null
+  );
 }
 
 function panelMenuItem(panel: ChatTopMenuPanel): ChatTopMenuItem {

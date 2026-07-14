@@ -1,4 +1,11 @@
-<div class="rv-top-menu-host" data-testid="top-menu">
+<div
+  class="rv-top-menu-host"
+  data-testid="top-menu"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerCancel($event)"
+>
   <rv-top-menu-bar [items]="entries()" (selected)="onSelect($event)" />
 
   @if (optionsOpen()) {
@@ -8,7 +15,7 @@
     role="button"
     tabindex="0"
     aria-label="Close options"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -30,7 +37,7 @@
     role="button"
     tabindex="0"
     aria-label="Close help"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -63,7 +70,7 @@
     role="button"
     tabindex="0"
     aria-label="Close sessions"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -85,7 +92,7 @@
     role="button"
     tabindex="0"
     aria-label="Close profiles"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -107,7 +114,7 @@
     role="button"
     tabindex="0"
     aria-label="Close service config"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -129,7 +136,7 @@
     role="button"
     tabindex="0"
     aria-label="Close debug"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -151,7 +158,7 @@
     role="button"
     tabindex="0"
     aria-label="Close providers"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >
@@ -173,7 +180,7 @@
     role="button"
     tabindex="0"
     [attr.aria-label]="'Close ' + customPanel.title"
-    (click)="closePanel()"
+    (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
   >

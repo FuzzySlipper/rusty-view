@@ -122,3 +122,30 @@ test('top menu opens options, applies an appearance change, opens help', async (
   await expect(page.locator('rv-help-panel')).toHaveCount(0);
   await expect(page.locator('.rv-debug__header')).toBeVisible();
 });
+
+test('floating panel ignores an inside-to-outside drag but closes on an outside click', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.locator('.rv-top-menu__item', { hasText: 'Help' }).click();
+
+  const panel = page.getByTestId('top-menu-panel-help');
+  const overlay = page.getByTestId('top-menu-overlay-help');
+  await expect(panel).toBeVisible();
+  const panelBounds = await panel.evaluate((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  });
+
+  await page.mouse.move(
+    panelBounds.x + panelBounds.width / 2,
+    panelBounds.y + panelBounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(8, 8, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(panel).toBeVisible();
+  await overlay.click({ position: { x: 8, y: 8 } });
+  await expect(panel).toHaveCount(0);
+});
