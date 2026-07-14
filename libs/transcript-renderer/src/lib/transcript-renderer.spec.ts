@@ -798,6 +798,17 @@ describe('MessageItemComponent', () => {
     expect(host.textContent).toContain('typing');
   });
 
+  it('shows sending for an optimistic user message', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        status: 'streaming',
+        metadata: { deliveryStatus: 'sending' },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.textContent).toContain('sending');
+  });
+
   it('renders multiple blocks', async () => {
     const fixture = await createMessage(
       makeMessage({

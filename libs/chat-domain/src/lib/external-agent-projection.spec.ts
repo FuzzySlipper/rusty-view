@@ -3,6 +3,59 @@ import type { NormalizedExternalRuntimeEvent } from '@rusty-view/protocol';
 import { projectExternalAgentTranscript } from './external-agent-projection';
 
 describe('projectExternalAgentTranscript', () => {
+  it('projects native userMessage items as visible user transcript rows', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread',
+        sessionId: 'session',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'active',
+        cwd: '/workspace',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'user',
+                kind: 'userMessage',
+                status: 'completed',
+                text: 'Please inspect the transcript.',
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        author: { role: 'user', displayName: undefined },
+        status: 'completed',
+        blocks: [
+          expect.objectContaining({
+            kind: 'text',
+            content: 'Please inspect the transcript.',
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('keeps plans, commands, files, reasoning, and unknown events inspectable', () => {
     const events: NormalizedExternalRuntimeEvent[] = [
       event('1', 'plan_delta', {

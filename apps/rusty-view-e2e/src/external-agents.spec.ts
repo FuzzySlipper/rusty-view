@@ -367,6 +367,22 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(row).not.toContainText('runtime-1');
   await row.click();
 
+  const composer = page.getByTestId('message-input-field');
+  await expect(
+    page
+      .locator('.rv-message--user')
+      .filter({ hasText: 'Newest native prompt' }),
+  ).toBeVisible();
+  await composer.fill('unsent draft');
+  await composer.press('ArrowUp');
+  await expect(composer).toHaveValue('Newest native prompt');
+  await composer.press('ArrowUp');
+  await expect(composer).toHaveValue('Older native prompt');
+  await composer.press('ArrowDown');
+  await composer.press('ArrowDown');
+  await expect(composer).toHaveValue('unsent draft');
+  await composer.fill('');
+
   await expect(page.getByTestId('external-turn-status')).toHaveText(
     /^(active|waiting_interaction)$/,
   );
@@ -444,6 +460,11 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(page.getByRole('alert')).toContainText(
     'Send failed: delivery offline',
   );
+  const rejectedPrompt = page
+    .locator('.rv-message--user')
+    .filter({ hasText: 'Rejected message proof' });
+  await expect(rejectedPrompt).toBeVisible();
+  await expect(rejectedPrompt).toHaveAttribute('data-message-status', 'error');
   await page.screenshot({
     path: testInfo.outputPath('external-agent-console.png'),
     fullPage: true,
@@ -621,7 +642,38 @@ const thread = {
   name: 'Rusty View task 5516',
   agentNickname: null,
   agentRole: null,
-  turns: [],
+  turns: [
+    {
+      turnId: 'prompt-turn-1',
+      status: 'completed',
+      startedAt: 1783756801,
+      completedAt: 1783756802,
+      durationMs: 1,
+      items: [
+        {
+          itemId: 'user-prompt-1',
+          kind: 'userMessage',
+          status: 'completed',
+          text: 'Older native prompt',
+        },
+      ],
+    },
+    {
+      turnId: 'prompt-turn-2',
+      status: 'completed',
+      startedAt: 1783756803,
+      completedAt: 1783756804,
+      durationMs: 1,
+      items: [
+        {
+          itemId: 'user-prompt-2',
+          kind: 'userMessage',
+          status: 'completed',
+          text: 'Newest native prompt',
+        },
+      ],
+    },
+  ],
 };
 const interaction = {
   interactionId: 'interaction-1',

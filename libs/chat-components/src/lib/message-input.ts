@@ -61,8 +61,10 @@ export class MessageInputComponent {
   readonly erasePreviousWordHotkey = input<string>('Ctrl+W');
   readonly placeholder = input<string>('Type a message…');
   readonly commands = input<readonly MessageInputCommandDescriptor[]>([]);
-  /** Submitted slash commands for Up/Down navigation (newest-first). */
+  /** @deprecated Use submissionHistory for ordinary prompts and commands. */
   readonly commandHistory = input<readonly string[]>([]);
+  /** Submitted prompts and commands for Up/Down navigation (newest-first). */
+  readonly submissionHistory = input<readonly string[] | undefined>(undefined);
   readonly attachmentsEnabled = input<boolean>(false);
   readonly attachmentScopes = input<readonly ChatAttachmentScope[]>([]);
   readonly send = output<string>();
@@ -79,7 +81,7 @@ export class MessageInputComponent {
   protected readonly attachments = signal<
     readonly MessageInputAttachmentSelection[]
   >([]);
-  /** null = not navigating history; number = index into commandHistory(). */
+  /** null = not navigating history; number = index into effectiveHistory(). */
   protected readonly historyIndex = signal<number | null>(null);
   /** Draft preserved when the user enters history navigation. */
   protected savedDraft = '';
@@ -128,6 +130,10 @@ export class MessageInputComponent {
 
   protected readonly accept = computed(() => this.activeScope()?.accept);
 
+  private readonly effectiveHistory = computed(
+    () => this.submissionHistory() ?? this.commandHistory(),
+  );
+
   protected onKeydown(event: KeyboardEvent): void {
     if (matchesHotkey(event, this.erasePreviousWordHotkey())) {
       event.preventDefault();
@@ -162,12 +168,10 @@ export class MessageInputComponent {
       }
     }
 
-    // Command history navigation (only when hints are closed and the text is
-    // empty or a slash command — never clobber a half-typed normal message).
+    // Submission history navigation. Multiline drafts retain normal cursor
+    // movement until the caret reaches the first/last line.
     if (!isOpen && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      const value = this.text();
-      const isCommandContext = value.length === 0 || value.startsWith('/');
-      if (isCommandContext) {
+      if (this.canNavigateHistory(event)) {
         event.preventDefault();
         // ArrowUp = older (index increases), ArrowDown = newer (index decreases).
         this.navigateHistory(event.key === 'ArrowUp' ? 1 : -1);
@@ -179,6 +183,18 @@ export class MessageInputComponent {
       event.preventDefault();
       this.submit();
     }
+  }
+
+  private canNavigateHistory(event: KeyboardEvent): boolean {
+    if (this.historyIndex() !== null) return true;
+    const target = event.target;
+    if (!(target instanceof HTMLTextAreaElement)) return true;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? start;
+    if (event.key === 'ArrowUp') {
+      return !target.value.slice(0, start).includes('\n');
+    }
+    return !target.value.slice(end).includes('\n');
   }
 
   private erasePreviousWord(target: EventTarget | null): void {
@@ -254,7 +270,7 @@ export class MessageInputComponent {
   }
 
   /**
-   * Navigate command history. `delta` +1 = older (ArrowUp), -1 = newer
+   * Navigate submission history. `delta` +1 = older (ArrowUp), -1 = newer
    * (ArrowDown). History is newest-first, so older = higher index.
    *
    * Enters history mode on first navigation, preserving the current draft.
@@ -262,7 +278,7 @@ export class MessageInputComponent {
    * Clamps at the oldest entry (index >= length).
    */
   protected navigateHistory(delta: 1 | -1): void {
-    const history = this.commandHistory();
+    const history = this.effectiveHistory();
     if (history.length === 0) return;
 
     const currentIndex = this.historyIndex();

@@ -8,7 +8,11 @@ import {
   type HotkeySettings,
   type HotkeySettingsStorage,
 } from './hotkey-settings';
-import { canCycleExternalThread, cyclicTarget } from './debug-shell';
+import {
+  canCycleExternalThread,
+  cyclicTarget,
+  submissionHistory,
+} from './debug-shell';
 
 class MemoryHotkeyStorage implements HotkeySettingsStorage {
   value: unknown | null = null;
@@ -95,5 +99,39 @@ describe('cyclicTarget', () => {
     expect(canCycleExternalThread('idle')).toBe(true);
     expect(canCycleExternalThread('active')).toBe(true);
     expect(canCycleExternalThread('archived')).toBe(false);
+  });
+});
+
+describe('submissionHistory', () => {
+  it('uses newest user prompts for either transcript surface and keeps commands', () => {
+    const message = (id: string, role: 'user' | 'assistant', text: string) => ({
+      id,
+      sessionId: 'session',
+      author: { role, displayName: undefined },
+      createdAt: '2026-07-13T00:00:00Z',
+      status: 'completed' as const,
+      blocks: [
+        {
+          id: `block-${id}`,
+          messageId: id,
+          kind: 'text',
+          content: text,
+          estimatedHeight: undefined,
+          renderPolicy: 'full' as const,
+        },
+      ],
+    });
+
+    expect(
+      submissionHistory(
+        [
+          message('user-1', 'user', 'older prompt'),
+          message('assistant', 'assistant', 'reply'),
+          message('user-2', 'user', 'newer prompt'),
+          message('user-3', 'user', 'newer prompt'),
+        ],
+        ['/status', '/status'],
+      ),
+    ).toEqual(['newer prompt', 'older prompt', '/status']);
   });
 });

@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { projectExternalAgentTranscript } from '@rusty-view/chat-domain';
+import type { ChatMessage } from '@rusty-view/chat-domain';
 import type {
   ExternalAgentBinding,
   ExternalAgentSessionCreateResult,
@@ -64,6 +65,14 @@ interface CachedInactiveThread {
   readonly thread: ExternalThreadProjection;
 }
 
+interface OptimisticExternalUserMessage {
+  readonly id: string;
+  readonly text: string;
+  readonly createdAt: string;
+  readonly expectedOccurrence: number;
+  readonly status: 'sending' | 'accepted' | 'failed';
+}
+
 const INACTIVE_THREAD_CACHE_CAPACITY = 8;
 
 @Injectable({ providedIn: 'root' })
@@ -89,6 +98,9 @@ export class ExternalAgentStore {
   private readonly seen = signal<Readonly<Record<string, number>>>({});
   private readonly commandHistoryBySession = signal<
     Readonly<Record<string, readonly string[]>>
+  >({});
+  private readonly optimisticUserMessagesBySession = signal<
+    Readonly<Record<string, readonly OptimisticExternalUserMessage[]>>
   >({});
 
   readonly runtimes = signal<readonly ExternalRuntimeRegistration[]>([]);
@@ -240,9 +252,19 @@ export class ExternalAgentStore {
     );
   });
 
-  readonly messages = computed(() =>
-    projectExternalAgentTranscript(this.selectedThread(), this.events()),
-  );
+  readonly messages = computed(() => {
+    const authoritative = projectExternalAgentTranscript(
+      this.selectedThread(),
+      this.events(),
+    );
+    const key = this.selectedSessionKey();
+    if (key === undefined) return authoritative;
+    return mergeOptimisticUserMessages(
+      authoritative,
+      this.optimisticUserMessagesBySession()[key] ?? [],
+      this.selectedThread()?.sessionId ?? key,
+    );
+  });
 
   readonly turnPhase = computed<ExternalTurnPhase | undefined>(() => {
     if (this.selectedInteractions().some((item) => item.status === 'pending')) {
@@ -777,6 +799,7 @@ export class ExternalAgentStore {
       );
       return;
     }
+    const optimisticId = this.addOptimisticUserMessage(text);
     this.pending.set(true);
     try {
       this.error.set(undefined);
@@ -805,12 +828,57 @@ export class ExternalAgentStore {
         await this.transport.external.sendMessage(binding.bindingId, request);
         if (mode === 'plan') this.composerMode.set('auto');
       }
+      this.updateOptimisticUserMessage(optimisticId, 'accepted');
       await this.refreshSelectedEvents();
     } catch (error) {
+      this.updateOptimisticUserMessage(optimisticId, 'failed');
       this.error.set(`Send failed: ${errorMessage(error)}`);
     } finally {
       this.pending.set(false);
     }
+  }
+
+  private addOptimisticUserMessage(text: string): string {
+    const key = this.selectedSessionKey();
+    const id = createExternalAgentRequestKey();
+    if (key === undefined) return id;
+    const authoritativeCount = userMessageOccurrenceCount(
+      projectExternalAgentTranscript(this.selectedThread(), this.events()),
+      text,
+    );
+    this.optimisticUserMessagesBySession.update((messagesBySession) => {
+      const current = messagesBySession[key] ?? [];
+      const pendingSameText = current.filter(
+        (message) =>
+          message.text === text &&
+          message.expectedOccurrence > authoritativeCount,
+      ).length;
+      const next: OptimisticExternalUserMessage = {
+        id,
+        text,
+        createdAt: new Date().toISOString(),
+        expectedOccurrence: authoritativeCount + pendingSameText + 1,
+        status: 'sending',
+      };
+      return { ...messagesBySession, [key]: [...current, next].slice(-100) };
+    });
+    return id;
+  }
+
+  private updateOptimisticUserMessage(
+    id: string,
+    status: OptimisticExternalUserMessage['status'],
+  ): void {
+    this.optimisticUserMessagesBySession.update((messagesBySession) =>
+      Object.fromEntries(
+        Object.entries(messagesBySession).map(([key, messages]) => [
+          key,
+          messages.map((message) =>
+            message.id === id ? { ...message, status } : message,
+          ),
+        ]),
+      ),
+    );
   }
 
   async interrupt(): Promise<void> {
@@ -1194,6 +1262,78 @@ export class ExternalAgentStore {
     }
     return events;
   }
+}
+
+function mergeOptimisticUserMessages(
+  authoritative: readonly ChatMessage[],
+  optimistic: readonly OptimisticExternalUserMessage[],
+  sessionId: string,
+): readonly ChatMessage[] {
+  const occurrences = userMessageOccurrences(authoritative);
+  return [
+    ...authoritative,
+    ...optimistic
+      .filter(
+        (message) =>
+          (occurrences.get(message.text) ?? 0) < message.expectedOccurrence,
+      )
+      .map((message) => optimisticUserMessage(message, sessionId)),
+  ];
+}
+
+function userMessageOccurrenceCount(
+  messages: readonly ChatMessage[],
+  text: string,
+): number {
+  return userMessageOccurrences(messages).get(text) ?? 0;
+}
+
+function userMessageOccurrences(
+  messages: readonly ChatMessage[],
+): ReadonlyMap<string, number> {
+  const occurrences = new Map<string, number>();
+  for (const message of messages) {
+    if (message.author.role !== 'user') continue;
+    const text = message.blocks
+      .filter((block) => block.kind === 'text')
+      .map((block) => block.content)
+      .join('\n');
+    occurrences.set(text, (occurrences.get(text) ?? 0) + 1);
+  }
+  return occurrences;
+}
+
+function optimisticUserMessage(
+  optimistic: OptimisticExternalUserMessage,
+  sessionId: string,
+): ChatMessage {
+  const id = `external-optimistic-user:${optimistic.id}`;
+  return {
+    id,
+    sessionId,
+    author: { role: 'user', displayName: undefined },
+    createdAt: optimistic.createdAt,
+    status:
+      optimistic.status === 'failed'
+        ? 'error'
+        : optimistic.status === 'sending'
+          ? 'streaming'
+          : 'completed',
+    blocks: [
+      {
+        id: `block:${id}`,
+        messageId: id,
+        kind: 'text',
+        content: optimistic.text,
+        estimatedHeight: undefined,
+        renderPolicy: 'full',
+      },
+    ],
+    metadata: {
+      optimisticExternalUser: true,
+      deliveryStatus: optimistic.status,
+    },
+  };
 }
 
 export function sessionKey(runtimeId: string, threadId: string): string {

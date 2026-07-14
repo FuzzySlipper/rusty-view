@@ -109,7 +109,9 @@ export class MessageItemComponent {
   protected readonly statusIndicator = computed(() => {
     const status = this.message().status;
     if (status === 'streaming') {
-      return 'typing…';
+      return this.message().metadata?.['deliveryStatus'] === 'sending'
+        ? 'sending…'
+        : 'typing…';
     }
     if (status === 'error') {
       return 'error';

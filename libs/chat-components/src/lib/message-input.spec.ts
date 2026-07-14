@@ -463,7 +463,7 @@ describe('MessageInputComponent', () => {
     });
   });
 
-  describe('Command history navigation', () => {
+  describe('Submission history navigation', () => {
     const history = ['/new', '/status', '/help'];
 
     it('should not navigate when history is empty', () => {
@@ -622,10 +622,13 @@ describe('MessageInputComponent', () => {
       expect(component['historyIndex']()).toBeNull();
     });
 
-    it('should not navigate history when typing a normal message', () => {
+    it('should preserve a normal-message draft while navigating history', () => {
       const fixture = TestBed.createComponent(MessageInputComponent);
       const component = fixture.componentInstance;
-      fixture.componentRef.setInput('commandHistory', history);
+      fixture.componentRef.setInput('submissionHistory', [
+        'newest prompt',
+        'older prompt',
+      ]);
       fixture.detectChanges();
 
       const textarea = fixture.nativeElement.querySelector('textarea');
@@ -636,9 +639,50 @@ describe('MessageInputComponent', () => {
       textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
       fixture.detectChanges();
 
-      // Text should not change (history nav didn't fire for normal text).
+      expect(component['text']()).toBe('newest prompt');
+      expect(component['historyIndex']()).toBe(0);
+
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
+      fixture.detectChanges();
+
       expect(component['text']()).toBe('hello world');
       expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('keeps ArrowUp as cursor movement below the first line of a draft', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = 'first line\nsecond line';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('first line\nsecond line');
+      expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('navigates history from the first line of a multiline draft', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = 'first line\nsecond line';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.setSelectionRange(4, 4);
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('previous prompt');
+      expect(component['historyIndex']()).toBe(0);
     });
 
     it('should navigate history from empty text on ArrowUp', () => {

@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { ChatStore, ExternalAgentStore } from '@rusty-view/chat-store';
 import { ChatTheme } from '@rusty-view/chat-theme';
-import type { MessageBlock } from '@rusty-view/chat-domain';
+import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
 import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
@@ -243,11 +243,12 @@ export class DebugShellComponent {
           ),
         ],
   );
-  protected readonly inputCommandHistory = computed(() =>
-    this.externalSelected()
+  protected readonly inputSubmissionHistory = computed(() => {
+    const commands = this.externalSelected()
       ? this.external.commandHistory()
-      : this.store.commandHistory(),
-  );
+      : this.store.commandHistory();
+    return submissionHistory(this.displayedMessages(), commands);
+  });
   protected readonly composerError = computed(() =>
     this.externalSelected()
       ? this.external.commandError()
@@ -505,6 +506,28 @@ function confirmCommand(message: string | undefined): Promise<boolean> {
     return Promise.resolve(globalThis.confirm(message ?? 'Run command?'));
   }
   return Promise.resolve(true);
+}
+
+function messageText(message: ChatMessage): string {
+  return message.blocks
+    .filter((block) => block.kind === 'text')
+    .map((block) => block.content)
+    .join('\n')
+    .trim();
+}
+
+export function submissionHistory(
+  messages: readonly ChatMessage[],
+  commands: readonly string[],
+): readonly string[] {
+  const prompts = [...messages]
+    .reverse()
+    .filter((message) => message.author.role === 'user')
+    .map(messageText)
+    .filter((text) => text.length > 0);
+  return [...prompts, ...commands].filter(
+    (entry, index, entries) => entry !== entries[index - 1],
+  );
 }
 
 export function cyclicTarget<T>(

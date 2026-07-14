@@ -457,10 +457,81 @@ describe('ExternalAgentStore', () => {
 
     await store.send('hello');
     expect(store.error()).toContain('Send failed: delivery offline');
+    expect(store.messages()).toEqual([
+      expect.objectContaining({
+        author: expect.objectContaining({ role: 'user' }),
+        status: 'error',
+        blocks: [expect.objectContaining({ content: 'hello' })],
+      }),
+    ]);
 
     store.events.set([event(1, 'turn-1', 'inProgress')]);
     await store.interrupt();
     expect(store.error()).toContain('Interrupt failed: control offline');
+  });
+
+  it('projects a user prompt immediately and marks it accepted after delivery', async () => {
+    const delivery = deferred<void>();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage: vi.fn(() => delivery.promise),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(thread('thread-1', 10));
+
+    const sending = store.send('hello now');
+
+    expect(store.messages()).toEqual([
+      expect.objectContaining({
+        author: expect.objectContaining({ role: 'user' }),
+        status: 'streaming',
+        blocks: [expect.objectContaining({ content: 'hello now' })],
+        metadata: expect.objectContaining({ deliveryStatus: 'sending' }),
+      }),
+    ]);
+
+    delivery.resolve();
+    await sending;
+    expect(store.messages()[0]).toMatchObject({
+      status: 'completed',
+      metadata: { deliveryStatus: 'accepted' },
+    });
+  });
+
+  it('reconciles repeated optimistic prompts against native user messages without duplicates', async () => {
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage: vi.fn(),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(threadWithUserPrompts('hello'));
+
+    await store.send('hello');
+    await store.send('hello');
+    expect(
+      store.messages().filter((message) => message.author.role === 'user'),
+    ).toHaveLength(3);
+
+    store.selectedThread.set(threadWithUserPrompts('hello', 'hello', 'hello'));
+
+    expect(
+      store.messages().filter((message) => message.author.role === 'user'),
+    ).toHaveLength(3);
+    expect(
+      store
+        .messages()
+        .filter(
+          (message) => message.metadata?.['optimisticExternalUser'] === true,
+        ),
+    ).toHaveLength(0);
   });
 
   it('sends Plan collaboration mode once and returns the composer to auto', async () => {
@@ -1027,6 +1098,29 @@ function thread(threadId: string, updatedAt: number): ExternalThreadProjection {
     agentNickname: null,
     agentRole: null,
     turns: [],
+  };
+}
+
+function threadWithUserPrompts(
+  ...prompts: readonly string[]
+): ExternalThreadProjection {
+  return {
+    ...thread('thread-1', 10),
+    turns: prompts.map((text, index) => ({
+      turnId: `turn-${index + 1}`,
+      status: 'completed',
+      startedAt: index + 1,
+      completedAt: index + 1,
+      durationMs: 0,
+      items: [
+        {
+          itemId: `user-${index + 1}`,
+          kind: 'userMessage',
+          status: 'completed',
+          text,
+        },
+      ],
+    })),
   };
 }
 
