@@ -326,6 +326,46 @@ describe('ExternalAgentStore', () => {
     expect(store.error()).toBeUndefined();
   });
 
+  it('recovers missing active bindings without reading archived bindings', async () => {
+    const missingActiveBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-active-missing',
+      nativeThreadId: 'thread-active-missing',
+    };
+    const archivedBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-archived',
+      nativeThreadId: 'thread-archived',
+      status: 'archived' as const,
+    };
+    const readThread = vi.fn(
+      async (
+        _runtimeId: string,
+        request: {
+          threadId: string;
+        },
+      ) => ({ thread: thread(request.threadId, 20) }),
+    );
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding(), missingActiveBinding, archivedBinding],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread,
+    });
+
+    await store.refresh();
+
+    expect(readThread).toHaveBeenCalledTimes(1);
+    expect(readThread).toHaveBeenCalledWith('runtime-1', {
+      threadId: 'thread-active-missing',
+      includeTurns: false,
+    });
+    expect(store.sessions().map((session) => session.thread.threadId)).toEqual([
+      'thread-1',
+      'thread-active-missing',
+    ]);
+  });
+
   it('does not retry a binding thread with a controller resume failure', async () => {
     const staleBinding = {
       ...externalBinding(),

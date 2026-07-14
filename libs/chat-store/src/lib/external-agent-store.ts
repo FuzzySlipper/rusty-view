@@ -376,6 +376,7 @@ export class ExternalAgentStore {
                 .filter(
                   (binding) =>
                     binding.runtimeId === runtime.runtimeId &&
+                    binding.status === 'active' &&
                     binding.nativeThreadId != null &&
                     !known.has(binding.nativeThreadId) &&
                     !failedResumeBindingIds.has(binding.bindingId),
