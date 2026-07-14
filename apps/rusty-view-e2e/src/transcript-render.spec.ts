@@ -247,6 +247,19 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(page.locator('.rv-message--user')).toHaveCount(2);
   await expect(page.locator('.rv-message--assistant')).toHaveCount(1);
 
+  // The same submission-history behavior is wired to native Crew Profile
+  // transcripts, including forward navigation back to the unsent draft.
+  const composer = page.getByTestId('message-input-field');
+  await composer.fill('profile draft');
+  await composer.press('ArrowUp');
+  await expect(composer).toHaveValue('What happens next?');
+  await composer.press('ArrowUp');
+  await expect(composer).toHaveValue(USER_BODY);
+  await composer.press('ArrowDown');
+  await composer.press('ArrowDown');
+  await expect(composer).toHaveValue('profile draft');
+  await composer.fill('');
+
   // Message actions stay visually quiet until their owning message is hovered.
   // The action row remains in the DOM so keyboard focus can reveal it via the
   // message's :focus-within state.
