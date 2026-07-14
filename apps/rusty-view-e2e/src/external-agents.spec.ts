@@ -375,9 +375,12 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   ).toBeVisible();
   await composer.fill('unsent draft');
   await composer.press('ArrowUp');
+  await expect(composer).toHaveValue('unsent draft');
+  await composer.press('ArrowUp');
   await expect(composer).toHaveValue('Newest native prompt');
   await composer.press('ArrowUp');
   await expect(composer).toHaveValue('Older native prompt');
+  await composer.press('ArrowDown');
   await composer.press('ArrowDown');
   await composer.press('ArrowDown');
   await expect(composer).toHaveValue('unsent draft');

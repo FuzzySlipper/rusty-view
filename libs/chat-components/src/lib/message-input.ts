@@ -168,13 +168,29 @@ export class MessageInputComponent {
       }
     }
 
-    // Submission history navigation. Multiline drafts retain normal cursor
-    // movement until the caret reaches the first/last line.
+    // Submission history navigation follows terminal-style boundaries. Arrow
+    // keys retain normal multiline movement until the caret reaches the first
+    // or last line, move to that line's outer edge on the next press, and only
+    // enter history on a subsequent press from the absolute start/end.
     if (!isOpen && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      if (this.canNavigateHistory(event)) {
+      const action = this.historyArrowAction(event);
+      if (action.kind === 'move-to-edge') {
+        event.preventDefault();
+        action.target.setSelectionRange(action.position, action.position);
+        return;
+      }
+      if (action.kind === 'navigate') {
         event.preventDefault();
         // ArrowUp = older (index increases), ArrowDown = newer (index decreases).
         this.navigateHistory(event.key === 'ArrowUp' ? 1 : -1);
+        if (action.target !== null) {
+          // Keep the DOM value and caret in sync immediately so a repeated key
+          // press sees the boundary selected for its navigation direction.
+          action.target.value = this.text();
+          const position =
+            event.key === 'ArrowUp' ? 0 : action.target.value.length;
+          action.target.setSelectionRange(position, position);
+        }
         return;
       }
     }
@@ -185,16 +201,49 @@ export class MessageInputComponent {
     }
   }
 
-  private canNavigateHistory(event: KeyboardEvent): boolean {
-    if (this.historyIndex() !== null) return true;
+  private historyArrowAction(event: KeyboardEvent):
+    | { readonly kind: 'native' }
+    | {
+        readonly kind: 'move-to-edge';
+        readonly target: HTMLTextAreaElement;
+        readonly position: number;
+      }
+    | {
+        readonly kind: 'navigate';
+        readonly target: HTMLTextAreaElement | null;
+      } {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return { kind: 'native' };
+    }
     const target = event.target;
-    if (!(target instanceof HTMLTextAreaElement)) return true;
+    if (!(target instanceof HTMLTextAreaElement)) {
+      return { kind: 'navigate', target: null };
+    }
     const start = target.selectionStart ?? target.value.length;
     const end = target.selectionEnd ?? start;
+    if (start !== end) return { kind: 'native' };
+
     if (event.key === 'ArrowUp') {
-      return !target.value.slice(0, start).includes('\n');
+      if (start === 0) return { kind: 'navigate', target };
+      if (!target.value.slice(0, start).includes('\n')) {
+        return { kind: 'move-to-edge', target, position: 0 };
+      }
+      return { kind: 'native' };
     }
-    return !target.value.slice(end).includes('\n');
+
+    if (end === target.value.length) {
+      return this.historyIndex() === null
+        ? { kind: 'native' }
+        : { kind: 'navigate', target };
+    }
+    if (!target.value.slice(end).includes('\n')) {
+      return {
+        kind: 'move-to-edge',
+        target,
+        position: target.value.length,
+      };
+    }
+    return { kind: 'native' };
   }
 
   private erasePreviousWord(target: EventTarget | null): void {

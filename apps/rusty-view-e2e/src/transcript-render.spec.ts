@@ -252,9 +252,12 @@ test('selecting a session renders message rows in the transcript', async ({
   const composer = page.getByTestId('message-input-field');
   await composer.fill('profile draft');
   await composer.press('ArrowUp');
+  await expect(composer).toHaveValue('profile draft');
+  await composer.press('ArrowUp');
   await expect(composer).toHaveValue('What happens next?');
   await composer.press('ArrowUp');
   await expect(composer).toHaveValue(USER_BODY);
+  await composer.press('ArrowDown');
   await composer.press('ArrowDown');
   await composer.press('ArrowDown');
   await expect(composer).toHaveValue('profile draft');

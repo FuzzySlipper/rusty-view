@@ -548,6 +548,9 @@ describe('MessageInputComponent', () => {
       textarea.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown' }),
       );
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       fixture.detectChanges();
 
       expect(component['text']()).toBe('/status');
@@ -568,10 +571,14 @@ describe('MessageInputComponent', () => {
 
       // Enter history.
       textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
       fixture.detectChanges();
       expect(component['text']()).toBe('/new');
 
       // Exit past newest.
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       textarea.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown' }),
       );
@@ -593,10 +600,14 @@ describe('MessageInputComponent', () => {
 
       // Enter history.
       textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
       fixture.detectChanges();
       expect(component['text']()).toBe('/new');
 
       // Exit history by navigating past newest.
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       textarea.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown' }),
       );
@@ -637,11 +648,15 @@ describe('MessageInputComponent', () => {
       fixture.detectChanges();
 
       textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
       fixture.detectChanges();
 
       expect(component['text']()).toBe('newest prompt');
       expect(component['historyIndex']()).toBe(0);
 
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
       textarea.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown' }),
       );
@@ -668,7 +683,7 @@ describe('MessageInputComponent', () => {
       expect(component['historyIndex']()).toBeNull();
     });
 
-    it('navigates history from the first line of a multiline draft', () => {
+    it('moves to the start before navigating history from the first line', () => {
       const fixture = TestBed.createComponent(MessageInputComponent);
       const component = fixture.componentInstance;
       fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
@@ -681,8 +696,51 @@ describe('MessageInputComponent', () => {
       textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
       fixture.detectChanges();
 
+      expect(component['text']()).toBe('first line\nsecond line');
+      expect(textarea.selectionStart).toBe(0);
+      expect(textarea.selectionEnd).toBe(0);
+      expect(component['historyIndex']()).toBeNull();
+
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+
       expect(component['text']()).toBe('previous prompt');
       expect(component['historyIndex']()).toBe(0);
+      expect(textarea.selectionStart).toBe(0);
+    });
+
+    it('moves to the end before navigating forward from the last line', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = 'draft first\ndraft last';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.setSelectionRange(0, 0);
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+      fixture.detectChanges();
+      expect(component['text']()).toBe('previous prompt');
+
+      textarea.setSelectionRange(4, 4);
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('previous prompt');
+      expect(textarea.selectionStart).toBe('previous prompt'.length);
+      expect(component['historyIndex']()).toBe(0);
+
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('draft first\ndraft last');
+      expect(component['historyIndex']()).toBeNull();
+      expect(textarea.selectionStart).toBe('draft first\ndraft last'.length);
     });
 
     it('should navigate history from empty text on ArrowUp', () => {
@@ -696,6 +754,48 @@ describe('MessageInputComponent', () => {
       fixture.detectChanges();
 
       expect(component['text']()).toBe('/new');
+    });
+
+    it('does not enter history from a draft on ArrowDown', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = 'draft';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+      );
+      fixture.detectChanges();
+
+      expect(component['text']()).toBe('draft');
+      expect(component['historyIndex']()).toBeNull();
+    });
+
+    it('leaves modified arrow keys available for text selection', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector('textarea');
+      textarea.value = 'draft';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.setSelectionRange(0, 0);
+      const event = new KeyboardEvent('keydown', {
+        key: 'ArrowUp',
+        shiftKey: true,
+        cancelable: true,
+      });
+      textarea.dispatchEvent(event);
+      fixture.detectChanges();
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(component['text']()).toBe('draft');
+      expect(component['historyIndex']()).toBeNull();
     });
 
     it('should prioritize hint navigation over history when hints are open', () => {
