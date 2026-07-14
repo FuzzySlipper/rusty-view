@@ -657,13 +657,18 @@ export class TranscriptViewportComponent {
           return;
         }
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
+        const tailMaterialized = this.isTailMaterialized();
+        if (tailMaterialized && this.reconcileOverflowingTail()) {
+          this.settleScrollToBottom(attempt + 1, generation);
+          return;
+        }
         // Autosize may temporarily report a zero bottom offset while its
         // estimator still has not materialized the actual last row. Stopping
         // at that provisional bottom is what could hide a final_answer after
         // a long refreshed transcript. Only settle once the tail row exists.
         if (
           bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX &&
-          this.isTailMaterialized()
+          tailMaterialized
         ) {
           this.isAtBottom.set(true);
           return;
@@ -690,6 +695,44 @@ export class TranscriptViewportComponent {
       lastMessage === undefined ||
       this.findRenderedMessageElement(lastMessage.id) !== null
     );
+  }
+
+  /**
+   * Close a stale autosize spacer after the real tail row has materialized.
+   *
+   * The experimental autosize strategy keeps a weighted estimate across data
+   * replacements. After switching between differently sized transcripts it
+   * can clamp at its estimated bottom while the rendered tail ends well above
+   * that bottom. Re-anchor the rendered range to its measured end before we
+   * accept the viewport as settled. Short transcripts intentionally keep their
+   * natural empty space and are left alone.
+   */
+  private reconcileOverflowingTail(): boolean {
+    const viewport = this.viewport();
+    const host = viewport.elementRef.nativeElement;
+    if (host.scrollHeight <= host.clientHeight + 2) return false;
+
+    const lastMessage = this.renderMessages().at(-1);
+    if (lastMessage === undefined) return false;
+    const lastItem = this.findRenderedMessageElement(lastMessage.id);
+    if (lastItem === null) return false;
+
+    const hostBounds = host.getBoundingClientRect();
+    const lastBounds = lastItem.getBoundingClientRect();
+    const tailGap = hostBounds.bottom - lastBounds.bottom;
+    if (tailGap <= 2) return false;
+
+    const measuredTailEnd = Math.ceil(
+      viewport.measureScrollOffset('top') + lastBounds.bottom - hostBounds.top,
+    );
+    const correctedTotal = Math.max(
+      viewport.getViewportSize(),
+      measuredTailEnd,
+    );
+    viewport.setTotalContentSize(correctedTotal);
+    viewport.setRenderedContentOffset(correctedTotal, 'to-end');
+    viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
+    return true;
   }
 
   private materializeTailRange(): void {

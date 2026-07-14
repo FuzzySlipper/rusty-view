@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test('persists composer sizing and configurable hotkeys in a real browser', async ({
   page,
@@ -213,6 +213,35 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
     .toBe(true);
 });
 
+test('session cycling does not leave blank space after the transcript tail', async ({
+  page,
+}) => {
+  await installExternalSessionFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.getByTestId('external-agents-tab').click();
+  await page.getByTestId('external-agent-mode-all').click();
+
+  const transcript = page.getByTestId('transcript-viewport');
+  const tailIds = new Map([
+    ['thread-1', 'external:thread-1:turn-1:reasoning-visible'],
+    [
+      'thread-native-hidden',
+      'external:thread-native-hidden:turn-native:second-tail',
+    ],
+  ]);
+  for (let cycle = 0; cycle < 6; cycle += 1) {
+    for (const threadId of ['thread-1', 'thread-native-hidden']) {
+      await page.locator(`[data-thread-id="${threadId}"]`).click();
+      await expect(
+        transcript.locator('.rv-transcript__item').last(),
+      ).toHaveAttribute('data-message-id', tailIds.get(threadId) ?? '');
+      expect(await transcriptTailGapAfter(transcript, 700)).toBeLessThanOrEqual(
+        2,
+      );
+    }
+  }
+});
+
 test('auto-expand reasoning is live, manually collapsible, and persisted', async ({
   page,
 }) => {
@@ -232,8 +261,24 @@ test('auto-expand reasoning is live, manually collapsible, and persisted', async
     'Inspect the final state',
   );
 
+  const transcript = page.getByTestId('transcript-viewport');
+  const latest = page.getByTestId('transcript-scroll-to-bottom');
+  await latest.evaluateAll((buttons: HTMLButtonElement[]) =>
+    buttons.at(0)?.click(),
+  );
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(80);
+  expect(await transcriptTailGapAfter(transcript, 700)).toBeLessThanOrEqual(2);
+
   await reasoningToggle.click();
   await expect(reasoningToggle).toHaveAttribute('aria-expanded', 'false');
+  expect(await transcriptTailGapAfter(transcript, 300)).toBeLessThanOrEqual(2);
   await expect
     .poll(() => readAppearanceSetting(page, 'autoExpandReasoning'))
     .toBe(true);
@@ -289,6 +334,18 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
     kind: 'reasoning',
     text: 'Inspect the final state before answering.',
   });
+  const secondItems = Array.from({ length: 55 }, (_, index) => ({
+    itemId: `second-item-${index}`,
+    kind: 'agentMessage',
+    text: `Second transcript row ${index}: ${'variable content '.repeat(
+      index % 5 === 0 ? 40 : 4,
+    )}`,
+  }));
+  secondItems.push({
+    itemId: 'second-tail',
+    kind: 'agentMessage',
+    text: 'Second transcript tail.',
+  });
   const threads = [
     {
       ...baseThread,
@@ -321,6 +378,16 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
       ...baseThread,
       threadId: 'thread-native-hidden',
       preview: 'Native history outside the managed inventory',
+      turns: [
+        {
+          turnId: 'turn-native',
+          status: 'completed',
+          startedAt: 1,
+          completedAt: 2,
+          durationMs: 1,
+          items: secondItems,
+        },
+      ],
     },
   ];
   const bindings = threads
@@ -395,4 +462,28 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
       }),
     });
   });
+}
+
+async function transcriptTailGapAfter(
+  transcript: Locator,
+  delayMs: number,
+): Promise<number> {
+  return transcript.evaluate(
+    (viewport, delay) =>
+      new Promise<number>((resolve) => {
+        setTimeout(() => {
+          const items = viewport.querySelectorAll<HTMLElement>(
+            '.rv-transcript__item',
+          );
+          const lastItem = items.item(items.length - 1);
+          resolve(
+            lastItem === null
+              ? Number.POSITIVE_INFINITY
+              : viewport.getBoundingClientRect().bottom -
+                  lastItem.getBoundingClientRect().bottom,
+          );
+        }, delay);
+      }),
+    delayMs,
+  );
 }

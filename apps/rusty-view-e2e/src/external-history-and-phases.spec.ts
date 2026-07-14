@@ -82,6 +82,20 @@ test('renders commentary, activity, and one final answer identically after reloa
   await expect(page.locator('.rv-transcript__item').last()).toContainText(
     'Final answer from Codex.',
   );
+  await expect
+    .poll(() =>
+      page.getByTestId('transcript-viewport').evaluate((viewport) => {
+        const lastItem = viewport.querySelector<HTMLElement>(
+          '.rv-transcript__item:last-child',
+        );
+        if (lastItem === null) return Number.POSITIVE_INFINITY;
+        return (
+          viewport.getBoundingClientRect().bottom -
+          lastItem.getBoundingClientRect().bottom
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(2);
   await expect(page.getByTestId('transcript-viewport')).not.toContainText(
     'Replay-only reasoning after canonical final',
   );
