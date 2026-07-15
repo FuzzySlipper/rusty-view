@@ -542,6 +542,37 @@ describe('ExternalAgentStore', () => {
     });
   });
 
+  it('keeps an optimistic prompt before authoritative rows that stream later', async () => {
+    const delivery = deferred<void>();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage: vi.fn(() => delivery.promise),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(threadWithUserPrompts('older prompt'));
+
+    const sending = store.send('current prompt');
+    store.events.set([assistantTextEvent(1, 'Streaming after the prompt')]);
+
+    expect(
+      store.messages().map((message) => ({
+        role: message.author.role,
+        content: message.blocks[0]?.content,
+      })),
+    ).toEqual([
+      { role: 'user', content: 'older prompt' },
+      { role: 'user', content: 'current prompt' },
+      { role: 'assistant', content: 'Streaming after the prompt' },
+    ]);
+
+    delivery.resolve();
+    await sending;
+  });
+
   it('reconciles repeated optimistic prompts against native user messages without duplicates', async () => {
     const store = setupStore({
       runtimes: [registration('runtime-1')],
@@ -1280,6 +1311,26 @@ function event(
       nativeMethod:
         status === undefined ? 'turn/diff/updated' : 'turn/completed',
       ...(status === undefined ? {} : { status }),
+    },
+  };
+}
+
+function assistantTextEvent(
+  sequenceId: number,
+  text: string,
+): NormalizedExternalRuntimeEvent {
+  return {
+    eventId: `assistant-${sequenceId}`,
+    runtimeId: 'runtime-1',
+    sequenceId,
+    createdAt: '2026-07-11T00:00:01Z',
+    kind: 'assistant_text_delta',
+    nativeThreadId: 'thread-1',
+    nativeTurnId: 'turn-live',
+    itemId: 'assistant-live',
+    payload: {
+      nativeMethod: 'item/agentMessage/delta',
+      text,
     },
   };
 }

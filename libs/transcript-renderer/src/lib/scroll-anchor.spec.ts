@@ -158,4 +158,33 @@ describe('transcriptTailChanged', () => {
 
     expect(transcriptTailChanged(previous, current)).toBe(true);
   });
+
+  it('detects streamed growth before an unchanged optimistic tail', () => {
+    const assistant = {
+      ...makeMessage('assistant'),
+      author: { role: 'assistant' as const, displayName: 'Agent' },
+      status: 'streaming' as const,
+    };
+    const assistantBlock = assistant.blocks[0];
+    if (assistantBlock === undefined) throw new Error('expected message block');
+    const optimistic = {
+      ...makeMessage('optimistic-user'),
+      metadata: { optimisticExternalUser: true },
+    };
+    const previous = [assistant, optimistic];
+    const current: ChatMessage[] = [
+      {
+        ...assistant,
+        blocks: [
+          {
+            ...assistantBlock,
+            content: 'A longer streamed assistant update',
+          },
+        ],
+      },
+      optimistic,
+    ];
+
+    expect(transcriptTailChanged(previous, current)).toBe(true);
+  });
 });

@@ -69,6 +69,7 @@ interface OptimisticExternalUserMessage {
   readonly id: string;
   readonly text: string;
   readonly createdAt: string;
+  readonly afterAuthoritativeMessageId?: string;
   readonly expectedOccurrence: number;
   readonly status: 'sending' | 'accepted' | 'failed';
 }
@@ -843,10 +844,12 @@ export class ExternalAgentStore {
     const key = this.selectedSessionKey();
     const id = createExternalAgentRequestKey();
     if (key === undefined) return id;
-    const authoritativeCount = userMessageOccurrenceCount(
-      projectExternalAgentTranscript(this.selectedThread(), this.events()),
-      text,
+    const authoritative = projectExternalAgentTranscript(
+      this.selectedThread(),
+      this.events(),
     );
+    const authoritativeCount = userMessageOccurrenceCount(authoritative, text);
+    const afterAuthoritativeMessageId = authoritative.at(-1)?.id;
     this.optimisticUserMessagesBySession.update((messagesBySession) => {
       const current = messagesBySession[key] ?? [];
       const pendingSameText = current.filter(
@@ -858,6 +861,9 @@ export class ExternalAgentStore {
         id,
         text,
         createdAt: new Date().toISOString(),
+        ...(afterAuthoritativeMessageId === undefined
+          ? {}
+          : { afterAuthoritativeMessageId }),
         expectedOccurrence: authoritativeCount + pendingSameText + 1,
         status: 'sending',
       };
@@ -1271,15 +1277,51 @@ function mergeOptimisticUserMessages(
   sessionId: string,
 ): readonly ChatMessage[] {
   const occurrences = userMessageOccurrences(authoritative);
-  return [
-    ...authoritative,
-    ...optimistic
-      .filter(
-        (message) =>
-          (occurrences.get(message.text) ?? 0) < message.expectedOccurrence,
-      )
-      .map((message) => optimisticUserMessage(message, sessionId)),
-  ];
+  const outstanding = optimistic.filter(
+    (message) =>
+      (occurrences.get(message.text) ?? 0) < message.expectedOccurrence,
+  );
+  if (outstanding.length === 0) return authoritative;
+
+  const authoritativeIndexById = new Map(
+    authoritative.map((message, index) => [message.id, index]),
+  );
+  const optimisticByBoundary = new Map<number, ChatMessage[]>();
+  for (const message of outstanding) {
+    const anchorIndex = authoritativeIndexById.get(
+      message.afterAuthoritativeMessageId ?? '',
+    );
+    const boundary =
+      message.afterAuthoritativeMessageId === undefined
+        ? 0
+        : anchorIndex === undefined
+          ? chronologicalInsertionBoundary(authoritative, message.createdAt)
+          : anchorIndex + 1;
+    const projected = optimisticUserMessage(message, sessionId);
+    optimisticByBoundary.set(boundary, [
+      ...(optimisticByBoundary.get(boundary) ?? []),
+      projected,
+    ]);
+  }
+
+  const merged: ChatMessage[] = [...(optimisticByBoundary.get(0) ?? [])];
+  authoritative.forEach((message, index) => {
+    merged.push(message, ...(optimisticByBoundary.get(index + 1) ?? []));
+  });
+  return merged;
+}
+
+function chronologicalInsertionBoundary(
+  authoritative: readonly ChatMessage[],
+  createdAt: string,
+): number {
+  const optimisticTimestamp = Date.parse(createdAt);
+  if (Number.isNaN(optimisticTimestamp)) return authoritative.length;
+  const nextIndex = authoritative.findIndex((message) => {
+    const timestamp = Date.parse(message.createdAt);
+    return !Number.isNaN(timestamp) && timestamp > optimisticTimestamp;
+  });
+  return nextIndex < 0 ? authoritative.length : nextIndex;
 }
 
 function userMessageOccurrenceCount(

@@ -781,8 +781,27 @@ export function transcriptTailChanged(
   current: readonly ChatMessage[],
 ): boolean {
   if (previous.length !== current.length) return true;
-  const before = previous.at(-1);
-  const after = current.at(-1);
+  if (messagePresentationChanged(previous.at(-1), current.at(-1))) return true;
+
+  // An optimistic user row can briefly remain after an authoritative
+  // streaming row while the native user item catches up. Detect growth in any
+  // active row so that a stable optimistic tail cannot mask the geometry
+  // change and bypass managed tail-follow.
+  for (let index = current.length - 2; index >= 0; index -= 1) {
+    const before = previous[index];
+    const after = current[index];
+    if (before?.status !== 'streaming' && after?.status !== 'streaming') {
+      continue;
+    }
+    if (messagePresentationChanged(before, after)) return true;
+  }
+  return false;
+}
+
+function messagePresentationChanged(
+  before: ChatMessage | undefined,
+  after: ChatMessage | undefined,
+): boolean {
   if (before === after) return false;
   if (before === undefined || after === undefined) return before !== after;
   if (before.id !== after.id || before.status !== after.status) return true;

@@ -9,6 +9,8 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let messageBindingId: string | undefined;
   let commandRequest: Record<string, unknown> | undefined;
   let metadataRequest: Record<string, unknown> | undefined;
+  let streamReplyForNextMessage = false;
+  let nextStreamingSequence = 200;
   let listedBindings = [binding];
   let listedThreads = [thread];
   let listedEvents: unknown[] = [...events];
@@ -264,6 +266,16 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     }
     if (url.pathname.endsWith('/messages')) {
       messageBindingId = url.pathname.split('/')[3];
+      if (streamReplyForNextMessage) {
+        streamReplyForNextMessage = false;
+        listedEvents = [
+          ...listedEvents,
+          streamingReplyEvent(
+            String(nextStreamingSequence++),
+            'Streaming reply',
+          ),
+        ];
+      }
       return ok({ deliveryId: 'delivery-1', status: 'accepted' });
     }
     return route.fulfill({
@@ -385,6 +397,52 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await composer.press('ArrowDown');
   await expect(composer).toHaveValue('unsent draft');
   await composer.fill('');
+
+  await page.getByLabel('External message mode').selectOption('queue');
+  streamReplyForNextMessage = true;
+  await composer.fill('Ordering proof prompt');
+  await page.getByTestId('send-message').click();
+  const orderingPrompt = page
+    .locator('.rv-message--user')
+    .filter({ hasText: 'Ordering proof prompt' });
+  const streamingReply = page
+    .locator('.rv-message--assistant')
+    .filter({ hasText: 'Streaming reply' });
+  await expect(orderingPrompt).toBeVisible();
+  await expect(streamingReply).toBeVisible();
+  await expect
+    .poll(async () => {
+      const rows = await page.getByTestId('transcript-item').allTextContents();
+      const promptIndex = rows.findIndex((row) =>
+        row.includes('Ordering proof prompt'),
+      );
+      const replyIndex = rows.findIndex((row) =>
+        row.includes('Streaming reply'),
+      );
+      return promptIndex >= 0 && replyIndex > promptIndex;
+    })
+    .toBe(true);
+
+  const transcriptViewport = page.getByTestId('transcript-viewport');
+  const bottomGap = () =>
+    transcriptViewport.evaluate((element) =>
+      Math.max(
+        0,
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+      ),
+    );
+  await expect.poll(bottomGap).toBeLessThanOrEqual(80);
+  let expectedReply = 'Streaming reply';
+  for (const chunk of [' continues', ' without', ' jumping']) {
+    listedEvents = [
+      ...listedEvents,
+      streamingReplyEvent(String(nextStreamingSequence++), chunk),
+    ];
+    await page.getByTestId('external-agent-refresh').click();
+    expectedReply += chunk;
+    await expect(streamingReply).toContainText(expectedReply);
+    await expect.poll(bottomGap).toBeLessThanOrEqual(80);
+  }
 
   await expect(page.getByTestId('external-turn-status')).toHaveText(
     /^(active|waiting_interaction)$/,
@@ -756,5 +814,16 @@ function externalEvent(
     nativeThreadId: 'thread-1',
     nativeTurnId: 'turn-1',
     payload,
+  };
+}
+
+function streamingReplyEvent(eventId: string, text: string) {
+  return {
+    ...externalEvent(eventId, 'assistant_text_delta', {
+      nativeMethod: 'item/agentMessage/delta',
+      text,
+    }),
+    itemId: 'ordering-agent-message',
+    nativeTurnId: 'ordering-turn',
   };
 }
