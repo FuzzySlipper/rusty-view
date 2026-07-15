@@ -398,52 +398,6 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(composer).toHaveValue('unsent draft');
   await composer.fill('');
 
-  await page.getByLabel('External message mode').selectOption('queue');
-  streamReplyForNextMessage = true;
-  await composer.fill('Ordering proof prompt');
-  await page.getByTestId('send-message').click();
-  const orderingPrompt = page
-    .locator('.rv-message--user')
-    .filter({ hasText: 'Ordering proof prompt' });
-  const streamingReply = page
-    .locator('.rv-message--assistant')
-    .filter({ hasText: 'Streaming reply' });
-  await expect(orderingPrompt).toBeVisible();
-  await expect(streamingReply).toBeVisible();
-  await expect
-    .poll(async () => {
-      const rows = await page.getByTestId('transcript-item').allTextContents();
-      const promptIndex = rows.findIndex((row) =>
-        row.includes('Ordering proof prompt'),
-      );
-      const replyIndex = rows.findIndex((row) =>
-        row.includes('Streaming reply'),
-      );
-      return promptIndex >= 0 && replyIndex > promptIndex;
-    })
-    .toBe(true);
-
-  const transcriptViewport = page.getByTestId('transcript-viewport');
-  const bottomGap = () =>
-    transcriptViewport.evaluate((element) =>
-      Math.max(
-        0,
-        element.scrollHeight - element.clientHeight - element.scrollTop,
-      ),
-    );
-  await expect.poll(bottomGap).toBeLessThanOrEqual(80);
-  let expectedReply = 'Streaming reply';
-  for (const chunk of [' continues', ' without', ' jumping']) {
-    listedEvents = [
-      ...listedEvents,
-      streamingReplyEvent(String(nextStreamingSequence++), chunk),
-    ];
-    await page.getByTestId('external-agent-refresh').click();
-    expectedReply += chunk;
-    await expect(streamingReply).toContainText(expectedReply);
-    await expect.poll(bottomGap).toBeLessThanOrEqual(80);
-  }
-
   await expect(page.getByTestId('external-turn-status')).toHaveText(
     /^(active|waiting_interaction)$/,
   );
@@ -497,6 +451,59 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(
     aggregateDiff.getByTestId('message-block-detail-content'),
   ).toContainText('diff --git a/src/app.ts b/src/app.ts');
+
+  // Run the chronology proof after assertions over the initial projected
+  // transcript. Appending the live rows first can legitimately virtualize
+  // those older rows out of the DOM, which would make unrelated assertions
+  // depend on the viewport overscan window.
+  await page.getByLabel('External message mode').selectOption('queue');
+  streamReplyForNextMessage = true;
+  await composer.fill('Ordering proof prompt');
+  await page.getByTestId('send-message').click();
+  const orderingPrompt = page
+    .locator('.rv-message--user')
+    .filter({ hasText: 'Ordering proof prompt' });
+  const streamingReply = page
+    .locator('.rv-message--assistant')
+    .filter({ hasText: 'Streaming reply' });
+  await expect(orderingPrompt).toBeVisible();
+  await expect(streamingReply).toBeVisible();
+  await expect
+    .poll(async () => {
+      const rows = await page.getByTestId('transcript-item').allTextContents();
+      const promptIndex = rows.findIndex((row) =>
+        row.includes('Ordering proof prompt'),
+      );
+      const replyIndex = rows.findIndex((row) =>
+        row.includes('Streaming reply'),
+      );
+      return promptIndex >= 0 && replyIndex > promptIndex;
+    })
+    .toBe(true);
+
+  const transcriptViewport = page.getByTestId('transcript-viewport');
+  const bottomGap = () =>
+    transcriptViewport.evaluate((element) =>
+      Math.max(
+        0,
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+      ),
+    );
+  await expect.poll(bottomGap).toBeLessThanOrEqual(80);
+  let expectedReply = 'Streaming reply';
+  for (const chunk of [' continues', ' without', ' jumping']) {
+    listedEvents = [
+      ...listedEvents,
+      streamingReplyEvent(String(nextStreamingSequence++), chunk),
+    ];
+    await page.getByTestId('external-agent-refresh').click();
+    expectedReply += chunk;
+    await expect(streamingReply).toContainText(expectedReply);
+    await expect.poll(bottomGap).toBeLessThanOrEqual(80);
+  }
+  expect(messageBindingId).toBe('binding-1');
+  messageBindingId = undefined;
+
   await page
     .getByTestId('event-row')
     .filter({ hasText: 'unknown_native_notification' })
