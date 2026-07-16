@@ -12,8 +12,11 @@ import {
 import { TopMenuComponent } from './top-menu';
 import { TopMenuController } from './top-menu-controller';
 import {
+  CHAT_TOP_MENU_CONFIGURATION,
   CHAT_TOP_MENU_PANELS,
   OPTIONS_PANEL_ID,
+  SERVICE_PANEL_ID,
+  SESSIONS_PANEL_ID,
 } from './shell-extension-tokens';
 
 @Component({
@@ -136,6 +139,23 @@ describe('TopMenuComponent', () => {
     expect(labels).toContain('Debug');
     expect(labels).toContain('Options');
     expect(labels).toContain('Help');
+  });
+
+  it('suppresses selected built-in entries without changing the defaults', async () => {
+    const fixture = await createMenu([
+      {
+        provide: CHAT_TOP_MENU_CONFIGURATION,
+        useValue: {
+          hiddenBuiltInItemIds: [SESSIONS_PANEL_ID, SERVICE_PANEL_ID],
+        },
+      },
+    ]);
+    const labels = menuItemLabels(fixture.nativeElement as HTMLElement);
+
+    expect(labels).not.toContain('Sessions');
+    expect(labels).not.toContain('Service');
+    expect(labels).toContain('Debug');
+    expect(labels).toContain('Options');
   });
 
   it('opens the Profiles panel when Profiles is clicked', async () => {
@@ -359,6 +379,35 @@ describe('TopMenuComponent', () => {
     findMenuButton(host, 'Options')?.click();
     fixture.detectChanges();
 
+    expect(host.querySelector('rv-options-panel')).not.toBeNull();
+    expect(host.querySelector('[data-testid="roleplay-panel"]')).toBeNull();
+  });
+
+  it('does not make a reserved panel replaceable when its menu item is hidden', async () => {
+    const fixture = await createMenu([
+      {
+        provide: CHAT_TOP_MENU_CONFIGURATION,
+        useValue: { hiddenBuiltInItemIds: [OPTIONS_PANEL_ID] },
+      },
+      {
+        provide: CHAT_TOP_MENU_PANELS,
+        useValue: [
+          {
+            id: OPTIONS_PANEL_ID,
+            label: 'Roleplay Options',
+            title: 'Roleplay Options',
+            component: TestRoleplayPanelComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(menuItemLabels(host)).not.toContain('Options');
+    expect(menuItemLabels(host)).not.toContain('Roleplay Options');
+
+    TestBed.inject(TopMenuController).openPanel(OPTIONS_PANEL_ID);
+    fixture.detectChanges();
     expect(host.querySelector('rv-options-panel')).not.toBeNull();
     expect(host.querySelector('[data-testid="roleplay-panel"]')).toBeNull();
   });

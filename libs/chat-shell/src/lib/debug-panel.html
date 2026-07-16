@@ -5,27 +5,15 @@
   </header>
 
   <nav class="rv-debug-panel__tabs" aria-label="Debug views">
+    @for (tab of tabs(); track tab.id) {
     <button
       type="button"
-      [class.rv-debug-panel__tab--active]="activeTab() === 'providers'"
-      (click)="selectTab('providers')"
+      [class.rv-debug-panel__tab--active]="activeTab() === tab.id"
+      (click)="selectTab(tab.id)"
     >
-      Provider Requests
+      {{ tab.label }}
     </button>
-    <button
-      type="button"
-      [class.rv-debug-panel__tab--active]="activeTab() === 'tools'"
-      (click)="selectTab('tools')"
-    >
-      Tool Calls
-    </button>
-    <button
-      type="button"
-      [class.rv-debug-panel__tab--active]="activeTab() === 'storage'"
-      (click)="selectTab('storage')"
-    >
-      Storage Queries
-    </button>
+    }
   </nav>
 
   @if (activeTab() === 'providers') {
@@ -128,7 +116,7 @@
     </div>
     }
   </section>
-  } @else {
+  } @else if (activeTab() === 'storage') {
   <section class="rv-debug-panel__body">
     <p class="rv-debug-panel__note">
       Storage queries are curated read-only backend diagnostics. Raw SQL is not
@@ -249,6 +237,10 @@
     } @else {
     <div class="rv-debug-panel__empty">Storage query catalog unavailable.</div>
     }
+  </section>
+  } @else if (activeCustomTab(); as customTab) {
+  <section class="rv-debug-panel__body">
+    <ng-container [ngComponentOutlet]="customTab.component" />
   </section>
   }
 </div>

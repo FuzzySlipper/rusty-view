@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { Component, signal, type Provider } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
@@ -14,6 +14,19 @@ import type {
 import { WorkerManager } from '@rusty-view/transcript-renderer';
 
 import { DebugPanelComponent } from './debug-panel';
+import { CHAT_DEBUG_TABS } from './shell-extension-tokens';
+
+@Component({
+  selector: 'rv-test-service-controls',
+  template: '<div data-testid="service-controls">Service controls</div>',
+})
+class TestServiceControlsComponent {}
+
+@Component({
+  selector: 'rv-test-reserved-debug',
+  template: '<div data-testid="reserved-debug-replacement">replacement</div>',
+})
+class TestReservedDebugComponent {}
 
 function providerStatusEvent(): ChatEvent {
   return {
@@ -90,7 +103,7 @@ function storageCatalog(): StorageQueryCatalog {
   };
 }
 
-async function createPanel() {
+async function createPanel(extraProviders: Provider[] = []) {
   const storageResult = signal<StorageQueryResult | null>(null);
   const loadStorageQueryCatalog = vi.fn(async () => undefined);
   const executeStorageQuery = vi.fn(async (queryId: string) => {
@@ -135,6 +148,7 @@ async function createPanel() {
           highlightJson: vi.fn(async (json: string) => json),
         },
       },
+      ...extraProviders,
     ],
   }).compileComponents();
 
@@ -146,6 +160,57 @@ async function createPanel() {
 }
 
 describe('DebugPanelComponent', () => {
+  it('composes a downstream Service surface as a Debug tab', async () => {
+    const { fixture } = await createPanel([
+      {
+        provide: CHAT_DEBUG_TABS,
+        multi: true,
+        useValue: [
+          {
+            id: 'service-controls',
+            label: 'Service',
+            order: 40,
+            component: TestServiceControlsComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+    const serviceTab = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Service',
+    ) as HTMLButtonElement;
+
+    expect(serviceTab).not.toBeUndefined();
+    serviceTab.click();
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="service-controls"]'),
+    ).not.toBeNull();
+  });
+
+  it('keeps built-in Debug tab ids reserved', async () => {
+    const { fixture } = await createPanel([
+      {
+        provide: CHAT_DEBUG_TABS,
+        multi: true,
+        useValue: [
+          {
+            id: 'providers',
+            label: 'Replacement Providers',
+            component: TestReservedDebugComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.textContent).toContain('Provider Requests');
+    expect(host.textContent).not.toContain('Replacement Providers');
+    expect(
+      host.querySelector('[data-testid="reserved-debug-replacement"]'),
+    ).toBeNull();
+  });
+
   it('loads and renders provider request debug details from provider_status metadata', async () => {
     const { fixture, loadProvider } = await createPanel();
     const host = fixture.nativeElement as HTMLElement;

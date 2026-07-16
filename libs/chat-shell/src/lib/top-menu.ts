@@ -22,6 +22,7 @@ import { TopMenuController } from './top-menu-controller';
 import {
   CHAT_TOP_MENU_ITEMS,
   CHAT_TOP_MENU_PANELS,
+  CHAT_TOP_MENU_CONFIGURATION,
   DEBUG_PANEL_ID,
   HELP_PANEL_ID,
   OPTIONS_PANEL_ID,
@@ -148,6 +149,9 @@ export class TopMenuComponent {
   private readonly providedPanels = inject(CHAT_TOP_MENU_PANELS, {
     optional: true,
   });
+  private readonly configuration = inject(CHAT_TOP_MENU_CONFIGURATION, {
+    optional: true,
+  });
   private readonly controller = inject(TopMenuController);
   private activePointerGesture: ActivePointerGesture | undefined;
   private suppressNextOverlayClick = false;
@@ -160,9 +164,14 @@ export class TopMenuComponent {
     for (const item of flattenTopMenuProviders<ChatTopMenuItem>(
       this.providedItems,
     )) {
+      if (BUILT_IN_PANEL_IDS.has(item.id)) continue;
       merged.set(item.id, item);
     }
+    const hiddenBuiltIns = new Set<string>(
+      this.configuration?.hiddenBuiltInItemIds ?? [],
+    );
     for (const item of BUILT_IN_ITEMS) {
+      if (hiddenBuiltIns.has(item.id)) continue;
       merged.set(item.id, item);
     }
     return [...merged.values()].sort(

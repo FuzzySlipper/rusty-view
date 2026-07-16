@@ -55,6 +55,52 @@ export const appConfig = {
 `provideChatPlugins()` flattens contribution arrays into the public `CHAT_*`
 tokens, including the existing top-menu and Options-panel tokens.
 
+## Shell Menu Composition
+
+Downstream shells can hide selected built-in top-menu affordances while keeping
+the default Rusty View menu unchanged. They can also contribute tabs to the
+built-in Debug panel. For example, a shell with its own Sessions surface can
+hide the generic Sessions and Service buttons, then expose the standard service
+controls inside Debug:
+
+```ts
+import {
+  AdminServicePanelComponent,
+  CHAT_DEBUG_TABS,
+  CHAT_TOP_MENU_CONFIGURATION,
+  SERVICE_PANEL_ID,
+  SESSIONS_PANEL_ID,
+} from '@rusty-view/chat-shell';
+
+export const appConfig = {
+  providers: [
+    {
+      provide: CHAT_TOP_MENU_CONFIGURATION,
+      useValue: {
+        hiddenBuiltInItemIds: [SESSIONS_PANEL_ID, SERVICE_PANEL_ID],
+      },
+    },
+    {
+      provide: CHAT_DEBUG_TABS,
+      multi: true,
+      useValue: [
+        {
+          id: 'service-controls',
+          label: 'Service',
+          order: 40,
+          component: AdminServicePanelComponent,
+        },
+      ],
+    },
+  ],
+};
+```
+
+Hiding a built-in entry removes only its top-menu button. Its stable ID remains
+reserved, downstream panels cannot replace it, and `TopMenuController` can
+still open the built-in panel. The built-in Debug tab IDs `providers`, `tools`,
+and `storage` are likewise reserved.
+
 ## Agent Data Actions
 
 Agent-facing helpers, such as a mechanic/OOC session, should use generic data
@@ -161,6 +207,8 @@ debug shell renders these contribution points today:
 
 - `CHAT_TOP_MENU_ITEMS`
 - `CHAT_TOP_MENU_PANELS`
+- `CHAT_TOP_MENU_CONFIGURATION`
+- `CHAT_DEBUG_TABS`
 - `CHAT_OPTIONS_TABS`
 - `CHAT_CONTENT_RENDERERS`
 - `CHAT_SLASH_COMMANDS`

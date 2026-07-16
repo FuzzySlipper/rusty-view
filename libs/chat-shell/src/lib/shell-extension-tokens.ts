@@ -74,6 +74,53 @@ export const CHAT_TOP_MENU_PANELS = new InjectionToken<
   readonly ChatTopMenuPanel[]
 >('CHAT_TOP_MENU_PANELS');
 
+/** Built-in panel ids reserved by the shell and stable for configuration. */
+export const PROFILES_PANEL_ID = 'profiles' as const;
+export const SERVICE_PANEL_ID = 'service' as const;
+export const DEBUG_PANEL_ID = 'debug' as const;
+export const OPTIONS_PANEL_ID = 'options' as const;
+export const HELP_PANEL_ID = 'help' as const;
+export const SESSIONS_PANEL_ID = 'sessions' as const;
+export const PROVIDERS_PANEL_ID = 'providers' as const;
+
+export type ChatBuiltInTopMenuId =
+  | typeof PROFILES_PANEL_ID
+  | typeof SERVICE_PANEL_ID
+  | typeof DEBUG_PANEL_ID
+  | typeof OPTIONS_PANEL_ID
+  | typeof HELP_PANEL_ID
+  | typeof SESSIONS_PANEL_ID
+  | typeof PROVIDERS_PANEL_ID;
+
+/**
+ * Configuration for the shell-owned top-menu entries. Hiding an entry removes
+ * only its top-bar affordance; the built-in id remains reserved and its panel
+ * can still be opened through {@link TopMenuController}.
+ */
+export interface ChatTopMenuConfiguration {
+  readonly hiddenBuiltInItemIds?: readonly ChatBuiltInTopMenuId[];
+}
+
+/** Single-provider downstream configuration for shell-owned top-menu items. */
+export const CHAT_TOP_MENU_CONFIGURATION =
+  new InjectionToken<ChatTopMenuConfiguration>('CHAT_TOP_MENU_CONFIGURATION');
+
+/** A downstream tab rendered inside the built-in Debug panel. */
+export interface ChatDebugTab {
+  readonly id: string;
+  readonly label: string;
+  readonly order?: number;
+  readonly component: Type<unknown>;
+}
+
+/**
+ * Multi-provider Debug tab contributions. The built-in ids `providers`,
+ * `tools`, and `storage` are reserved and cannot be replaced.
+ */
+export const CHAT_DEBUG_TABS = new InjectionToken<readonly ChatDebugTab[]>(
+  'CHAT_DEBUG_TABS',
+);
+
 /**
  * A tab in the Options panel. `component` is a standalone component rendered
  * inside the panel body when the tab is active. Downstream tabs are added by
@@ -94,12 +141,3 @@ export interface ChatOptionsTab {
 export const CHAT_OPTIONS_TABS = new InjectionToken<readonly ChatOptionsTab[]>(
   'CHAT_OPTIONS_TABS',
 );
-
-/** Built-in panel ids reserved by the shell. */
-export const PROFILES_PANEL_ID = 'profiles' as const;
-export const SERVICE_PANEL_ID = 'service' as const;
-export const DEBUG_PANEL_ID = 'debug' as const;
-export const OPTIONS_PANEL_ID = 'options' as const;
-export const HELP_PANEL_ID = 'help' as const;
-export const SESSIONS_PANEL_ID = 'sessions' as const;
-export const PROVIDERS_PANEL_ID = 'providers' as const;

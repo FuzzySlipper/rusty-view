@@ -5,6 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { NgComponentOutlet } from '@angular/common';
 import { JsonInspectorComponent } from '@rusty-view/chat-components';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type {
@@ -16,8 +17,22 @@ import type {
   StorageQueryParameter,
   StorageQueryResult,
 } from '@rusty-view/transport';
+import { CHAT_DEBUG_TABS, type ChatDebugTab } from './shell-extension-tokens';
 
-type DebugTab = 'providers' | 'tools' | 'storage';
+const BUILT_IN_DEBUG_TABS = [
+  { id: 'providers', label: 'Provider Requests', order: 10 },
+  { id: 'tools', label: 'Tool Calls', order: 20 },
+  { id: 'storage', label: 'Storage Queries', order: 30 },
+] as const;
+const BUILT_IN_DEBUG_TAB_IDS = new Set<string>(
+  BUILT_IN_DEBUG_TABS.map((tab) => tab.id),
+);
+
+interface DebugTabDescriptor {
+  readonly id: string;
+  readonly label: string;
+  readonly order: number;
+}
 
 interface ProviderRequestEntry {
   readonly eventId: string;
@@ -45,7 +60,7 @@ interface ToolDebugEntry {
 
 @Component({
   selector: 'rv-debug-panel',
-  imports: [JsonInspectorComponent],
+  imports: [JsonInspectorComponent, NgComponentOutlet],
   templateUrl: './debug-panel.html',
   styleUrl: './debug-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,8 +68,9 @@ interface ToolDebugEntry {
 export class DebugPanelComponent {
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
+  private readonly providedTabs = inject(CHAT_DEBUG_TABS, { optional: true });
 
-  protected readonly activeTab = signal<DebugTab>('providers');
+  protected readonly activeTab = signal<string>('providers');
   protected readonly selectedStorageQueryId = signal<string | null>(null);
   protected readonly storageInputs = signal<Record<string, string>>({});
   protected readonly providerLoadingId = signal<string | null>(null);
@@ -65,6 +81,37 @@ export class DebugPanelComponent {
   protected readonly toolLoadingId = signal<string | null>(null);
   protected readonly toolError = signal<string | null>(null);
   protected readonly toolDetail = signal<ToolCallDebugDetail | null>(null);
+
+  protected readonly customTabs = computed<readonly ChatDebugTab[]>(() => {
+    const merged = new Map<string, ChatDebugTab>();
+    for (const tab of flattenDebugTabProviders(this.providedTabs)) {
+      if (BUILT_IN_DEBUG_TAB_IDS.has(tab.id)) continue;
+      merged.set(tab.id, tab);
+    }
+    return [...merged.values()].sort(
+      (left, right) =>
+        (left.order ?? 100) - (right.order ?? 100) ||
+        left.id.localeCompare(right.id),
+    );
+  });
+
+  protected readonly tabs = computed<readonly DebugTabDescriptor[]>(() =>
+    [
+      ...BUILT_IN_DEBUG_TABS,
+      ...this.customTabs().map((tab) => ({
+        id: tab.id,
+        label: tab.label,
+        order: tab.order ?? 100,
+      })),
+    ].sort(
+      (left, right) =>
+        left.order - right.order || left.id.localeCompare(right.id),
+    ),
+  );
+
+  protected readonly activeCustomTab = computed<ChatDebugTab | undefined>(() =>
+    this.customTabs().find((tab) => tab.id === this.activeTab()),
+  );
 
   protected readonly providerEntries = computed<
     readonly ProviderRequestEntry[]
@@ -129,7 +176,7 @@ export class DebugPanelComponent {
     void this.admin.loadStorageQueryCatalog();
   }
 
-  protected selectTab(tab: DebugTab): void {
+  protected selectTab(tab: string): void {
     this.activeTab.set(tab);
   }
 
@@ -219,6 +266,20 @@ export class DebugPanelComponent {
     if (expiresAt === undefined) return 'expiry unknown';
     return new Date(expiresAt).getTime() <= Date.now() ? 'expired' : expiresAt;
   }
+}
+
+function flattenDebugTabProviders(
+  provided: readonly ChatDebugTab[] | null,
+): readonly ChatDebugTab[] {
+  const flattened: ChatDebugTab[] = [];
+  for (const entry of (provided ?? []) as readonly unknown[]) {
+    if (Array.isArray(entry)) {
+      flattened.push(...(entry as readonly ChatDebugTab[]));
+    } else {
+      flattened.push(entry as ChatDebugTab);
+    }
+  }
+  return flattened;
 }
 
 function providerRequestEntryFromEvent(

@@ -43,6 +43,8 @@ export { AdminServicePanelComponent } from './lib/admin-service-panel';
 export {
   CHAT_TOP_MENU_ITEMS,
   CHAT_TOP_MENU_PANELS,
+  CHAT_TOP_MENU_CONFIGURATION,
+  CHAT_DEBUG_TABS,
   CHAT_OPTIONS_TABS,
   OPTIONS_PANEL_ID,
   HELP_PANEL_ID,
@@ -56,6 +58,9 @@ export type {
   ChatTopMenuItem,
   ChatTopMenuPanel,
   ChatTopMenuPanelWidth,
+  ChatTopMenuConfiguration,
+  ChatBuiltInTopMenuId,
+  ChatDebugTab,
   ChatOptionsTab,
 } from './lib/shell-extension-tokens';
 export {
