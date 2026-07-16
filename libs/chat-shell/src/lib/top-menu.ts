@@ -284,6 +284,11 @@ export class TopMenuComponent {
     this.closePanel();
   }
 
+  protected onPanelKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') return;
+    event.stopPropagation();
+  }
+
   private updatePointerDragState(
     event: PointerEvent,
   ): ActivePointerGesture | undefined {
