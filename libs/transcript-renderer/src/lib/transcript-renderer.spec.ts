@@ -809,6 +809,44 @@ describe('MessageItemComponent', () => {
     expect(host.textContent).toContain('sending');
   });
 
+  it('renders structured prompt delivery failures in a message inspector', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        status: 'error',
+        metadata: {
+          deliveryStatus: 'failed',
+          deliveryFailure: {
+            operation: 'steer_turn',
+            endpoint: '/v1/external-bindings/binding-1/controls',
+            message: 'The expected turn is no longer active.',
+            reasonCode: 'external_turn_not_active',
+            statusCode: 409,
+            retryable: true,
+          },
+        },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const inspector = host.querySelector(
+      '[data-testid="message-delivery-failure"]',
+    ) as HTMLDetailsElement;
+
+    expect(inspector).not.toBeNull();
+    expect(inspector.open).toBe(false);
+    expect(inspector.querySelector('summary')?.textContent).toContain(
+      'Delivery failure details',
+    );
+    expect(inspector.textContent).toContain(
+      'The expected turn is no longer active.',
+    );
+    expect(inspector.textContent).toContain('steer_turn');
+    expect(inspector.textContent).toContain('external_turn_not_active');
+    expect(inspector.textContent).toContain('409');
+    expect(inspector.textContent).toContain(
+      '/v1/external-bindings/binding-1/controls',
+    );
+  });
+
   it('renders multiple blocks', async () => {
     const fixture = await createMessage(
       makeMessage({

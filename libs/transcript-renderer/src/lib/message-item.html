@@ -73,7 +73,35 @@
       }
     </div>
 
-    @if (decoration().suffix) {
+    @if (deliveryFailure(); as failure) {
+    <details
+      class="rv-message__delivery-failure"
+      data-testid="message-delivery-failure"
+    >
+      <summary>Delivery failure details</summary>
+      <dl>
+        <dt>Message</dt>
+        <dd data-testid="message-delivery-failure-message">
+          {{ failure.message }}
+        </dd>
+        <dt>Operation</dt>
+        <dd>{{ failure.operation }}</dd>
+        @if (failure.reasonCode) {
+        <dt>Reason code</dt>
+        <dd data-testid="message-delivery-failure-reason">
+          {{ failure.reasonCode }}
+        </dd>
+        } @if (failure.statusCode !== undefined) {
+        <dt>HTTP status</dt>
+        <dd>{{ failure.statusCode }}</dd>
+        }
+        <dt>Retryable</dt>
+        <dd>{{ failure.retryable ? 'yes' : 'no' }}</dd>
+        <dt>Endpoint</dt>
+        <dd>{{ failure.endpoint }}</dd>
+      </dl>
+    </details>
+    } @if (decoration().suffix) {
     <div class="rv-message__suffix">{{ decoration().suffix }}</div>
     } @if (showRevisionControls()) {
     <rv-message-revision-controls

@@ -13,6 +13,7 @@ import type {
   ExternalAgentSessionCreateWrite,
   ExternalBindingMetadataWrite,
   ExternalBindingMessageWrite,
+  ExternalControlReceipt,
   ExternalControlWrite,
   ExternalInteractionRecord,
   ExternalInteractionResolutionWrite,
@@ -24,6 +25,7 @@ import type {
   ExternalThreadProjection,
   ExternalTurnPhase,
   NormalizedExternalRuntimeEvent,
+  SendExternalBindingMessageResponse,
 } from '@rusty-view/protocol';
 import {
   ChatTransportError,
@@ -31,6 +33,11 @@ import {
   type AdminProfileRegistryRecord,
   type ExternalRuntimeEventStream,
 } from '@rusty-view/transport';
+import {
+  storeErrorDetail,
+  storeErrorDetailMessage,
+  type StoreErrorDetail,
+} from './store-error';
 
 export type ExternalComposerMode = 'auto' | 'steer' | 'queue' | 'plan';
 export type ExternalAgentInventoryMode =
@@ -72,6 +79,17 @@ interface OptimisticExternalUserMessage {
   readonly afterAuthoritativeMessageId?: string;
   readonly expectedOccurrence: number;
   readonly status: 'sending' | 'accepted' | 'failed';
+  readonly failure?: ExternalPromptFailureDetail;
+}
+
+export interface ExternalPromptFailureDetail {
+  readonly operation: 'binding_message' | 'steer_turn';
+  readonly endpoint: string;
+  readonly message: string;
+  readonly reasonCode?: string;
+  readonly statusCode?: number;
+  readonly retryable: boolean;
+  readonly transportCode?: StoreErrorDetail['transportCode'];
 }
 
 const INACTIVE_THREAD_CACHE_CAPACITY = 8;
@@ -271,16 +289,11 @@ export class ExternalAgentStore {
     if (this.selectedInteractions().some((item) => item.status === 'pending')) {
       return 'waiting_interaction';
     }
-    return (
-      latestExternalTurnPhase(this.events()) ??
-      latestSnapshotTurnPhase(this.selectedThread())
-    );
+    return reconciledExternalTurnPhase(this.events(), this.selectedThread());
   });
 
-  readonly activeTurnId = computed(
-    () =>
-      activeExternalTurnId(this.events()) ??
-      activeSnapshotTurnId(this.selectedThread()),
+  readonly activeTurnId = computed(() =>
+    reconciledActiveExternalTurnId(this.events(), this.selectedThread()),
   );
 
   readonly isTurnActive = computed(() => {
@@ -802,12 +815,14 @@ export class ExternalAgentStore {
       return;
     }
     const optimisticId = this.addOptimisticUserMessage(text);
+    const mode = this.composerMode();
+    const operation: ExternalPromptFailureDetail['operation'] =
+      mode === 'steer' ? 'steer_turn' : 'binding_message';
     this.pending.set(true);
     try {
       this.error.set(undefined);
-      const mode = this.composerMode();
-      const activeTurnId = this.activeTurnId();
-      if (mode === 'steer' || (mode === 'auto' && activeTurnId !== undefined)) {
+      if (mode === 'steer') {
+        const activeTurnId = this.activeTurnId();
         if (activeTurnId === undefined || binding.nativeThreadId == null) {
           throw new Error('No active turn is available to steer');
         }
@@ -820,21 +835,42 @@ export class ExternalAgentStore {
             input: [{ type: 'text', text }],
           },
         };
-        await this.transport.external.submitControl(binding.bindingId, request);
+        const receipt = await this.transport.external.submitControl(
+          binding.bindingId,
+          request,
+        );
+        const failure = controlReceiptFailure(binding.bindingId, receipt);
+        if (failure !== undefined) {
+          throw new ExternalPromptSubmissionError(failure);
+        }
       } else {
         const request: ExternalBindingMessageWrite = {
           body: text,
           ttlMs: 60_000,
           ...(mode === 'plan' ? { collaborationMode: 'plan' } : {}),
         };
-        await this.transport.external.sendMessage(binding.bindingId, request);
+        const receipt = await this.transport.external.sendMessage(
+          binding.bindingId,
+          request,
+        );
+        const failure = deliveryReceiptFailure(binding.bindingId, receipt);
+        if (failure !== undefined) {
+          throw new ExternalPromptSubmissionError(failure);
+        }
         if (mode === 'plan') this.composerMode.set('auto');
       }
       this.updateOptimisticUserMessage(optimisticId, 'accepted');
       await this.refreshSelectedEvents();
     } catch (error) {
-      this.updateOptimisticUserMessage(optimisticId, 'failed');
-      this.error.set(`Send failed: ${errorMessage(error)}`);
+      const failure =
+        error instanceof ExternalPromptSubmissionError
+          ? error.detail
+          : promptFailureDetail(error, operation, binding.bindingId);
+      this.updateOptimisticUserMessage(optimisticId, 'failed', failure);
+      if (mode === 'steer') {
+        await this.refreshSelectedProjection().catch(() => undefined);
+      }
+      this.error.set(`Send failed: ${promptFailureMessage(failure)}`);
     } finally {
       this.pending.set(false);
     }
@@ -875,17 +911,47 @@ export class ExternalAgentStore {
   private updateOptimisticUserMessage(
     id: string,
     status: OptimisticExternalUserMessage['status'],
+    failure?: ExternalPromptFailureDetail,
   ): void {
     this.optimisticUserMessagesBySession.update((messagesBySession) =>
       Object.fromEntries(
         Object.entries(messagesBySession).map(([key, messages]) => [
           key,
           messages.map((message) =>
-            message.id === id ? { ...message, status } : message,
+            message.id === id
+              ? {
+                  ...message,
+                  status,
+                  ...(failure === undefined ? {} : { failure }),
+                }
+              : message,
           ),
         ]),
       ),
     );
+  }
+
+  private async refreshSelectedProjection(): Promise<void> {
+    const runtimeId = this.selectedRuntimeId();
+    const threadId = this.selectedThreadId();
+    const key = this.selectedSessionKey();
+    const revision = this.selectionRevision;
+    if (
+      runtimeId === undefined ||
+      threadId === undefined ||
+      key === undefined
+    ) {
+      return;
+    }
+    const [read] = await Promise.all([
+      this.transport.external.readThread(runtimeId, {
+        threadId,
+        includeTurns: true,
+      }),
+      this.refreshSelectedEvents(),
+    ]);
+    if (!this.isCurrentSelection(revision, key)) return;
+    this.selectedThread.set(read.thread);
   }
 
   async interrupt(): Promise<void> {
@@ -1375,6 +1441,9 @@ function optimisticUserMessage(
     metadata: {
       optimisticExternalUser: true,
       deliveryStatus: optimistic.status,
+      ...(optimistic.failure === undefined
+        ? {}
+        : { deliveryFailure: optimistic.failure }),
     },
   };
 }
@@ -1451,6 +1520,106 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+class ExternalPromptSubmissionError extends Error {
+  constructor(readonly detail: ExternalPromptFailureDetail) {
+    super(detail.message);
+    this.name = 'ExternalPromptSubmissionError';
+  }
+}
+
+function deliveryReceiptFailure(
+  bindingId: string,
+  receipt: SendExternalBindingMessageResponse['data'],
+): ExternalPromptFailureDetail | undefined {
+  if (receipt.status === 'accepted' || receipt.status === 'pending') {
+    return undefined;
+  }
+  const reasonCode =
+    receipt.reasonCode ?? `external_delivery_${receipt.status}`;
+  return {
+    operation: 'binding_message',
+    endpoint: externalBindingOperationPath(bindingId, 'messages'),
+    message:
+      receipt.status === 'expired'
+        ? 'Delivery expired before Crew accepted it.'
+        : 'Delivery was rejected by Crew.',
+    reasonCode,
+    retryable: true,
+  };
+}
+
+function controlReceiptFailure(
+  bindingId: string,
+  receipt: ExternalControlReceipt,
+): ExternalPromptFailureDetail | undefined {
+  if (receipt.status === 'applied' || receipt.status === 'pending') {
+    return undefined;
+  }
+  return {
+    operation: 'steer_turn',
+    endpoint: externalBindingOperationPath(bindingId, 'controls'),
+    message:
+      receipt.status === 'rejected'
+        ? 'Steer request was rejected by Crew.'
+        : 'Steer request failed in Crew.',
+    reasonCode: receipt.reasonCode ?? `external_steer_${receipt.status}`,
+    retryable: true,
+  };
+}
+
+function promptFailureDetail(
+  error: unknown,
+  operation: ExternalPromptFailureDetail['operation'],
+  bindingId: string,
+): ExternalPromptFailureDetail {
+  const detail = storeErrorDetail(error);
+  const endpoint =
+    detail.endpoint ??
+    externalBindingOperationPath(
+      bindingId,
+      operation === 'steer_turn' ? 'controls' : 'messages',
+    );
+  return {
+    operation,
+    endpoint,
+    message: detail.message,
+    ...(detail.apiError?.reasonCode === undefined
+      ? {}
+      : { reasonCode: detail.apiError.reasonCode }),
+    ...(detail.statusCode === undefined
+      ? {}
+      : { statusCode: detail.statusCode }),
+    retryable: detail.retryable || operation === 'steer_turn',
+    ...(detail.transportCode === undefined
+      ? {}
+      : { transportCode: detail.transportCode }),
+  };
+}
+
+function promptFailureMessage(detail: ExternalPromptFailureDetail): string {
+  return storeErrorDetailMessage({
+    source: 'error',
+    message: detail.message,
+    retryable: detail.retryable,
+    ...(detail.reasonCode === undefined
+      ? {}
+      : {
+          apiError: {
+            code: 'external_prompt_submission_failed',
+            reasonCode: detail.reasonCode,
+            message: detail.message,
+          },
+        }),
+  });
+}
+
+function externalBindingOperationPath(
+  bindingId: string,
+  operation: 'messages' | 'controls',
+): string {
+  return `/v1/external-bindings/${encodeURIComponent(bindingId)}/${operation}`;
+}
+
 function capitalize(value: string): string {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }
@@ -1480,6 +1649,72 @@ export function latestExternalTurnPhase(
     }
   }
   return latest?.phase;
+}
+
+function reconciledExternalTurnPhase(
+  events: readonly NormalizedExternalRuntimeEvent[],
+  thread: ExternalThreadProjection | undefined,
+): ExternalTurnPhase | undefined {
+  const eventState = latestExternalTurnState(events);
+  if (eventState === undefined) return latestSnapshotTurnPhase(thread);
+  if (isTerminalPhase(eventState.phase)) return eventState.phase;
+  const matchingSnapshot = thread?.turns.find(
+    (turn) => turn.turnId === eventState.turnId,
+  );
+  const snapshotPhase = phaseValue(matchingSnapshot?.status);
+  if (snapshotPhase !== undefined && isTerminalPhase(snapshotPhase)) {
+    return latestSnapshotTurnPhase(thread) ?? snapshotPhase;
+  }
+  return eventState.phase;
+}
+
+function latestExternalTurnState(
+  events: readonly NormalizedExternalRuntimeEvent[],
+):
+  | {
+      readonly turnId: string | undefined;
+      readonly sequenceId: number;
+      readonly phase: ExternalTurnPhase;
+    }
+  | undefined {
+  let latest:
+    | {
+        readonly turnId: string | undefined;
+        readonly sequenceId: number;
+        readonly phase: ExternalTurnPhase;
+      }
+    | undefined;
+  for (const event of events) {
+    if (event.kind !== 'turn_lifecycle') continue;
+    const phase = phaseValue(event.payload.status);
+    if (
+      phase !== undefined &&
+      (latest === undefined || event.sequenceId > latest.sequenceId)
+    ) {
+      latest = {
+        turnId: event.nativeTurnId ?? undefined,
+        sequenceId: event.sequenceId,
+        phase,
+      };
+    }
+  }
+  return latest;
+}
+
+function reconciledActiveExternalTurnId(
+  events: readonly NormalizedExternalRuntimeEvent[],
+  thread: ExternalThreadProjection | undefined,
+): string | undefined {
+  const eventTurnId = activeExternalTurnId(events);
+  if (eventTurnId !== undefined) {
+    const snapshotPhase = phaseValue(
+      thread?.turns.find((turn) => turn.turnId === eventTurnId)?.status,
+    );
+    if (snapshotPhase === undefined || !isTerminalPhase(snapshotPhase)) {
+      return eventTurnId;
+    }
+  }
+  return activeSnapshotTurnId(thread);
 }
 
 export function activeExternalTurnId(

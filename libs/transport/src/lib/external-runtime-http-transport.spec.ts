@@ -1,8 +1,43 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ChatTransportError } from './chat-transport-error';
 import { ExternalRuntimeEventStream } from './external-runtime-event-stream';
 import { ExternalRuntimeHttpTransport } from './external-runtime-http-transport';
 
 describe('ExternalRuntimeHttpTransport', () => {
+  it('preserves typed Crew failure details and the external endpoint', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      json(
+        {
+          ok: false,
+          error: {
+            code: 'conflict',
+            reason_code: 'external_turn_not_active',
+            message: 'The expected turn is no longer active.',
+            retryable: false,
+          },
+          meta: meta(),
+        },
+        409,
+      ),
+    );
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    const failure = await transport
+      .submitControl('binding/1', { kind: 'steer_turn', payload: {} })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ChatTransportError);
+    expect(failure).toMatchObject({
+      code: 'http_error',
+      statusCode: 409,
+      endpoint: '/v1/external-bindings/binding%2F1/controls',
+      apiError: {
+        reason_code: 'external_turn_not_active',
+        retryable: false,
+      },
+    });
+  });
+
   it('creates an external agent session through the browser-safe endpoint', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -253,9 +288,9 @@ function config(fetchImpl: typeof fetch) {
 function meta() {
   return { request_id: 'req', schema_version: 1 };
 }
-function json(value: unknown): Response {
+function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
-    status: 200,
+    status,
     headers: { 'content-type': 'application/json' },
   });
 }

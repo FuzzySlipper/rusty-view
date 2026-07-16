@@ -7,8 +7,10 @@ import type {
   ExternalRuntimeRegistration,
   ExternalThreadProjection,
   NormalizedExternalRuntimeEvent,
+  SendExternalBindingMessageResponse,
+  ExternalControlReceipt,
 } from '@rusty-view/protocol';
-import { ChatTransport } from '@rusty-view/transport';
+import { ChatTransport, ChatTransportError } from '@rusty-view/transport';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -40,6 +42,18 @@ describe('external agent lifecycle reduction', () => {
 
     expect(latestExternalTurnPhase(events)).toBe('completed');
     expect(activeExternalTurnId(events)).toBeUndefined();
+  });
+
+  it('lets a terminal thread snapshot override a stale active event', () => {
+    const store = setupStore({
+      runtimes: [],
+      listThreads: vi.fn(),
+    });
+    store.selectedThread.set(threadWithUserPrompts('finished prompt'));
+    store.events.set([event(20, 'turn-1', 'inProgress')]);
+
+    expect(store.turnPhase()).toBe('completed');
+    expect(store.activeTurnId()).toBeUndefined();
   });
 });
 
@@ -511,7 +525,7 @@ describe('ExternalAgentStore', () => {
   });
 
   it('projects a user prompt immediately and marks it accepted after delivery', async () => {
-    const delivery = deferred<void>();
+    const delivery = deferred<SendExternalBindingMessageResponse['data']>();
     const store = setupStore({
       runtimes: [registration('runtime-1')],
       bindings: [externalBinding()],
@@ -534,7 +548,7 @@ describe('ExternalAgentStore', () => {
       }),
     ]);
 
-    delivery.resolve();
+    delivery.resolve(deliveryReceipt());
     await sending;
     expect(store.messages()[0]).toMatchObject({
       status: 'completed',
@@ -543,7 +557,7 @@ describe('ExternalAgentStore', () => {
   });
 
   it('keeps an optimistic prompt before authoritative rows that stream later', async () => {
-    const delivery = deferred<void>();
+    const delivery = deferred<SendExternalBindingMessageResponse['data']>();
     const store = setupStore({
       runtimes: [registration('runtime-1')],
       bindings: [externalBinding()],
@@ -569,7 +583,7 @@ describe('ExternalAgentStore', () => {
       { role: 'assistant', content: 'Streaming after the prompt' },
     ]);
 
-    delivery.resolve();
+    delivery.resolve(deliveryReceipt());
     await sending;
   });
 
@@ -578,7 +592,7 @@ describe('ExternalAgentStore', () => {
       runtimes: [registration('runtime-1')],
       bindings: [externalBinding()],
       listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
-      sendMessage: vi.fn(),
+      sendMessage: vi.fn(async () => deliveryReceipt()),
     });
     await store.refresh();
     store.selectedRuntimeId.set('runtime-1');
@@ -606,7 +620,7 @@ describe('ExternalAgentStore', () => {
   });
 
   it('sends Plan collaboration mode once and returns the composer to auto', async () => {
-    const sendMessage = vi.fn();
+    const sendMessage = vi.fn(async () => deliveryReceipt());
     const store = setupStore({
       runtimes: [registration('runtime-1')],
       bindings: [externalBinding()],
@@ -626,6 +640,144 @@ describe('ExternalAgentStore', () => {
       collaborationMode: 'plan',
     });
     expect(store.composerMode()).toBe('auto');
+  });
+
+  it('keeps auto delivery on the binding message route even when events look active', async () => {
+    const sendMessage = vi.fn(async () => deliveryReceipt());
+    const submitControl = vi.fn(async () => controlReceipt());
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage,
+      submitControl,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.events.set([event(1, 'turn-active', 'inProgress')]);
+
+    await store.send('authority-safe prompt');
+
+    expect(sendMessage).toHaveBeenCalledWith('binding-1', {
+      body: 'authority-safe prompt',
+      ttlMs: 60_000,
+    });
+    expect(submitControl).not.toHaveBeenCalled();
+  });
+
+  it('uses the control route only for an explicit steer', async () => {
+    const sendMessage = vi.fn(async () => deliveryReceipt());
+    const submitControl = vi.fn(async () => controlReceipt());
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage,
+      submitControl,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.events.set([event(1, 'turn-active', 'inProgress')]);
+    store.composerMode.set('steer');
+
+    await store.send('steer this turn');
+
+    expect(submitControl).toHaveBeenCalledWith(
+      'binding-1',
+      expect.objectContaining({
+        kind: 'steer_turn',
+        expectedNativeTurnId: 'turn-active',
+      }),
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('attaches a successful-envelope delivery rejection to the optimistic prompt', async () => {
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage: vi.fn(async () =>
+        deliveryReceipt('rejected', 'delivery_not_routable'),
+      ),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+
+    await store.send('keep this visible');
+
+    expect(store.messages()[0]).toMatchObject({
+      status: 'error',
+      metadata: {
+        deliveryStatus: 'failed',
+        deliveryFailure: {
+          operation: 'binding_message',
+          endpoint: '/v1/external-bindings/binding-1/messages',
+          reasonCode: 'delivery_not_routable',
+          retryable: true,
+        },
+      },
+    });
+    expect(store.error()).toContain('delivery_not_routable');
+  });
+
+  it('refreshes stale steer authority and keeps structured transport failure details', async () => {
+    const readThread = vi.fn(async () => ({
+      thread: threadWithUserPrompts('turn already finished'),
+    }));
+    const listEvents = vi.fn(async () => ({ events: [] }));
+    const submitControl = vi.fn(async () => {
+      throw new ChatTransportError({
+        code: 'http_error',
+        message: 'The expected turn is no longer active.',
+        statusCode: 409,
+        endpoint: '/v1/external-bindings/binding-1/controls',
+        apiError: {
+          code: 'conflict',
+          reason_code: 'external_turn_not_active',
+          message: 'The expected turn is no longer active.',
+          retryable: false,
+        },
+      });
+    });
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      listEvents,
+      readThread,
+      submitControl,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.events.set([event(1, 'turn-1', 'inProgress')]);
+    store.composerMode.set('steer');
+
+    await store.send('late steer');
+
+    expect(readThread).toHaveBeenCalledWith('runtime-1', {
+      threadId: 'thread-1',
+      includeTurns: true,
+    });
+    expect(store.messages()[0]).toMatchObject({
+      status: 'error',
+      blocks: [expect.objectContaining({ content: 'late steer' })],
+      metadata: {
+        deliveryFailure: {
+          operation: 'steer_turn',
+          endpoint: '/v1/external-bindings/binding-1/controls',
+          reasonCode: 'external_turn_not_active',
+          statusCode: 409,
+          retryable: true,
+          transportCode: 'http_error',
+        },
+      },
+    });
+    expect(store.activeTurnId()).toBeUndefined();
   });
 
   it('discovers and executes external commands without using the message route', async () => {
@@ -1075,8 +1227,10 @@ function setupStore(options: {
     listEvents: options.listEvents ?? vi.fn(async () => ({ events: [] })),
     readThread: options.readThread ?? vi.fn(),
     createAgentSession: options.createAgentSession ?? vi.fn(),
-    sendMessage: options.sendMessage ?? vi.fn(),
-    submitControl: options.submitControl ?? vi.fn(),
+    sendMessage:
+      options.sendMessage ?? vi.fn(async () => deliveryReceipt('accepted')),
+    submitControl:
+      options.submitControl ?? vi.fn(async () => controlReceipt('applied')),
     archiveThread: options.archiveThread ?? vi.fn(),
     unarchiveThread: options.unarchiveThread ?? vi.fn(),
     deleteThread: options.deleteThread ?? vi.fn(),
@@ -1208,6 +1362,51 @@ function externalBinding(): ExternalAgentBinding {
     effectiveConfigFingerprint: 'config',
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',
+    updatedAt: '2026-07-11T00:00:00Z',
+  };
+}
+
+function deliveryReceipt(
+  status: SendExternalBindingMessageResponse['data']['status'] = 'accepted',
+  reasonCode: string | null = null,
+): SendExternalBindingMessageResponse['data'] {
+  return {
+    request: {
+      body: 'test message',
+      createdAt: '2026-07-11T00:00:00Z',
+      deliveryId: 'delivery-1',
+      expiresAt: '2026-07-11T00:01:00Z',
+      fromAgentId: 'agent-sender',
+      idempotencyKey: 'delivery-key-1',
+      messageId: 'message-1',
+      requireWake: true,
+      toAgentId: 'agent-1',
+    },
+    reasonCode,
+    revision: 1,
+    status,
+  };
+}
+
+function controlReceipt(
+  status: ExternalControlReceipt['status'] = 'applied',
+  reasonCode: string | null = null,
+): ExternalControlReceipt {
+  return {
+    request: {
+      bindingId: 'binding-1',
+      controlId: 'control-1',
+      expectedBindingRevision: 1,
+      expectedNativeTurnId: 'turn-active',
+      idempotencyKey: 'control-key-1',
+      kind: 'steer_turn',
+      payload: {},
+      requestedAt: '2026-07-11T00:00:00Z',
+    },
+    reasonCode,
+    requestFingerprint: 'control-fingerprint',
+    revision: 1,
+    status,
     updatedAt: '2026-07-11T00:00:00Z',
   };
 }

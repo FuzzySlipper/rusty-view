@@ -141,6 +141,10 @@ export class MessageItemComponent {
             : '';
   });
 
+  protected readonly deliveryFailure = computed<
+    DeliveryFailureView | undefined
+  >(() => deliveryFailureView(this.message().metadata?.['deliveryFailure']));
+
   protected readonly showRevisionControls = computed(
     () =>
       this.message().author.role === 'assistant' &&
@@ -151,6 +155,42 @@ export class MessageItemComponent {
   protected onRevisionAction(action: MessageRevisionAction): void {
     this.revisionAction.emit(action);
   }
+}
+
+interface DeliveryFailureView {
+  readonly operation: string;
+  readonly endpoint: string;
+  readonly message: string;
+  readonly reasonCode?: string;
+  readonly statusCode?: number;
+  readonly retryable: boolean;
+}
+
+function deliveryFailureView(value: unknown): DeliveryFailureView | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Readonly<Record<string, unknown>>;
+  const operation = record['operation'];
+  const endpoint = record['endpoint'];
+  const message = record['message'];
+  const retryable = record['retryable'];
+  if (
+    typeof operation !== 'string' ||
+    typeof endpoint !== 'string' ||
+    typeof message !== 'string' ||
+    typeof retryable !== 'boolean'
+  ) {
+    return undefined;
+  }
+  const reasonCode = record['reasonCode'];
+  const statusCode = record['statusCode'];
+  return {
+    operation,
+    endpoint,
+    message,
+    retryable,
+    ...(typeof reasonCode === 'string' ? { reasonCode } : {}),
+    ...(typeof statusCode === 'number' ? { statusCode } : {}),
+  };
 }
 
 function initialsFor(label: string): string {

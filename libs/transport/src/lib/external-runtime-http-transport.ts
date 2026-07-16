@@ -1,4 +1,5 @@
 import type {
+  ApiError,
   ArchiveExternalRuntimeThreadResponse,
   CreateExternalAgentSessionResponse,
   DeleteExternalRuntimeThreadResponse,
@@ -307,13 +308,16 @@ export class ExternalRuntimeHttpTransport {
     }
     const parsed = (await response.json()) as unknown;
     if (!response.ok || !isSuccessEnvelope(parsed)) {
+      const apiError = apiErrorFromEnvelope(parsed);
       throw new ChatTransportError({
         code:
           response.status === 401 || response.status === 403
             ? 'auth_error'
             : 'http_error',
-        message: errorMessage(parsed, response),
+        message: apiError?.message ?? errorMessage(parsed, response),
         statusCode: response.status,
+        endpoint: path,
+        ...(apiError === undefined ? {} : { apiError }),
       });
     }
     return parsed as T;
@@ -359,6 +363,25 @@ function errorMessage(value: unknown, response: Response): string {
     return value.error.message;
   }
   return `External runtime request failed: HTTP ${response.status}`;
+}
+
+function apiErrorFromEnvelope(value: unknown): ApiError | undefined {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('error' in value) ||
+    typeof value.error !== 'object' ||
+    value.error === null
+  ) {
+    return undefined;
+  }
+  const error = value.error as Record<string, unknown>;
+  return typeof error['code'] === 'string' &&
+    typeof error['reason_code'] === 'string' &&
+    typeof error['message'] === 'string' &&
+    typeof error['retryable'] === 'boolean'
+    ? (error as unknown as ApiError)
+    : undefined;
 }
 
 export type ExternalBinding = ExternalAgentBinding;

@@ -5,6 +5,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
 }, testInfo) => {
   let interactionResolution: unknown;
   let rejectMessages = false;
+  let rejectControls = false;
   let creationRequest: Record<string, unknown> | undefined;
   let messageBindingId: string | undefined;
   let commandRequest: Record<string, unknown> | undefined;
@@ -160,6 +161,40 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         truncated: false,
         redactedKeys: [],
       });
+    if (url.pathname.endsWith('/controls') && rejectControls) {
+      listedThreads = listedThreads.map((candidate) =>
+        candidate.threadId === 'thread-1'
+          ? {
+              ...candidate,
+              turns: [
+                ...candidate.turns,
+                {
+                  turnId: 'turn-1',
+                  status: 'completed',
+                  startedAt: 1783756805,
+                  completedAt: 1783756806,
+                  durationMs: 1,
+                  items: [],
+                },
+              ],
+            }
+          : candidate,
+      );
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: 'conflict',
+            reason_code: 'external_turn_not_active',
+            message: 'The expected turn is no longer active.',
+            retryable: false,
+          },
+          meta: { request_id: 'req-stale-steer', schema_version: 1 },
+        }),
+      });
+    }
     if (url.pathname.endsWith('/controls'))
       return ok({
         request: {
@@ -255,13 +290,10 @@ test('external agent fleet, transcript activity, interactions, and controls are 
       });
     }
     if (url.pathname.endsWith('/messages') && rejectMessages) {
-      return route.fulfill({
-        status: 503,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ok: false,
-          error: { code: 'unavailable', message: 'delivery offline' },
-        }),
+      return ok({
+        deliveryId: 'delivery-rejected',
+        status: 'rejected',
+        reasonCode: 'delivery_offline',
       });
     }
     if (url.pathname.endsWith('/messages')) {
@@ -526,13 +558,48 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await page.getByTestId('message-input-field').fill('Rejected message proof');
   await page.getByTestId('send-message').click();
   await expect(page.getByRole('alert')).toContainText(
-    'Send failed: delivery offline',
+    'Send failed: Delivery was rejected by Crew. (delivery_offline)',
   );
   const rejectedPrompt = page
     .locator('.rv-message--user')
     .filter({ hasText: 'Rejected message proof' });
   await expect(rejectedPrompt).toBeVisible();
   await expect(rejectedPrompt).toHaveAttribute('data-message-status', 'error');
+  const rejectedInspector = rejectedPrompt.getByTestId(
+    'message-delivery-failure',
+  );
+  await expect(rejectedInspector).toContainText('delivery_offline');
+  await expect(rejectedInspector).toContainText(
+    '/v1/external-bindings/binding-1/messages',
+  );
+
+  rejectMessages = false;
+  rejectControls = true;
+  await page.getByLabel('External message mode').selectOption('steer');
+  await composer.fill('Stale steer proof');
+  await page.getByTestId('send-message').click();
+  await expect(page.getByRole('alert')).toContainText(
+    'external_turn_not_active',
+  );
+  const staleSteerPrompt = page
+    .locator('.rv-message--user')
+    .filter({ hasText: 'Stale steer proof' });
+  await expect(staleSteerPrompt).toBeVisible();
+  await expect(staleSteerPrompt).toHaveAttribute(
+    'data-message-status',
+    'error',
+  );
+  const staleSteerInspector = staleSteerPrompt.getByTestId(
+    'message-delivery-failure',
+  );
+  await expect(staleSteerInspector).toContainText('external_turn_not_active');
+  await expect(staleSteerInspector).toContainText('HTTP status409');
+  await expect(staleSteerInspector).toContainText(
+    '/v1/external-bindings/binding-1/controls',
+  );
+  await expect(page.getByTestId('external-turn-status')).toHaveText(
+    'waiting_interaction',
+  );
   await page.screenshot({
     path: testInfo.outputPath('external-agent-console.png'),
     fullPage: true,
