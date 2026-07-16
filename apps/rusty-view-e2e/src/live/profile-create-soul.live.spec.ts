@@ -13,8 +13,9 @@ test.describe('profile create soul persistence @live-agent @profiles', () => {
   test('persists soul markdown and injects it into a new Codex session', async ({
     page,
     request,
-  }) => {
-    test.setTimeout(6 * 60_000);
+  }, testInfo) => {
+    test.setTimeout(8 * 60_000);
+    page.setDefaultTimeout(30_000);
     const suffix = Date.now();
     const profileId = `rv-soul-cert-${suffix}`;
     const marker = `RV_SOUL_MARKER_${suffix}`;
@@ -75,7 +76,10 @@ test.describe('profile create soul persistence @live-agent @profiles', () => {
       await expect(profileRegistryRow(page, profileId)).toBeVisible({
         timeout: 30_000,
       });
-      await page.getByLabel('Close profiles').click();
+      await page
+        .getByTestId('top-menu-panel-profiles')
+        .getByRole('button', { name: 'Close profiles' })
+        .click();
       await page.getByTestId('external-agents-tab').click();
       await page.getByTestId('external-agent-create').click();
       await page.getByLabel('Codex session profile').selectOption(profileId);
@@ -94,33 +98,53 @@ test.describe('profile create soul persistence @live-agent @profiles', () => {
       );
       expect(threadId).toBeTruthy();
       target = await bindingForThread(request, threadId ?? '');
-      await sessionRow.click();
 
-      await page
-        .getByTestId('message-input-field')
-        .fill('What is the private profile marker? Reply with only it.');
-      await page.getByTestId('send-message').click();
-      await expect(page.getByTestId('transcript-shell')).toContainText(marker, {
-        timeout: 2 * 60_000,
-      });
-      await expect(page.getByTestId('external-turn-status')).toHaveAttribute(
-        'data-turn-phase',
-        'completed',
-        { timeout: 2 * 60_000 },
+      const composer = page.getByTestId('message-input-field');
+      await expect(composer).toBeEnabled();
+      await composer.fill(
+        'What is the private profile marker? Reply with only it.',
       );
+      await page.getByTestId('send-message').click();
+      await Promise.all([
+        expect(page.getByTestId('transcript-shell')).toContainText(marker, {
+          timeout: 2 * 60_000,
+        }),
+        expect(page.getByTestId('external-turn-status')).toHaveAttribute(
+          'data-turn-phase',
+          'completed',
+          { timeout: 2 * 60_000 },
+        ),
+      ]);
 
       await page.reload();
       await openProfilesPanel(page);
       const reloadedRow = profileRegistryRow(page, profileId);
       await expect(reloadedRow).toBeVisible({ timeout: 30_000 });
       await reloadedRow.getByRole('button', { name: 'Edit' }).click();
-      const editDialog = page.getByRole('dialog', {
-        name: `Edit Profile — ${profileId}`,
-      });
+      const editDialog = page.getByRole('dialog', { name: 'Edit Profile' });
+      await expect(editDialog).toContainText(`Edit Profile — ${profileId}`);
       await editDialog.getByRole('button', { name: 'Prompts' }).click();
       await expect(editDialog.locator('textarea').first()).toHaveValue(
         soulMarkdown,
       );
+      await testInfo.attach('profile-soul-certification.json', {
+        body: JSON.stringify(
+          {
+            profileId,
+            marker,
+            soulMarkdown,
+            createWrite,
+            registryRecord: createdRecord,
+            runtimeId: target.runtimeId,
+            bindingId: target.bindingId,
+            threadId: target.threadId,
+            reloadReadback: soulMarkdown,
+          },
+          null,
+          2,
+        ),
+        contentType: 'application/json',
+      });
     } finally {
       if (target !== undefined) await deleteThread(request, target);
       if (profileCreated) await deleteProfile(request, profileId);
@@ -135,7 +159,7 @@ async function openProfilesPanel(page: Page): Promise<void> {
 
 function profileRegistryRow(page: Page, profileId: string) {
   return page
-    .locator('.rv-admin-profiles__registry')
+    .locator('li.rv-admin-profiles__registry')
     .filter({ hasText: profileId });
 }
 
