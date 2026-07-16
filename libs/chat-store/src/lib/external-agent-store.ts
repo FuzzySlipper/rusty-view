@@ -1234,12 +1234,28 @@ export class ExternalAgentStore {
 
   private async refreshSelectedEvents(): Promise<void> {
     const runtimeId = this.selectedRuntimeId();
-    if (runtimeId === undefined) return;
+    const threadId = this.selectedThreadId();
+    const key = this.selectedSessionKey();
+    const revision = this.selectionRevision;
+    if (
+      runtimeId === undefined ||
+      threadId === undefined ||
+      key === undefined
+    ) {
+      return;
+    }
     const after = this.selectedRuntimeEventCursor;
     const page = await this.transport.external.listEvents(runtimeId, {
       ...(after === undefined ? {} : { after }),
       limit: 1_000,
     });
+    if (
+      !this.isCurrentSelection(revision, key) ||
+      this.selectedRuntimeId() !== runtimeId ||
+      this.selectedThreadId() !== threadId
+    ) {
+      return;
+    }
     const lastSequence = page.events.at(-1)?.sequenceId;
     if (lastSequence !== undefined) {
       this.selectedRuntimeEventCursor = Math.max(
@@ -1247,9 +1263,8 @@ export class ExternalAgentStore {
         lastSequence,
       );
     }
-    const selectedThreadId = this.selectedThreadId();
     this.appendEvents(
-      page.events.filter((event) => event.nativeThreadId === selectedThreadId),
+      page.events.filter((event) => event.nativeThreadId === threadId),
     );
   }
 
@@ -1589,7 +1604,7 @@ function promptFailureDetail(
     ...(detail.statusCode === undefined
       ? {}
       : { statusCode: detail.statusCode }),
-    retryable: detail.retryable || operation === 'steer_turn',
+    retryable: detail.retryable,
     ...(detail.transportCode === undefined
       ? {}
       : { transportCode: detail.transportCode }),

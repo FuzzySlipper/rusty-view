@@ -772,12 +772,78 @@ describe('ExternalAgentStore', () => {
           endpoint: '/v1/external-bindings/binding-1/controls',
           reasonCode: 'external_turn_not_active',
           statusCode: 409,
-          retryable: true,
+          retryable: false,
           transportCode: 'http_error',
         },
       },
     });
     expect(store.activeTurnId()).toBeUndefined();
+  });
+
+  it('discards a deferred event page after switching runtimes with the same thread id', async () => {
+    const staleEvents = deferred<{
+      readonly events: readonly NormalizedExternalRuntimeEvent[];
+    }>();
+    const staleReadStarted = deferred<void>();
+    let deferRuntimeOne = false;
+    const listEvents = vi.fn(async (runtimeId: string) => {
+      if (deferRuntimeOne && runtimeId === 'runtime-1') {
+        staleReadStarted.resolve();
+        return staleEvents.promise;
+      }
+      return { events: [] };
+    });
+    const sharedThreadId = 'shared-thread';
+    const runtimeOneBinding = {
+      ...externalBinding(),
+      nativeThreadId: sharedThreadId,
+    };
+    const runtimeTwoBinding = {
+      ...runtimeOneBinding,
+      bindingId: 'binding-2',
+      runtimeId: 'runtime-2',
+      sessionId: 'session-2',
+    };
+    const store = setupStore({
+      runtimes: [registration('runtime-1'), registration('runtime-2')],
+      bindings: [runtimeOneBinding, runtimeTwoBinding],
+      listThreads: vi.fn(async (runtimeId: string) =>
+        page(
+          [thread(sharedThreadId, runtimeId === 'runtime-1' ? 10 : 20)],
+          null,
+        ),
+      ),
+      listEvents,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set(sharedThreadId);
+    store.selectedThread.set(thread(sharedThreadId, 10));
+
+    deferRuntimeOne = true;
+    const firstSend = store.send('runtime one prompt');
+    await staleReadStarted.promise;
+
+    store.selectedRuntimeId.set('runtime-2');
+    store.selectedThreadId.set(sharedThreadId);
+    store.selectedThread.set(thread(sharedThreadId, 20));
+    store.events.set([]);
+    staleEvents.resolve({
+      events: [
+        {
+          ...event(500, 'runtime-one-turn', 'inProgress'),
+          nativeThreadId: sharedThreadId,
+        },
+      ],
+    });
+    await firstSend;
+
+    expect(store.events()).toEqual([]);
+    deferRuntimeOne = false;
+    await store.send('runtime two prompt');
+    expect(listEvents).toHaveBeenLastCalledWith('runtime-2', {
+      limit: 1_000,
+    });
   });
 
   it('discovers and executes external commands without using the message route', async () => {
