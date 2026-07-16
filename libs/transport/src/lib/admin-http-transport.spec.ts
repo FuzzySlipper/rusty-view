@@ -207,6 +207,7 @@ describe('AdminHttpTransport', () => {
       profileId: 'field-prime',
       displayName: 'Field Prime',
       kind: 'full',
+      soulMarkdown: 'PROFILE_SOUL_MARKER\nKeep this second line exactly.',
       modelConfig: { provider: 'local', modelName: 'deterministic' },
     });
 
@@ -216,6 +217,10 @@ describe('AdminHttpTransport', () => {
     expect(req.headers.get('Content-Type')).toBe('application/json');
     expect(req.body).toContain('field-prime');
     expect(req.body).toContain('Field Prime');
+    expect(JSON.parse(req.body ?? '{}')).toMatchObject({
+      profileId: 'field-prime',
+      soulMarkdown: 'PROFILE_SOUL_MARKER\nKeep this second line exactly.',
+    });
   });
 
   it('plans and applies a profile brain rebuild through the guarded control route', async () => {
