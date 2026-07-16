@@ -25,7 +25,8 @@
       role="dialog"
       aria-label="Options"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <rv-options-panel (dismissed)="closePanel()" />
     </div>
@@ -47,7 +48,8 @@
       role="dialog"
       aria-label="Help"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <header class="rv-top-menu__panel-header">
         <span>Commands</span>
@@ -80,7 +82,8 @@
       role="dialog"
       aria-label="Sessions"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <rv-sessions-panel (dismissed)="closePanel()" />
     </div>
@@ -102,7 +105,8 @@
       role="dialog"
       aria-label="Profiles"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <rv-admin-profiles-panel (dismissed)="closePanel()" />
     </div>
@@ -124,7 +128,8 @@
       role="dialog"
       aria-label="Service Config"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <rv-admin-service-panel (dismissed)="closePanel()" />
     </div>
@@ -146,7 +151,8 @@
       role="dialog"
       aria-label="Debug"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <rv-debug-panel />
     </div>
@@ -168,7 +174,8 @@
       role="dialog"
       aria-label="Model Providers"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <rv-admin-providers-panel (dismissed)="closePanel()" />
     </div>
@@ -191,7 +198,8 @@
       role="dialog"
       [attr.aria-label]="customPanel.title"
       (click)="$event.stopPropagation()"
-      (keydown)="$event.stopPropagation()"
+      (keydown.enter)="$event.stopPropagation()"
+      (keydown.space)="$event.stopPropagation()"
     >
       <header class="rv-top-menu__panel-header">
         <span>{{ customPanel.title }}</span>

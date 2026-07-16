@@ -287,6 +287,25 @@ describe('TopMenuComponent', () => {
     expect(
       host.querySelector('[data-testid="top-menu-overlay-debug"]'),
     ).not.toBeNull();
+
+    serviceTab?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    serviceTab?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', bubbles: true }),
+    );
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="top-menu-overlay-debug"]'),
+    ).not.toBeNull();
+
+    serviceTab?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="top-menu-overlay-debug"]'),
+    ).toBeNull();
   });
 
   it('opens the Options panel when Options is clicked', async () => {
