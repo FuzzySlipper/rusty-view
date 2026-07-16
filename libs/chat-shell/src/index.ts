@@ -44,6 +44,7 @@ export {
   CHAT_TOP_MENU_ITEMS,
   CHAT_TOP_MENU_PANELS,
   CHAT_TOP_MENU_CONFIGURATION,
+  CHAT_DEBUG_TAB_CONTEXT,
   CHAT_DEBUG_TABS,
   CHAT_OPTIONS_TABS,
   OPTIONS_PANEL_ID,
@@ -61,6 +62,7 @@ export type {
   ChatTopMenuConfiguration,
   ChatBuiltInTopMenuId,
   ChatDebugTab,
+  ChatDebugTabContext,
   ChatOptionsTab,
 } from './lib/shell-extension-tokens';
 export {

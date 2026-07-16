@@ -1,7 +1,7 @@
 <div class="rv-debug-panel">
   <header class="rv-debug-panel__header">
     <span>Debug</span>
-    <span class="rv-debug-panel__subtle">read-only runtime diagnostics</span>
+    <span class="rv-debug-panel__subtle">{{ headerSubtitle() }}</span>
   </header>
 
   <nav class="rv-debug-panel__tabs" aria-label="Debug views">
@@ -240,7 +240,10 @@
   </section>
   } @else if (activeCustomTab(); as customTab) {
   <section class="rv-debug-panel__body">
-    <ng-container [ngComponentOutlet]="customTab.component" />
+    <ng-container
+      [ngComponentOutlet]="customTab.component"
+      [ngComponentOutletInjector]="customTabInjector"
+    />
   </section>
   }
 </div>

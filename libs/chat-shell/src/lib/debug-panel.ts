@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  Injector,
   signal,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
@@ -17,7 +18,11 @@ import type {
   StorageQueryParameter,
   StorageQueryResult,
 } from '@rusty-view/transport';
-import { CHAT_DEBUG_TABS, type ChatDebugTab } from './shell-extension-tokens';
+import {
+  CHAT_DEBUG_TAB_CONTEXT,
+  CHAT_DEBUG_TABS,
+  type ChatDebugTab,
+} from './shell-extension-tokens';
 
 const BUILT_IN_DEBUG_TABS = [
   { id: 'providers', label: 'Provider Requests', order: 10 },
@@ -68,7 +73,18 @@ interface ToolDebugEntry {
 export class DebugPanelComponent {
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
+  private readonly injector = inject(Injector);
   private readonly providedTabs = inject(CHAT_DEBUG_TABS, { optional: true });
+
+  protected readonly customTabInjector = Injector.create({
+    parent: this.injector,
+    providers: [
+      {
+        provide: CHAT_DEBUG_TAB_CONTEXT,
+        useValue: { embedded: true },
+      },
+    ],
+  });
 
   protected readonly activeTab = signal<string>('providers');
   protected readonly selectedStorageQueryId = signal<string | null>(null);
@@ -111,6 +127,12 @@ export class DebugPanelComponent {
 
   protected readonly activeCustomTab = computed<ChatDebugTab | undefined>(() =>
     this.customTabs().find((tab) => tab.id === this.activeTab()),
+  );
+
+  protected readonly headerSubtitle = computed(() =>
+    this.activeCustomTab()?.mode === 'controls'
+      ? 'runtime diagnostics and controls'
+      : 'read-only runtime diagnostics',
   );
 
   protected readonly providerEntries = computed<

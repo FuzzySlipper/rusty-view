@@ -110,8 +110,27 @@ export interface ChatDebugTab {
   readonly id: string;
   readonly label: string;
   readonly order?: number;
+  /**
+   * Whether this tab is limited to diagnostics or exposes runtime controls.
+   * The Debug panel uses this to keep its chrome accurate for the active tab.
+   */
+  readonly mode?: 'diagnostics' | 'controls';
   readonly component: Type<unknown>;
 }
+
+/** Context available to components rendered inside a contributed Debug tab. */
+export interface ChatDebugTabContext {
+  readonly embedded: true;
+}
+
+/**
+ * Lets a contributed component adapt its own chrome when hosted by Debug.
+ * The built-in service panel uses this to avoid rendering an inert nested
+ * close affordance while retaining its normal standalone panel chrome.
+ */
+export const CHAT_DEBUG_TAB_CONTEXT = new InjectionToken<ChatDebugTabContext>(
+  'CHAT_DEBUG_TAB_CONTEXT',
+);
 
 /**
  * Multi-provider Debug tab contributions. The built-in ids `providers`,

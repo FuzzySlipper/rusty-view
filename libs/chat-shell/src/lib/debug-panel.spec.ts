@@ -170,6 +170,7 @@ describe('DebugPanelComponent', () => {
             id: 'service-controls',
             label: 'Service',
             order: 40,
+            mode: 'controls',
             component: TestServiceControlsComponent,
           },
         ],
@@ -186,6 +187,9 @@ describe('DebugPanelComponent', () => {
     expect(
       host.querySelector('[data-testid="service-controls"]'),
     ).not.toBeNull();
+    expect(
+      host.querySelector('.rv-debug-panel__subtle')?.textContent,
+    ).toContain('runtime diagnostics and controls');
   });
 
   it('keeps built-in Debug tab ids reserved', async () => {

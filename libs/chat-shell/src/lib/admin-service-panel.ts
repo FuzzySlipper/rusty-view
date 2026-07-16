@@ -11,6 +11,7 @@ import type {
   RuntimeWakeTimeoutConfig,
 } from '@rusty-view/transport';
 import { AdminStore } from '@rusty-view/chat-store';
+import { CHAT_DEBUG_TAB_CONTEXT } from './shell-extension-tokens';
 
 import {
   formatDurationMs,
@@ -85,6 +86,8 @@ const APPLY_SEMANTICS_ROWS: readonly ServiceCapabilityRow[] = [
 })
 export class AdminServicePanelComponent {
   protected readonly admin = inject(AdminStore);
+  protected readonly embedded =
+    inject(CHAT_DEBUG_TAB_CONTEXT, { optional: true })?.embedded === true;
   protected readonly applySemanticsRows = APPLY_SEMANTICS_ROWS;
   protected readonly reloadCapabilityStatus = computed(() =>
     this.capabilityStatusFor([CONFIG_RELOAD_CAPABILITY_ID]),

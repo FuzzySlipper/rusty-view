@@ -11,7 +11,9 @@ import {
 
 import { TopMenuComponent } from './top-menu';
 import { TopMenuController } from './top-menu-controller';
+import { AdminServicePanelComponent } from './admin-service-panel';
 import {
+  CHAT_DEBUG_TABS,
   CHAT_TOP_MENU_CONFIGURATION,
   CHAT_TOP_MENU_PANELS,
   OPTIONS_PANEL_ID,
@@ -243,6 +245,48 @@ describe('TopMenuComponent', () => {
     fixture.detectChanges();
 
     expect(host.querySelector('rv-debug-panel')).not.toBeNull();
+  });
+
+  it('composes the real Service controls inside Debug with embed-safe chrome', async () => {
+    const fixture = await createMenu([
+      {
+        provide: CHAT_DEBUG_TABS,
+        multi: true,
+        useValue: [
+          {
+            id: 'service-controls',
+            label: 'Service',
+            order: 40,
+            mode: 'controls',
+            component: AdminServicePanelComponent,
+          },
+        ],
+      },
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    findMenuButton(host, 'Debug')?.click();
+    fixture.detectChanges();
+    const serviceTab = Array.from(
+      host.querySelectorAll('.rv-debug-panel__tabs button'),
+    ).find((button) => button.textContent?.trim() === 'Service') as
+      | HTMLButtonElement
+      | undefined;
+    expect(serviceTab).toBeDefined();
+
+    serviceTab?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(host.querySelector('rv-admin-service-panel')).not.toBeNull();
+    expect(host.querySelector('.rv-admin-service__toolbar')).not.toBeNull();
+    expect(host.querySelector('.rv-admin-service__close')).toBeNull();
+    expect(
+      host.querySelector('.rv-debug-panel__subtle')?.textContent,
+    ).toContain('runtime diagnostics and controls');
+    expect(
+      host.querySelector('[data-testid="top-menu-overlay-debug"]'),
+    ).not.toBeNull();
   });
 
   it('opens the Options panel when Options is clicked', async () => {

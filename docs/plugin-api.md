@@ -88,6 +88,7 @@ export const appConfig = {
           id: 'service-controls',
           label: 'Service',
           order: 40,
+          mode: 'controls',
           component: AdminServicePanelComponent,
         },
       ],
@@ -99,7 +100,10 @@ export const appConfig = {
 Hiding a built-in entry removes only its top-menu button. Its stable ID remains
 reserved, downstream panels cannot replace it, and `TopMenuController` can
 still open the built-in panel. The built-in Debug tab IDs `providers`, `tools`,
-and `storage` are likewise reserved.
+and `storage` are likewise reserved. Debug tab components receive an embedded
+panel context; the standard Service component uses it to suppress its nested
+header and close button. Tabs with `mode: 'controls'` also replace Debug's
+read-only subtitle with an accurate diagnostics-and-controls label.
 
 ## Agent Data Actions
 
