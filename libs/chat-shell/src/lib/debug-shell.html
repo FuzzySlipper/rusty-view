@@ -23,7 +23,7 @@
     </button>
     <button
       type="button"
-      class="rv-debug__toggle"
+      class="rv-debug__toggle rv-debug__desktop-profiles-toggle"
       data-testid="profiles-toggle"
       rvTooltip="Show or hide the profiles sidebar"
       rvTooltipPlacement="bottom"
@@ -34,7 +34,7 @@
     </button>
     <button
       type="button"
-      class="rv-debug__toggle"
+      class="rv-debug__toggle rv-debug__inspector-toggle"
       data-testid="inspector-toggle"
       rvTooltip="Show or hide the event inspector"
       rvTooltipPlacement="bottom"
@@ -42,13 +42,37 @@
     >
       {{ showInspector() ? 'Hide Inspector' : 'Show Inspector' }}
     </button>
+    <button
+      type="button"
+      class="rv-debug__toggle rv-debug__mobile-sessions-toggle"
+      data-testid="mobile-sessions-toggle"
+      aria-controls="rv-mobile-session-drawer"
+      [attr.aria-expanded]="mobileSessionsOpen()"
+      (click)="toggleMobileSessions()"
+    >
+      Sessions
+    </button>
   </header>
 
   <!-- Body: profile sidebar + transcript + inspector -->
   <div class="rv-debug__body">
+    @if (mobileSessionsOpen()) {
+    <button
+      type="button"
+      class="rv-debug__mobile-backdrop"
+      data-testid="mobile-sessions-backdrop"
+      aria-label="Close session switcher"
+      (click)="closeMobileSessions()"
+    ></button>
+    }
     <!-- Profile sidebar -->
-    @if (showProfiles()) {
-    <aside class="rv-debug__sidebar">
+    @if (showProfiles() || mobileSessionsOpen()) {
+    <aside
+      id="rv-mobile-session-drawer"
+      class="rv-debug__sidebar"
+      [class.rv-debug__sidebar--desktop-visible]="showProfiles()"
+      [class.rv-debug__sidebar--mobile-open]="mobileSessionsOpen()"
+    >
       <nav class="rv-debug__sidebar-tabs" aria-label="Conversation sources">
         <button
           type="button"
@@ -66,9 +90,21 @@
           Agents @if (externalAttention()) {
           <span class="rv-debug__attention-dot"></span> }
         </button>
+        <button
+          type="button"
+          class="rv-debug__sidebar-close"
+          data-testid="mobile-sessions-close"
+          aria-label="Close session switcher"
+          (click)="closeMobileSessions()"
+        >
+          Close
+        </button>
       </nav>
-      @if (sidebarMode() === 'profiles') { <rv-profile-panel /> } @else {
-      <rv-external-agent-panel /> }
+      @if (sidebarMode() === 'profiles') {
+      <rv-profile-panel (profileSelected)="closeMobileSessions()" />
+      } @else {
+      <rv-external-agent-panel (sessionSelected)="closeMobileSessions()" />
+      }
     </aside>
     }
 

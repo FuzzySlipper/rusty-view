@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  output,
 } from '@angular/core';
 import type { BrainProfile } from '@rusty-view/chat-domain';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
@@ -29,6 +30,7 @@ import { profileWakeTimeoutLabel } from './wake-timeout-display';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfilePanelComponent {
+  readonly profileSelected = output<void>();
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
 
@@ -50,6 +52,7 @@ export class ProfilePanelComponent {
 
   protected onSelectProfile(profileId: string): void {
     void this.store.selectProfile(profileId);
+    this.profileSelected.emit();
   }
 
   protected onRefresh(): void {

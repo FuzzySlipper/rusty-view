@@ -189,3 +189,19 @@
   color: var(--rv-color-text-muted);
   margin-top: 2px;
 }
+
+@media (max-width: 720px) {
+  .rv-input {
+    gap: var(--rv-space-xs);
+    padding: var(--rv-space-sm);
+  }
+
+  .rv-input__field {
+    min-width: 0;
+  }
+
+  .rv-input__hints {
+    left: var(--rv-space-sm);
+    right: var(--rv-space-sm);
+  }
+}

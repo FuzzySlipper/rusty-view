@@ -135,6 +135,7 @@ export class DebugShellComponent {
   );
   protected readonly showTranscriptSearch = signal(false);
   protected readonly sidebarMode = signal<'profiles' | 'agents'>('profiles');
+  protected readonly mobileSessionsOpen = signal(false);
   /** Which inspector tab is shown: the raw event log or context diagnostics. */
   protected readonly inspectorTab = signal<'events' | 'context'>('events');
   protected readonly selectedEventId = signal<string | undefined>(undefined);
@@ -272,6 +273,11 @@ export class DebugShellComponent {
 
   @HostListener('document:keydown', ['$event'])
   protected onGlobalHotkey(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.mobileSessionsOpen()) {
+      event.preventDefault();
+      this.mobileSessionsOpen.set(false);
+      return;
+    }
     if (matchesHotkey(event, this.hotkeys.binding('nextSession'))) {
       event.preventDefault();
       this.cycleSession(1);
@@ -338,6 +344,14 @@ export class DebugShellComponent {
 
   protected toggleProfiles(): void {
     void this.theme.update({ showProfiles: !this.showProfiles() });
+  }
+
+  protected toggleMobileSessions(): void {
+    this.mobileSessionsOpen.update((open) => !open);
+  }
+
+  protected closeMobileSessions(): void {
+    this.mobileSessionsOpen.set(false);
   }
 
   protected showSidebar(mode: 'profiles' | 'agents'): void {

@@ -4,6 +4,7 @@ import {
   type WritableSignal,
   computed,
   inject,
+  output,
   signal,
 } from '@angular/core';
 import {
@@ -30,6 +31,7 @@ type ExternalAgentSessionCreateIntent = Omit<
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExternalAgentPanelComponent {
+  readonly sessionSelected = output<void>();
   protected readonly store = inject(ExternalAgentStore);
   protected readonly inventoryModes: readonly ExternalAgentInventoryMode[] = [
     'managed',
@@ -99,6 +101,7 @@ export class ExternalAgentPanelComponent {
 
   protected select(session: ExternalAgentSession): void {
     void this.store.selectSession(session);
+    this.sessionSelected.emit();
   }
 
   protected taskRefLabel(session: ExternalAgentSession): string {

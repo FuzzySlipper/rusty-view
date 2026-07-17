@@ -56,6 +56,7 @@ async function createPanel(
     metadataError: signal<string | undefined>(undefined),
     metadataNotice: signal<string | undefined>(undefined),
     interactions: signal([]),
+    selectSession: vi.fn(),
     setArchivedInventory: vi.fn(),
     setInventoryMode: vi.fn(),
     archiveThread: vi.fn(),
@@ -171,6 +172,22 @@ describe('ExternalAgentPanelComponent creation retries', () => {
 
 describe('ExternalAgentPanelComponent inventory modes', () => {
   afterEach(() => TestBed.resetTestingModule());
+
+  it('notifies the shell after an agent session is selected', async () => {
+    const session = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    const { fixture } = await createPanel(async () => undefined, [session]);
+    const selected = vi.fn();
+    fixture.componentInstance.sessionSelected.subscribe(selected);
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('.rv-agent__select').click();
+
+    expect(selected).toHaveBeenCalledOnce();
+  });
 
   it('uses a dedicated full-directory line instead of repeated runtime details', async () => {
     const base = inventorySession(1, {

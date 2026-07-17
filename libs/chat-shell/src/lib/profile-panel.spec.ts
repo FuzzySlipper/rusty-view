@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatSessionSummary } from '@rusty-view/protocol';
 import {
@@ -211,5 +211,19 @@ describe('ProfilePanelComponent', () => {
       '.rv-profile--selected',
     );
     expect(selected?.textContent).toContain('p1');
+  });
+
+  it('notifies the shell after a profile is selected', async () => {
+    const { fixture } = await createPanel([
+      makeSession({ session_id: 'live', profile_id: 'p1' }),
+    ]);
+    const selected = vi.fn();
+    fixture.componentInstance.profileSelected.subscribe(selected);
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.rv-profile')
+      ?.click();
+
+    expect(selected).toHaveBeenCalledOnce();
   });
 });
