@@ -440,6 +440,44 @@ describe('MessageBlockComponent', () => {
     expect(sheet).toContain('var(--rv-font-size-md)');
   });
 
+  it('renders aligned semantic tables in a themed overflow container', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: [
+          '| Concern | Stable semantic authority | Variable product composition |',
+          '|---|---:|---:|',
+          '| Capability state and mutation | Rust | Never TS |',
+        ].join('\n'),
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const scrollContainer = host.querySelector('.rv-md-table-scroll');
+    const table = scrollContainer?.querySelector('table.rv-md-table');
+    expect(scrollContainer).not.toBeNull();
+    expect(table?.querySelectorAll('thead th')).toHaveLength(3);
+    expect(table?.querySelectorAll('tbody td')).toHaveLength(3);
+    expect(table?.querySelectorAll('.rv-md-align-right')).toHaveLength(4);
+
+    const sheet = Array.from(host.ownerDocument.styleSheets)
+      .flatMap((styleSheet) => {
+        try {
+          return Array.from(styleSheet.cssRules).map((rule) => rule.cssText);
+        } catch {
+          return [];
+        }
+      })
+      .join('\n');
+    expect(sheet).toContain('rv-md-table-scroll');
+    expect(sheet).toContain('overflow-x: auto');
+    expect(sheet).toContain('var(--rv-color-surface-raised)');
+    expect(sheet).toContain('rv-md-align-right');
+  });
+
   it('bypasses markdown for configured literal exclusions', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: '== literal separator ==' }),

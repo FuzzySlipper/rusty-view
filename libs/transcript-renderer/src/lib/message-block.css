@@ -243,27 +243,67 @@
   color: var(--rv-color-text-secondary);
 }
 
-/* Tables: compact, bordered, scrollable on narrow widths. */
+/* Tables: semantic markup inside a dedicated narrow-width scroll container. */
+.rv-block__markdown .rv-md-table-scroll {
+  max-width: 100%;
+  margin: 0 0 var(--rv-space-sm);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--rv-color-border-strong);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+}
+
 .rv-block__markdown .rv-md-table {
   width: max-content;
-  max-width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
-  margin: 0 0 var(--rv-space-sm);
   font-size: var(--rv-font-size-sm);
-  overflow-x: auto;
-  display: block;
+  color: var(--rv-color-text-primary);
 }
 
 .rv-block__markdown .rv-md-table th,
 .rv-block__markdown .rv-md-table td {
-  padding: var(--rv-space-xs) var(--rv-space-sm);
-  border: 1px solid var(--rv-color-border);
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-right: 1px solid var(--rv-color-border);
+  border-bottom: 1px solid var(--rv-color-border);
   text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
 }
 
 .rv-block__markdown .rv-md-table th {
   background: var(--rv-color-surface-raised);
   font-weight: var(--rv-font-weight-bold);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-block__markdown .rv-md-table tbody tr:nth-child(even) {
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-block__markdown .rv-md-table tr:last-child td {
+  border-bottom: none;
+}
+
+.rv-block__markdown .rv-md-table th:last-child,
+.rv-block__markdown .rv-md-table td:last-child {
+  border-right: none;
+}
+
+.rv-block__markdown .rv-md-table th.rv-md-align-left,
+.rv-block__markdown .rv-md-table td.rv-md-align-left {
+  text-align: left;
+}
+
+.rv-block__markdown .rv-md-table th.rv-md-align-center,
+.rv-block__markdown .rv-md-table td.rv-md-align-center {
+  text-align: center;
+}
+
+.rv-block__markdown .rv-md-table th.rv-md-align-right,
+.rv-block__markdown .rv-md-table td.rv-md-align-right {
+  text-align: right;
 }
 
 .rv-block--collapsible {

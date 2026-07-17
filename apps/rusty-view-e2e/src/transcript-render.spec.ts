@@ -31,8 +31,22 @@ const SESSION_SUMMARY = {
 };
 
 const USER_BODY = 'The door creaks open.';
-const ASSISTANT_BODY =
+const REPRESENTATIVE_TABLE = [
+  '| Concern | Stable semantic authority | Variable product composition |',
+  '|---|---:|---:|',
+  '| Capability state and mutation | Rust | Never TS |',
+  '| Rule semantics and appliers | Rust | TS selects/configures |',
+  '| Intent validation | Rust | TS constructs intents |',
+  '| Formula/predicate meaning | Rust | TS composes typed ASTs |',
+  '| Runtime scheduling/timing | Rust | TS chooses declared modes |',
+  '| Content and project assembly | Rust validates | TS authors |',
+  '| Policy | Rust bounds | TS proposes |',
+  '| Workflow and UI | Rust exposes facts | TS orchestrates/presents |',
+  '| Proof and certification | Owners expose invariants | External consumers compose evidence |',
+].join('\n');
+const ASSISTANT_LEAD =
   'A figure steps through the doorway, into the amber light.';
+const ASSISTANT_BODY = `${ASSISTANT_LEAD}\n\n${REPRESENTATIVE_TABLE}`;
 const TOOL_DEBUG_DETAIL_ID = 'debug_tc1';
 const LIVE_SCROLL_SESSION_ID = 'render-live-scroll-session';
 const LIVE_SCROLL_ASSISTANT_ID = 'msg_live_scroll_asst';
@@ -237,7 +251,7 @@ test('selecting a session renders message rows in the transcript', async ({
   const items = page.locator('.rv-transcript__item');
   await expect(items).toHaveCount(3, { timeout: 10_000 });
   await expect(page.getByText(USER_BODY)).toBeVisible();
-  await expect(page.getByText(ASSISTANT_BODY, { exact: false })).toBeVisible();
+  await expect(page.getByText(ASSISTANT_LEAD, { exact: false })).toBeVisible();
   await expect(page.locator('.rv-message--assistant')).not.toContainText(
     'responses replay wake completed',
   );
@@ -246,6 +260,52 @@ test('selecting a session renders message rows in the transcript', async ({
   // message items and not placeholders.
   await expect(page.locator('.rv-message--user')).toHaveCount(2);
   await expect(page.locator('.rv-message--assistant')).toHaveCount(1);
+
+  // GFM tables use semantic structure and preserve delimiter alignment in the
+  // shared renderer used by native Profiles and Codex Agent transcripts.
+  const tableScroll = page.locator(
+    '.rv-message--assistant .rv-md-table-scroll',
+  );
+  const table = tableScroll.locator('table.rv-md-table');
+  await expect(table).toHaveCount(1);
+  await expect(table.locator('thead th')).toHaveCount(3);
+  await expect(table.locator('tbody tr')).toHaveCount(9);
+  await expect(table.locator('thead th').nth(1)).toHaveCSS(
+    'text-align',
+    'right',
+  );
+  await expect(table.locator('tbody tr').last().locator('td').nth(2)).toHaveCSS(
+    'text-align',
+    'right',
+  );
+  await expect(table.locator('thead th').first()).toHaveCSS(
+    'background-color',
+    /rgba?\(/,
+  );
+
+  // At a portrait viewport, the wide table scrolls inside its own container
+  // while the transcript remains contained by the browser viewport.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      tableScroll.evaluate(
+        (element) => element.scrollWidth > element.clientWidth,
+      ),
+    )
+    .toBe(true);
+  const containment = await page
+    .getByTestId('transcript-viewport')
+    .evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      right: element.getBoundingClientRect().right,
+      viewportWidth: window.innerWidth,
+    }));
+  expect(containment.scrollWidth).toBeLessThanOrEqual(
+    containment.clientWidth + 1,
+  );
+  expect(containment.right).toBeLessThanOrEqual(containment.viewportWidth + 1);
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   // The same submission-history behavior is wired to native Crew Profile
   // transcripts, including forward navigation back to the unsent draft.

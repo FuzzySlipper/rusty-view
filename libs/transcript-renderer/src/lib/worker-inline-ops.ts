@@ -170,32 +170,35 @@ function parseMarkdown(
 
     // ---- Table ----
     const separator = lines[i + 1];
-    if (
-      line.startsWith('|') &&
-      separator !== undefined &&
-      separator.match(/^\|[\s|-]+\|?\s*$/) !== null
-    ) {
+    const headerCells = splitTableRow(line);
+    const alignments =
+      separator === undefined || headerCells === null
+        ? null
+        : parseTableAlignments(separator, headerCells.length);
+    if (headerCells !== null && alignments !== null) {
       flushParagraph();
-      const headerCells = splitTableRow(line);
       i += 2; // skip header + separator
       const bodyRows: string[] = [];
       let tableLine = lines[i];
-      while (
-        i < lines.length &&
-        tableLine !== undefined &&
-        tableLine.startsWith('|')
-      ) {
+      while (i < lines.length && tableLine !== undefined) {
         const cells = splitTableRow(tableLine);
-        const tds = cells.map((c) => `<td>${formatInline(c)}</td>`).join('');
+        if (cells === null) break;
+        const tds = headerCells
+          .map((_, columnIndex) =>
+            tableCell('td', cells[columnIndex] ?? '', alignments[columnIndex]),
+          )
+          .join('');
         bodyRows.push(`<tr>${tds}</tr>`);
         i++;
         tableLine = lines[i];
       }
       const ths = headerCells
-        .map((c) => `<th>${formatInline(c)}</th>`)
+        .map((cell, columnIndex) =>
+          tableCell('th', cell, alignments[columnIndex]),
+        )
         .join('');
       htmlParts.push(
-        `<table class="rv-md-table"><thead><tr>${ths}</tr></thead><tbody>${bodyRows.join('')}</tbody></table>`,
+        `<div class="rv-md-table-scroll"><table class="rv-md-table"><thead><tr>${ths}</tr></thead><tbody>${bodyRows.join('')}</tbody></table></div>`,
       );
       continue;
     }
@@ -241,10 +244,109 @@ function isHorizontalRule(line: string, policy: MarkdownRenderPolicy): boolean {
   );
 }
 
-/** Split a table row into cell contents (without leading/trailing pipes). */
-function splitTableRow(line: string): string[] {
-  const trimmed = line.replace(/^\|/, '').replace(/\|$/, '');
-  return trimmed.split('|').map((c) => c.trim());
+type TableAlignment = 'left' | 'center' | 'right' | undefined;
+
+/**
+ * Split a GFM table row without treating escaped pipes or pipes inside inline
+ * code as column boundaries. Outer pipes are optional, but at least one real
+ * pipe must be present so ordinary prose cannot become a one-column table.
+ */
+function splitTableRow(line: string): string[] | null {
+  let source = line.trim();
+  let sawPipe = false;
+
+  if (source.startsWith('|')) {
+    source = source.slice(1);
+    sawPipe = true;
+  }
+  if (source.endsWith('|') && !isEscapedAt(source, source.length - 1)) {
+    source = source.slice(0, -1);
+    sawPipe = true;
+  }
+
+  const cells: string[] = [];
+  let cell = '';
+  let codeDelimiterLength = 0;
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === undefined) continue;
+
+    if (character === '\\' && source[index + 1] === '|') {
+      cell += '|';
+      index++;
+      continue;
+    }
+
+    if (character === '`') {
+      let runLength = 1;
+      while (source[index + runLength] === '`') runLength++;
+      if (codeDelimiterLength === 0) codeDelimiterLength = runLength;
+      else if (codeDelimiterLength === runLength) codeDelimiterLength = 0;
+      cell += '`'.repeat(runLength);
+      index += runLength - 1;
+      continue;
+    }
+
+    if (character === '|' && codeDelimiterLength === 0) {
+      cells.push(cell.trim());
+      cell = '';
+      sawPipe = true;
+      continue;
+    }
+
+    cell += character;
+  }
+
+  if (!sawPipe) return null;
+  cells.push(cell.trim());
+  return cells;
+}
+
+function isEscapedAt(value: string, index: number): boolean {
+  let precedingBackslashes = 0;
+  for (
+    let cursor = index - 1;
+    cursor >= 0 && value[cursor] === '\\';
+    cursor--
+  ) {
+    precedingBackslashes++;
+  }
+  return precedingBackslashes % 2 === 1;
+}
+
+/** Parse and validate a GFM delimiter row, including alignment markers. */
+function parseTableAlignments(
+  line: string,
+  columnCount: number,
+): TableAlignment[] | null {
+  const cells = splitTableRow(line);
+  if (cells === null || cells.length !== columnCount) return null;
+
+  const alignments: TableAlignment[] = [];
+  for (const cell of cells) {
+    const delimiter = cell.trim();
+    if (!/^:?-{3,}:?$/.test(delimiter)) return null;
+    if (delimiter.startsWith(':') && delimiter.endsWith(':')) {
+      alignments.push('center');
+    } else if (delimiter.endsWith(':')) {
+      alignments.push('right');
+    } else if (delimiter.startsWith(':')) {
+      alignments.push('left');
+    } else {
+      alignments.push(undefined);
+    }
+  }
+  return alignments;
+}
+
+function tableCell(
+  tag: 'th' | 'td',
+  content: string,
+  alignment: TableAlignment,
+): string {
+  const className = alignment ? ` class="rv-md-align-${alignment}"` : '';
+  return `<${tag}${className}>${formatInline(content)}</${tag}>`;
 }
 
 /**

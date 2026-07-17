@@ -253,22 +253,79 @@ describe('processRequestInline (inline worker fallback)', () => {
       }
     });
 
-    it('renders tables', () => {
+    it('renders semantic GFM tables with declared column alignment', () => {
+      const table = [
+        '| Concern | Stable semantic authority | Variable product composition |',
+        '|---|---:|---:|',
+        '| Capability state and mutation | Rust | Never TS |',
+        '| Rule semantics and appliers | Rust | TS selects/configures |',
+        '| Intent validation | Rust | TS constructs intents |',
+        '| Formula/predicate meaning | Rust | TS composes typed ASTs |',
+        '| Runtime scheduling/timing | Rust | TS chooses declared modes |',
+        '| Content and project assembly | Rust validates | TS authors |',
+        '| Policy | Rust bounds | TS proposes |',
+        '| Workflow and UI | Rust exposes facts | TS orchestrates/presents |',
+        '| Proof and certification | Owners expose invariants | External consumers compose evidence |',
+      ].join('\n');
       const response = processRequestInline({
         kind: 'parse-markdown',
         id: 16,
-        content: '| Name | Age |\n|---|---|\n| Alice | 30 |\n| Bob | 25 |',
+        content: table,
       });
       if (response.kind === 'parse-markdown') {
-        expect(response.html).toContain('<table');
+        expect(response.html).toContain('<div class="rv-md-table-scroll">');
+        expect(response.html).toContain('<table class="rv-md-table">');
         expect(response.html).toContain('<thead>');
-        expect(response.html).toContain('<th>Name</th>');
-        expect(response.html).toContain('<th>Age</th>');
+        expect(response.html).toContain('<th>Concern</th>');
+        expect(response.html).toContain(
+          '<th class="rv-md-align-right">Stable semantic authority</th>',
+        );
+        expect(response.html).toContain(
+          '<th class="rv-md-align-right">Variable product composition</th>',
+        );
         expect(response.html).toContain('<tbody>');
-        expect(response.html).toContain('<td>Alice</td>');
-        expect(response.html).toContain('<td>30</td>');
-        expect(response.html).toContain('<td>Bob</td>');
-        expect(response.html).toContain('<td>25</td>');
+        expect(response.html).toContain(
+          '<td class="rv-md-align-right">Owners expose invariants</td>',
+        );
+        expect(response.html).toContain(
+          '<td class="rv-md-align-right">External consumers compose evidence</td>',
+        );
+        expect(response.html.match(/<tr>/g)).toHaveLength(10);
+        expect(response.html).toContain('</tbody></table></div>');
+      }
+    });
+
+    it('supports outer-pipe-free tables and left/center alignment', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 161,
+        content: 'Left | Center\n:--- | :---:\none | two',
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).toContain('<table class="rv-md-table">');
+        expect(response.html).toContain(
+          '<th class="rv-md-align-left">Left</th>',
+        );
+        expect(response.html).toContain(
+          '<th class="rv-md-align-center">Center</th>',
+        );
+        expect(response.html).toContain(
+          '<td class="rv-md-align-center">two</td>',
+        );
+      }
+    });
+
+    it('does not interpret table syntax inside fenced or inline code as a table', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 162,
+        content:
+          '```markdown\n| Header | Value |\n|---|---:|\n| Safe | Code |\n```\n\n`| Header | Value |`\n|---|---|',
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).toContain('<pre class="rv-md-code');
+        expect(response.html).toContain('<code>| Header | Value |</code>');
+        expect(response.html).not.toContain('<table');
       }
     });
 

@@ -6,6 +6,7 @@ import {
   inject,
   input,
   signal,
+  ViewEncapsulation,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import type {
@@ -123,6 +124,11 @@ const AUTO_HTML_TAGS = new Set([
   templateUrl: './message-block.html',
   styleUrl: './message-block.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // Markdown and sanitized HTML are inserted with [innerHTML], so those child
+  // nodes do not receive Angular's emulated encapsulation attribute. Every
+  // selector in this stylesheet is rv-prefixed; emitting it globally lets the
+  // shared renderer theme its generated markup without leaking generic rules.
+  encapsulation: ViewEncapsulation.None,
 })
 export class MessageBlockComponent {
   private readonly workerManager = inject(WorkerManager);
