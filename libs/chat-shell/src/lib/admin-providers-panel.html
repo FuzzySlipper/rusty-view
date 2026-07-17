@@ -167,6 +167,9 @@
           [value]="form().credentialMode"
           (change)="updateCredentialMode($event)"
         >
+          @if (form().credentialMode === 'unconfigured') {
+          <option value="unconfigured">Unconfigured</option>
+          }
           <option value="api_key">API key</option>
           <option value="openai_oauth">OpenAI OAuth</option>
         </select>
@@ -190,7 +193,7 @@
         />
         <span>Clear stored secret</span>
       </label>
-      } @else {
+      } @else if (form().credentialMode === 'openai_oauth') {
       <label>
         <span>OAuth Callback URL</span>
         <input
@@ -200,6 +203,11 @@
           autocomplete="off"
         />
       </label>
+      } @else {
+      <p class="rv-admin-providers__oauth" role="status">
+        No credential is configured. Choose API key or OpenAI OAuth to set up
+        this provider alias.
+      </p>
       }
     </div>
 
@@ -264,7 +272,15 @@
       }
     </div>
 
-    @if (oauthPendingLogin(); as pendingLogin) {
+    @if (form().credentialMode === 'openai_oauth') {
+    <div class="rv-admin-providers__oauth" role="status">
+      <span>{{ oauthStateLabel() }}</span>
+      <span>
+        OAuth credentials are local to this provider alias on this Crew service.
+        Credentials from another alias or Crew service are not reused.
+      </span>
+    </div>
+    } @if (oauthPendingLogin(); as pendingLogin) {
     <div class="rv-admin-providers__oauth" role="status">
       <span>{{ pendingLogin.providerAlias }}</span>
       <a
@@ -276,10 +292,10 @@
       </a>
       <span>expires {{ pendingLogin.expiresAt }}</span>
     </div>
-    } @if (admin.openAiOauthStatus(); as oauthStatus) {
+    } @if (selectedOauthStatus(); as oauthStatus) {
     <div class="rv-admin-providers__result" role="status">
       <span>{{ oauthStatus.provider.alias }}</span>
-      <span>{{ oauthStatus.credential.kind ?? 'api_key' }}</span>
+      <span>{{ oauthStatus.credential.kind ?? 'unconfigured' }}</span>
       <span>
         {{ oauthStatus.credential.status ?? (oauthStatus.credential.hasSecret ?
         'configured' : 'missing') }}

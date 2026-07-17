@@ -13,10 +13,11 @@ import type {
   ModelProviderRefreshMode,
   ModelProviderStatus,
   ModelProviderWriteRequest,
+  ModelProviderWriteResponse,
   OpenAiOauthPendingLogin,
 } from '@rusty-view/transport';
 
-type ProviderCredentialMode = 'api_key' | 'openai_oauth';
+type ProviderCredentialMode = 'unconfigured' | 'api_key' | 'openai_oauth';
 
 interface ProviderFormState {
   readonly alias: string;
@@ -110,6 +111,23 @@ export class AdminProvidersPanelComponent {
   protected readonly oauthCallbackReady = computed(
     () => this.form().oauthCallbackUrl.trim() !== '',
   );
+  protected readonly selectedOauthStatus = computed(() => {
+    const alias = this.editingAlias();
+    const status = this.admin.openAiOauthStatus();
+    return alias !== null && status?.provider.alias === alias ? status : null;
+  });
+  protected readonly oauthCredentialState = computed<
+    'checking' | 'configured' | 'pending' | 'unconfigured'
+  >(() => {
+    if (this.admin.saving()) return 'checking';
+    const status = this.selectedOauthStatus();
+    if (status === null) return 'unconfigured';
+    if (status.pendingLogins.length > 0) return 'pending';
+    return status.credential.hasSecret &&
+      status.credential.kind === 'openai_oauth'
+      ? 'configured'
+      : 'unconfigured';
+  });
 
   protected readonly saveDisabled = computed(() => {
     const form = this.form();
@@ -229,7 +247,12 @@ export class AdminProvidersPanelComponent {
 
   protected updateCredentialMode(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    if (value !== 'api_key' && value !== 'openai_oauth') return;
+    if (
+      value !== 'unconfigured' &&
+      value !== 'api_key' &&
+      value !== 'openai_oauth'
+    )
+      return;
     this.form.update((current) =>
       value === 'openai_oauth'
         ? {
@@ -247,8 +270,18 @@ export class AdminProvidersPanelComponent {
             secret: '',
             clearSecret: false,
           }
-        : { ...current, credentialMode: value, oauthCallbackUrl: '' },
+        : {
+            ...current,
+            credentialMode: value,
+            oauthCallbackUrl: '',
+            secret: '',
+            clearSecret: false,
+          },
     );
+    const alias = this.editingAlias();
+    if (value === 'openai_oauth' && alias !== null) {
+      void this.admin.loadOpenAiOauthStatus(alias);
+    }
   }
 
   protected updateRefreshMode(event: Event): void {
@@ -264,8 +297,7 @@ export class AdminProvidersPanelComponent {
   }
 
   protected selectProviderForEdit(provider: ModelProviderRecord): void {
-    const credentialMode =
-      provider.credential.kind === 'openai_oauth' ? 'openai_oauth' : 'api_key';
+    const credentialMode = providerCredentialMode(provider);
     this.editingAlias.set(provider.alias);
     this.form.set({
       alias: provider.alias,
@@ -295,7 +327,11 @@ export class AdminProvidersPanelComponent {
       oauthCallbackUrl: '',
       status: provider.status,
     });
-    if (credentialMode === 'openai_oauth') {
+    if (
+      credentialMode === 'openai_oauth' ||
+      (credentialMode === 'unconfigured' &&
+        provider.providerKind.toLowerCase() === 'openai')
+    ) {
       void this.admin.loadOpenAiOauthStatus(provider.alias);
     }
   }
@@ -305,18 +341,45 @@ export class AdminProvidersPanelComponent {
     this.form.set(initialForm());
   }
 
-  protected saveProvider(): void {
+  protected async saveProvider(): Promise<void> {
     const form = this.form();
     const request = buildWriteRequest(form);
     const refresh = this.refreshMode();
+    let result: ModelProviderWriteResponse | undefined;
     if (this.editingAlias() !== null) {
-      void this.admin.updateModelProvider(
+      result = await this.admin.updateModelProvider(
         this.editingAlias() as string,
         request,
         refresh,
       );
     } else {
-      void this.admin.createModelProvider(request, refresh);
+      result = await this.admin.createModelProvider(request, refresh);
+    }
+    if (result === undefined || form.credentialMode !== 'openai_oauth') return;
+
+    // Structural provider writes do not configure OAuth. Keep the operator in
+    // the explicitly selected OAuth workflow and read Crew's alias-local
+    // status instead of reseeding the form from a credential-less provider.
+    const alias = result.provider.alias;
+    this.editingAlias.set(alias);
+    this.form.update((current) => ({
+      ...current,
+      alias,
+      credentialMode: 'openai_oauth',
+    }));
+    await this.admin.loadOpenAiOauthStatus(alias);
+  }
+
+  protected oauthStateLabel(): string {
+    switch (this.oauthCredentialState()) {
+      case 'checking':
+        return 'Checking this provider alias on the current Crew service…';
+      case 'configured':
+        return 'OAuth is configured for this provider alias.';
+      case 'pending':
+        return 'OAuth login is pending for this provider alias. Complete it with the callback URL.';
+      case 'unconfigured':
+        return 'OAuth is unconfigured for this provider alias. Start and complete OAuth before using it.';
     }
   }
 
@@ -325,7 +388,12 @@ export class AdminProvidersPanelComponent {
   }
 
   protected credentialKindLabel(provider: ModelProviderRecord): string {
-    return provider.credential.kind ?? 'api_key';
+    return (
+      provider.credential.kind ??
+      (provider.credential.hasSecret
+        ? 'configured-kind-unknown'
+        : 'unconfigured')
+    );
   }
 
   protected credentialUpdatedLabel(provider: ModelProviderRecord): string {
@@ -333,11 +401,10 @@ export class AdminProvidersPanelComponent {
   }
 
   protected oauthPendingLogin(): OpenAiOauthPendingLogin | null {
-    return (
-      this.admin.openAiOauthStartResult()?.pendingLogin ??
-      this.admin.openAiOauthStatus()?.pendingLogins[0] ??
-      null
-    );
+    const alias = this.editingAlias();
+    const started = this.admin.openAiOauthStartResult()?.pendingLogin;
+    if (started?.providerAlias === alias) return started;
+    return this.selectedOauthStatus()?.pendingLogins[0] ?? null;
   }
 
   protected startOpenAiOauthLogin(): void {
@@ -436,6 +503,20 @@ function credentialLabel(provider: ModelProviderRecord): string {
     provider.credential.status ??
     (provider.credential.hasSecret ? 'configured' : 'missing');
   return status.replace('_', '-');
+}
+
+function providerCredentialMode(
+  provider: ModelProviderRecord,
+): ProviderCredentialMode {
+  if (provider.credential.kind === 'openai_oauth') return 'openai_oauth';
+  if (
+    provider.credential.kind === 'api_key' ||
+    provider.credential.kind === 'legacy_raw_api_key' ||
+    (provider.credential.kind === undefined && provider.credential.hasSecret)
+  ) {
+    return 'api_key';
+  }
+  return 'unconfigured';
 }
 
 /**

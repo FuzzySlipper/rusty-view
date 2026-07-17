@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AdminStore } from '@rusty-view/chat-store';
@@ -100,16 +100,18 @@ function makeTransport(
       capabilities: [],
     }),
     adminProfileDiagnostics: async () => null,
-    adminModelProviders: providerLoadFails
-      ? async () => {
-          throw new Error('boom');
-        }
-      : async () => page,
+    adminModelProviders: vi.fn(
+      providerLoadFails
+        ? async () => {
+            throw new Error('boom');
+          }
+        : async () => page,
+    ),
     createAdminModelProvider: vi.fn(
       async (
         request: ModelProviderWriteRequest,
       ): Promise<ModelProviderWriteResponse> => ({
-        provider: makeProvider(request.modelId),
+        provider: makeProvider(request.alias ?? request.modelId),
         refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
       }),
     ),
@@ -122,15 +124,23 @@ function makeTransport(
         refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
       }),
     ),
-    adminOpenAiOauthStatus: vi.fn(async (alias: string) => ({
-      provider: {
-        ...makeProvider(alias, true),
-        credential: { hasSecret: true, kind: 'openai_oauth' },
-      },
-      credential: { hasSecret: true, kind: 'openai_oauth' },
-      loginConfig: openAiOauthLoginConfig(),
-      pendingLogins: [],
-    })),
+    adminOpenAiOauthStatus: vi.fn(async (alias: string) => {
+      const configured = providers.some(
+        (provider) =>
+          provider.alias === alias &&
+          provider.credential.hasSecret &&
+          provider.credential.kind === 'openai_oauth',
+      );
+      const credential = configured
+        ? ({ hasSecret: true, kind: 'openai_oauth' } as const)
+        : ({ hasSecret: false } as const);
+      return {
+        provider: { ...makeProvider(alias, configured), credential },
+        credential,
+        loginConfig: openAiOauthLoginConfig(),
+        pendingLogins: [],
+      };
+    }),
     adminStartOpenAiOauthLogin: vi.fn(async (alias: string) => ({
       provider: {
         ...makeProvider(alias),
@@ -188,6 +198,12 @@ async function createPanel(
   return fixture;
 }
 
+function textContent(
+  fixture: ComponentFixture<AdminProvidersPanelComponent>,
+): string {
+  return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
 describe('AdminProvidersPanelComponent', () => {
   it('lists configured provider aliases with redacted credential status', async () => {
     const fixture = await createPanel([
@@ -216,6 +232,37 @@ describe('AdminProvidersPanelComponent', () => {
     expect(text).toContain('2026-07-02T00:00:00Z');
     expect(text).not.toContain('alternate-secret');
     expect(text).not.toContain('secretRef');
+  });
+
+  it('renders a credential-less provider as unconfigured and edits it without assuming API key', async () => {
+    const provider: ModelProviderRecord = {
+      ...makeProvider('openai-missing'),
+      protocol: 'responses',
+      providerKind: 'openai',
+      credential: { hasSecret: false },
+    };
+    const fixture = await createPanel([provider]);
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      form(): { credentialMode: string };
+    };
+
+    const listText =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-providers__list',
+      )?.textContent ?? '';
+    expect(listText).toContain('unconfigured');
+    expect(listText).not.toContain('api_key');
+
+    component.selectProviderForEdit(provider);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.form().credentialMode).toBe('unconfigured');
+    const credentialSelect = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('select'),
+    ).find((select) => select.textContent?.includes('OpenAI OAuth'));
+    expect(credentialSelect?.value).toBe('unconfigured');
   });
 
   it('shows an empty state when no providers are configured', async () => {
@@ -262,8 +309,14 @@ describe('AdminProvidersPanelComponent', () => {
         event: { target: { value: string } },
       ): void;
       updateCredentialMode(event: { target: { value: string } }): void;
-      saveProvider(): void;
-      form(): { secret: string; protocol: string; providerKind: string };
+      saveProvider(): Promise<void>;
+      editingAlias(): string | null;
+      form(): {
+        secret: string;
+        protocol: string;
+        providerKind: string;
+        credentialMode: string;
+      };
     };
 
     component.updateText('alias', { target: { value: 'openai-oauth' } });
@@ -272,8 +325,8 @@ describe('AdminProvidersPanelComponent', () => {
       target: { value: 'openai_oauth' },
     });
     fixture.detectChanges();
-    component.saveProvider();
-    await fixture.whenStable();
+    await component.saveProvider();
+    fixture.detectChanges();
 
     const call = transport.createAdminModelProvider.mock.calls[0];
     if (call === undefined) throw new Error('expected a create call');
@@ -283,6 +336,14 @@ describe('AdminProvidersPanelComponent', () => {
     expect(request).not.toHaveProperty('secret');
     expect(request).not.toHaveProperty('credentialSecret');
     expect(component.form().secret).toBe('');
+    expect(component.form().credentialMode).toBe('openai_oauth');
+    expect(component.editingAlias()).toBe('openai-oauth');
+    expect(textContent(fixture)).toContain(
+      'OAuth is unconfigured for this provider alias',
+    );
+    expect(textContent(fixture)).toContain(
+      'Credentials from another alias or Crew service are not reused',
+    );
   });
 
   it('starts OpenAI OAuth without overriding Crew registered redirect URL', async () => {
@@ -369,6 +430,17 @@ describe('AdminProvidersPanelComponent', () => {
       callbackUrl:
         'http://localhost:1455/auth/callback?code=code-1&state=callback-state',
     });
+    expect(
+      (
+        transport as unknown as {
+          adminOpenAiOauthStatus: { mock: { calls: unknown[] } };
+        }
+      ).adminOpenAiOauthStatus.mock.calls.length,
+    ).toBeGreaterThanOrEqual(2);
+    fixture.detectChanges();
+    expect(textContent(fixture)).toContain(
+      'OAuth is configured for this provider alias',
+    );
     openSpy.mockRestore();
   });
 
@@ -382,7 +454,25 @@ describe('AdminProvidersPanelComponent', () => {
       adminClearOpenAiOauthCredential: {
         mock: { calls: [string][] };
       };
+      adminOpenAiOauthStatus: {
+        mockImplementationOnce(fn: (alias: string) => Promise<unknown>): void;
+      };
+      adminModelProviders: {
+        mockImplementationOnce(fn: () => Promise<ModelProviderPage>): void;
+      };
     };
+    transport.adminModelProviders.mockImplementationOnce(async () => ({
+      items: [makeProvider('openai-oauth')],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    }));
+    transport.adminOpenAiOauthStatus.mockImplementationOnce(async (alias) => ({
+      provider: makeProvider(alias),
+      credential: { hasSecret: false },
+      loginConfig: openAiOauthLoginConfig(),
+      pendingLogins: [],
+    }));
     const component = fixture.componentInstance as unknown as {
       clearOpenAiOauthCredential(provider: ModelProviderRecord): void;
     };
@@ -393,6 +483,11 @@ describe('AdminProvidersPanelComponent', () => {
     expect(transport.adminClearOpenAiOauthCredential.mock.calls[0]?.[0]).toBe(
       'openai-oauth',
     );
+    expect(TestBed.inject(AdminStore).openAiOauthStatus()?.credential).toEqual({
+      hasSecret: false,
+    });
+    fixture.detectChanges();
+    expect(textContent(fixture)).toContain('unconfigured');
   });
 
   it('uses the provider temperature default for new providers', async () => {

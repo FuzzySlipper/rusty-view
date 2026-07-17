@@ -953,7 +953,16 @@ describe('AdminStore behavior', () => {
   });
 
   it('tracks OpenAI OAuth pending login and completion without exposing token material', async () => {
-    const transport = createTransport();
+    const adminOpenAiOauthStatus = vi.fn(async (alias: string) => ({
+      provider: {
+        ...provider(alias),
+        credential: { hasSecret: true, kind: 'openai_oauth' as const },
+      },
+      credential: { hasSecret: true, kind: 'openai_oauth' as const },
+      loginConfig: openAiOauthLoginConfig(),
+      pendingLogins: [],
+    }));
+    const transport = createTransport({ adminOpenAiOauthStatus });
     const store = setupAdminStore(transport);
 
     await store.startOpenAiOauthLogin('openai-oauth', {
@@ -988,6 +997,11 @@ describe('AdminStore behavior', () => {
       'refresh-token',
     );
     expect(store.openAiOauthStatus()?.pendingLogins).toHaveLength(0);
+    expect(store.openAiOauthStatus()?.credential).toEqual({
+      hasSecret: true,
+      kind: 'openai_oauth',
+    });
+    expect(adminOpenAiOauthStatus).toHaveBeenCalledWith('openai-oauth');
   });
 
   it('clears OpenAI OAuth credentials through the explicit credential endpoint', async () => {
@@ -1000,7 +1014,32 @@ describe('AdminStore behavior', () => {
       'openai-oauth',
     );
     expect(store.openAiOauthClearResult()?.credential.hasSecret).toBe(false);
-    expect(store.openAiOauthStatus()?.credential.hasSecret).toBe(false);
+    expect(store.openAiOauthStatus()?.credential).toEqual({ hasSecret: false });
+    expect(transport.adminOpenAiOauthStatus).toHaveBeenCalledWith(
+      'openai-oauth',
+    );
+  });
+
+  it('keeps structured OpenAI OAuth failures actionable for the provider alert', async () => {
+    const transport = createTransport({
+      adminCompleteOpenAiOauthLogin: vi.fn(async () => {
+        throw apiError(
+          'openai_oauth_state_mismatch',
+          'callback state did not match',
+        );
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.completeOpenAiOauthLogin('openai-oauth', {
+      callbackUrl:
+        'http://localhost:1455/auth/callback?code=authorization-code&state=stale-state',
+    });
+
+    expect(store.error()).toContain('did not match the pending login');
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'openai_oauth_state_mismatch',
+    );
   });
 
   it('pauseRuntime and resumeRuntime expose control results', async () => {

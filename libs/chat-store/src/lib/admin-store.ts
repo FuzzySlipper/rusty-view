@@ -939,7 +939,7 @@ export class AdminStore {
   async createModelProvider(
     request: ModelProviderWriteRequest,
     refresh: ModelProviderRefreshMode = 'none',
-  ): Promise<void> {
+  ): Promise<ModelProviderWriteResponse | undefined> {
     this._saving.set(true);
     this._error.set(null);
     this._providerWriteResult.set(null);
@@ -950,8 +950,10 @@ export class AdminStore {
       );
       this._providerWriteResult.set(result);
       await this.refresh();
+      return result;
     } catch (error) {
       this._error.set(storeErrorDetail(error));
+      return undefined;
     } finally {
       this._saving.set(false);
     }
@@ -965,7 +967,7 @@ export class AdminStore {
     alias: string,
     request: ModelProviderWriteRequest,
     refresh: ModelProviderRefreshMode = 'none',
-  ): Promise<void> {
+  ): Promise<ModelProviderWriteResponse | undefined> {
     this._saving.set(true);
     this._error.set(null);
     this._providerWriteResult.set(null);
@@ -977,6 +979,7 @@ export class AdminStore {
       );
       this._providerWriteResult.set(result);
       await this.refresh();
+      return result;
     } catch (error) {
       if (isProviderRevisionConflict(error)) {
         // Recoverable conflict (task #3722): the record advanced elsewhere.
@@ -994,6 +997,7 @@ export class AdminStore {
       } else {
         this._error.set(storeErrorDetail(error));
       }
+      return undefined;
     } finally {
       this._saving.set(false);
     }
@@ -1061,16 +1065,13 @@ export class AdminStore {
         request,
       );
       this._openAiOauthCompleteResult.set(result);
-      const loginConfig =
-        this._openAiOauthStatus()?.loginConfig ??
-        this._openAiOauthStartResult()?.loginConfig;
-      this._openAiOauthStatus.set({
-        provider: result.provider,
-        credential: result.credential,
-        ...(loginConfig === undefined ? {} : { loginConfig }),
-        pendingLogins: [],
-      });
       await this.refresh();
+      // Completion is only durable once Crew's alias-local status route reads
+      // the stored credential back. Do not present the completion response as
+      // durable configuration by itself.
+      this._openAiOauthStatus.set(
+        await this.transport.adminOpenAiOauthStatus(alias),
+      );
     } catch (error) {
       this._error.set(providerCredentialErrorDetail(error));
     } finally {
@@ -1086,16 +1087,10 @@ export class AdminStore {
       const result =
         await this.transport.adminClearOpenAiOauthCredential(alias);
       this._openAiOauthClearResult.set(result);
-      const loginConfig =
-        this._openAiOauthStatus()?.loginConfig ??
-        this._openAiOauthStartResult()?.loginConfig;
-      this._openAiOauthStatus.set({
-        provider: result.provider,
-        credential: result.credential,
-        ...(loginConfig === undefined ? {} : { loginConfig }),
-        pendingLogins: [],
-      });
       await this.refresh();
+      this._openAiOauthStatus.set(
+        await this.transport.adminOpenAiOauthStatus(alias),
+      );
     } catch (error) {
       if (isProviderRevisionConflict(error)) {
         await this.refresh();
