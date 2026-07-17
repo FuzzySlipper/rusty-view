@@ -11,6 +11,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let commandRequest: Record<string, unknown> | undefined;
   let metadataRequest: Record<string, unknown> | undefined;
   let streamReplyForNextMessage = false;
+  let streamReplyThreadId = 'thread-1';
   let nextStreamingSequence = 200;
   let listedBindings = [binding];
   let listedThreads = [thread];
@@ -228,8 +229,55 @@ test('external agent fleet, transcript activity, interactions, and controls are 
       const message =
         command === 'compact'
           ? 'Native Codex compaction started.'
-          : 'Runtime ready\nModel: gpt-5.6';
+          : command === 'new'
+            ? 'Started a replacement Codex thread.'
+            : 'Runtime ready\nModel: gpt-5.6';
       const commandId = `command-${command}-1`;
+      let threadReplacement: Record<string, unknown> | undefined;
+      if (command === 'new') {
+        const currentBinding = listedBindings.find(
+          (candidate) => candidate.bindingId === 'binding-1',
+        );
+        if (currentBinding === undefined) throw new Error('binding not found');
+        const replacementThread = {
+          ...thread,
+          threadId: 'thread-replacement',
+          sessionId: 'session-replacement-native',
+          preview: 'Replacement Codex thread',
+          name: 'Replacement Codex thread',
+          updatedAt: 1783756900,
+          turns: [],
+        };
+        listedThreads = [
+          ...listedThreads.filter(
+            (candidate) => candidate.threadId !== 'thread-1',
+          ),
+          replacementThread,
+        ];
+        listedBindings = listedBindings.map((candidate) =>
+          candidate.bindingId === 'binding-1'
+            ? {
+                ...candidate,
+                nativeThreadId: replacementThread.threadId,
+                revision: 6,
+              }
+            : candidate,
+        );
+        threadReplacement = {
+          bindingId: 'binding-1',
+          bindingRevision: 6,
+          sessionId: 'session-1',
+          profileId: null,
+          cwd: '/home/dev/rusty-view',
+          label: 'Replacement Codex thread',
+          taskRef: { project_id: 'rusty-view', task_id: '5888' },
+          previousNativeThreadId: 'thread-1',
+          nativeThreadId: replacementThread.threadId,
+          previousNativeThreadArchived: true,
+          settingsPreserved: true,
+          settings: commandCatalog('binding-1').settings,
+        };
+      }
       listedEvents = [
         ...listedEvents,
         {
@@ -276,6 +324,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
           status: {
             settings: commandCatalog('binding-1').settings,
           },
+          ...(threadReplacement === undefined ? {} : { threadReplacement }),
         },
         receipt: {},
       });
@@ -302,10 +351,13 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         streamReplyForNextMessage = false;
         listedEvents = [
           ...listedEvents,
-          streamingReplyEvent(
-            String(nextStreamingSequence++),
-            'Streaming reply',
-          ),
+          {
+            ...streamingReplyEvent(
+              String(nextStreamingSequence++),
+              'Streaming reply',
+            ),
+            nativeThreadId: streamReplyThreadId,
+          },
         ];
       }
       return ok({ deliveryId: 'delivery-1', status: 'accepted' });
@@ -600,6 +652,27 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await expect(page.getByTestId('external-turn-status')).toHaveText(
     'waiting_interaction',
   );
+
+  commandRequest = undefined;
+  await page.getByLabel('External message mode').selectOption('queue');
+  await composer.fill('/new');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => commandRequest).toMatchObject({ input: '/new' });
+  await expect(
+    page.locator('[data-thread-id="thread-replacement"]'),
+  ).toBeVisible();
+  streamReplyThreadId = 'thread-replacement';
+  streamReplyForNextMessage = true;
+  messageBindingId = undefined;
+  await composer.fill('Immediate replacement prompt');
+  await page.getByTestId('send-message').click();
+  expect(messageBindingId).toBe('binding-1');
+  await expect(page.getByTestId('transcript-shell')).toContainText(
+    'Immediate replacement prompt',
+  );
+  await expect(page.getByTestId('transcript-shell')).toContainText(
+    'Streaming reply',
+  );
   await page.screenshot({
     path: testInfo.outputPath('external-agent-console.png'),
     fullPage: true,
@@ -752,9 +825,9 @@ const runtime = {
   observedState: 'ready',
   processOwnership: 'attached',
   endpoint: { transport: 'unix_web_socket', address: '/run/codex.sock' },
-  executableSha256: 'exe',
-  protocolSchemaSha256: 'schema',
-  expectedCliVersion: '0.144.1',
+  compatibilityState: 'certified',
+  consumedContractRevision: 'external-runtime-api-v0',
+  observedCliVersion: '0.144.1',
   revision: 1,
   createdAt: '2026-07-11T00:00:00Z',
   updatedAt: '2026-07-11T00:00:00Z',
@@ -765,6 +838,11 @@ const controller = {
   controllerInstanceId: 'crew-1',
   controllerGeneration: 1,
   leaseExpiresAt: '2026-07-11T00:10:00Z',
+  observedCliVersion: '0.144.1',
+  consumedContractRevision: 'external-runtime-api-v0',
+  compatibilityState: 'certified',
+  compatibilityDiagnostic: 'certified',
+  lastCompatibilityProbe: null,
   bindingResumeFailures: [],
 };
 
@@ -859,6 +937,10 @@ const binding = {
   cwd: '/home/dev/rusty-view',
   taskRef: { project_id: 'rusty-view', task_id: '5516' },
   effectiveConfigFingerprint: 'config',
+  messageDeliveryPolicy: 'immediate_steer',
+  profileId: null,
+  profilePromptHash: null,
+  profileRevision: null,
   revision: 1,
   createdAt: '2026-07-11T00:00:00Z',
   updatedAt: '2026-07-11T00:00:00Z',

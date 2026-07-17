@@ -117,6 +117,8 @@ export type ExternalRuntimeCommandCatalog =
   ExternalSchemas['ExternalRuntimeCommandCatalog'];
 export type ExternalRuntimeCommandResultData =
   ExternalSchemas['ExternalRuntimeCommandResultData'];
+export type ExternalRuntimeThreadReplacementResult =
+  ExternalSchemas['ExternalRuntimeThreadReplacementResult'];
 export type ExternalRuntimeCommandExecutionResult =
   ExternalSchemas['ExternalRuntimeCommandExecutionResult'];
 

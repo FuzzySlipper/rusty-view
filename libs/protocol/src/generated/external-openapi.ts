@@ -52,6 +52,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/external-runtime-promotion-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readExternalRuntimePromotionReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/external-runtime-certifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listExternalRuntimeCertifications"];
+        put?: never;
+        post: operations["certifyExternalRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/external-runtime-certifications/{certification_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readExternalRuntimeCertification"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/external-runtime-certifications/{certification_id}/invalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["invalidateExternalRuntimeCertification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-runtimes/{runtime_id}/connect": {
         parameters: {
             query?: never;
@@ -384,6 +448,15 @@ export interface components {
             /** @constant */
             type: "external_turn_requested";
         } | {
+            bindingId: string;
+            messageText: string;
+            nativeThreadId: string;
+            nativeTurnId: string;
+            requestId: string;
+            sessionId: string;
+            /** @constant */
+            type: "external_turn_steer_requested";
+        } | {
             queueId: string;
             sessionId: string;
             /** @constant */
@@ -469,9 +542,18 @@ export interface components {
             deliveryId: string;
             expiresAt: string;
             idempotencyKey: string;
+            inputKind: components["schemas"]["AgentMessageInputKind"];
             messageId: string;
             requireWake: boolean;
             toAgentId: string;
+        };
+        AgentMessageDeliveryCompletion: {
+            completedAt: string;
+            deliveryId: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            reasonCode?: string | null;
+            status: components["schemas"]["AgentMessageDeliveryStatus"];
         };
         AgentMessageDeliveryReceipt: {
             activation?: components["schemas"]["AgentActivation"] | null;
@@ -493,18 +575,49 @@ export interface components {
             deliveryId: string;
             expiresAt: string;
             fromAgentId: string;
+            fromSessionId?: string | null;
             idempotencyKey: string;
+            inputKind: components["schemas"]["AgentMessageInputKind"];
             messageId: string;
+            replyToMessageId?: string | null;
             requireWake: boolean;
             toAgentId: string;
+            toSessionId?: string | null;
         };
         /** @enum {string} */
         AgentMessageDeliveryStatus: "pending" | "accepted" | "rejected" | "expired";
+        AgentMessageInboxItem: {
+            delivery: components["schemas"]["AgentMessageDeliveryReceipt"];
+            externalTurnRequestId?: string | null;
+            queuedMessageId?: string | null;
+            reply?: components["schemas"]["AgentMessageDeliveryReceipt"] | null;
+            status: components["schemas"]["AgentMessageInboxStatus"];
+            terminalReasonCode?: string | null;
+        };
+        AgentMessageInboxQuery: {
+            /** Format: uint32 */
+            limit?: number | null;
+            toAgentId?: string | null;
+        };
+        /** @enum {string} */
+        AgentMessageInboxStatus: "queued" | "in_progress" | "awaiting_reply" | "replied" | "no_reply" | "failed" | "expired" | "rejected";
+        /** @enum {string} */
+        AgentMessageInputKind: "operator" | "routed_agent_message";
         AgentMessageProjectionHint: {
             reason?: string | null;
             target_ref?: components["schemas"]["ProjectionRef"] | null;
             visibility: components["schemas"]["ProjectionVisibility"];
             work_ref?: components["schemas"]["ProjectionRef"] | null;
+        };
+        AgentMessageReplyCommand: {
+            body: string;
+            caller: components["schemas"]["AgentCoordinationCaller"];
+            createdAt: string;
+            deliveryId: string;
+            expiresAt: string;
+            idempotencyKey: string;
+            inReplyToMessageId: string;
+            messageId: string;
         };
         AgentRoundCommand: {
             body: string;
@@ -903,7 +1016,18 @@ export interface components {
             cwd?: string | null;
             effectiveConfigFingerprint: string;
             label?: string | null;
+            /** @default immediate_steer */
+            messageDeliveryPolicy: components["schemas"]["ExternalMessageDeliveryPolicy"];
             nativeThreadId?: string | null;
+            /** @default null */
+            profileId: string | null;
+            /** @default null */
+            profilePromptHash: string | null;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            profileRevision: number | null;
             purpose: components["schemas"]["ExternalBindingPurpose"];
             /** Format: uint64 */
             revision: number;
@@ -1071,7 +1195,63 @@ export interface components {
         /** @enum {string} */
         ExternalInteractionStatus: "pending" | "resolved" | "expired" | "lost";
         /** @enum {string} */
+        ExternalMessageDeliveryPolicy: "immediate_steer" | "serial_next_turn";
+        /** @enum {string} */
         ExternalProcessOwnership: "attached" | "managed";
+        ExternalRuntimeCertificationInvalidation: {
+            certificationId: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            invalidatedAt: string;
+            reason: string;
+        };
+        ExternalRuntimeCertificationRecord: {
+            certificationId: string;
+            certifiedRuntimeId: string;
+            consumedContractRevision: string;
+            createdAt: string;
+            evidenceSummary: string;
+            idempotencyKey: string;
+            invalidatedAt?: string | null;
+            invalidationReason?: string | null;
+            observedCliVersion: string;
+            probeSuiteRevision: string;
+            /** Format: uint64 */
+            revision: number;
+            runtimeKind: components["schemas"]["ExternalRuntimeKind"];
+            status: components["schemas"]["ExternalRuntimeCertificationStatus"];
+            supersededByCertificationId?: string | null;
+            updatedAt: string;
+        };
+        ExternalRuntimeCertificationRequest: {
+            certificationId: string;
+            evidenceSummary: string;
+            idempotencyKey: string;
+            requestedAt: string;
+            runtimeId: string;
+        };
+        /** @enum {string} */
+        ExternalRuntimeCertificationStatus: "active" | "superseded" | "invalidated";
+        /** @enum {string} */
+        ExternalRuntimeCompatibilityProbeOutcome: "passed" | "transport_retryable" | "incompatible";
+        ExternalRuntimeCompatibilityProbeReport: {
+            completedAt: string;
+            outcome: components["schemas"]["ExternalRuntimeCompatibilityProbeOutcome"];
+            steps: components["schemas"]["ExternalRuntimeCompatibilityProbeStep"][];
+            suiteRevision: string;
+        };
+        ExternalRuntimeCompatibilityProbeStep: {
+            detail?: string | null;
+            /** Format: uint64 */
+            durationMs: number;
+            reasonCode?: string | null;
+            status: components["schemas"]["ExternalRuntimeCompatibilityProbeStepStatus"];
+            stepId: string;
+        };
+        /** @enum {string} */
+        ExternalRuntimeCompatibilityProbeStepStatus: "passed" | "skipped" | "failed";
+        /** @enum {string} */
+        ExternalRuntimeCompatibilityState: "unassessed" | "compatible_uncertified" | "certified" | "incompatible";
         /** @enum {string} */
         ExternalRuntimeDesiredState: "enabled" | "disabled";
         ExternalRuntimeEventInput: {
@@ -1089,15 +1269,17 @@ export interface components {
         };
         ExternalRuntimeHandshakeDecision: {
             accepted: boolean;
+            compatibilityState: components["schemas"]["ExternalRuntimeCompatibilityState"];
             reasonCode?: string | null;
             registration: components["schemas"]["ExternalRuntimeRegistration"];
+            retryable: boolean;
         };
         ExternalRuntimeHandshakeObservation: {
             cliVersion: string;
+            consumedContractRevision: string;
             controller: components["schemas"]["ExternalControllerContext"];
-            executableSha256: string;
             observedAt: string;
-            protocolSchemaSha256: string;
+            probeReport: components["schemas"]["ExternalRuntimeCompatibilityProbeReport"];
             runtimeId: string;
         };
         /** @enum {string} */
@@ -1106,16 +1288,17 @@ export interface components {
         ExternalRuntimeObservedState: "disconnected" | "connecting" | "ready" | "degraded" | "incompatible";
         ExternalRuntimeRegistration: {
             codexHomeRef?: string | null;
+            compatibilityState: components["schemas"]["ExternalRuntimeCompatibilityState"];
+            consumedContractRevision?: string | null;
             createdAt: string;
             desiredState: components["schemas"]["ExternalRuntimeDesiredState"];
             endpoint: components["schemas"]["ExternalEndpoint"];
-            executableSha256: string;
-            expectedCliVersion: string;
             kind: components["schemas"]["ExternalRuntimeKind"];
+            lastCompatibilityProbe?: components["schemas"]["ExternalRuntimeCompatibilityProbeReport"] | null;
+            observedCliVersion?: string | null;
             observedReasonCode?: string | null;
             observedState: components["schemas"]["ExternalRuntimeObservedState"];
             processOwnership: components["schemas"]["ExternalProcessOwnership"];
-            protocolSchemaSha256: string;
             /** Format: uint64 */
             revision: number;
             runtimeId: string;
@@ -1459,6 +1642,9 @@ export interface components {
             /** Format: uint32 */
             max_messages?: number | null;
         };
+        SessionInferenceOverrides: {
+            reasoning_effort?: string | null;
+        };
         /** @enum {string} */
         SessionKind: "full" | "worker" | "delegated";
         SessionState: {
@@ -1470,6 +1656,8 @@ export interface components {
             /** Format: uint64 */
             handle: number;
             history_window?: components["schemas"]["SessionHistoryWindow"] | null;
+            /** @default {} */
+            inference_overrides: components["schemas"]["SessionInferenceOverrides"];
             kind: components["schemas"]["SessionKind"];
             last_active_at: string;
             profile_id: string;
@@ -1539,6 +1727,26 @@ export interface components {
             fallback_policy: components["schemas"]["WorkerPoolCapacityFallbackPolicy"];
             member_id: string;
         };
+        ExternalRuntimeCertificationList: {
+            certifications: components["schemas"]["ExternalRuntimeCertificationRecord"][];
+        };
+        ExternalRuntimePromotionReadiness: {
+            registration: components["schemas"]["ExternalRuntimeRegistration"];
+            controller: components["schemas"]["ExternalRuntimeControllerStatus"] | null;
+            activeBindings: components["schemas"]["ExternalAgentBinding"][];
+            activeTurns: components["schemas"]["ExternalTurnCorrelation"][];
+            pendingInteractions: components["schemas"]["ExternalInteractionRecord"][];
+        };
+        ExternalRuntimeCertificationWrite: {
+            certificationId: string;
+            idempotencyKey: string;
+            runtimeId: string;
+            evidenceSummary: string;
+        };
+        ExternalRuntimeCertificationInvalidationWrite: {
+            expectedRevision: number;
+            reason: string;
+        };
         ApiMeta: {
             request_id: string;
             /** @constant */
@@ -1564,6 +1772,12 @@ export interface components {
             controllerGeneration: number;
             /** Format: date-time */
             leaseExpiresAt: string;
+            observedCliVersion: string | null;
+            consumedContractRevision: string | null;
+            compatibilityState: components["schemas"]["ExternalRuntimeCompatibilityState"];
+            /** @enum {string} */
+            compatibilityDiagnostic: "certified" | "compatible_uncertified" | "incompatible" | "probe_failed" | "disconnected";
+            lastCompatibilityProbe: components["schemas"]["ExternalRuntimeCompatibilityProbeReport"] | null;
             bindingResumeFailures: {
                 bindingId: string;
                 nativeThreadId: string;
@@ -1615,6 +1829,7 @@ export interface components {
             expectedBindingRevision?: number;
             expectedNativeTurnId?: string;
             kind: components["schemas"]["ExternalControlKind"];
+            /** @description Operation-specific payload. interrupt_turn requires an empty object; Crew derives native thread and turn identity from Rust-validated state. */
             payload?: unknown;
         };
         ExternalRuntimeCommandWrite: {
@@ -1691,7 +1906,22 @@ export interface components {
             settings?: components["schemas"]["ExternalThreadSettingsProjection"];
             models?: components["schemas"]["ExternalRuntimeModelOption"][];
             validEfforts?: components["schemas"]["ExternalRuntimeReasoningEffortOption"][];
+            threadReplacement?: components["schemas"]["ExternalRuntimeThreadReplacementResult"];
             nativeResult?: unknown;
+        };
+        ExternalRuntimeThreadReplacementResult: {
+            bindingId: string;
+            bindingRevision: number;
+            sessionId: string | null;
+            profileId: string | null;
+            cwd: string;
+            label: string | null;
+            taskRef: components["schemas"]["DenRuntimeReference"] | null;
+            previousNativeThreadId: string;
+            nativeThreadId: string;
+            previousNativeThreadArchived: boolean;
+            settingsPreserved: boolean;
+            settings: components["schemas"]["ExternalThreadSettingsProjection"];
         };
         ExternalRuntimeCommandExecutionResult: {
             commandId: string;
@@ -1984,6 +2214,190 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalRuntimeDetail"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readExternalRuntimePromotionReadiness: {
+        parameters: {
+            query: {
+                runtimeId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimePromotionReadiness"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listExternalRuntimeCertifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeCertificationList"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    certifyExternalRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalRuntimeCertificationWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeCertificationRecord"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readExternalRuntimeCertification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                certification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeCertificationRecord"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    invalidateExternalRuntimeCertification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                certification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalRuntimeCertificationInvalidationWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeCertificationRecord"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };

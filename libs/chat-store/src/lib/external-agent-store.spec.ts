@@ -396,6 +396,11 @@ describe('ExternalAgentStore', () => {
           controllerInstanceId: 'controller-1',
           controllerGeneration: 1,
           leaseExpiresAt: '2026-07-12T10:00:00.000Z',
+          observedCliVersion: '0.144.1',
+          consumedContractRevision: 'external-runtime-api-v0',
+          compatibilityState: 'certified',
+          compatibilityDiagnostic: 'certified',
+          lastCompatibilityProbe: null,
           bindingResumeFailures: [
             {
               bindingId: 'binding-stale',
@@ -874,6 +879,152 @@ describe('ExternalAgentStore', () => {
     expect(store.commandHistory()).toEqual(['/status']);
     expect(sendMessage).not.toHaveBeenCalled();
     expect(listCommands).toHaveBeenCalledTimes(2);
+  });
+
+  it('atomically switches an applied /new replacement and sends on the stable binding', async () => {
+    const originalBinding = externalBinding();
+    const replacementThread = thread('thread-replacement', 20);
+    const readThread = vi.fn(async () => ({ thread: replacementThread }));
+    const executeCommand = vi.fn(async () => ({
+      ...externalCommandResult('applied'),
+      input: '/new',
+      command: 'new',
+      result: {
+        threadReplacement: {
+          bindingId: originalBinding.bindingId,
+          bindingRevision: 6,
+          sessionId: originalBinding.sessionId ?? null,
+          profileId: 'reviewer',
+          cwd: '/home/dev/rusty-view',
+          label: 'Replacement session',
+          taskRef: { project_id: 'rusty-view', task_id: '5888' },
+          previousNativeThreadId: 'thread-1',
+          nativeThreadId: replacementThread.threadId,
+          previousNativeThreadArchived: true,
+          settingsPreserved: true,
+          settings: {
+            model: 'gpt-5.6',
+            modelProvider: 'openai',
+            effort: 'medium',
+          },
+        },
+      },
+    }));
+    const sendMessage = vi.fn(async () => deliveryReceipt());
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      // This inventory intentionally remains stale until after /new.
+      bindings: [originalBinding],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread,
+      executeCommand,
+      sendMessage,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(thread('thread-1', 10));
+
+    await store.executeCommand('/new');
+
+    expect(readThread).toHaveBeenCalledWith('runtime-1', {
+      threadId: 'thread-replacement',
+      includeTurns: true,
+    });
+    expect(store.selectedThreadId()).toBe('thread-replacement');
+    expect(store.selectedThread()).toBe(replacementThread);
+    expect(store.selectedBinding()).toMatchObject({
+      bindingId: 'binding-1',
+      nativeThreadId: 'thread-replacement',
+      sessionId: 'session-1',
+      profileId: 'reviewer',
+      revision: 6,
+    });
+    expect(
+      store.commandResult()?.result.threadReplacement?.nativeThreadId,
+    ).toBe('thread-replacement');
+
+    await store.send('immediate replacement prompt');
+
+    expect(sendMessage).toHaveBeenCalledWith('binding-1', {
+      body: 'immediate replacement prompt',
+      ttlMs: 60_000,
+    });
+    expect(store.messages()).toEqual([
+      expect.objectContaining({
+        sessionId: replacementThread.sessionId,
+        metadata: expect.objectContaining({
+          optimisticExternalUser: true,
+          deliveryStatus: 'accepted',
+        }),
+      }),
+    ]);
+  });
+
+  it('keeps an immediate post-/new transport failure visible on the replacement thread', async () => {
+    const originalBinding = externalBinding();
+    const replacementThread = thread('thread-replacement', 20);
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [originalBinding],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread: vi.fn(async () => ({ thread: replacementThread })),
+      executeCommand: vi.fn(async () => ({
+        ...externalCommandResult('applied'),
+        input: '/new',
+        command: 'new',
+        result: {
+          threadReplacement: {
+            bindingId: 'binding-1',
+            bindingRevision: 2,
+            sessionId: 'session-1',
+            profileId: null,
+            cwd: '/home/dev/rusty-view',
+            label: null,
+            taskRef: null,
+            previousNativeThreadId: 'thread-1',
+            nativeThreadId: 'thread-replacement',
+            previousNativeThreadArchived: true,
+            settingsPreserved: true,
+            settings: {
+              model: 'gpt-5.6',
+              modelProvider: 'openai',
+              effort: 'medium',
+            },
+          },
+        },
+      })),
+      sendMessage: vi.fn(async () => {
+        throw new ChatTransportError({
+          code: 'network_error',
+          message: 'Crew debug restarted during delivery',
+          endpoint: '/v1/external-bindings/binding-1/messages',
+        });
+      }),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(thread('thread-1', 10));
+
+    await store.executeCommand('/new');
+    await store.send('retryable replacement prompt');
+
+    expect(store.selectedThreadId()).toBe('thread-replacement');
+    expect(store.messages()).toEqual([
+      expect.objectContaining({
+        status: 'error',
+        metadata: expect.objectContaining({
+          deliveryStatus: 'failed',
+          deliveryFailure: expect.objectContaining({
+            endpoint: '/v1/external-bindings/binding-1/messages',
+            message: 'Crew debug restarted during delivery',
+            retryable: true,
+          }),
+        }),
+      }),
+    ]);
+    expect(store.error()).toContain('Crew debug restarted during delivery');
   });
 
   it('keeps command rejection explicit and command history isolated by external session', async () => {
@@ -1422,9 +1573,9 @@ function registration(runtimeId: string): ExternalRuntimeRegistration {
       transport: 'unix_web_socket',
       address: `/run/${runtimeId}.sock`,
     },
-    executableSha256: 'exe',
-    protocolSchemaSha256: 'schema',
-    expectedCliVersion: '0.144.1',
+    compatibilityState: 'certified',
+    consumedContractRevision: 'external-runtime-api-v0',
+    observedCliVersion: '0.144.1',
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',
     updatedAt: '2026-07-11T00:00:00Z',
@@ -1486,6 +1637,10 @@ function externalBinding(): ExternalAgentBinding {
     status: 'active',
     cwd: '/home/dev/rusty-view',
     effectiveConfigFingerprint: 'config',
+    messageDeliveryPolicy: 'immediate_steer',
+    profileId: null,
+    profilePromptHash: null,
+    profileRevision: null,
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',
     updatedAt: '2026-07-11T00:00:00Z',
@@ -1504,6 +1659,7 @@ function deliveryReceipt(
       expiresAt: '2026-07-11T00:01:00Z',
       fromAgentId: 'agent-sender',
       idempotencyKey: 'delivery-key-1',
+      inputKind: 'operator',
       messageId: 'message-1',
       requireWake: true,
       toAgentId: 'agent-1',

@@ -22,6 +22,7 @@ import type {
   ExternalRuntimeCommandExecutionResult,
   ExternalRuntimeRegistration,
   ExternalRuntimeRawDetail,
+  ExternalRuntimeThreadReplacementResult,
   ExternalThreadProjection,
   ExternalTurnPhase,
   NormalizedExternalRuntimeEvent,
@@ -775,6 +776,21 @@ export class ExternalAgentStore {
       if (result.result.catalog !== undefined) {
         this.commandCatalog.set(result.result.catalog);
       }
+      if (
+        result.status === 'applied' &&
+        result.result.threadReplacement !== undefined
+      ) {
+        try {
+          await this.applyThreadReplacement(
+            binding,
+            result.result.threadReplacement,
+          );
+        } catch (error) {
+          this.commandError.set(
+            `Command applied, but loading replacement thread ${result.result.threadReplacement.nativeThreadId} failed: ${errorMessage(error)}`,
+          );
+        }
+      }
       await Promise.all([
         this.refreshSelectedEvents(),
         this.refreshSelectedCommands(),
@@ -791,6 +807,83 @@ export class ExternalAgentStore {
     } finally {
       this.pending.set(false);
     }
+  }
+
+  private async applyThreadReplacement(
+    binding: ExternalAgentBinding,
+    replacement: ExternalRuntimeThreadReplacementResult,
+  ): Promise<void> {
+    if (replacement.bindingId !== binding.bindingId) {
+      throw new Error(
+        `Crew returned replacement binding ${replacement.bindingId} for command binding ${binding.bindingId}`,
+      );
+    }
+
+    const runtimeId = binding.runtimeId;
+    const previousKey = sessionKey(
+      runtimeId,
+      replacement.previousNativeThreadId,
+    );
+    const selectionRevision = this.selectionRevision;
+    const stillSelected = () =>
+      selectionRevision === this.selectionRevision &&
+      this.selectedSessionKey() === previousKey;
+    const read = await this.transport.external.readThread(runtimeId, {
+      threadId: replacement.nativeThreadId,
+      includeTurns: true,
+    });
+    const sessionId = replacement.sessionId ?? binding.sessionId;
+    const nextBinding: ExternalAgentBinding = {
+      ...binding,
+      nativeThreadId: replacement.nativeThreadId,
+      ...(sessionId === undefined ? {} : { sessionId }),
+      profileId: replacement.profileId,
+      cwd: replacement.cwd,
+      label: replacement.label,
+      taskRef: replacement.taskRef,
+      revision: replacement.bindingRevision,
+    };
+
+    this.bindingMutationRevision += 1;
+    this.bindings.update((bindings) => [
+      ...bindings.filter(
+        (candidate) => candidate.bindingId !== nextBinding.bindingId,
+      ),
+      nextBinding,
+    ]);
+    this.inactiveThreadCache.delete(previousKey);
+    this.runtimeThreads.update((threads) => [
+      ...threads.filter(
+        (entry) =>
+          entry.runtimeId !== runtimeId ||
+          (entry.thread.threadId !== replacement.nativeThreadId &&
+            (!replacement.previousNativeThreadArchived ||
+              entry.thread.threadId !== replacement.previousNativeThreadId)),
+      ),
+      { runtimeId, thread: read.thread },
+    ]);
+
+    // A user may have selected another session while the replacement snapshot
+    // was loading. Keep the fleet state current without stealing that newer
+    // selection.
+    if (!stillSelected()) return;
+
+    this.selectionRevision += 1;
+    this.stream?.close();
+    this.stream = undefined;
+    this.selectedRuntimeEventCursor = this.fleetCursors.get(runtimeId);
+    this.events.set([]);
+    this.eventHistoryLoading.set(false);
+    this.eventHistoryLoaded.set(false);
+    this.selectedRuntimeId.set(runtimeId);
+    this.selectedThreadId.set(replacement.nativeThreadId);
+    this.selectedThread.set(read.thread);
+    this.seen.update((seen) => ({
+      ...seen,
+      [sessionKey(runtimeId, replacement.nativeThreadId)]:
+        read.thread.updatedAt,
+    }));
+    this.startStream(runtimeId, this.selectedRuntimeEventCursor);
   }
 
   private recordCommand(command: string): void {
