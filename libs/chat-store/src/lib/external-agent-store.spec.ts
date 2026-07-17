@@ -1275,10 +1275,10 @@ describe('ExternalAgentStore', () => {
     expect(store.eventHistoryLoaded()).toBe(false);
   });
 
-  it('discovers a high-water cursor beyond the bounded history page ceiling', async () => {
+  it('converges on a high-water cursor across the safe-integer sequence range', async () => {
     const runtime = registration('runtime-1');
     const snapshot = { ...thread('thread-1', 10), status: 'active' as const };
-    const latestSequence = 150_123;
+    const latestSequence = 1_000_000_000_000_000;
     const firstPage = Array.from({ length: 1_000 }, (_, index) => ({
       ...event(index + 1, 'old-turn', 'completed'),
       nativeThreadId: 'other-thread',
@@ -1324,7 +1324,7 @@ describe('ExternalAgentStore', () => {
       'runtime-1',
       latestSequence,
     );
-    expect(listEvents.mock.calls.length).toBeLessThanOrEqual(64);
+    expect(listEvents.mock.calls.length).toBeLessThanOrEqual(110);
     expect(
       listEvents.mock.calls.some(
         ([, query]) =>

@@ -113,6 +113,22 @@ describe('MessageBlockComponent', () => {
     expect(host.querySelector('.rv-block--text')).not.toBeNull();
   });
 
+  it('keeps the reusable message-block host block-level outside flex layouts', async () => {
+    const fixture = await createBlock(
+      makeBlock({ kind: 'text', content: 'Standalone block' }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const container = host.ownerDocument.createElement('div');
+    container.append(host);
+    host.ownerDocument.body.append(container);
+
+    try {
+      expect(getComputedStyle(host).display).toBe('block');
+    } finally {
+      container.remove();
+    }
+  });
+
   it('marks raw text search matches without using innerHTML', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: 'Find the brass key.' }),

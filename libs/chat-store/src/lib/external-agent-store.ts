@@ -95,7 +95,6 @@ export interface ExternalPromptFailureDetail {
 
 const INACTIVE_THREAD_CACHE_CAPACITY = 8;
 const EXTERNAL_EVENT_PAGE_SIZE = 1_000;
-const EXTERNAL_EVENT_CURSOR_PROBE_LIMIT = 64;
 
 @Injectable({ providedIn: 'root' })
 export class ExternalAgentStore {
@@ -1492,7 +1491,12 @@ export class ExternalAgentStore {
     let upper: number | undefined;
     let stride = 1;
 
-    for (let probe = 0; probe < EXTERNAL_EVENT_CURSOR_PROBE_LIMIT; probe++) {
+    // Every probe advances `lower`, lowers `upper`, or invalidates a stale
+    // bracket after observing an event that arrived during the search. For a
+    // stable event set, exponential bracketing and binary convergence each
+    // take at most the safe-integer bit width (53) rather than sharing an
+    // arbitrary budget that can expire before convergence.
+    while (lower < Number.MAX_SAFE_INTEGER) {
       const target =
         upper === undefined
           ? Math.min(Number.MAX_SAFE_INTEGER, lower + stride)
