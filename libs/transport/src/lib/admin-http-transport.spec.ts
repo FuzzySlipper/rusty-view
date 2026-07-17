@@ -1117,6 +1117,7 @@ describe('AdminHttpTransport', () => {
         protocol: 'chat_completions',
         modelId: 'deterministic-updated',
         status: 'disabled',
+        temperatureMilli: null,
         expectedRevision: 3,
       },
       'apply',
@@ -1128,6 +1129,7 @@ describe('AdminHttpTransport', () => {
     expect(req.url).toContain('refresh=apply');
     expect(req.body).toContain('disabled');
     expect(req.body).toContain('"expectedRevision":3');
+    expect(req.body).toContain('"temperatureMilli":null');
   });
 
   it('starts an OpenAI OAuth provider login through the explicit route', async () => {

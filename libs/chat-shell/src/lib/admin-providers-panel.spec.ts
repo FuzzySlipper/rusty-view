@@ -395,7 +395,7 @@ describe('AdminProvidersPanelComponent', () => {
     );
   });
 
-  it('applies create defaults and converts the decimal temperature to milli', async () => {
+  it('uses the provider temperature default for new providers', async () => {
     const fixture = await createPanel([]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
       createAdminModelProvider: {
@@ -419,9 +419,8 @@ describe('AdminProvidersPanelComponent', () => {
     const call = transport.createAdminModelProvider.mock.calls[0];
     if (call === undefined) throw new Error('expected a create call');
     const [request] = call;
-    // Sensible defaults populated, temperature sent in milli (0.7 -> 700).
     expect(request.maxOutputTokens).toBe(4096);
-    expect(request.temperatureMilli).toBe(700);
+    expect(request.temperatureMilli).toBeNull();
   });
 
   it('round-trips an existing provider temperature from milli to the decimal field', async () => {
@@ -451,6 +450,50 @@ describe('AdminProvidersPanelComponent', () => {
     const [, request] = call;
     // 250 milli seeded as 0.25 in the field, sent back as 250 milli.
     expect(request.temperatureMilli).toBe(250);
+  });
+
+  it('sends null when an existing temperature override is cleared', async () => {
+    const provider = { ...makeProvider('warm'), temperatureMilli: 250 };
+    const fixture = await createPanel([provider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      updateText(
+        field: 'temperature',
+        event: { target: { value: string } },
+      ): void;
+      saveProvider(): void;
+    };
+
+    component.selectProviderForEdit(provider);
+    component.updateText('temperature', { target: { value: '' } });
+    fixture.detectChanges();
+    component.saveProvider();
+    await fixture.whenStable();
+
+    const call = transport.updateAdminModelProvider.mock.calls[0];
+    if (call === undefined) throw new Error('expected an update call');
+    expect(call[1].temperatureMilli).toBeNull();
+  });
+
+  it('shows an unset provider temperature as a blank field', async () => {
+    const provider = makeProvider('provider-default');
+    const fixture = await createPanel([provider]);
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+    };
+
+    component.selectProviderForEdit(provider);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(
+      'input[placeholder="Provider default"]',
+    ) as HTMLInputElement | null;
+    expect(input?.value).toBe('');
   });
 
   it('omits expectedRevision when saving an edited provider so the save overwrites (#3722)', async () => {

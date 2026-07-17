@@ -1365,7 +1365,7 @@ export interface ModelProviderWriteRequest {
   readonly modelId: string;
   readonly contextWindowTokens?: number;
   readonly maxOutputTokens?: number;
-  readonly temperatureMilli?: number;
+  readonly temperatureMilli?: number | null;
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
   readonly secret?: string;

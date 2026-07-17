@@ -28,7 +28,7 @@ interface ProviderFormState {
   readonly modelId: string;
   readonly contextWindowTokens: string;
   readonly maxOutputTokens: string;
-  /** Temperature as a human-friendly decimal (0–2); converted to milli on save. */
+  /** Optional temperature override as a decimal (0–2); blank uses provider default. */
   readonly temperature: string;
   readonly reasoningEffort: string;
   readonly reasoningFormat: string;
@@ -49,9 +49,8 @@ function initialForm(): ProviderFormState {
     baseUrl: '',
     modelId: '',
     contextWindowTokens: '',
-    // Sensible create-time defaults so operators don't start from blank fields.
     maxOutputTokens: '4096',
-    temperature: '0.7',
+    temperature: '',
     reasoningEffort: '',
     reasoningFormat: '',
     credentialMode: 'api_key',
@@ -441,13 +440,13 @@ function credentialLabel(provider: ModelProviderRecord): string {
 
 /**
  * Convert a human-friendly decimal temperature (e.g. "0.7") to the backend's
- * integer milli units (700). Omitted when blank or non-numeric.
+ * integer milli units (700). Blank explicitly clears the backend override.
  */
 function optionalTemperatureMilli(
   value: string,
-): { temperatureMilli: number } | Record<string, never> {
+): { temperatureMilli: number | null } | Record<string, never> {
   const trimmed = value.trim();
-  if (trimmed === '') return {};
+  if (trimmed === '') return { temperatureMilli: null };
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) return {};
   return { temperatureMilli: Math.round(parsed * 1000) };
