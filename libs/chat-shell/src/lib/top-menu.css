@@ -25,6 +25,11 @@ rv-top-menu-bar {
   background: var(--rv-color-scrim);
 }
 
+.rv-top-menu__overlay--providers {
+  box-sizing: border-box;
+  padding-block: 4vh;
+}
+
 .rv-top-menu__panel {
   position: relative;
   display: flex;

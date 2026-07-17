@@ -274,6 +274,31 @@ describe('AdminProvidersPanelComponent', () => {
     expect(text).toContain('No configured providers');
   });
 
+  it('keeps the editor separate from the scrolling provider list region', async () => {
+    const fixture = await createPanel(
+      Array.from({ length: 12 }, (_, index) =>
+        makeProvider(`provider-${index + 1}`),
+      ),
+    );
+    const host = fixture.nativeElement as HTMLElement;
+    const editor = host.querySelector<HTMLElement>(
+      '[data-testid="admin-providers-editor"]',
+    );
+    const listRegion = host.querySelector<HTMLElement>(
+      '[data-testid="admin-providers-list-region"]',
+    );
+
+    expect(editor).not.toBeNull();
+    expect(listRegion).not.toBeNull();
+    expect(editor?.querySelector('h2')?.textContent).toContain(
+      'Create Provider',
+    );
+    expect(
+      listRegion?.querySelectorAll('.rv-admin-providers__provider'),
+    ).toHaveLength(12);
+    expect(editor?.contains(listRegion ?? null)).toBe(false);
+  });
+
   it('creates a provider through the store when the form is valid', async () => {
     const fixture = await createPanel([]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
