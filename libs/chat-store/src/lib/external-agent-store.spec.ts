@@ -1124,6 +1124,66 @@ describe('ExternalAgentStore', () => {
     expect(store.eventHistoryLoaded()).toBe(false);
   });
 
+  it('discovers a high-water cursor beyond the bounded history page ceiling', async () => {
+    const runtime = registration('runtime-1');
+    const snapshot = { ...thread('thread-1', 10), status: 'active' as const };
+    const latestSequence = 150_123;
+    const firstPage = Array.from({ length: 1_000 }, (_, index) => ({
+      ...event(index + 1, 'old-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    }));
+    const listEvents = vi.fn(
+      async (
+        _runtimeId: string,
+        query?: { readonly after?: number; readonly limit?: number },
+      ) => {
+        if (query?.after === undefined) return { events: firstPage };
+        if (query.after >= latestSequence) return { events: [] };
+        const sequenceId = query.after + 1;
+        return {
+          events: [
+            {
+              ...event(sequenceId, 'old-turn', 'completed'),
+              nativeThreadId: 'other-thread',
+            },
+          ],
+        };
+      },
+    );
+    const streamExternalRuntimeEvents = vi.fn(() => ({
+      close: vi.fn(),
+      async *events() {
+        yield* [];
+      },
+    }));
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([snapshot], null)),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: snapshot })),
+      streamExternalRuntimeEvents,
+    });
+
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected active session');
+    await store.selectSession(session);
+
+    expect(streamExternalRuntimeEvents).toHaveBeenCalledWith(
+      'runtime-1',
+      latestSequence,
+    );
+    expect(listEvents.mock.calls.length).toBeLessThanOrEqual(64);
+    expect(
+      listEvents.mock.calls.some(
+        ([, query]) =>
+          (query as { readonly after?: number } | undefined)?.after !==
+          undefined,
+      ),
+    ).toBe(true);
+    expect(store.events()).toEqual([]);
+  });
+
   it('derives the active turn from a native snapshot before live events arrive', () => {
     const store = setupStore({ runtimes: [], listThreads: vi.fn() });
     store.selectedThread.set({

@@ -643,6 +643,108 @@ test('external agent creation explains a missing ready runtime', async ({
   await expect(page.getByTestId('external-agent-create')).toBeDisabled();
 });
 
+test('renders a delayed live event from a runtime beyond 100k events without user input', async ({
+  page,
+}) => {
+  const highWater = 150_000;
+  const marker = 'Idle page received the live update.';
+  let streamCursor: string | null = null;
+  const firstPage = Array.from({ length: 1_000 }, (_, index) => ({
+    ...externalEvent(String(index + 1), 'runtime_status', {
+      nativeMethod: 'remoteControl/status/changed',
+    }),
+    nativeThreadId: null,
+    nativeTurnId: null,
+  }));
+
+  await page.route('http://large-runtime.test/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const ok = (data: unknown) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          data,
+          meta: { request_id: 'req-large-runtime', schema_version: 1 },
+        }),
+      });
+
+    if (url.pathname === '/v1/admin/profiles/registry') {
+      return ok({ items: [], total: 0, limit: 100, offset: 0 });
+    }
+    if (url.pathname === '/v1/external-runtimes') {
+      return ok({ runtimes: [runtime], controllers: [controller] });
+    }
+    if (url.pathname === '/v1/external-bindings') {
+      return ok({ bindings: [] });
+    }
+    if (url.pathname === '/v1/external-interactions') {
+      return ok({ interactions: [] });
+    }
+    if (url.pathname.endsWith('/threads/read')) {
+      return ok({ thread: { ...thread, turns: [] } });
+    }
+    if (url.pathname.endsWith('/threads')) {
+      return ok({
+        items: [{ ...thread, turns: [] }],
+        nextCursor: null,
+        backwardsCursor: null,
+      });
+    }
+    if (url.pathname.endsWith('/events')) {
+      const after = url.searchParams.get('after');
+      if (after === null) return ok({ events: firstPage });
+      const afterSequence = Number(after);
+      return ok({
+        events:
+          afterSequence >= highWater
+            ? []
+            : [
+                {
+                  ...externalEvent(
+                    String(afterSequence + 1),
+                    'runtime_status',
+                    { nativeMethod: 'remoteControl/status/changed' },
+                  ),
+                  nativeThreadId: null,
+                  nativeTurnId: null,
+                },
+              ],
+      });
+    }
+    if (url.pathname.endsWith('/stream')) {
+      streamCursor = url.searchParams.get('cursor');
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const liveEvent = {
+        ...streamingReplyEvent(String(highWater + 1), marker),
+        itemId: 'idle-live-message',
+        nativeTurnId: 'idle-live-turn',
+      };
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: `: connected\n\nid: ${highWater + 1}\nevent: assistant_text_delta\ndata: ${JSON.stringify(liveEvent)}\n\n`,
+      });
+    }
+    return route.fulfill({ status: 404, body: 'not mocked' });
+  });
+
+  await page.goto('/?api=http://large-runtime.test');
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-1"]').click();
+
+  await expect(page.getByTestId('transcript-viewport')).toContainText(marker, {
+    timeout: 10_000,
+  });
+  expect(streamCursor).toBe(String(highWater));
+  await expect(page.getByTestId('external-turn-status')).toHaveAttribute(
+    'data-latest-sequence',
+    String(highWater + 1),
+  );
+});
+
 const runtime = {
   runtimeId: 'runtime-1',
   kind: 'codex_app_server',
