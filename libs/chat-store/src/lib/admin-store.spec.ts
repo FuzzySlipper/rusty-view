@@ -24,6 +24,7 @@ import {
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
+  type ModelProviderCredentialLinkRequest,
   type ModelProviderCredentialLinkResponse,
   type ModelProviderCredentialUnlinkResponse,
   type OpenAiOauthClearResponse,
@@ -588,11 +589,15 @@ function brain(profileId: string): RuntimeBrainModuleDiagnostics {
   };
 }
 
-function apiError(reasonCode: string, message: string): ChatTransportError {
+function apiError(
+  reasonCode: string,
+  message: string,
+  statusCode = 503,
+): ChatTransportError {
   return new ChatTransportError({
     code: 'http_error',
     message,
-    statusCode: 503,
+    statusCode,
     endpoint: 'http://test/v1/admin/diagnostics',
     apiError: {
       code: 'internal_error',
@@ -1249,6 +1254,79 @@ describe('AdminStore behavior', () => {
     expect(store.errorDetail()?.apiError?.reasonCode).toBe(
       'service_credential_linked',
     );
+  });
+
+  it('reloads a stale credential revision so the next link attempt can succeed', async () => {
+    let backendCredentialRevision = 1;
+    const currentCredential = (): ServiceCredentialRecord => ({
+      ...serviceCredential('openai:shared'),
+      revision: backendCredentialRevision,
+    });
+    const linkAdminModelProviderCredential = vi.fn(
+      async (
+        alias: string,
+        request: ModelProviderCredentialLinkRequest,
+      ): Promise<ModelProviderCredentialLinkResponse> => {
+        if (request.expectedCredentialRevision !== backendCredentialRevision) {
+          throw apiError(
+            'service_credential_revision_mismatch',
+            'credential revision changed',
+            409,
+          );
+        }
+        return {
+          provider: {
+            ...provider(alias),
+            credentialId: request.credentialId,
+            credential: currentCredential().credential,
+          },
+          credential: currentCredential(),
+        };
+      },
+    );
+    const transport = createTransport({
+      adminServiceCredentials: vi.fn(async () => ({
+        ...emptyPage<ServiceCredentialRecord>(),
+        items: [currentCredential()],
+        total: 1,
+      })),
+      linkAdminModelProviderCredential,
+    });
+    const store = setupAdminStore(transport);
+    await store.refresh();
+    const staleCredential = store.serviceCredentials()[0];
+    if (staleCredential === undefined) {
+      throw new Error('expected the initial credential');
+    }
+    backendCredentialRevision = 2;
+
+    const firstResult = await store.linkModelProviderCredential(
+      'terra',
+      staleCredential,
+    );
+
+    expect(firstResult).toBeUndefined();
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'service_credential_revision_mismatch',
+    );
+    expect(store.error()).toContain('current redacted state has been reloaded');
+    expect(store.serviceCredentials()[0]?.revision).toBe(2);
+
+    const refreshedCredential = store.serviceCredentials()[0];
+    if (refreshedCredential === undefined) {
+      throw new Error('expected the refreshed credential');
+    }
+    const secondResult = await store.linkModelProviderCredential(
+      'terra',
+      refreshedCredential,
+    );
+
+    expect(secondResult?.provider.credentialId).toBe('openai:shared');
+    expect(
+      linkAdminModelProviderCredential.mock.calls.map(
+        ([, request]) => request.expectedCredentialRevision,
+      ),
+    ).toEqual([1, 2]);
   });
 
   it('tracks OpenAI OAuth pending login and completion without exposing token material', async () => {

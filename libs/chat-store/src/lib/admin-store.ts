@@ -1098,7 +1098,12 @@ export class AdminStore {
       await this.loadServiceCredentialImpact(credential.credentialId);
       return result;
     } catch (error) {
-      if (isProviderRevisionConflict(error)) await this.refresh();
+      if (
+        isProviderRevisionConflict(error) ||
+        isServiceCredentialRevisionConflict(error)
+      ) {
+        await this.refresh();
+      }
       this._error.set(providerCredentialErrorDetail(error));
       return undefined;
     } finally {
@@ -1160,6 +1165,7 @@ export class AdminStore {
       await this.loadServiceCredentialImpact(credential.credentialId);
       return result.credential;
     } catch (error) {
+      if (isServiceCredentialRevisionConflict(error)) await this.refresh();
       this._error.set(providerCredentialErrorDetail(error));
       return undefined;
     } finally {
@@ -1181,6 +1187,7 @@ export class AdminStore {
       await this.refresh();
       return result;
     } catch (error) {
+      if (isServiceCredentialRevisionConflict(error)) await this.refresh();
       this._error.set(providerCredentialErrorDetail(error));
       return undefined;
     } finally {
@@ -1293,6 +1300,7 @@ export class AdminStore {
       );
       await this.loadServiceCredentialImpact(credential.credentialId);
     } catch (error) {
+      if (isServiceCredentialRevisionConflict(error)) await this.refresh();
       this._error.set(providerCredentialErrorDetail(error));
     } finally {
       this._saving.set(false);
@@ -1549,6 +1557,18 @@ function isProviderRevisionConflict(error: unknown): boolean {
   return (
     storeErrorDetail(error).apiError?.reasonCode ===
     'model_provider_revision_mismatch'
+  );
+}
+
+/**
+ * Whether Crew rejected a service-credential mutation because the cached
+ * redacted record carried an old revision. Callers refresh before exposing the
+ * retry guidance so the next UI action sends Crew's current revision.
+ */
+function isServiceCredentialRevisionConflict(error: unknown): boolean {
+  return (
+    storeErrorDetail(error).apiError?.reasonCode ===
+    'service_credential_revision_mismatch'
   );
 }
 
