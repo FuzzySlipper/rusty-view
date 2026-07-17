@@ -31,6 +31,10 @@ import type {
   ModelProviderRefreshMode,
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
+  ModelProviderCredentialLinkRequest,
+  ModelProviderCredentialLinkResponse,
+  ModelProviderCredentialUnlinkRequest,
+  ModelProviderCredentialUnlinkResponse,
   OpenAiOauthClearRequest,
   OpenAiOauthClearResponse,
   OpenAiOauthCompleteRequest,
@@ -38,6 +42,17 @@ import type {
   OpenAiOauthStartRequest,
   OpenAiOauthStartResponse,
   OpenAiOauthStatusResponse,
+  ServiceCredentialDeleteResponse,
+  ServiceCredentialImpact,
+  ServiceCredentialOpenAiOauthClearResponse,
+  ServiceCredentialOpenAiOauthCompleteResponse,
+  ServiceCredentialOpenAiOauthStartResponse,
+  ServiceCredentialOpenAiOauthStatusResponse,
+  ServiceCredentialPage,
+  ServiceCredentialQuery,
+  ServiceCredentialRecord,
+  ServiceCredentialWriteRequest,
+  ServiceCredentialWriteResponse,
   ProfileBundleExportPlan,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
@@ -472,6 +487,125 @@ export class AdminHttpTransport {
     );
   }
 
+  serviceCredentials(
+    query?: ServiceCredentialQuery,
+  ): Promise<ServiceCredentialPage> {
+    return this.request(
+      'GET',
+      '/v1/admin/service-credentials',
+      optionsForServiceCredentialQuery(query),
+    );
+  }
+
+  serviceCredential(credentialId: string): Promise<ServiceCredentialRecord> {
+    return this.request('GET', serviceCredentialPath(credentialId));
+  }
+
+  createServiceCredential(
+    request: ServiceCredentialWriteRequest & { readonly credentialId: string },
+  ): Promise<ServiceCredentialWriteResponse> {
+    return this.request('POST', '/v1/admin/service-credentials', {
+      body: compactRecord(serviceCredentialWriteBody(request)),
+    });
+  }
+
+  updateServiceCredential(
+    credentialId: string,
+    request: ServiceCredentialWriteRequest,
+  ): Promise<ServiceCredentialWriteResponse> {
+    return this.request('PATCH', serviceCredentialPath(credentialId), {
+      body: compactRecord(serviceCredentialWriteBody(request)),
+    });
+  }
+
+  serviceCredentialImpact(
+    credentialId: string,
+  ): Promise<ServiceCredentialImpact> {
+    return this.request('GET', `${serviceCredentialPath(credentialId)}/impact`);
+  }
+
+  clearServiceCredential(
+    credentialId: string,
+    expectedRevision?: number,
+  ): Promise<ServiceCredentialWriteResponse> {
+    return this.request(
+      'POST',
+      `${serviceCredentialPath(credentialId)}/clear`,
+      { body: compactRecord({ expectedRevision }) },
+    );
+  }
+
+  deleteServiceCredential(
+    credentialId: string,
+    expectedRevision?: number,
+  ): Promise<ServiceCredentialDeleteResponse> {
+    return this.request('DELETE', serviceCredentialPath(credentialId), {
+      query: expectedRevision === undefined ? {} : { expectedRevision },
+    });
+  }
+
+  linkModelProviderCredential(
+    alias: string,
+    request: ModelProviderCredentialLinkRequest,
+  ): Promise<ModelProviderCredentialLinkResponse> {
+    return this.request('POST', `${providerItemPath(alias)}/credential/link`, {
+      body: compactRecord({ ...request }),
+    });
+  }
+
+  unlinkModelProviderCredential(
+    alias: string,
+    request: ModelProviderCredentialUnlinkRequest = {},
+  ): Promise<ModelProviderCredentialUnlinkResponse> {
+    return this.request(
+      'POST',
+      `${providerItemPath(alias)}/credential/unlink`,
+      { body: compactRecord({ ...request }) },
+    );
+  }
+
+  serviceCredentialOpenAiOauthStatus(
+    credentialId: string,
+  ): Promise<ServiceCredentialOpenAiOauthStatusResponse> {
+    return this.request(
+      'GET',
+      openAiOauthCredentialPath(credentialId, 'status'),
+    );
+  }
+
+  startServiceCredentialOpenAiOauthLogin(
+    credentialId: string,
+    request: OpenAiOauthStartRequest = {},
+  ): Promise<ServiceCredentialOpenAiOauthStartResponse> {
+    return this.request(
+      'POST',
+      openAiOauthCredentialPath(credentialId, 'start'),
+      { body: compactRecord(openAiOauthStartBody(request)) },
+    );
+  }
+
+  completeServiceCredentialOpenAiOauthLogin(
+    credentialId: string,
+    request: OpenAiOauthCompleteRequest,
+  ): Promise<ServiceCredentialOpenAiOauthCompleteResponse> {
+    return this.request(
+      'POST',
+      openAiOauthCredentialPath(credentialId, 'complete'),
+      { body: compactRecord(openAiOauthCompleteBody(request)) },
+    );
+  }
+
+  clearServiceCredentialOpenAiOauth(
+    credentialId: string,
+    expectedRevision?: number,
+  ): Promise<ServiceCredentialOpenAiOauthClearResponse> {
+    return this.request(
+      'POST',
+      openAiOauthCredentialPath(credentialId, 'clear'),
+      { body: compactRecord({ expectedRevision }) },
+    );
+  }
+
   openAiOauthStatus(alias: string): Promise<OpenAiOauthStatusResponse> {
     return this.request('GET', openAiOauthProviderPath(alias, 'status'));
   }
@@ -713,6 +847,19 @@ function optionsForProviderQuery(query?: ModelProviderQuery): RequestOptions {
   return { query: params };
 }
 
+function optionsForServiceCredentialQuery(
+  query?: ServiceCredentialQuery,
+): RequestOptions {
+  if (query === undefined) return {};
+  const params: Record<string, unknown> = {};
+  if (query.providerKind !== undefined) {
+    params['providerKind'] = query.providerKind;
+  }
+  if (query.limit !== undefined) params['limit'] = query.limit;
+  if (query.offset !== undefined) params['offset'] = query.offset;
+  return { query: params };
+}
+
 function providerWritePath(refresh: ModelProviderRefreshMode): string {
   return refresh === 'none'
     ? '/v1/admin/model-providers'
@@ -728,6 +875,17 @@ function openAiOauthProviderPath(
   action: 'status' | 'start' | 'complete' | 'clear',
 ): string {
   return `${providerItemPath(alias)}/oauth/openai/${action}`;
+}
+
+function serviceCredentialPath(credentialId: string): string {
+  return `/v1/admin/service-credentials/${encodeURIComponent(credentialId)}`;
+}
+
+function openAiOauthCredentialPath(
+  credentialId: string,
+  action: 'status' | 'start' | 'complete' | 'clear',
+): string {
+  return `${serviceCredentialPath(credentialId)}/oauth/openai/${action}`;
 }
 
 function registryWritePath(
@@ -807,6 +965,20 @@ function providerWriteBody(
     body['apiKey'] = request.apiKey;
   }
   return body;
+}
+
+function serviceCredentialWriteBody(
+  request: ServiceCredentialWriteRequest,
+): Record<string, unknown> {
+  return {
+    credentialId: request.credentialId,
+    displayName: request.displayName,
+    providerKind: request.providerKind,
+    credentialKind: request.credentialKind,
+    secret: request.secret,
+    clearSecret: request.clearSecret,
+    expectedRevision: request.expectedRevision,
+  };
 }
 
 function openAiOauthStartBody(

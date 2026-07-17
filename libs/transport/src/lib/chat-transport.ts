@@ -64,6 +64,10 @@ import type {
   ModelProviderRefreshMode,
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
+  ModelProviderCredentialLinkRequest,
+  ModelProviderCredentialLinkResponse,
+  ModelProviderCredentialUnlinkRequest,
+  ModelProviderCredentialUnlinkResponse,
   OpenAiOauthClearRequest,
   OpenAiOauthClearResponse,
   OpenAiOauthCompleteRequest,
@@ -71,6 +75,17 @@ import type {
   OpenAiOauthStartRequest,
   OpenAiOauthStartResponse,
   OpenAiOauthStatusResponse,
+  ServiceCredentialDeleteResponse,
+  ServiceCredentialImpact,
+  ServiceCredentialOpenAiOauthClearResponse,
+  ServiceCredentialOpenAiOauthCompleteResponse,
+  ServiceCredentialOpenAiOauthStartResponse,
+  ServiceCredentialOpenAiOauthStatusResponse,
+  ServiceCredentialPage,
+  ServiceCredentialQuery,
+  ServiceCredentialRecord,
+  ServiceCredentialWriteRequest,
+  ServiceCredentialWriteResponse,
   ProfileBundleExportPlan,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
@@ -450,6 +465,107 @@ export class ChatTransport {
     refresh?: ModelProviderRefreshMode,
   ): Promise<ModelProviderWriteResponse> {
     return this.adminHttp.updateModelProvider(alias, request, refresh);
+  }
+
+  adminServiceCredentials(
+    query?: ServiceCredentialQuery,
+  ): Promise<ServiceCredentialPage> {
+    return this.adminHttp.serviceCredentials(query);
+  }
+
+  adminServiceCredential(
+    credentialId: string,
+  ): Promise<ServiceCredentialRecord> {
+    return this.adminHttp.serviceCredential(credentialId);
+  }
+
+  createAdminServiceCredential(
+    request: ServiceCredentialWriteRequest & { readonly credentialId: string },
+  ): Promise<ServiceCredentialWriteResponse> {
+    return this.adminHttp.createServiceCredential(request);
+  }
+
+  updateAdminServiceCredential(
+    credentialId: string,
+    request: ServiceCredentialWriteRequest,
+  ): Promise<ServiceCredentialWriteResponse> {
+    return this.adminHttp.updateServiceCredential(credentialId, request);
+  }
+
+  adminServiceCredentialImpact(
+    credentialId: string,
+  ): Promise<ServiceCredentialImpact> {
+    return this.adminHttp.serviceCredentialImpact(credentialId);
+  }
+
+  clearAdminServiceCredential(
+    credentialId: string,
+    expectedRevision?: number,
+  ): Promise<ServiceCredentialWriteResponse> {
+    return this.adminHttp.clearServiceCredential(
+      credentialId,
+      expectedRevision,
+    );
+  }
+
+  deleteAdminServiceCredential(
+    credentialId: string,
+    expectedRevision?: number,
+  ): Promise<ServiceCredentialDeleteResponse> {
+    return this.adminHttp.deleteServiceCredential(
+      credentialId,
+      expectedRevision,
+    );
+  }
+
+  linkAdminModelProviderCredential(
+    alias: string,
+    request: ModelProviderCredentialLinkRequest,
+  ): Promise<ModelProviderCredentialLinkResponse> {
+    return this.adminHttp.linkModelProviderCredential(alias, request);
+  }
+
+  unlinkAdminModelProviderCredential(
+    alias: string,
+    request?: ModelProviderCredentialUnlinkRequest,
+  ): Promise<ModelProviderCredentialUnlinkResponse> {
+    return this.adminHttp.unlinkModelProviderCredential(alias, request);
+  }
+
+  adminServiceCredentialOpenAiOauthStatus(
+    credentialId: string,
+  ): Promise<ServiceCredentialOpenAiOauthStatusResponse> {
+    return this.adminHttp.serviceCredentialOpenAiOauthStatus(credentialId);
+  }
+
+  adminStartServiceCredentialOpenAiOauthLogin(
+    credentialId: string,
+    request?: OpenAiOauthStartRequest,
+  ): Promise<ServiceCredentialOpenAiOauthStartResponse> {
+    return this.adminHttp.startServiceCredentialOpenAiOauthLogin(
+      credentialId,
+      request,
+    );
+  }
+
+  adminCompleteServiceCredentialOpenAiOauthLogin(
+    credentialId: string,
+    request: OpenAiOauthCompleteRequest,
+  ): Promise<ServiceCredentialOpenAiOauthCompleteResponse> {
+    return this.adminHttp.completeServiceCredentialOpenAiOauthLogin(
+      credentialId,
+      request,
+    );
+  }
+
+  adminClearServiceCredentialOpenAiOauth(
+    credentialId: string,
+    expectedRevision?: number,
+  ): Promise<ServiceCredentialOpenAiOauthClearResponse> {
+    return this.adminHttp.clearServiceCredentialOpenAiOauth(
+      credentialId,
+      expectedRevision,
+    );
   }
 
   adminOpenAiOauthStatus(alias: string): Promise<OpenAiOauthStatusResponse> {

@@ -24,12 +24,24 @@ import {
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
+  type ModelProviderCredentialLinkResponse,
+  type ModelProviderCredentialUnlinkResponse,
   type OpenAiOauthClearResponse,
   type OpenAiOauthCompleteRequest,
   type OpenAiOauthCompleteResponse,
   type OpenAiOauthStartRequest,
   type OpenAiOauthStartResponse,
   type OpenAiOauthStatusResponse,
+  type ServiceCredentialDeleteResponse,
+  type ServiceCredentialImpact,
+  type ServiceCredentialOpenAiOauthClearResponse,
+  type ServiceCredentialOpenAiOauthCompleteResponse,
+  type ServiceCredentialOpenAiOauthStartResponse,
+  type ServiceCredentialOpenAiOauthStatusResponse,
+  type ServiceCredentialPage,
+  type ServiceCredentialRecord,
+  type ServiceCredentialWriteRequest,
+  type ServiceCredentialWriteResponse,
   type RuntimeBrainModuleDiagnostics,
   type RuntimeConfigApplyResult,
   type RuntimePauseControlRequest,
@@ -85,6 +97,81 @@ interface AdminTransportMock {
   >;
   readonly adminModelProviders: ReturnType<
     typeof vi.fn<() => Promise<ModelProviderPage>>
+  >;
+  readonly adminServiceCredentials: ReturnType<
+    typeof vi.fn<() => Promise<ServiceCredentialPage>>
+  >;
+  readonly createAdminServiceCredential: ReturnType<
+    typeof vi.fn<
+      (
+        request: ServiceCredentialWriteRequest & {
+          readonly credentialId: string;
+        },
+      ) => Promise<ServiceCredentialWriteResponse>
+    >
+  >;
+  readonly adminServiceCredentialImpact: ReturnType<
+    typeof vi.fn<(credentialId: string) => Promise<ServiceCredentialImpact>>
+  >;
+  readonly clearAdminServiceCredential: ReturnType<
+    typeof vi.fn<
+      (
+        credentialId: string,
+        expectedRevision?: number,
+      ) => Promise<ServiceCredentialWriteResponse>
+    >
+  >;
+  readonly deleteAdminServiceCredential: ReturnType<
+    typeof vi.fn<
+      (
+        credentialId: string,
+        expectedRevision?: number,
+      ) => Promise<ServiceCredentialDeleteResponse>
+    >
+  >;
+  readonly linkAdminModelProviderCredential: ReturnType<
+    typeof vi.fn<
+      (
+        alias: string,
+        request: { readonly credentialId: string },
+      ) => Promise<ModelProviderCredentialLinkResponse>
+    >
+  >;
+  readonly unlinkAdminModelProviderCredential: ReturnType<
+    typeof vi.fn<
+      (alias: string) => Promise<ModelProviderCredentialUnlinkResponse>
+    >
+  >;
+  readonly adminServiceCredentialOpenAiOauthStatus: ReturnType<
+    typeof vi.fn<
+      (
+        credentialId: string,
+      ) => Promise<ServiceCredentialOpenAiOauthStatusResponse>
+    >
+  >;
+  readonly adminStartServiceCredentialOpenAiOauthLogin: ReturnType<
+    typeof vi.fn<
+      (
+        credentialId: string,
+        request?: OpenAiOauthStartRequest,
+      ) => Promise<ServiceCredentialOpenAiOauthStartResponse>
+    >
+  >;
+  readonly adminCompleteServiceCredentialOpenAiOauthLogin: ReturnType<
+    typeof vi.fn<
+      (
+        credentialId: string,
+        request: OpenAiOauthCompleteRequest,
+      ) => Promise<ServiceCredentialOpenAiOauthCompleteResponse>
+    >
+  >;
+  readonly adminClearServiceCredentialOpenAiOauth: ReturnType<
+    typeof vi.fn<
+      (
+        credentialId: string,
+        expectedRevision?: number,
+      ) => Promise<ServiceCredentialOpenAiOauthClearResponse>
+    >
   >;
   readonly adminStorageQueryCatalog: ReturnType<
     typeof vi.fn<() => Promise<StorageQueryCatalog>>
@@ -371,6 +458,56 @@ function provider(alias: string): ModelProviderRecord {
   };
 }
 
+function serviceCredential(
+  credentialId: string,
+  hasSecret = true,
+): ServiceCredentialRecord {
+  return {
+    credentialId,
+    displayName: `Credential ${credentialId}`,
+    providerKind: 'openai',
+    credentialKind: 'openai_oauth',
+    credential: {
+      hasSecret,
+      kind: 'openai_oauth',
+      status: hasSecret ? 'configured' : 'missing',
+    },
+    linkedProviderAliases: [],
+    revision: 1,
+    createdAt: '2026-07-02T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  };
+}
+
+function serviceCredentialImpact(
+  credentialId: string,
+): ServiceCredentialImpact {
+  return {
+    credential: serviceCredential(credentialId),
+    linkedProviderAliases: [],
+    linkedProviders: [],
+    canClear: true,
+    canDelete: true,
+  };
+}
+
+function serviceCredentialPendingLogin(
+  credentialId: string,
+): ServiceCredentialOpenAiOauthStartResponse['pendingLogin'] {
+  return {
+    pendingLoginId: 'pending-credential-1',
+    credentialId,
+    issuer: 'https://auth.openai.com',
+    clientId: 'app-client',
+    redirectUri: 'http://localhost:1455/auth/callback',
+    scopes: ['openid'],
+    codeChallenge: 'challenge',
+    authorizationUrl: 'https://auth.openai.com/oauth/authorize?...',
+    createdAt: '2026-07-02T00:00:00Z',
+    expiresAt: '2026-07-02T00:10:00Z',
+  };
+}
+
 function openAiOauthLoginConfig(): OpenAiOauthStartResponse['loginConfig'] {
   return {
     issuer: 'https://auth.openai.com',
@@ -523,6 +660,56 @@ function createTransport(
         }) satisfies ContextStrategyCatalog,
     ),
     adminModelProviders: vi.fn(async () => emptyPage()),
+    adminServiceCredentials: vi.fn(async () => emptyPage()),
+    createAdminServiceCredential: vi.fn(async (request) => ({
+      credential: serviceCredential(request.credentialId),
+    })),
+    adminServiceCredentialImpact: vi.fn(async (credentialId) =>
+      serviceCredentialImpact(credentialId),
+    ),
+    clearAdminServiceCredential: vi.fn(async (credentialId) => ({
+      credential: {
+        ...serviceCredential(credentialId),
+        credential: { hasSecret: false },
+      },
+    })),
+    deleteAdminServiceCredential: vi.fn(async (credentialId) => ({
+      deleted: true as const,
+      credential: serviceCredential(credentialId),
+    })),
+    linkAdminModelProviderCredential: vi.fn(async (alias, request) => ({
+      provider: {
+        ...provider(alias),
+        credentialId: request.credentialId,
+        credential: { hasSecret: true, kind: 'openai_oauth' },
+      },
+      credential: serviceCredential(request.credentialId),
+    })),
+    unlinkAdminModelProviderCredential: vi.fn(async (alias) => ({
+      provider: provider(alias),
+    })),
+    adminServiceCredentialOpenAiOauthStatus: vi.fn(async (credentialId) => ({
+      credential: serviceCredential(credentialId),
+      loginConfig: openAiOauthLoginConfig(),
+      pendingLogins: [],
+    })),
+    adminStartServiceCredentialOpenAiOauthLogin: vi.fn(
+      async (credentialId) => ({
+        credential: serviceCredential(credentialId),
+        loginConfig: openAiOauthLoginConfig(),
+        pendingLogin: serviceCredentialPendingLogin(credentialId),
+      }),
+    ),
+    adminCompleteServiceCredentialOpenAiOauthLogin: vi.fn(
+      async (credentialId) => ({
+        credential: serviceCredential(credentialId, true),
+        completionMode: 'test' as const,
+        pendingLoginId: 'pending-credential-1',
+      }),
+    ),
+    adminClearServiceCredentialOpenAiOauth: vi.fn(async (credentialId) => ({
+      credential: serviceCredential(credentialId, false),
+    })),
     adminStorageQueryCatalog: vi.fn(async () => ({
       schema_version: 1,
       source: 'rust_bridge_read_model',
@@ -950,6 +1137,118 @@ describe('AdminStore behavior', () => {
     );
     expect(store.providerWriteResult()?.provider.alias).toBe('main');
     expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it('links two aliases to one shared credential and unlinks without deleting it', async () => {
+    let linkedAliases: string[] = [];
+    let providers: ModelProviderRecord[] = ['sol', 'terra'].map((alias) => ({
+      ...provider(alias),
+      protocol: 'responses' as const,
+    }));
+    const credential = serviceCredential('openai:shared');
+    const currentCredential = (): ServiceCredentialRecord => ({
+      ...credential,
+      linkedProviderAliases: linkedAliases,
+    });
+    const transport = createTransport({
+      adminModelProviders: vi.fn(async () => ({
+        ...emptyPage<ModelProviderRecord>(),
+        items: providers,
+        total: providers.length,
+      })),
+      adminServiceCredentials: vi.fn(async () => ({
+        ...emptyPage<ServiceCredentialRecord>(),
+        items: [currentCredential()],
+        total: 1,
+      })),
+      linkAdminModelProviderCredential: vi.fn(async (alias, request) => {
+        linkedAliases = [...new Set([...linkedAliases, alias])];
+        const current = providers.find((item) => item.alias === alias);
+        const linked = {
+          ...(current ?? provider(alias)),
+          credentialId: request.credentialId,
+          credential: credential.credential,
+          revision: (current?.revision ?? 0) + 1,
+        };
+        providers = [
+          ...providers.filter((item) => item.alias !== alias),
+          linked,
+        ];
+        return { provider: linked, credential: currentCredential() };
+      }),
+      unlinkAdminModelProviderCredential: vi.fn(async (alias) => {
+        linkedAliases = linkedAliases.filter((item) => item !== alias);
+        const current = providers.find((item) => item.alias === alias);
+        const rest = { ...(current ?? provider(alias)) };
+        delete rest.credentialId;
+        const unlinked = {
+          ...rest,
+          credential: { hasSecret: false },
+          revision: (current?.revision ?? 0) + 1,
+        };
+        providers = [
+          ...providers.filter((item) => item.alias !== alias),
+          unlinked,
+        ];
+        return { provider: unlinked };
+      }),
+      adminServiceCredentialImpact: vi.fn(async () => ({
+        credential: currentCredential(),
+        linkedProviderAliases: linkedAliases,
+        linkedProviders: providers.filter((item) =>
+          linkedAliases.includes(item.alias),
+        ),
+        canClear: linkedAliases.length === 0,
+        canDelete: linkedAliases.length === 0,
+      })),
+    });
+    const store = setupAdminStore(transport);
+    await store.refresh();
+
+    await store.linkModelProviderCredential('sol', credential);
+    await store.linkModelProviderCredential('terra', currentCredential());
+
+    expect(linkedAliases).toEqual(['sol', 'terra']);
+    expect(
+      store.providerAliases().find((item) => item.alias === 'terra')
+        ?.credentialId,
+    ).toBe('openai:shared');
+    expect(store.serviceCredentials()[0]?.linkedProviderAliases).toEqual([
+      'sol',
+      'terra',
+    ]);
+    const terra = store
+      .providerAliases()
+      .find((item) => item.alias === 'terra');
+    if (terra === undefined) throw new Error('expected terra provider');
+    await store.unlinkModelProviderCredential(terra);
+
+    expect(linkedAliases).toEqual(['sol']);
+    expect(
+      store.providerAliases().find((item) => item.alias === 'terra')
+        ?.credentialId,
+    ).toBeUndefined();
+    expect(store.serviceCredentials()[0]?.credentialId).toBe('openai:shared');
+    expect(transport.deleteAdminServiceCredential).not.toHaveBeenCalled();
+  });
+
+  it('surfaces linked-credential structured errors with an unlink-first action', async () => {
+    const transport = createTransport({
+      deleteAdminServiceCredential: vi.fn(async () => {
+        throw apiError(
+          'service_credential_linked',
+          'cannot delete while linked',
+        );
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.deleteServiceCredential(serviceCredential('openai:shared'));
+
+    expect(store.error()).toContain('Unlink every affected alias');
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'service_credential_linked',
+    );
   });
 
   it('tracks OpenAI OAuth pending login and completion without exposing token material', async () => {

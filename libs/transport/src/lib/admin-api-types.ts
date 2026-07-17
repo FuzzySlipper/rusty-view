@@ -1333,6 +1333,8 @@ export interface ModelProviderRecord {
   readonly temperatureMilli?: number;
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
+  /** Service-scoped credential identity linked to this alias, when configured. */
+  readonly credentialId?: string;
   readonly credential: ModelProviderCredential;
   readonly metadataJson: unknown;
   readonly revision: number;
@@ -1444,11 +1446,89 @@ export interface ModelProviderPage {
   readonly offset: number;
 }
 
+// ---- service-scoped credential registry (tasks rusty-crew #5894/#5895) ----
+
+/** Redacted reusable credential record. Secret material never appears here. */
+export interface ServiceCredentialRecord {
+  readonly credentialId: string;
+  readonly displayName: string;
+  readonly providerKind: string;
+  readonly credentialKind: ModelProviderCredentialKind;
+  readonly credential: ModelProviderCredential;
+  readonly linkedProviderAliases: readonly string[];
+  readonly revision: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ServiceCredentialQuery {
+  readonly providerKind?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export interface ServiceCredentialPage {
+  readonly items: readonly ServiceCredentialRecord[];
+  readonly total: number;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+export interface ServiceCredentialWriteRequest {
+  readonly credentialId?: string;
+  readonly displayName?: string;
+  readonly providerKind?: string;
+  readonly credentialKind?: Exclude<
+    ModelProviderCredentialKind,
+    'legacy_raw_api_key'
+  >;
+  readonly secret?: string;
+  readonly clearSecret?: boolean;
+  readonly expectedRevision?: number;
+}
+
+export interface ServiceCredentialWriteResponse {
+  readonly credential: ServiceCredentialRecord;
+}
+
+export interface ServiceCredentialDeleteResponse {
+  readonly deleted: true;
+  readonly credential: ServiceCredentialRecord;
+}
+
+export interface ServiceCredentialImpact {
+  readonly credential: ServiceCredentialRecord;
+  readonly linkedProviderAliases: readonly string[];
+  readonly linkedProviders: readonly ModelProviderRecord[];
+  readonly canClear: boolean;
+  readonly canDelete: boolean;
+}
+
+export interface ModelProviderCredentialLinkRequest {
+  readonly credentialId: string;
+  readonly expectedProviderRevision?: number;
+  readonly expectedCredentialRevision?: number;
+}
+
+export interface ModelProviderCredentialUnlinkRequest {
+  readonly expectedProviderRevision?: number;
+}
+
+export interface ModelProviderCredentialLinkResponse {
+  readonly provider: ModelProviderRecord;
+  readonly credential: ServiceCredentialRecord;
+}
+
+export interface ModelProviderCredentialUnlinkResponse {
+  readonly provider: ModelProviderRecord;
+}
+
 // ---- OpenAI OAuth provider credential setup ----
 
 export interface OpenAiOauthPendingLogin {
   readonly pendingLoginId: string;
-  readonly providerAlias: string;
+  readonly credentialId?: string;
+  readonly providerAlias?: string;
   readonly issuer: string;
   readonly clientId: string;
   readonly redirectUri: string;
@@ -1532,4 +1612,28 @@ export interface OpenAiOauthClearRequest {
 export interface OpenAiOauthClearResponse {
   readonly provider: ModelProviderRecord;
   readonly credential: ModelProviderCredential;
+}
+
+/** Credential-scoped OAuth status; unlike the compatibility route it has no provider wrapper. */
+export interface ServiceCredentialOpenAiOauthStatusResponse {
+  readonly credential: ServiceCredentialRecord;
+  readonly loginConfig?: OpenAiOauthLoginConfig;
+  readonly pendingLogins: readonly OpenAiOauthPendingLogin[];
+}
+
+export interface ServiceCredentialOpenAiOauthStartResponse {
+  readonly credential: ServiceCredentialRecord;
+  readonly loginConfig: OpenAiOauthLoginConfig;
+  readonly pendingLogin: OpenAiOauthPendingLogin;
+}
+
+export interface ServiceCredentialOpenAiOauthCompleteResponse {
+  readonly credential: ServiceCredentialRecord;
+  readonly completionMode: 'real' | 'test';
+  readonly oauthSummary?: unknown;
+  readonly pendingLoginId: string;
+}
+
+export interface ServiceCredentialOpenAiOauthClearResponse {
+  readonly credential: ServiceCredentialRecord;
 }

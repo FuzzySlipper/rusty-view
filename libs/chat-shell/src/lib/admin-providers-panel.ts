@@ -1,7 +1,9 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   computed,
+  DestroyRef,
   inject,
   output,
   signal,
@@ -15,9 +17,14 @@ import type {
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
   OpenAiOauthPendingLogin,
+  ServiceCredentialRecord,
 } from '@rusty-view/transport';
 
-type ProviderCredentialMode = 'unconfigured' | 'api_key' | 'openai_oauth';
+type ProviderCredentialMode =
+  | 'unconfigured'
+  | 'create_api_key'
+  | 'create_openai_oauth'
+  | 'reuse';
 
 interface ProviderFormState {
   readonly alias: string;
@@ -34,8 +41,9 @@ interface ProviderFormState {
   readonly reasoningEffort: string;
   readonly reasoningFormat: string;
   readonly credentialMode: ProviderCredentialMode;
+  readonly credentialId: string;
+  readonly credentialDisplayName: string;
   readonly secret: string;
-  readonly clearSecret: boolean;
   readonly oauthCallbackUrl: string;
   readonly status: ModelProviderStatus;
 }
@@ -54,9 +62,10 @@ function initialForm(): ProviderFormState {
     temperature: '',
     reasoningEffort: '',
     reasoningFormat: '',
-    credentialMode: 'api_key',
+    credentialMode: 'unconfigured',
+    credentialId: '',
+    credentialDisplayName: '',
     secret: '',
-    clearSecret: false,
     oauthCallbackUrl: '',
     status: 'active',
   };
@@ -98,6 +107,8 @@ const REASONING_EFFORT_OPTIONS: readonly { value: string; label: string }[] = [
 })
 export class AdminProvidersPanelComponent {
   protected readonly admin = inject(AdminStore);
+  private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly dismissed = output<void>();
 
@@ -111,10 +122,29 @@ export class AdminProvidersPanelComponent {
   protected readonly oauthCallbackReady = computed(
     () => this.form().oauthCallbackUrl.trim() !== '',
   );
+  protected readonly compatibleCredentials = computed(() => {
+    const form = this.form();
+    const providerKind = form.providerKind.trim() || 'custom';
+    return this.admin.serviceCredentials().filter((credential) => {
+      if (credential.providerKind !== providerKind) return false;
+      return !(
+        credential.credentialKind === 'openai_oauth' &&
+        form.protocol !== 'responses'
+      );
+    });
+  });
+  protected readonly selectedCredential = computed(() => {
+    const credentialId = this.form().credentialId;
+    return (
+      this.admin
+        .serviceCredentials()
+        .find((credential) => credential.credentialId === credentialId) ?? null
+    );
+  });
   protected readonly selectedOauthStatus = computed(() => {
-    const alias = this.editingAlias();
-    const status = this.admin.openAiOauthStatus();
-    return alias !== null && status?.provider.alias === alias ? status : null;
+    const credentialId = this.form().credentialId;
+    const status = this.admin.serviceCredentialOauthStatus();
+    return status?.credential.credentialId === credentialId ? status : null;
   });
   protected readonly oauthCredentialState = computed<
     'checking' | 'configured' | 'pending' | 'unconfigured'
@@ -123,10 +153,28 @@ export class AdminProvidersPanelComponent {
     const status = this.selectedOauthStatus();
     if (status === null) return 'unconfigured';
     if (status.pendingLogins.length > 0) return 'pending';
-    return status.credential.hasSecret &&
-      status.credential.kind === 'openai_oauth'
+    return status.credential.credential.hasSecret &&
+      status.credential.credentialKind === 'openai_oauth'
       ? 'configured'
       : 'unconfigured';
+  });
+  protected readonly selectedCredentialImpact = computed(() => {
+    const credentialId = this.form().credentialId;
+    const impact = this.admin.serviceCredentialImpact();
+    return impact?.credential.credentialId === credentialId ? impact : null;
+  });
+  protected readonly credentialChoice = computed(() => {
+    const form = this.form();
+    return form.credentialMode === 'reuse'
+      ? `reuse:${form.credentialId}`
+      : form.credentialMode;
+  });
+  protected readonly oauthMode = computed(() => {
+    const form = this.form();
+    return (
+      form.credentialMode === 'create_openai_oauth' ||
+      this.selectedCredential()?.credentialKind === 'openai_oauth'
+    );
   });
 
   protected readonly saveDisabled = computed(() => {
@@ -146,13 +194,13 @@ export class AdminProvidersPanelComponent {
   }
 
   protected refresh(): void {
-    void this.admin.refresh();
+    void this.admin.refresh().then(() => this.refreshView());
   }
 
   protected updateText(
     field: Exclude<
       keyof ProviderFormState,
-      'protocol' | 'status' | 'credentialMode' | 'clearSecret'
+      'protocol' | 'status' | 'credentialMode'
     >,
     event: Event,
   ): void {
@@ -247,17 +295,29 @@ export class AdminProvidersPanelComponent {
 
   protected updateCredentialMode(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
-    if (
-      value !== 'unconfigured' &&
-      value !== 'api_key' &&
-      value !== 'openai_oauth'
-    )
-      return;
+    const reusedCredentialId = value.startsWith('reuse:')
+      ? value.slice('reuse:'.length)
+      : '';
+    const mode: ProviderCredentialMode | null =
+      reusedCredentialId !== ''
+        ? 'reuse'
+        : value === 'unconfigured' ||
+            value === 'create_api_key' ||
+            value === 'create_openai_oauth'
+          ? value
+          : null;
+    if (mode === null) return;
     this.form.update((current) =>
-      value === 'openai_oauth'
+      mode === 'create_openai_oauth'
         ? {
             ...current,
-            credentialMode: value,
+            credentialMode: mode,
+            credentialId:
+              current.credentialId || suggestedCredentialId(current.alias),
+            credentialDisplayName:
+              current.credentialDisplayName ||
+              current.displayName ||
+              current.alias,
             protocol: 'responses',
             providerKind:
               current.providerKind.trim() === 'custom'
@@ -268,19 +328,28 @@ export class AdminProvidersPanelComponent {
                 ? 'https://chatgpt.com/backend-api/codex'
                 : current.baseUrl,
             secret: '',
-            clearSecret: false,
           }
         : {
             ...current,
-            credentialMode: value,
+            credentialMode: mode,
+            credentialId:
+              mode === 'reuse'
+                ? reusedCredentialId
+                : mode === 'create_api_key'
+                  ? current.credentialId || suggestedCredentialId(current.alias)
+                  : '',
+            credentialDisplayName:
+              mode === 'create_api_key'
+                ? current.credentialDisplayName ||
+                  current.displayName ||
+                  current.alias
+                : '',
             oauthCallbackUrl: '',
             secret: '',
-            clearSecret: false,
           },
     );
-    const alias = this.editingAlias();
-    if (value === 'openai_oauth' && alias !== null) {
-      void this.admin.loadOpenAiOauthStatus(alias);
+    if (mode === 'reuse') {
+      void this.loadSelectedCredential(reusedCredentialId);
     }
   }
 
@@ -291,13 +360,9 @@ export class AdminProvidersPanelComponent {
     }
   }
 
-  protected toggleClearSecret(event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.form.update((current) => ({ ...current, clearSecret: checked }));
-  }
-
   protected selectProviderForEdit(provider: ModelProviderRecord): void {
-    const credentialMode = providerCredentialMode(provider);
+    const credentialMode: ProviderCredentialMode =
+      provider.credentialId === undefined ? 'unconfigured' : 'reuse';
     this.editingAlias.set(provider.alias);
     this.form.set({
       alias: provider.alias,
@@ -322,17 +387,14 @@ export class AdminProvidersPanelComponent {
       reasoningEffort: provider.reasoningEffort ?? '',
       reasoningFormat: provider.reasoningFormat ?? '',
       credentialMode,
+      credentialId: provider.credentialId ?? '',
+      credentialDisplayName: '',
       secret: '',
-      clearSecret: false,
       oauthCallbackUrl: '',
       status: provider.status,
     });
-    if (
-      credentialMode === 'openai_oauth' ||
-      (credentialMode === 'unconfigured' &&
-        provider.providerKind.toLowerCase() === 'openai')
-    ) {
-      void this.admin.loadOpenAiOauthStatus(provider.alias);
+    if (provider.credentialId !== undefined) {
+      void this.loadSelectedCredential(provider.credentialId);
     }
   }
 
@@ -355,31 +417,65 @@ export class AdminProvidersPanelComponent {
     } else {
       result = await this.admin.createModelProvider(request, refresh);
     }
-    if (result === undefined || form.credentialMode !== 'openai_oauth') return;
-
-    // Structural provider writes do not configure OAuth. Keep the operator in
-    // the explicitly selected OAuth workflow and read Crew's alias-local
-    // status instead of reseeding the form from a credential-less provider.
+    if (result === undefined) return;
     const alias = result.provider.alias;
+    let credential = selectedReusableCredential(
+      form,
+      this.admin.serviceCredentials(),
+    );
+    if (
+      form.credentialMode === 'create_api_key' ||
+      form.credentialMode === 'create_openai_oauth'
+    ) {
+      const credentialId =
+        form.credentialId.trim() || suggestedCredentialId(alias);
+      credential = await this.admin.createServiceCredential({
+        credentialId,
+        displayName:
+          form.credentialDisplayName.trim() || form.displayName.trim() || alias,
+        providerKind: form.providerKind.trim() || 'custom',
+        credentialKind:
+          form.credentialMode === 'create_openai_oauth'
+            ? 'openai_oauth'
+            : 'api_key',
+        ...(form.credentialMode === 'create_api_key' &&
+        form.secret.trim() !== ''
+          ? { secret: form.secret.trim() }
+          : {}),
+      });
+    }
+    if (form.credentialMode === 'unconfigured') {
+      if (result.provider.credentialId !== undefined) {
+        await this.admin.unlinkModelProviderCredential(result.provider);
+      }
+    } else if (credential !== undefined) {
+      const linked = await this.admin.linkModelProviderCredential(
+        alias,
+        credential,
+      );
+      if (linked === undefined) return;
+      this.form.update((current) => ({
+        ...current,
+        credentialMode: 'reuse',
+        credentialId: credential?.credentialId ?? '',
+        secret: '',
+      }));
+      await this.loadSelectedCredential(credential.credentialId);
+    }
     this.editingAlias.set(alias);
-    this.form.update((current) => ({
-      ...current,
-      alias,
-      credentialMode: 'openai_oauth',
-    }));
-    await this.admin.loadOpenAiOauthStatus(alias);
+    this.refreshView();
   }
 
   protected oauthStateLabel(): string {
     switch (this.oauthCredentialState()) {
       case 'checking':
-        return 'Checking this provider alias on the current Crew service…';
+        return 'Checking this shared credential on the current Crew service…';
       case 'configured':
-        return 'OAuth is configured for this provider alias.';
+        return 'OAuth is configured for this shared credential.';
       case 'pending':
-        return 'OAuth login is pending for this provider alias. Complete it with the callback URL.';
+        return 'OAuth login is pending for this shared credential. Complete it with the callback URL.';
       case 'unconfigured':
-        return 'OAuth is unconfigured for this provider alias. Start and complete OAuth before using it.';
+        return 'OAuth is unconfigured for this shared credential. Start and complete OAuth before using linked aliases.';
     }
   }
 
@@ -401,20 +497,24 @@ export class AdminProvidersPanelComponent {
   }
 
   protected oauthPendingLogin(): OpenAiOauthPendingLogin | null {
-    const alias = this.editingAlias();
-    const started = this.admin.openAiOauthStartResult()?.pendingLogin;
-    if (started?.providerAlias === alias) return started;
+    const credentialId = this.form().credentialId;
+    const started =
+      this.admin.serviceCredentialOauthStartResult()?.pendingLogin;
+    if (started?.credentialId === credentialId) return started;
     return this.selectedOauthStatus()?.pendingLogins[0] ?? null;
   }
 
   protected startOpenAiOauthLogin(): void {
-    const alias = this.editingAlias();
-    if (alias === null) return;
+    const credentialId = this.form().credentialId;
+    if (credentialId === '') return;
     void this.admin
-      .startOpenAiOauthLogin(alias, { originator: 'rusty_view' })
+      .startServiceCredentialOpenAiOauthLogin(credentialId, {
+        originator: 'rusty_view',
+      })
       .then(() => {
         const authorizationUrl =
-          this.admin.openAiOauthStartResult()?.pendingLogin.authorizationUrl;
+          this.admin.serviceCredentialOauthStartResult()?.pendingLogin
+            .authorizationUrl;
         if (
           authorizationUrl !== undefined &&
           typeof globalThis.open === 'function'
@@ -425,22 +525,74 @@ export class AdminProvidersPanelComponent {
             // Some test DOMs expose window.open but throw a not-implemented error.
           }
         }
+        this.refreshView();
       });
   }
 
   protected completeOpenAiOauthLogin(): void {
-    const alias = this.editingAlias();
+    const credentialId = this.form().credentialId;
     const callbackUrl = this.form().oauthCallbackUrl.trim();
-    if (alias === null || callbackUrl === '') return;
-    void this.admin.completeOpenAiOauthLogin(alias, {
-      callbackUrl,
+    if (credentialId === '' || callbackUrl === '') return;
+    void this.admin
+      .completeServiceCredentialOpenAiOauthLogin(credentialId, {
+        callbackUrl,
+      })
+      .then(() => this.refreshView());
+  }
+
+  protected unlinkSelectedCredential(): void {
+    const alias = this.editingAlias();
+    const provider = this.admin
+      .providerAliases()
+      .find((candidate) => candidate.alias === alias);
+    if (provider === undefined || provider.credentialId === undefined) return;
+    void this.admin.unlinkModelProviderCredential(provider).then((result) => {
+      if (result === undefined) return;
+      this.form.update((current) => ({
+        ...current,
+        credentialMode: 'unconfigured',
+      }));
+      this.refreshView();
     });
   }
 
-  protected clearOpenAiOauthCredential(provider?: ModelProviderRecord): void {
-    const alias = provider?.alias ?? this.editingAlias();
-    if (alias === null) return;
-    void this.admin.clearOpenAiOauthCredential(alias);
+  protected clearSelectedCredential(): void {
+    const credential = this.selectedCredential();
+    if (credential === null) return;
+    void (
+      credential.credentialKind === 'openai_oauth'
+        ? this.admin.clearServiceCredentialOpenAiOauth(credential)
+        : this.admin.clearServiceCredential(credential)
+    ).then(() => this.refreshView());
+  }
+
+  protected deleteSelectedCredential(): void {
+    const credential = this.selectedCredential();
+    if (credential === null) return;
+    void this.admin.deleteServiceCredential(credential).then((result) => {
+      if (result === undefined) return;
+      this.form.update((current) => ({
+        ...current,
+        credentialMode: 'unconfigured',
+        credentialId: '',
+      }));
+      this.refreshView();
+    });
+  }
+
+  private async loadSelectedCredential(credentialId: string): Promise<void> {
+    await this.admin.loadServiceCredentialImpact(credentialId);
+    const credential = this.admin
+      .serviceCredentials()
+      .find((candidate) => candidate.credentialId === credentialId);
+    if (credential?.credentialKind === 'openai_oauth') {
+      await this.admin.loadServiceCredentialOpenAiOauthStatus(credentialId);
+    }
+    this.refreshView();
+  }
+
+  private refreshView(): void {
+    if (!this.destroyRef.destroyed) this.changeDetector.detectChanges();
   }
 }
 
@@ -456,13 +608,9 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
     ...optionalStringField('baseUrl', form.baseUrl),
     ...optionalStringField('reasoningEffort', form.reasoningEffort),
     ...optionalStringField('reasoningFormat', form.reasoningFormat),
-    ...optionalSecret(form),
     ...optionalNumberField('contextWindowTokens', form.contextWindowTokens),
     ...optionalNumberField('maxOutputTokens', form.maxOutputTokens),
     ...optionalTemperatureMilli(form.temperature),
-    ...(form.credentialMode === 'api_key' && form.clearSecret
-      ? { clearSecret: true }
-      : {}),
   };
   // NOTE: `expectedRevision` is intentionally omitted (task #3722). Crew
   // overwrites the current record when it is absent, so normal edits succeed
@@ -490,14 +638,6 @@ function optionalNumberField<TKey extends string>(
   return { [key]: parsed } as Record<TKey, number>;
 }
 
-function optionalSecret(
-  form: ProviderFormState,
-): { secret: string } | Record<string, never> {
-  if (form.credentialMode !== 'api_key' || form.clearSecret) return {};
-  const trimmed = form.secret.trim();
-  return trimmed === '' ? {} : { secret: trimmed };
-}
-
 function credentialLabel(provider: ModelProviderRecord): string {
   const status =
     provider.credential.status ??
@@ -505,18 +645,19 @@ function credentialLabel(provider: ModelProviderRecord): string {
   return status.replace('_', '-');
 }
 
-function providerCredentialMode(
-  provider: ModelProviderRecord,
-): ProviderCredentialMode {
-  if (provider.credential.kind === 'openai_oauth') return 'openai_oauth';
-  if (
-    provider.credential.kind === 'api_key' ||
-    provider.credential.kind === 'legacy_raw_api_key' ||
-    (provider.credential.kind === undefined && provider.credential.hasSecret)
-  ) {
-    return 'api_key';
-  }
-  return 'unconfigured';
+function suggestedCredentialId(alias: string): string {
+  const trimmed = alias.trim();
+  return trimmed === '' ? '' : `provider:${trimmed}`;
+}
+
+function selectedReusableCredential(
+  form: ProviderFormState,
+  credentials: readonly ServiceCredentialRecord[],
+): ServiceCredentialRecord | undefined {
+  if (form.credentialMode !== 'reuse') return undefined;
+  return credentials.find(
+    (credential) => credential.credentialId === form.credentialId,
+  );
 }
 
 /**

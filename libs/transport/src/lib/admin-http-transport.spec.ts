@@ -1132,6 +1132,146 @@ describe('AdminHttpTransport', () => {
     expect(req.body).toContain('"temperatureMilli":null');
   });
 
+  it('uses service-scoped credential registry, link, impact, and unlink routes', async () => {
+    const requests: CapturedRequest[] = [];
+    const credential = {
+      credentialId: 'openai:shared',
+      displayName: 'Shared OpenAI',
+      providerKind: 'openai',
+      credentialKind: 'openai_oauth',
+      credential: {
+        hasSecret: true,
+        kind: 'openai_oauth',
+        status: 'configured',
+      },
+      linkedProviderAliases: ['sol', 'terra'],
+      revision: 4,
+      createdAt: '2026-07-17T00:00:00Z',
+      updatedAt: '2026-07-17T00:00:00Z',
+    } as const;
+    const provider = {
+      alias: 'terra',
+      credentialId: credential.credentialId,
+      credential: credential.credential,
+    };
+    const fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const request = {
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      };
+      requests.push(request);
+      const pathname = new URL(request.url).pathname;
+      if (pathname.endsWith('/impact')) {
+        return jsonOk({
+          credential,
+          linkedProviderAliases: credential.linkedProviderAliases,
+          linkedProviders: [provider],
+          canClear: false,
+          canDelete: false,
+        });
+      }
+      if (pathname.endsWith('/credential/unlink')) {
+        return jsonOk({ provider: { ...provider, credentialId: undefined } });
+      }
+      if (pathname.endsWith('/credential/link')) {
+        return jsonOk({ provider, credential });
+      }
+      return jsonOk({
+        items: [credential],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      });
+    }) as FetchImpl;
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const page = await transport.serviceCredentials({
+      providerKind: 'openai',
+      limit: 100,
+    });
+    expect(page.items[0]?.credentialId).toBe('openai:shared');
+
+    await transport.linkModelProviderCredential('terra', {
+      credentialId: 'openai:shared',
+      expectedProviderRevision: 2,
+      expectedCredentialRevision: 4,
+    });
+    expect(requests.at(-1)?.url).toContain(
+      '/v1/admin/model-providers/terra/credential/link',
+    );
+    expect(requests.at(-1)?.body).toContain('"credentialId":"openai:shared"');
+
+    const impact = await transport.serviceCredentialImpact('openai:shared');
+    expect(impact.canDelete).toBe(false);
+    expect(impact.linkedProviderAliases).toEqual(['sol', 'terra']);
+
+    await transport.unlinkModelProviderCredential('terra', {
+      expectedProviderRevision: 3,
+    });
+    expect(requests.at(-1)?.url).toContain(
+      '/v1/admin/model-providers/terra/credential/unlink',
+    );
+    expect(requests[0]?.url).toContain('providerKind=openai');
+  });
+
+  it('performs OpenAI OAuth against credential identity rather than alias', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        credential: {
+          credentialId: 'openai:shared',
+          displayName: 'Shared OpenAI',
+          providerKind: 'openai',
+          credentialKind: 'openai_oauth',
+          credential: { hasSecret: false, kind: 'openai_oauth' },
+          linkedProviderAliases: [],
+          revision: 1,
+          createdAt: '2026-07-17T00:00:00Z',
+          updatedAt: '2026-07-17T00:00:00Z',
+        },
+        loginConfig: {
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          redirectUriOverrideAllowed: false,
+          redirectUriMode: 'registered',
+          callbackUrlCompletionAccepted: true,
+          callbackUrlCompletionField: 'callbackUrl',
+          pendingLoginIdRequiredForCallbackUrl: false,
+          remoteOperatorFlow: 'paste_callback_url',
+        },
+        pendingLogin: {
+          pendingLoginId: 'pending-1',
+          credentialId: 'openai:shared',
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          scopes: ['openid'],
+          codeChallenge: 'challenge',
+          authorizationUrl: 'https://auth.openai.com/oauth/authorize?...',
+          createdAt: '2026-07-17T00:00:00Z',
+          expiresAt: '2026-07-17T00:10:00Z',
+        },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.startServiceCredentialOpenAiOauthLogin(
+      'openai:shared',
+      { originator: 'rusty_view' },
+    );
+
+    expect(lastRequest().url).toContain(
+      '/v1/admin/service-credentials/openai%3Ashared/oauth/openai/start',
+    );
+    expect(lastRequest().body).toContain('rusty_view');
+    expect(result.pendingLogin.credentialId).toBe('openai:shared');
+  });
+
   it('starts an OpenAI OAuth provider login through the explicit route', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

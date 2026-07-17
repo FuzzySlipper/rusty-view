@@ -12,6 +12,8 @@ import {
   type OpenAiOauthCompleteRequest,
   type OpenAiOauthStartResponse,
   type OpenAiOauthStartRequest,
+  type ServiceCredentialImpact,
+  type ServiceCredentialRecord,
 } from '@rusty-view/transport';
 
 import { AdminProvidersPanelComponent } from './admin-providers-panel';
@@ -47,10 +49,35 @@ function openAiOauthLoginConfig(): OpenAiOauthStartResponse['loginConfig'] {
   };
 }
 
+function makeCredential(
+  credentialId: string,
+  linkedProviderAliases: readonly string[] = [],
+  hasSecret = true,
+): ServiceCredentialRecord {
+  return {
+    credentialId,
+    displayName: `Shared ${credentialId}`,
+    providerKind: 'openai',
+    credentialKind: 'openai_oauth',
+    credential: {
+      hasSecret,
+      kind: 'openai_oauth',
+      status: hasSecret ? 'configured' : 'missing',
+    },
+    linkedProviderAliases,
+    revision: 1,
+    createdAt: '2026-07-02T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  };
+}
+
 function makeTransport(
   providers: readonly ModelProviderRecord[],
   providerLoadFails = false,
+  initialCredentials: readonly ServiceCredentialRecord[] = [],
 ): ChatTransport {
+  let currentProviders = [...providers];
+  let currentCredentials = [...initialCredentials];
   const page: ModelProviderPage = {
     items: providers,
     total: providers.length,
@@ -105,24 +132,204 @@ function makeTransport(
         ? async () => {
             throw new Error('boom');
           }
-        : async () => page,
+        : async () => ({ ...page, items: currentProviders }),
     ),
+    adminServiceCredentials: vi.fn(async () => ({
+      items: currentCredentials,
+      total: currentCredentials.length,
+      limit: 100,
+      offset: 0,
+    })),
+    createAdminServiceCredential: vi.fn(async (request) => {
+      const credential: ServiceCredentialRecord = {
+        credentialId: request.credentialId,
+        displayName: request.displayName ?? request.credentialId,
+        providerKind: request.providerKind ?? 'custom',
+        credentialKind: request.credentialKind ?? 'api_key',
+        credential: {
+          hasSecret: request.secret !== undefined,
+          kind: request.credentialKind ?? 'api_key',
+          status: request.secret === undefined ? 'missing' : 'configured',
+        },
+        linkedProviderAliases: [],
+        revision: 1,
+        createdAt: '2026-07-02T00:00:00Z',
+        updatedAt: '2026-07-02T00:00:00Z',
+      };
+      currentCredentials = [...currentCredentials, credential];
+      return { credential };
+    }),
+    adminServiceCredentialImpact: vi.fn(async (credentialId: string) => {
+      const credential = currentCredentials.find(
+        (candidate) => candidate.credentialId === credentialId,
+      );
+      if (credential === undefined) throw new Error('credential missing');
+      const linkedProviders = currentProviders.filter(
+        (provider) => provider.credentialId === credentialId,
+      );
+      return {
+        credential,
+        linkedProviderAliases: linkedProviders.map(
+          (provider) => provider.alias,
+        ),
+        linkedProviders,
+        canClear: linkedProviders.length === 0,
+        canDelete: linkedProviders.length === 0,
+      } satisfies ServiceCredentialImpact;
+    }),
+    linkAdminModelProviderCredential: vi.fn(async (alias, request) => {
+      const credential = currentCredentials.find(
+        (candidate) => candidate.credentialId === request.credentialId,
+      );
+      if (credential === undefined) throw new Error('credential missing');
+      const current = currentProviders.find(
+        (provider) => provider.alias === alias,
+      );
+      const provider = {
+        ...(current ?? makeProvider(alias)),
+        credentialId: credential.credentialId,
+        credential: credential.credential,
+        revision: (current?.revision ?? 0) + 1,
+      };
+      currentProviders = [
+        ...currentProviders.filter((candidate) => candidate.alias !== alias),
+        provider,
+      ];
+      currentCredentials = currentCredentials.map((candidate) =>
+        candidate.credentialId === credential.credentialId
+          ? {
+              ...candidate,
+              linkedProviderAliases: [
+                ...new Set([...candidate.linkedProviderAliases, alias]),
+              ],
+            }
+          : candidate,
+      );
+      return { provider, credential };
+    }),
+    unlinkAdminModelProviderCredential: vi.fn(async (alias) => {
+      const current = currentProviders.find(
+        (provider) => provider.alias === alias,
+      );
+      const unlinked = { ...(current ?? makeProvider(alias)) };
+      delete unlinked.credentialId;
+      const provider = {
+        ...unlinked,
+        credential: { hasSecret: false },
+        revision: (current?.revision ?? 0) + 1,
+      } satisfies ModelProviderRecord;
+      currentProviders = [
+        ...currentProviders.filter((candidate) => candidate.alias !== alias),
+        provider,
+      ];
+      currentCredentials = currentCredentials.map((candidate) => ({
+        ...candidate,
+        linkedProviderAliases: candidate.linkedProviderAliases.filter(
+          (linkedAlias) => linkedAlias !== alias,
+        ),
+      }));
+      return { provider };
+    }),
+    clearAdminServiceCredential: vi.fn(async (credentialId) => {
+      const credential = makeCredential(credentialId, [], false);
+      return { credential };
+    }),
+    deleteAdminServiceCredential: vi.fn(async (credentialId) => {
+      const credential =
+        currentCredentials.find(
+          (candidate) => candidate.credentialId === credentialId,
+        ) ?? makeCredential(credentialId);
+      currentCredentials = currentCredentials.filter(
+        (candidate) => candidate.credentialId !== credentialId,
+      );
+      return { deleted: true as const, credential };
+    }),
+    adminServiceCredentialOpenAiOauthStatus: vi.fn(
+      async (credentialId: string) => ({
+        credential:
+          currentCredentials.find(
+            (candidate) => candidate.credentialId === credentialId,
+          ) ?? makeCredential(credentialId, [], false),
+        loginConfig: openAiOauthLoginConfig(),
+        pendingLogins: [],
+      }),
+    ),
+    adminStartServiceCredentialOpenAiOauthLogin: vi.fn(
+      async (credentialId: string) => ({
+        credential:
+          currentCredentials.find(
+            (candidate) => candidate.credentialId === credentialId,
+          ) ?? makeCredential(credentialId, [], false),
+        loginConfig: openAiOauthLoginConfig(),
+        pendingLogin: {
+          pendingLoginId: 'pending-1',
+          credentialId,
+          issuer: 'https://auth.openai.com',
+          clientId: 'app-client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          scopes: ['openid'],
+          codeChallenge: 'challenge',
+          authorizationUrl:
+            'https://auth.openai.com/oauth/authorize?state=callback-state',
+          createdAt: '2026-07-02T00:00:00Z',
+          expiresAt: '2026-07-02T00:10:00Z',
+        },
+      }),
+    ),
+    adminCompleteServiceCredentialOpenAiOauthLogin: vi.fn(
+      async (credentialId: string) => {
+        const credential = makeCredential(credentialId, [], true);
+        currentCredentials = currentCredentials.map((candidate) =>
+          candidate.credentialId === credentialId
+            ? {
+                ...credential,
+                linkedProviderAliases: candidate.linkedProviderAliases,
+              }
+            : candidate,
+        );
+        return {
+          credential,
+          completionMode: 'real' as const,
+          pendingLoginId: 'pending-1',
+        };
+      },
+    ),
+    adminClearServiceCredentialOpenAiOauth: vi.fn(async (credentialId) => ({
+      credential: makeCredential(credentialId, [], false),
+    })),
     createAdminModelProvider: vi.fn(
       async (
         request: ModelProviderWriteRequest,
-      ): Promise<ModelProviderWriteResponse> => ({
-        provider: makeProvider(request.alias ?? request.modelId),
-        refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
-      }),
+      ): Promise<ModelProviderWriteResponse> => {
+        const provider = makeProvider(request.alias ?? request.modelId);
+        currentProviders = [...currentProviders, provider];
+        return {
+          provider,
+          refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
+        };
+      },
     ),
     updateAdminModelProvider: vi.fn(
       async (
-        _alias: string,
+        alias: string,
         request: ModelProviderWriteRequest,
-      ): Promise<ModelProviderWriteResponse> => ({
-        provider: { ...makeProvider(request.modelId ?? 'x') },
-        refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
-      }),
+      ): Promise<ModelProviderWriteResponse> => {
+        const current = currentProviders.find(
+          (provider) => provider.alias === alias,
+        );
+        const provider = {
+          ...(current ?? makeProvider(alias)),
+          modelId: request.modelId,
+        };
+        currentProviders = [
+          ...currentProviders.filter((candidate) => candidate.alias !== alias),
+          provider,
+        ];
+        return {
+          provider,
+          refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
+        };
+      },
     ),
     adminOpenAiOauthStatus: vi.fn(async (alias: string) => {
       const configured = providers.some(
@@ -180,6 +387,7 @@ function makeTransport(
 async function createPanel(
   providers: readonly ModelProviderRecord[],
   providerLoadFails = false,
+  credentials: readonly ServiceCredentialRecord[] = [],
 ) {
   await TestBed.configureTestingModule({
     imports: [AdminProvidersPanelComponent],
@@ -187,7 +395,7 @@ async function createPanel(
       AdminStore,
       {
         provide: ChatTransport,
-        useValue: makeTransport(providers, providerLoadFails),
+        useValue: makeTransport(providers, providerLoadFails, credentials),
       },
     ],
   }).compileComponents();
@@ -347,7 +555,7 @@ describe('AdminProvidersPanelComponent', () => {
     component.updateText('alias', { target: { value: 'openai-oauth' } });
     component.updateText('modelId', { target: { value: 'gpt-5' } });
     component.updateCredentialMode({
-      target: { value: 'openai_oauth' },
+      target: { value: 'create_openai_oauth' },
     });
     fixture.detectChanges();
     await component.saveProvider();
@@ -361,13 +569,13 @@ describe('AdminProvidersPanelComponent', () => {
     expect(request).not.toHaveProperty('secret');
     expect(request).not.toHaveProperty('credentialSecret');
     expect(component.form().secret).toBe('');
-    expect(component.form().credentialMode).toBe('openai_oauth');
+    expect(component.form().credentialMode).toBe('reuse');
     expect(component.editingAlias()).toBe('openai-oauth');
     expect(textContent(fixture)).toContain(
-      'OAuth is unconfigured for this provider alias',
+      'OAuth is unconfigured for this shared credential',
     );
     expect(textContent(fixture)).toContain(
-      'Credentials from another alias or Crew service are not reused',
+      'Credentials can be reused by compatible aliases on this Crew service',
     );
   });
 
@@ -376,11 +584,14 @@ describe('AdminProvidersPanelComponent', () => {
       ...makeProvider('openai-oauth', true),
       protocol: 'responses',
       providerKind: 'openai',
+      credentialId: 'openai:shared',
       credential: { hasSecret: true, kind: 'openai_oauth' },
     };
-    const fixture = await createPanel([oauthProvider]);
+    const fixture = await createPanel([oauthProvider], false, [
+      makeCredential('openai:shared', ['openai-oauth']),
+    ]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
-      adminStartOpenAiOauthLogin: {
+      adminStartServiceCredentialOpenAiOauthLogin: {
         mock: { calls: [string, OpenAiOauthStartRequest][] };
       };
     };
@@ -394,7 +605,8 @@ describe('AdminProvidersPanelComponent', () => {
     component.startOpenAiOauthLogin();
     await fixture.whenStable();
 
-    const request = transport.adminStartOpenAiOauthLogin.mock.calls[0]?.[1];
+    const request =
+      transport.adminStartServiceCredentialOpenAiOauthLogin.mock.calls[0]?.[1];
     expect(request).toEqual({ originator: 'rusty_view' });
     expect(request).not.toHaveProperty('redirectUri');
     openSpy.mockRestore();
@@ -405,14 +617,17 @@ describe('AdminProvidersPanelComponent', () => {
       ...makeProvider('openai-oauth', true),
       protocol: 'responses',
       providerKind: 'openai',
+      credentialId: 'openai:shared',
       credential: { hasSecret: true, kind: 'openai_oauth' },
     };
-    const fixture = await createPanel([oauthProvider]);
+    const fixture = await createPanel([oauthProvider], false, [
+      makeCredential('openai:shared', ['openai-oauth']),
+    ]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
-      adminStartOpenAiOauthLogin: {
+      adminStartServiceCredentialOpenAiOauthLogin: {
         mock: { calls: [string, OpenAiOauthStartRequest][] };
       };
-      adminCompleteOpenAiOauthLogin: {
+      adminCompleteServiceCredentialOpenAiOauthLogin: {
         mock: { calls: [string, OpenAiOauthCompleteRequest][] };
       };
     };
@@ -435,11 +650,11 @@ describe('AdminProvidersPanelComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('authorization URL');
     expect(text).toContain('openai-oauth');
-    expect(transport.adminStartOpenAiOauthLogin.mock.calls[0]?.[0]).toBe(
-      'openai-oauth',
-    );
     expect(
-      transport.adminStartOpenAiOauthLogin.mock.calls[0]?.[1],
+      transport.adminStartServiceCredentialOpenAiOauthLogin.mock.calls[0]?.[0],
+    ).toBe('openai:shared');
+    expect(
+      transport.adminStartServiceCredentialOpenAiOauthLogin.mock.calls[0]?.[1],
     ).not.toHaveProperty('redirectUri');
 
     component.updateText('oauthCallbackUrl', {
@@ -451,68 +666,103 @@ describe('AdminProvidersPanelComponent', () => {
     component.completeOpenAiOauthLogin();
     await fixture.whenStable();
 
-    expect(transport.adminCompleteOpenAiOauthLogin.mock.calls[0]?.[1]).toEqual({
+    expect(
+      transport.adminCompleteServiceCredentialOpenAiOauthLogin.mock
+        .calls[0]?.[1],
+    ).toEqual({
       callbackUrl:
         'http://localhost:1455/auth/callback?code=code-1&state=callback-state',
     });
     expect(
       (
         transport as unknown as {
-          adminOpenAiOauthStatus: { mock: { calls: unknown[] } };
+          adminServiceCredentialOpenAiOauthStatus: {
+            mock: { calls: unknown[] };
+          };
         }
-      ).adminOpenAiOauthStatus.mock.calls.length,
+      ).adminServiceCredentialOpenAiOauthStatus.mock.calls.length,
     ).toBeGreaterThanOrEqual(2);
     fixture.detectChanges();
     expect(textContent(fixture)).toContain(
-      'OAuth is configured for this provider alias',
+      'OAuth is configured for this shared credential',
     );
     openSpy.mockRestore();
   });
 
-  it('clears OpenAI OAuth credentials through the explicit clear route', async () => {
+  it('keeps unlink distinct from guarded shared credential clear', async () => {
     const oauthProvider: ModelProviderRecord = {
       ...makeProvider('openai-oauth', true),
+      credentialId: 'openai:shared',
+      protocol: 'responses',
+      providerKind: 'openai',
       credential: { hasSecret: true, kind: 'openai_oauth' },
     };
-    const fixture = await createPanel([oauthProvider]);
+    const fixture = await createPanel([oauthProvider], false, [
+      makeCredential('openai:shared', ['openai-oauth']),
+    ]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
-      adminClearOpenAiOauthCredential: {
+      unlinkAdminModelProviderCredential: {
         mock: { calls: [string][] };
       };
-      adminOpenAiOauthStatus: {
-        mockImplementationOnce(fn: (alias: string) => Promise<unknown>): void;
-      };
-      adminModelProviders: {
-        mockImplementationOnce(fn: () => Promise<ModelProviderPage>): void;
+      adminClearServiceCredentialOpenAiOauth: {
+        mock: { calls: [string, number][] };
       };
     };
-    transport.adminModelProviders.mockImplementationOnce(async () => ({
-      items: [makeProvider('openai-oauth')],
-      total: 1,
-      limit: 100,
-      offset: 0,
-    }));
-    transport.adminOpenAiOauthStatus.mockImplementationOnce(async (alias) => ({
-      provider: makeProvider(alias),
-      credential: { hasSecret: false },
-      loginConfig: openAiOauthLoginConfig(),
-      pendingLogins: [],
-    }));
     const component = fixture.componentInstance as unknown as {
-      clearOpenAiOauthCredential(provider: ModelProviderRecord): void;
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      unlinkSelectedCredential(): void;
+      clearSelectedCredential(): void;
     };
 
-    component.clearOpenAiOauthCredential(oauthProvider);
+    component.selectProviderForEdit(oauthProvider);
     await fixture.whenStable();
-
-    expect(transport.adminClearOpenAiOauthCredential.mock.calls[0]?.[0]).toBe(
-      'openai-oauth',
-    );
-    expect(TestBed.inject(AdminStore).openAiOauthStatus()?.credential).toEqual({
-      hasSecret: false,
-    });
     fixture.detectChanges();
-    expect(textContent(fixture)).toContain('unconfigured');
+    const clearButton = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Clear Shared Credential'));
+    expect(clearButton?.disabled).toBe(true);
+    expect(textContent(fixture)).toContain('1 linked aliases');
+
+    component.unlinkSelectedCredential();
+    await fixture.whenStable();
+    expect(
+      transport.unlinkAdminModelProviderCredential.mock.calls[0]?.[0],
+    ).toBe('openai-oauth');
+    component.clearSelectedCredential();
+    await fixture.whenStable();
+    expect(
+      transport.adminClearServiceCredentialOpenAiOauth.mock.calls[0]?.[0],
+    ).toBe('openai:shared');
+  });
+
+  it('offers guarded clear for a shared API key credential too', async () => {
+    const apiKeyProvider: ModelProviderRecord = {
+      ...makeProvider('api-key-provider', true),
+      credentialId: 'key:shared',
+      credential: { hasSecret: true, kind: 'api_key' },
+    };
+    const apiKeyCredential: ServiceCredentialRecord = {
+      ...makeCredential('key:shared', ['api-key-provider']),
+      providerKind: 'local',
+      credentialKind: 'api_key',
+      credential: { hasSecret: true, kind: 'api_key', status: 'configured' },
+    };
+    const fixture = await createPanel([apiKeyProvider], false, [
+      apiKeyCredential,
+    ]);
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+    };
+
+    component.selectProviderForEdit(apiKeyProvider);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const clearButton = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Clear Shared Credential'));
+    expect(clearButton?.disabled).toBe(true);
+    expect(textContent(fixture)).not.toContain('Start OpenAI OAuth');
   });
 
   it('uses the provider temperature default for new providers', async () => {

@@ -28,12 +28,23 @@ import {
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
+  type ModelProviderCredentialLinkResponse,
+  type ModelProviderCredentialUnlinkResponse,
   type OpenAiOauthClearResponse,
   type OpenAiOauthCompleteRequest,
   type OpenAiOauthCompleteResponse,
   type OpenAiOauthStartRequest,
   type OpenAiOauthStartResponse,
   type OpenAiOauthStatusResponse,
+  type ServiceCredentialDeleteResponse,
+  type ServiceCredentialImpact,
+  type ServiceCredentialOpenAiOauthClearResponse,
+  type ServiceCredentialOpenAiOauthCompleteResponse,
+  type ServiceCredentialOpenAiOauthStartResponse,
+  type ServiceCredentialOpenAiOauthStatusResponse,
+  type ServiceCredentialPage,
+  type ServiceCredentialRecord,
+  type ServiceCredentialWriteRequest,
   type ProfileBundleExportPlan,
   type ProfileBrainRebuildRequest,
   type ProfileBrainRebuildResult,
@@ -140,6 +151,19 @@ export class AdminStore {
   private readonly _modelProviders = signal<ModelProviderPage | null>(null);
   private readonly _providerWriteResult =
     signal<ModelProviderWriteResponse | null>(null);
+  private readonly _serviceCredentials = signal<ServiceCredentialPage | null>(
+    null,
+  );
+  private readonly _serviceCredentialImpact =
+    signal<ServiceCredentialImpact | null>(null);
+  private readonly _serviceCredentialOauthStatus =
+    signal<ServiceCredentialOpenAiOauthStatusResponse | null>(null);
+  private readonly _serviceCredentialOauthStartResult =
+    signal<ServiceCredentialOpenAiOauthStartResponse | null>(null);
+  private readonly _serviceCredentialOauthCompleteResult =
+    signal<ServiceCredentialOpenAiOauthCompleteResponse | null>(null);
+  private readonly _serviceCredentialOauthClearResult =
+    signal<ServiceCredentialOpenAiOauthClearResponse | null>(null);
   private readonly _openAiOauthStatus =
     signal<OpenAiOauthStatusResponse | null>(null);
   private readonly _openAiOauthStartResult =
@@ -154,6 +178,7 @@ export class AdminStore {
    * to load it must be visible rather than looking like an empty registry.
    */
   private readonly _providerLoadError = signal<StoreErrorDetail | null>(null);
+  private readonly _credentialLoadError = signal<StoreErrorDetail | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
   private readonly _error = signal<StoreErrorDetail | null>(null);
@@ -202,6 +227,16 @@ export class AdminStore {
   readonly runtimeConfigResult = this._runtimeConfigResult.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
+  readonly serviceCredentialPage = this._serviceCredentials.asReadonly();
+  readonly serviceCredentialImpact = this._serviceCredentialImpact.asReadonly();
+  readonly serviceCredentialOauthStatus =
+    this._serviceCredentialOauthStatus.asReadonly();
+  readonly serviceCredentialOauthStartResult =
+    this._serviceCredentialOauthStartResult.asReadonly();
+  readonly serviceCredentialOauthCompleteResult =
+    this._serviceCredentialOauthCompleteResult.asReadonly();
+  readonly serviceCredentialOauthClearResult =
+    this._serviceCredentialOauthClearResult.asReadonly();
   readonly openAiOauthStatus = this._openAiOauthStatus.asReadonly();
   readonly openAiOauthStartResult = this._openAiOauthStartResult.asReadonly();
   readonly openAiOauthCompleteResult =
@@ -210,6 +245,10 @@ export class AdminStore {
   readonly providerLoadErrorDetail = this._providerLoadError.asReadonly();
   readonly providerLoadError = computed(() => {
     const error = this._providerLoadError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
+  readonly credentialLoadError = computed(() => {
+    const error = this._credentialLoadError();
     return error === null ? null : storeErrorDetailMessage(error);
   });
   readonly loading = this._loading.asReadonly();
@@ -277,6 +316,11 @@ export class AdminStore {
    */
   readonly providerAliases = computed<readonly ModelProviderRecord[]>(
     () => this._modelProviders()?.items ?? [],
+  );
+
+  /** Redacted service-scoped credentials that compatible aliases can reuse. */
+  readonly serviceCredentials = computed<readonly ServiceCredentialRecord[]>(
+    () => this._serviceCredentials()?.items ?? [],
   );
 
   /**
@@ -375,6 +419,7 @@ export class AdminStore {
         localToolProfiles,
         contextStrategyCatalog,
         modelProvidersResult,
+        serviceCredentialsResult,
       ] = await Promise.all([
         this.transport.adminDiagnostics(),
         this.transport.adminSessions({ limit: 100 }),
@@ -388,6 +433,7 @@ export class AdminStore {
         loadLocalToolProfiles(this.transport),
         loadContextStrategyCatalog(this.transport),
         loadModelProviders(this.transport),
+        loadServiceCredentials(this.transport),
       ]);
       this._diagnostics.set(diagnostics);
       this._sessions.set(sessions);
@@ -402,6 +448,8 @@ export class AdminStore {
       this._contextStrategyCatalog.set(contextStrategyCatalog);
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
+      this._serviceCredentials.set(serviceCredentialsResult.page);
+      this._credentialLoadError.set(serviceCredentialsResult.error);
     } catch (error) {
       this._error.set(storeErrorDetail(error));
     } finally {
@@ -1008,6 +1056,249 @@ export class AdminStore {
     this._providerWriteResult.set(null);
   }
 
+  async createServiceCredential(
+    request: ServiceCredentialWriteRequest & { readonly credentialId: string },
+  ): Promise<ServiceCredentialRecord | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const result = await this.transport.createAdminServiceCredential(request);
+      await this.refresh();
+      return result.credential;
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async linkModelProviderCredential(
+    alias: string,
+    credential: ServiceCredentialRecord,
+  ): Promise<ModelProviderCredentialLinkResponse | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const provider = this.providerAliases().find(
+        (candidate) => candidate.alias === alias,
+      );
+      const result = await this.transport.linkAdminModelProviderCredential(
+        alias,
+        {
+          credentialId: credential.credentialId,
+          ...(provider === undefined
+            ? {}
+            : { expectedProviderRevision: provider.revision }),
+          expectedCredentialRevision: credential.revision,
+        },
+      );
+      await this.refresh();
+      this.replaceModelProvider(result.provider);
+      await this.loadServiceCredentialImpact(credential.credentialId);
+      return result;
+    } catch (error) {
+      if (isProviderRevisionConflict(error)) await this.refresh();
+      this._error.set(providerCredentialErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async unlinkModelProviderCredential(
+    provider: ModelProviderRecord,
+  ): Promise<ModelProviderCredentialUnlinkResponse | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const result = await this.transport.unlinkAdminModelProviderCredential(
+        provider.alias,
+        { expectedProviderRevision: provider.revision },
+      );
+      await this.refresh();
+      this.replaceModelProvider(result.provider);
+      if (provider.credentialId !== undefined) {
+        await this.loadServiceCredentialImpact(provider.credentialId);
+      }
+      return result;
+    } catch (error) {
+      if (isProviderRevisionConflict(error)) await this.refresh();
+      this._error.set(providerCredentialErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async loadServiceCredentialImpact(credentialId: string): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      this._serviceCredentialImpact.set(
+        await this.transport.adminServiceCredentialImpact(credentialId),
+      );
+    } catch (error) {
+      this._serviceCredentialImpact.set(null);
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async clearServiceCredential(
+    credential: ServiceCredentialRecord,
+  ): Promise<ServiceCredentialRecord | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const result = await this.transport.clearAdminServiceCredential(
+        credential.credentialId,
+        credential.revision,
+      );
+      await this.refresh();
+      await this.loadServiceCredentialImpact(credential.credentialId);
+      return result.credential;
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async deleteServiceCredential(
+    credential: ServiceCredentialRecord,
+  ): Promise<ServiceCredentialDeleteResponse | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const result = await this.transport.deleteAdminServiceCredential(
+        credential.credentialId,
+        credential.revision,
+      );
+      this._serviceCredentialImpact.set(null);
+      await this.refresh();
+      return result;
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async loadServiceCredentialOpenAiOauthStatus(
+    credentialId: string,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      this._serviceCredentialOauthStatus.set(
+        await this.transport.adminServiceCredentialOpenAiOauthStatus(
+          credentialId,
+        ),
+      );
+    } catch (error) {
+      this._serviceCredentialOauthStatus.set(null);
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /**
+   * Keep the write response authoritative for the edited alias. A registry
+   * list read may briefly lag a successful credential link/unlink, while the
+   * mutation response already carries the committed provider revision.
+   */
+  private replaceModelProvider(provider: ModelProviderRecord): void {
+    this._modelProviders.update((page) => {
+      if (page === null) return page;
+      const index = page.items.findIndex(
+        (candidate) => candidate.alias === provider.alias,
+      );
+      if (index < 0) return page;
+      const items = [...page.items];
+      items[index] = provider;
+      return { ...page, items };
+    });
+  }
+
+  async startServiceCredentialOpenAiOauthLogin(
+    credentialId: string,
+    request: OpenAiOauthStartRequest = {},
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._serviceCredentialOauthStartResult.set(null);
+    try {
+      const result =
+        await this.transport.adminStartServiceCredentialOpenAiOauthLogin(
+          credentialId,
+          request,
+        );
+      this._serviceCredentialOauthStartResult.set(result);
+      this._serviceCredentialOauthStatus.set({
+        credential: result.credential,
+        loginConfig: result.loginConfig,
+        pendingLogins: [result.pendingLogin],
+      });
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async completeServiceCredentialOpenAiOauthLogin(
+    credentialId: string,
+    request: OpenAiOauthCompleteRequest,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._serviceCredentialOauthCompleteResult.set(null);
+    try {
+      const result =
+        await this.transport.adminCompleteServiceCredentialOpenAiOauthLogin(
+          credentialId,
+          request,
+        );
+      this._serviceCredentialOauthCompleteResult.set(result);
+      await this.refresh();
+      await this.loadServiceCredentialOpenAiOauthStatus(credentialId);
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  async clearServiceCredentialOpenAiOauth(
+    credential: ServiceCredentialRecord,
+  ): Promise<void> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._serviceCredentialOauthClearResult.set(null);
+    try {
+      const result =
+        await this.transport.adminClearServiceCredentialOpenAiOauth(
+          credential.credentialId,
+          credential.revision,
+        );
+      this._serviceCredentialOauthClearResult.set(result);
+      await this.refresh();
+      await this.loadServiceCredentialOpenAiOauthStatus(
+        credential.credentialId,
+      );
+      await this.loadServiceCredentialImpact(credential.credentialId);
+    } catch (error) {
+      this._error.set(providerCredentialErrorDetail(error));
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
   setLocalError(message: string): void {
     this._error.set({ source: 'error', message, retryable: false });
   }
@@ -1293,6 +1584,19 @@ function providerCredentialErrorMessage(
       return 'OpenAI OAuth token refresh failed. Clear the credential and sign in again.';
     case 'model_provider_revision_mismatch':
       return 'This provider was changed elsewhere; the list has been refreshed. Review the current values and save again to overwrite.';
+    case 'service_credential_linked':
+      return 'This shared credential is still linked to one or more provider aliases. Unlink every affected alias before clearing or deleting it.';
+    case 'service_credential_revision_mismatch':
+      return 'This shared credential changed elsewhere. Its current redacted state has been reloaded; review it and try again.';
+    case 'service_credential_not_found':
+      return 'This shared credential no longer exists. Refresh the provider panel and choose another credential.';
+    case 'invalid_service_credential':
+      return 'Crew rejected the shared credential configuration. Check its ID, provider kind, and credential kind.';
+    case 'model_provider_credential_incompatible':
+    case 'openai_oauth_incompatible_target':
+      return 'That credential is not compatible with this provider alias and protocol.';
+    case 'service_credential_link_mismatch':
+      return 'This provider alias is linked to a different shared credential. Refresh before unlinking.';
     default:
       return undefined;
   }
@@ -1370,6 +1674,19 @@ async function loadModelProviders(transport: ChatTransport): Promise<{
 }> {
   try {
     const page = await transport.adminModelProviders({ limit: 100 });
+    return { page, error: null };
+  } catch (error) {
+    return { page: null, error: storeErrorDetail(error) };
+  }
+}
+
+/** Load the redacted reusable credential registry as a first-class panel input. */
+async function loadServiceCredentials(transport: ChatTransport): Promise<{
+  page: ServiceCredentialPage | null;
+  error: StoreErrorDetail | null;
+}> {
+  try {
+    const page = await transport.adminServiceCredentials({ limit: 100 });
     return { page, error: null };
   } catch (error) {
     return { page: null, error: storeErrorDetail(error) };
