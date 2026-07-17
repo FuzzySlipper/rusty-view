@@ -1335,6 +1335,68 @@ describe('ExternalAgentStore', () => {
     expect(store.events()).toEqual([]);
   });
 
+  it('bounds high-water probing when sparse growth repeatedly invalidates brackets', async () => {
+    const runtime = registration('runtime-1');
+    const snapshot = { ...thread('thread-1', 10), status: 'active' as const };
+    const firstPage = Array.from({ length: 1_000 }, (_, index) => ({
+      ...event(index + 1, 'old-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    }));
+    let probe = 0;
+    let highestObservedSequence = 1_000;
+    const listEvents = vi.fn(
+      async (
+        _runtimeId: string,
+        query?: { readonly after?: number; readonly limit?: number },
+      ) => {
+        if (query?.after === undefined) return { events: firstPage };
+
+        const phase = probe++ % 3;
+        if (phase === 1) return { events: [] };
+
+        // Observe lower + 1, establish an empty upper bracket, then make that
+        // bracket stale with a sparse event immediately beyond it. Repeating
+        // this cycle used to keep selection probing indefinitely.
+        const sequenceId = query.after + (phase === 0 ? 1 : 2);
+        highestObservedSequence = Math.max(highestObservedSequence, sequenceId);
+        return {
+          events: [
+            {
+              ...event(sequenceId, 'old-turn', 'completed'),
+              nativeThreadId: 'other-thread',
+            },
+          ],
+        };
+      },
+    );
+    const streamExternalRuntimeEvents = vi.fn(() => ({
+      close: vi.fn(),
+      async *events() {
+        yield* [];
+      },
+    }));
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([snapshot], null)),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: snapshot })),
+      streamExternalRuntimeEvents,
+    });
+
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected active session');
+    await store.selectSession(session);
+
+    expect(listEvents).toHaveBeenCalledTimes(129);
+    expect(streamExternalRuntimeEvents).toHaveBeenCalledWith(
+      'runtime-1',
+      highestObservedSequence,
+    );
+    expect(highestObservedSequence).toBeGreaterThan(1_000);
+    expect(store.events()).toEqual([]);
+  });
+
   it('derives the active turn from a native snapshot before live events arrive', () => {
     const store = setupStore({ runtimes: [], listThreads: vi.fn() });
     store.selectedThread.set({

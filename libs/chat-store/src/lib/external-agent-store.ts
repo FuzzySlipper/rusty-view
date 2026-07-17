@@ -95,6 +95,10 @@ export interface ExternalPromptFailureDetail {
 
 const INACTIVE_THREAD_CACHE_CAPACITY = 8;
 const EXTERNAL_EVENT_PAGE_SIZE = 1_000;
+// A stable search needs at most 53 exponential probes plus 53 binary probes
+// across JavaScript's safe-integer sequence domain. The remaining probes let
+// us absorb concurrent growth without allowing selection to wait forever.
+const EXTERNAL_EVENT_CURSOR_PROBE_LIMIT = 128;
 
 @Injectable({ providedIn: 'root' })
 export class ExternalAgentStore {
@@ -1492,11 +1496,16 @@ export class ExternalAgentStore {
     let stride = 1;
 
     // Every probe advances `lower`, lowers `upper`, or invalidates a stale
-    // bracket after observing an event that arrived during the search. For a
-    // stable event set, exponential bracketing and binary convergence each
-    // take at most the safe-integer bit width (53) rather than sharing an
-    // arbitrary budget that can expire before convergence.
-    while (lower < Number.MAX_SAFE_INTEGER) {
+    // bracket after observing an event that arrived during the search. A
+    // stable event set converges within 106 probes across the full safe-integer
+    // domain. If concurrent growth keeps invalidating brackets, stop at the
+    // explicit request budget and resume SSE from the highest observed cursor.
+    for (
+      let probe = 0;
+      probe < EXTERNAL_EVENT_CURSOR_PROBE_LIMIT &&
+      lower < Number.MAX_SAFE_INTEGER;
+      probe++
+    ) {
       const target =
         upper === undefined
           ? Math.min(Number.MAX_SAFE_INTEGER, lower + stride)
