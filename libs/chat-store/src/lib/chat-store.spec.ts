@@ -435,6 +435,63 @@ describe('ChatStore', () => {
     expect(store.projection().messages[0]?.status).toBe('completed');
   });
 
+  it('rebuilds in sequence order when catch-up delivers an older unseen delta after completion', () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    store.ingestEvents([
+      {
+        event_id: 'race:1',
+        session_id: 'sess_1',
+        sequence_id: 1,
+        created_at: '2026-07-18T05:50:00Z',
+        kind: 'assistant_turn_started',
+        payload: {} as ChatEvent['payload'],
+      },
+      {
+        event_id: 'race:4',
+        session_id: 'sess_1',
+        sequence_id: 4,
+        created_at: '2026-07-18T05:50:04Z',
+        kind: 'assistant_message_completed',
+        payload: { message_id: 'a1', body: 'complete answer' },
+      },
+      {
+        event_id: 'race:5',
+        session_id: 'sess_1',
+        sequence_id: 5,
+        created_at: '2026-07-18T05:50:05Z',
+        kind: 'assistant_turn_finished',
+        payload: {} as ChatEvent['payload'],
+      },
+    ]);
+    expect(store.projection().messages[0]?.status).toBe('completed');
+
+    store.ingestEvents([
+      {
+        event_id: 'race:3',
+        session_id: 'sess_1',
+        sequence_id: 3,
+        created_at: '2026-07-18T05:50:03Z',
+        kind: 'assistant_text_delta',
+        payload: {
+          message_id: 'a1',
+          delta: 'complete answer',
+          coalesced: false,
+        },
+      },
+    ]);
+
+    expect(store.rawEvents().map((event) => event.sequence_id)).toEqual([
+      1, 3, 4, 5,
+    ]);
+    expect(store.projection().messages[0]?.status).toBe('completed');
+    expect(store.projection().messages[0]?.blocks[0]?.content).toBe(
+      'complete answer',
+    );
+    expect(store.projection().activeTurn).toBeUndefined();
+  });
+
   it('sendMessage calls transport.sendMessage with the text', async () => {
     const transport = createMockTransport({});
     const store = setupStore(transport, new InMemoryChatStorage());

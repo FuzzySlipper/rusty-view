@@ -55,9 +55,10 @@ export const CHAT_STORAGE_ADAPTER = new InjectionToken<ChatStorageAdapter>(
  *
  * Streaming: the store subscribes to transport's SSE stream, feeds protocol
  * events into the chat-domain reducer incrementally, and deduplicates by
- * event_id. The projection is updated incrementally (only new events are
- * reduced, not the full event log) so streaming deltas don't trigger a full
- * rebuild.
+ * event_id. Monotonic events use the incremental fast path. If live delivery
+ * races paged write catch-up and an older unseen event arrives late, the store
+ * rebuilds once from the sequence-sorted raw log so stale deltas cannot regress
+ * a completed message back to streaming.
  */
 @Injectable()
 export class ChatStore implements OnDestroy {
@@ -665,17 +666,33 @@ export class ChatStore implements OnDestroy {
     const newEvents = events.filter((e) => !this.seenEventIds.has(e.event_id));
     if (newEvents.length === 0) return;
 
-    for (const event of newEvents) {
+    const orderedNewEvents = [...newEvents].sort(compareChatEventSequence);
+    const previousEvents = this._rawEvents();
+    const latestSequence = previousEvents.at(-1)?.sequence_id;
+    const arrivedOutOfOrder =
+      latestSequence !== undefined &&
+      orderedNewEvents.some((event) => event.sequence_id < latestSequence);
+    const nextRawEvents = arrivedOutOfOrder
+      ? [...previousEvents, ...orderedNewEvents].sort(compareChatEventSequence)
+      : [...previousEvents, ...orderedNewEvents];
+    const nextProjection = arrivedOutOfOrder
+      ? projectConversation(nextRawEvents)
+      : projectConversation(orderedNewEvents, this._projection());
+
+    // Commit dedupe and signal state only after projection succeeds. A malformed
+    // event remains retryable instead of being permanently hidden as "seen".
+    for (const event of orderedNewEvents) {
       this.seenEventIds.add(event.event_id);
     }
-
-    this._rawEvents.update((prev) => [...prev, ...newEvents]);
-    this._projection.update((prev) => projectConversation(newEvents, prev));
+    this._rawEvents.set(nextRawEvents);
+    this._projection.set(nextProjection);
 
     // Persist (fire and forget — storage failures are non-fatal).
     const sessionId = this._activeSessionId();
     if (sessionId !== null) {
-      void this.storage.putEvents(sessionId, newEvents).catch(() => undefined);
+      void this.storage
+        .putEvents(sessionId, orderedNewEvents)
+        .catch(() => undefined);
     }
   }
 
@@ -728,6 +745,13 @@ export class ChatStore implements OnDestroy {
   ngOnDestroy(): void {
     this.closeStream();
   }
+}
+
+function compareChatEventSequence(left: ChatEvent, right: ChatEvent): number {
+  return (
+    left.sequence_id - right.sequence_id ||
+    left.event_id.localeCompare(right.event_id)
+  );
 }
 
 /** Type alias for message list (avoids importing domain Message type name conflicts). */
