@@ -37,6 +37,13 @@
   height: auto;
   min-height: 0;
   overflow-y: auto;
+  /* CDK owns anchoring for this transform-based virtual list. Native browser
+     anchoring can otherwise apply a second, opposing correction as the
+     streaming tail and CDK's autosize estimate change. Tail-follow is always
+     immediate; appearance reduced-motion must never inherit smooth scrolling
+     from a host page or downstream shell. */
+  overflow-anchor: none;
+  scroll-behavior: auto;
   contain: strict;
 }
 

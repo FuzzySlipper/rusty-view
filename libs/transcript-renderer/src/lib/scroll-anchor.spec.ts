@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ChatMessage } from '@rusty-view/chat-domain';
-import { transcriptTailChanged } from './transcript-viewport';
+import {
+  tailGeometryIsStable,
+  transcriptTailChanged,
+} from './transcript-viewport';
 
 /**
  * Unit tests for the scroll anchor preservation logic.
@@ -186,5 +189,18 @@ describe('transcriptTailChanged', () => {
     ];
 
     expect(transcriptTailChanged(previous, current)).toBe(true);
+  });
+});
+
+describe('tailGeometryIsStable', () => {
+  it('keeps autosize reconciliation paused while streamed geometry is active', () => {
+    expect(tailGeometryIsStable(1_000, 1_149, 150)).toBe(false);
+    expect(tailGeometryIsStable(1_000, 1_150, 150)).toBe(true);
+  });
+
+  it('allows initial stable transcripts to reconcile immediately', () => {
+    expect(tailGeometryIsStable(Number.NEGATIVE_INFINITY, 1_000, 150)).toBe(
+      true,
+    );
   });
 });

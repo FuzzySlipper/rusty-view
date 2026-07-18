@@ -139,6 +139,17 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
   const transcript = page.getByTestId('transcript-viewport');
   await expect
     .poll(() =>
+      transcript.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          overflowAnchor: style.overflowAnchor,
+          scrollBehavior: style.scrollBehavior,
+        };
+      }),
+    )
+    .toEqual({ overflowAnchor: 'none', scrollBehavior: 'auto' });
+  await expect
+    .poll(() =>
       transcript.evaluate(
         (element) => element.scrollHeight > element.clientHeight + 80,
       ),
@@ -211,6 +222,76 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
       return bottomOffset <= 80 || (await latest.isVisible());
     })
     .toBe(true);
+});
+
+test('rapid streamed tail growth does not apply reverse scroll corrections', async ({
+  page,
+}) => {
+  const fixture = await installExternalSessionFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await page.getByLabel('Reduced Motion').check();
+  await page.locator('.rv-options__close').click();
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-1"]').click();
+
+  const transcript = page.getByTestId('transcript-viewport');
+  const latest = page.getByTestId('transcript-scroll-to-bottom');
+  await latest.evaluateAll((buttons: HTMLButtonElement[]) =>
+    buttons.at(0)?.click(),
+  );
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(80);
+
+  fixture.startGrowingTail();
+  await transcript.evaluate((element) => {
+    const samples: number[] = [];
+    (window as typeof window & { __rvTailScrollSamples?: number[] })[
+      '__rvTailScrollSamples'
+    ] = samples;
+    element.addEventListener('scroll', () => samples.push(element.scrollTop));
+  });
+
+  for (let index = 0; index < 12; index += 1) {
+    fixture.growTail(
+      `\nStreaming line ${index}: ${'variable-height content '.repeat(10)}`,
+    );
+    await page.getByTestId('external-agent-refresh').click();
+    await expect(page.getByTestId('transcript-shell')).toContainText(
+      `Streaming line ${index}`,
+    );
+  }
+
+  await transcript.evaluate(
+    () => new Promise<void>((resolve) => setTimeout(resolve, 400)),
+  );
+  const samples = await page.evaluate(
+    () =>
+      (window as typeof window & { __rvTailScrollSamples?: number[] })
+        .__rvTailScrollSamples ?? [],
+  );
+  expect(samples.length).toBeGreaterThan(0);
+  const largestReverseCorrection = samples.reduce((largest, value, index) => {
+    const previous = samples[index - 1];
+    return previous === undefined
+      ? largest
+      : Math.max(largest, previous - value);
+  }, 0);
+  expect(largestReverseCorrection).toBeLessThanOrEqual(2);
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(80);
 });
 
 test('session cycling does not leave blank space after the transcript tail', async ({
@@ -292,7 +373,14 @@ test('auto-expand reasoning is live, manually collapsible, and persisted', async
   );
 });
 
-async function installExternalSessionFixture(page: Page): Promise<void> {
+interface ExternalSessionFixtureController {
+  startGrowingTail(): void;
+  growTail(text: string): void;
+}
+
+async function installExternalSessionFixture(
+  page: Page,
+): Promise<ExternalSessionFixtureController> {
   const runtime = {
     runtimeId: 'runtime-1',
     kind: 'codex_app_server',
@@ -407,6 +495,8 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
       createdAt: '2026-07-12T00:00:00Z',
       updatedAt: '2026-07-12T00:00:00Z',
     }));
+  const growingTailEvents: Array<Record<string, unknown>> = [];
+  let growingSequence = 1;
 
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
@@ -440,7 +530,7 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
     } else if (pathname.endsWith('/threads')) {
       data = { items: threads, nextCursor: null, backwardsCursor: null };
     } else if (pathname.endsWith('/events')) {
-      data = { events: [] };
+      data = { events: growingTailEvents };
     } else if (pathname.endsWith('/stream')) {
       await route.fulfill({
         status: 200,
@@ -462,6 +552,38 @@ async function installExternalSessionFixture(page: Page): Promise<void> {
       }),
     });
   });
+
+  let growingTailStarted = false;
+  const appendGrowingTailEvent = (text: string): void => {
+    const eventId = String(growingSequence++);
+    growingTailEvents.push({
+      eventId,
+      runtimeId: 'runtime-1',
+      sequenceId: Number(eventId),
+      createdAt: '2026-07-12T00:00:00Z',
+      kind: 'assistant_text_delta',
+      sessionId: 'session-1',
+      nativeThreadId: 'thread-1',
+      nativeTurnId: 'streaming-growth-turn',
+      itemId: 'streaming-growth-tail',
+      payload: {
+        nativeMethod: 'item/agentMessage/delta',
+        text,
+      },
+    });
+  };
+  return {
+    startGrowingTail(): void {
+      growingTailStarted = true;
+      appendGrowingTailEvent('Streaming growth begins.');
+    },
+    growTail(text: string): void {
+      if (!growingTailStarted) {
+        throw new Error('startGrowingTail must be called before growTail');
+      }
+      appendGrowingTailEvent(text);
+    },
+  };
 }
 
 async function transcriptTailGapAfter(

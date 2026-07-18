@@ -118,6 +118,14 @@ export class TranscriptViewportComponent {
   /** Pixel threshold from bottom to consider "at bottom" for tail-follow. */
   private static readonly BOTTOM_THRESHOLD_PX = 80;
 
+  /**
+   * CDK autosize revises its estimated content size while a variable-height
+   * tail row grows. Rewriting the strategy's total size during that window can
+   * fight the next measurement and produce visible reverse jumps, so only run
+   * the stale-spacer repair after the tail has been quiet for this long.
+   */
+  private static readonly TAIL_GEOMETRY_QUIET_MS = 150;
+
   /** Default estimated item height used for offset estimation when the autosize
    * strategy hasn't measured enough items yet. Matches the CSS-based minimum
    * height of a single-line message row. */
@@ -138,6 +146,7 @@ export class TranscriptViewportComponent {
   private tailSettleTimer: ReturnType<typeof setTimeout> | undefined;
   private tailFollowGeneration = 0;
   private tailFollowRenderPending = false;
+  private tailGeometryChangedAt = Number.NEGATIVE_INFINITY;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -302,6 +311,9 @@ export class TranscriptViewportComponent {
 
       const prependedCount = countPrependedMessages(prev, msgs);
       const tailChanged = transcriptTailChanged(prev, msgs);
+      if (tailChanged) {
+        this.tailGeometryChangedAt = Date.now();
+      }
 
       const replaced = messagesWereReplaced(prev, msgs);
       if (replaced) {
@@ -658,6 +670,16 @@ export class TranscriptViewportComponent {
         }
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
         const tailMaterialized = this.isTailMaterialized();
+        if (!this.tailGeometryCanReconcile()) {
+          // Keep following real growth, but leave CDK's size estimate alone
+          // until the active row stops changing. A later settlement attempt
+          // performs the stale-spacer repair against stable measurements.
+          if (bottomOffset > TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
+            this.scrollToBottomOffset();
+          }
+          this.settleScrollToBottom(attempt + 1, generation);
+          return;
+        }
         if (tailMaterialized && this.reconcileOverflowingTail()) {
           this.settleScrollToBottom(attempt + 1, generation);
           return;
@@ -687,6 +709,19 @@ export class TranscriptViewportComponent {
         this.settleScrollToBottom(attempt + 1, generation);
       });
     }, 50);
+  }
+
+  private tailGeometryCanReconcile(): boolean {
+    return (
+      !this.renderMessages().some(
+        (message) => message.status === 'streaming',
+      ) &&
+      tailGeometryIsStable(
+        this.tailGeometryChangedAt,
+        Date.now(),
+        TranscriptViewportComponent.TAIL_GEOMETRY_QUIET_MS,
+      )
+    );
   }
 
   private isTailMaterialized(): boolean {
@@ -769,6 +804,15 @@ export class TranscriptViewportComponent {
     // remeasured and repositioned items after the data change.
     vp.scrollToOffset(scrollOffsetFromTop);
   }
+}
+
+/** Whether CDK has had enough quiet time to reconcile its autosize estimate. */
+export function tailGeometryIsStable(
+  lastChangeAt: number,
+  now: number,
+  quietPeriodMs: number,
+): boolean {
+  return now - lastChangeAt >= quietPeriodMs;
 }
 
 /**
