@@ -24,7 +24,8 @@ export type {
   ChatMessageDecorator,
   ChatMessageDecoration,
 } from './lib/transcript-decorators';
-export { WorkerManager } from './lib/worker-manager';
+export { TRANSCRIPT_WORKER_FACTORY, WorkerManager } from './lib/worker-manager';
+export type { TranscriptWorkerFactory } from './lib/worker-manager';
 export type {
   WorkerRequest,
   WorkerResponse,

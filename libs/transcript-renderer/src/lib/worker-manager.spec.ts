@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
-import { WorkerManager } from './worker-manager';
+import { processRequestInline } from './worker-inline-ops';
+import { TRANSCRIPT_WORKER_FACTORY, WorkerManager } from './worker-manager';
+import type { WorkerRequest, WorkerResponse } from './worker-message-protocol';
 
 /**
  * WorkerManager tests. In the jsdom test environment, `Worker` is undefined, so
@@ -65,4 +67,60 @@ describe('WorkerManager', () => {
     const html = await manager.parseMarkdown('after dispose');
     expect(html).toContain('after dispose');
   });
+
+  it('uses an application-owned worker factory when configured', async () => {
+    const fakeWorker = new FakeTranscriptWorker();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: TRANSCRIPT_WORKER_FACTORY,
+          useValue: () => fakeWorker as unknown as Worker,
+        },
+      ],
+    });
+    manager = TestBed.inject(WorkerManager);
+
+    const html = await manager.parseMarkdown('**worker** path');
+
+    expect(html).toContain('<strong>worker</strong>');
+    expect(manager.isUsingWorker()).toBe(true);
+    expect(fakeWorker.postedRequests).toHaveLength(1);
+  });
+
+  it('falls back inline when an application worker factory throws', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: TRANSCRIPT_WORKER_FACTORY,
+          useValue: () => {
+            throw new Error('worker construction blocked');
+          },
+        },
+      ],
+    });
+    manager = TestBed.inject(WorkerManager);
+
+    const html = await manager.parseMarkdown('safe fallback');
+
+    expect(html).toContain('safe fallback');
+    expect(manager.isUsingWorker()).toBe(false);
+  });
 });
+
+class FakeTranscriptWorker {
+  onmessage: ((event: MessageEvent<WorkerResponse>) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
+  readonly postedRequests: WorkerRequest[] = [];
+
+  postMessage(request: WorkerRequest): void {
+    this.postedRequests.push(request);
+    const response = processRequestInline(request);
+    this.onmessage?.({ data: response } as MessageEvent<WorkerResponse>);
+  }
+
+  terminate(): void {
+    // The fake owns no external resources.
+  }
+}

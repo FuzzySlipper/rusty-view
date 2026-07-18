@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable, InjectionToken } from '@angular/core';
 
 import { processRequestInline } from './worker-inline-ops';
 import type { MarkdownRenderPolicy } from './render-mode-token';
@@ -7,6 +7,25 @@ import type {
   WorkerRequest,
   WorkerResponse,
 } from './worker-message-protocol';
+
+/** Creates the application-owned worker bundle used by the renderer. */
+export type TranscriptWorkerFactory = () => Worker;
+
+/**
+ * Optional worker factory supplied by an application build.
+ *
+ * Angular cannot bundle a `new URL(..., import.meta.url)` worker entry that
+ * originates in a pre-built library dependency. Applications that want
+ * off-thread rendering provide a factory from their own source tree, where the
+ * application builder can discover and emit the worker. Published consumers
+ * safely use inline rendering when no factory is configured.
+ */
+export const TRANSCRIPT_WORKER_FACTORY = new InjectionToken<
+  TranscriptWorkerFactory | undefined
+>('TRANSCRIPT_WORKER_FACTORY', {
+  providedIn: 'root',
+  factory: () => undefined,
+});
 
 /**
  * Manages the transcript worker lifecycle and provides a typed async API for
@@ -22,13 +41,14 @@ import type {
  */
 @Injectable({ providedIn: 'root' })
 export class WorkerManager {
+  private readonly workerFactory = inject(TRANSCRIPT_WORKER_FACTORY);
   private worker: Worker | null = null;
   private nextId = 0;
   private readonly pending = new Map<
     number,
     { resolve: (html: string) => void; reject: (error: Error) => void }
   >();
-  private workerSupported: boolean = typeof Worker !== 'undefined';
+  private workerSupported = this.workerFactory !== undefined;
 
   /** Parse markdown content into HTML (off-thread if possible). */
   parseMarkdown(
@@ -107,10 +127,13 @@ export class WorkerManager {
 
   private ensureWorker(): void {
     if (this.worker !== null) return;
+    const workerFactory = this.workerFactory;
+    if (workerFactory === undefined) {
+      this.workerSupported = false;
+      return;
+    }
     try {
-      this.worker = new Worker(
-        new URL('./transcript.worker.ts', import.meta.url),
-      );
+      this.worker = workerFactory();
       this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
         this.handleResponse(event.data);
       };
