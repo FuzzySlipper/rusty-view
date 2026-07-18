@@ -13,6 +13,7 @@ import { MessageBlockComponent } from './message-block';
 import { MessageItemComponent } from './message-item';
 import { MessageRevisionControlsComponent } from './message-revision-controls';
 import { TRANSCRIPT_RENDERER_VERSION } from '../index';
+import { visibleTranscriptBlocks } from './activity-visibility';
 import {
   TRANSCRIPT_MARKDOWN_POLICY,
   TRANSCRIPT_TEXT_RENDER_MODE,
@@ -913,6 +914,93 @@ describe('MessageItemComponent', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('text part');
     expect(host.textContent).toContain('tool data');
+  });
+
+  it('hides reasoning and tool activity without mutating the source message', async () => {
+    const message = makeMessage({
+      author: { role: 'assistant', displayName: 'Narrator' },
+      blocks: [
+        makeBlock({ id: 'text', kind: 'text', content: 'Visible prose' }),
+        makeBlock({
+          id: 'reasoning',
+          kind: 'reasoning',
+          content: 'Private deliberation',
+        }),
+        makeBlock({
+          id: 'tool',
+          kind: 'tool_call',
+          content: 'search_lore()',
+        }),
+      ],
+    });
+    const fixture = await createMessage(message);
+    fixture.componentRef.setInput('activityVisibility', {
+      reasoning: false,
+      tools: false,
+    });
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.textContent).toContain('Visible prose');
+    expect(host.textContent).not.toContain('Private deliberation');
+    expect(host.textContent).not.toContain('search_lore');
+    expect(host.querySelector('[data-testid="reasoning-block"]')).toBeNull();
+    expect(host.querySelector('[data-testid="tool-call-block"]')).toBeNull();
+    expect(message.blocks).toHaveLength(3);
+
+    fixture.componentRef.setInput('activityVisibility', {
+      reasoning: true,
+      tools: true,
+    });
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="reasoning-block"]'),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('tool_call');
+  });
+
+  it('removes message chrome when every block is hidden activity', async () => {
+    const fixture = await createMessage(
+      makeMessage({
+        author: { role: 'assistant', displayName: 'Narrator' },
+        blocks: [
+          makeBlock({
+            id: 'reasoning-only',
+            kind: 'reasoning',
+            content: 'Hidden reasoning',
+          }),
+        ],
+      }),
+    );
+    fixture.componentRef.setInput('activityVisibility', {
+      reasoning: false,
+      tools: true,
+    });
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="message-row"]'),
+    ).toBeNull();
+  });
+
+  it('classifies all built-in tool activity kinds under the tools policy', () => {
+    const message = makeMessage({
+      blocks: [
+        'tool_call',
+        'tool_result',
+        'debug',
+        'command',
+        'service_notice',
+      ].map((kind, index) =>
+        makeBlock({ id: `block-${index}`, kind, content: kind }),
+      ),
+    });
+
+    expect(
+      visibleTranscriptBlocks(message, { reasoning: true, tools: false }).map(
+        (block) => block.kind,
+      ),
+    ).toEqual(['service_notice']);
   });
 });
 

@@ -14,6 +14,11 @@ import type {
 
 import { CHAT_MESSAGE_DECORATORS } from './transcript-decorators';
 import type { ChatMessageDecoration } from './transcript-decorators';
+import {
+  DEFAULT_TRANSCRIPT_ACTIVITY_VISIBILITY,
+  visibleTranscriptBlocks,
+  type TranscriptActivityVisibility,
+} from './activity-visibility';
 import { MessageBlockComponent } from './message-block';
 import {
   MessageRevisionControlsComponent,
@@ -47,7 +52,14 @@ export class MessageItemComponent {
   readonly revisionCapabilities = input<MessageRevisionCapabilities>({});
   readonly showRevisionActions = input<boolean>(true);
   readonly autoExpandReasoning = input<boolean>(false);
+  readonly activityVisibility = input<TranscriptActivityVisibility>(
+    DEFAULT_TRANSCRIPT_ACTIVITY_VISIBILITY,
+  );
   readonly revisionAction = output<MessageRevisionAction>();
+
+  protected readonly visibleBlocks = computed(() =>
+    visibleTranscriptBlocks(this.message(), this.activityVisibility()),
+  );
 
   protected readonly decoration = computed<ChatMessageDecoration>(() => {
     const message = this.message();
@@ -151,6 +163,17 @@ export class MessageItemComponent {
       (this.showRevisionActions() ||
         (this.alternateSlot()?.alternates.length ?? 0) > 0),
   );
+
+  protected readonly hasVisibleContent = computed(() => {
+    const decoration = this.decoration();
+    return (
+      this.visibleBlocks().length > 0 ||
+      this.message().status === 'error' ||
+      this.deliveryFailure() !== undefined ||
+      decoration.prefix !== undefined ||
+      decoration.suffix !== undefined
+    );
+  });
 
   protected onRevisionAction(action: MessageRevisionAction): void {
     this.revisionAction.emit(action);

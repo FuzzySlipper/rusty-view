@@ -12,6 +12,12 @@
 export { TranscriptViewportComponent } from './lib/transcript-viewport';
 export { MessageItemComponent } from './lib/message-item';
 export { MessageBlockComponent } from './lib/message-block';
+export {
+  DEFAULT_TRANSCRIPT_ACTIVITY_VISIBILITY,
+  isTranscriptBlockVisible,
+  visibleTranscriptBlocks,
+} from './lib/activity-visibility';
+export type { TranscriptActivityVisibility } from './lib/activity-visibility';
 export { MessageRevisionControlsComponent } from './lib/message-revision-controls';
 export type {
   MessageRevisionAction,

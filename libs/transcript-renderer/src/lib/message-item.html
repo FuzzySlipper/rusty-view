@@ -1,3 +1,4 @@
+@if (hasVisibleContent()) {
 <div
   class="rv-message"
   data-testid="message-row"
@@ -62,7 +63,7 @@
     }
 
     <div class="rv-message__blocks" data-testid="message-blocks">
-      @for (block of message().blocks; track block.id) {
+      @for (block of visibleBlocks(); track block.id) {
       <rv-message-block
         [block]="block"
         [message]="message()"
@@ -114,3 +115,4 @@
     }
   </div>
 </div>
+}

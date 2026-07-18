@@ -32,6 +32,11 @@ import {
 } from '@rusty-view/chat-domain';
 
 import { MessageItemComponent } from './message-item';
+import {
+  DEFAULT_TRANSCRIPT_ACTIVITY_VISIBILITY,
+  visibleTranscriptBlocks,
+  type TranscriptActivityVisibility,
+} from './activity-visibility';
 import type {
   MessageRevisionAction,
   MessageRevisionCapabilities,
@@ -109,6 +114,11 @@ export class TranscriptViewportComponent {
 
   /** Whether reasoning blocks should open when first rendered. */
   readonly autoExpandReasoning = input<boolean>(false);
+
+  /** Product-agnostic visibility for inline reasoning and tool activity. */
+  readonly activityVisibility = input<TranscriptActivityVisibility>(
+    DEFAULT_TRANSCRIPT_ACTIVITY_VISIBILITY,
+  );
 
   /** Emits when the user asks the transcript to jump to a tree target. */
   readonly navigationRequested = output<ConversationNavigationTarget>();
@@ -206,10 +216,18 @@ export class TranscriptViewportComponent {
   protected readonly searchResults = computed(() => {
     if (!this.searchEnabled()) return [];
     return searchConversationMessages(
-      this.renderMessages(),
+      this.searchableMessages(),
       this.searchQuery(),
       this.searchFilters(),
     );
+  });
+
+  private readonly searchableMessages = computed(() => {
+    const visibility = this.activityVisibility();
+    return this.renderMessages().map((message) => {
+      const blocks = visibleTranscriptBlocks(message, visibility);
+      return blocks === message.blocks ? message : { ...message, blocks };
+    });
   });
 
   protected readonly activeSearchResult = computed(() => {
