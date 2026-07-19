@@ -299,6 +299,9 @@ test('session cycling does not leave blank space after the transcript tail', asy
 }) => {
   await installExternalSessionFixture(page);
   await page.goto('/?api=http://crew.test');
+  await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await page.getByTestId('appearance-auto-expand-reasoning').check();
+  await page.locator('.rv-options__close').click();
   await page.getByTestId('external-agents-tab').click();
   await page.getByTestId('external-agent-mode-all').click();
 
@@ -316,9 +319,10 @@ test('session cycling does not leave blank space after the transcript tail', asy
       await expect(
         transcript.locator('.rv-transcript__item').last(),
       ).toHaveAttribute('data-message-id', tailIds.get(threadId) ?? '');
-      expect(await transcriptTailGapAfter(transcript, 700)).toBeLessThanOrEqual(
-        2,
-      );
+      const geometry = await transcriptGeometryAfter(transcript, 700);
+      expect(geometry.tailGap).toBeLessThanOrEqual(2);
+      expect(geometry.bottomOffset).toBeLessThanOrEqual(80);
+      expect(Math.abs(geometry.renderedEndMismatch)).toBeLessThanOrEqual(2);
     }
   }
 });
@@ -420,7 +424,16 @@ async function installExternalSessionFixture(
   longItems.push({
     itemId: 'reasoning-visible',
     kind: 'reasoning',
-    text: 'Inspect the final state before answering.',
+    text: [
+      'Inspect the final state before answering.',
+      ...Array.from(
+        { length: 180 },
+        (_, index) =>
+          `Expanded reasoning line ${index}: ${'variable-height analysis '.repeat(
+            index % 7 === 0 ? 12 : 2,
+          )}`,
+      ),
+    ].join('\n'),
   });
   const secondItems = Array.from({ length: 55 }, (_, index) => ({
     itemId: `second-item-${index}`,
@@ -604,6 +617,59 @@ async function transcriptTailGapAfter(
               : viewport.getBoundingClientRect().bottom -
                   lastItem.getBoundingClientRect().bottom,
           );
+        }, delay);
+      }),
+    delayMs,
+  );
+}
+
+async function transcriptGeometryAfter(
+  transcript: Locator,
+  delayMs: number,
+): Promise<{
+  tailGap: number;
+  bottomOffset: number;
+  renderedEndMismatch: number;
+}> {
+  return transcript.evaluate(
+    (viewport, delay) =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          const wrapper = viewport.querySelector<HTMLElement>(
+            '.cdk-virtual-scroll-content-wrapper',
+          );
+          const spacer = viewport.querySelector<HTMLElement>(
+            '.cdk-virtual-scroll-spacer',
+          );
+          const items = viewport.querySelectorAll<HTMLElement>(
+            '.rv-transcript__item',
+          );
+          const lastItem = items.item(items.length - 1);
+          if (wrapper === null || spacer === null || lastItem === null) {
+            resolve({
+              tailGap: Number.POSITIVE_INFINITY,
+              bottomOffset: Number.POSITIVE_INFINITY,
+              renderedEndMismatch: Number.POSITIVE_INFINITY,
+            });
+            return;
+          }
+
+          const viewportBounds = viewport.getBoundingClientRect();
+          const wrapperBounds = wrapper.getBoundingClientRect();
+          const lastBounds = lastItem.getBoundingClientRect();
+          const renderedOffset =
+            viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
+          resolve({
+            tailGap: viewportBounds.bottom - lastBounds.bottom,
+            bottomOffset:
+              viewport.scrollHeight -
+              viewport.scrollTop -
+              viewport.clientHeight,
+            renderedEndMismatch:
+              renderedOffset +
+              wrapperBounds.height -
+              spacer.getBoundingClientRect().height,
+          });
         }, delay);
       }),
     delayMs,

@@ -41,6 +41,11 @@ import type {
   MessageRevisionAction,
   MessageRevisionCapabilities,
 } from './message-revision-controls';
+import {
+  assessTranscriptGeometry,
+  transcriptGeometryPresentationKey,
+  type TranscriptGeometryMeasurement,
+} from './transcript-geometry';
 
 const EMPTY_BLOCK_SET = new Set<string>();
 
@@ -157,6 +162,8 @@ export class TranscriptViewportComponent {
   private tailFollowGeneration = 0;
   private tailFollowRenderPending = false;
   private tailGeometryChangedAt = Number.NEGATIVE_INFINITY;
+  private renderedContentHeight: number | undefined;
+  private geometryPresentationKey: string | undefined;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -290,6 +297,35 @@ export class TranscriptViewportComponent {
       }
     });
 
+    // Keep presentation-driven height invalidation in one explicit model.
+    // Actual DOM height remains authoritative (the wrapper ResizeObserver
+    // below also covers Markdown, HTML, custom renderers, and future content),
+    // while this key makes settings that affect unrendered rows visible to the
+    // virtualizer before those rows materialize.
+    effect(() => {
+      const visibility = this.activityVisibility();
+      const key = transcriptGeometryPresentationKey({
+        autoExpandReasoning: this.autoExpandReasoning(),
+        reasoningVisible: visibility.reasoning,
+        toolsVisible: visibility.tools,
+        revisionActionsVisible: this.showRevisionActions(),
+        alternateSlotCount: this.alternateSlots().length,
+      });
+      const changed =
+        this.geometryPresentationKey !== undefined &&
+        this.geometryPresentationKey !== key;
+      this.geometryPresentationKey = key;
+      if (!changed || !this.viewportReady) return;
+
+      this.noteTailGeometryChange();
+      this.afterNextRender(() => {
+        this.viewport().checkViewportSize();
+        if (this.tailFollow() && this.followingTail()) {
+          this.requestTailFollow();
+        }
+      });
+    });
+
     // Emit the initial data once the viewport has a non-zero size. A
     // ResizeObserver covers both initial sizing (behind an `@if`, or a CSS-grid
     // cell resolving from 0 → its real height) and later layout changes. A ready
@@ -310,9 +346,22 @@ export class TranscriptViewportComponent {
       };
       emitWhenSized();
       if (typeof ResizeObserver !== 'undefined') {
-        const observer = new ResizeObserver(() => emitWhenSized());
-        observer.observe(host);
-        this.destroyRef.onDestroy(() => observer.disconnect());
+        const viewportObserver = new ResizeObserver(() => emitWhenSized());
+        viewportObserver.observe(host);
+
+        const contentWrapper = host.querySelector<HTMLElement>(
+          '.cdk-virtual-scroll-content-wrapper',
+        );
+        const contentObserver = new ResizeObserver((entries) => {
+          const height = entries.at(-1)?.contentRect.height;
+          if (height !== undefined) this.onRenderedContentResize(height);
+        });
+        if (contentWrapper !== null) contentObserver.observe(contentWrapper);
+
+        this.destroyRef.onDestroy(() => {
+          viewportObserver.disconnect();
+          contentObserver.disconnect();
+        });
       }
     });
 
@@ -330,7 +379,7 @@ export class TranscriptViewportComponent {
       const prependedCount = countPrependedMessages(prev, msgs);
       const tailChanged = transcriptTailChanged(prev, msgs);
       if (tailChanged) {
-        this.tailGeometryChangedAt = Date.now();
+        this.noteTailGeometryChange();
       }
 
       const replaced = messagesWereReplaced(prev, msgs);
@@ -440,9 +489,29 @@ export class TranscriptViewportComponent {
       if (generation !== this.tailFollowGeneration) return;
       this.tailFollowRenderPending = false;
       if (!this.tailFollow() || !this.followingTail()) return;
-      this.scrollToBottomOffset();
+      if (this.viewport().measureScrollOffset('bottom') > 2) {
+        this.scrollToBottomOffset();
+      }
       this.settleScrollToBottom(0, generation);
     });
+  }
+
+  private noteTailGeometryChange(): void {
+    this.tailGeometryChangedAt = Date.now();
+  }
+
+  private onRenderedContentResize(height: number): void {
+    if (
+      this.renderedContentHeight !== undefined &&
+      Math.abs(this.renderedContentHeight - height) <= 0.5
+    ) {
+      return;
+    }
+    this.renderedContentHeight = height;
+    this.noteTailGeometryChange();
+    if (this.viewportReady && this.tailFollow() && this.followingTail()) {
+      this.requestTailFollow();
+    }
   }
 
   private pauseTailFollow(): void {
@@ -698,7 +767,7 @@ export class TranscriptViewportComponent {
           this.settleScrollToBottom(attempt + 1, generation);
           return;
         }
-        if (tailMaterialized && this.reconcileOverflowingTail()) {
+        if (tailMaterialized && this.reconcileMaterializedTailGeometry()) {
           this.settleScrollToBottom(attempt + 1, generation);
           return;
         }
@@ -750,42 +819,58 @@ export class TranscriptViewportComponent {
     );
   }
 
-  /**
-   * Close a stale autosize spacer after the real tail row has materialized.
-   *
-   * The experimental autosize strategy keeps a weighted estimate across data
-   * replacements. After switching between differently sized transcripts it
-   * can clamp at its estimated bottom while the rendered tail ends well above
-   * that bottom. Re-anchor the rendered range to its measured end before we
-   * accept the viewport as settled. Short transcripts intentionally keep their
-   * natural empty space and are left alone.
-   */
-  private reconcileOverflowingTail(): boolean {
+  /** Keep a materialized tail wrapper aligned with CDK's authoritative spacer. */
+  private reconcileMaterializedTailGeometry(): boolean {
     const viewport = this.viewport();
-    const host = viewport.elementRef.nativeElement;
-    if (host.scrollHeight <= host.clientHeight + 2) return false;
+    const measurement = this.measureTranscriptGeometry();
+    if (measurement === undefined) return false;
+    if (
+      measurement.totalContentSize <= 0 ||
+      measurement.renderedContentSize <= 0
+    ) {
+      return false;
+    }
+    const assessment = assessTranscriptGeometry(measurement);
+    if (!assessment.tailRangeMaterialized || assessment.coherent) return false;
 
-    const lastMessage = this.renderMessages().at(-1);
-    if (lastMessage === undefined) return false;
-    const lastItem = this.findRenderedMessageElement(lastMessage.id);
-    if (lastItem === null) return false;
-
-    const hostBounds = host.getBoundingClientRect();
-    const lastBounds = lastItem.getBoundingClientRect();
-    const tailGap = hostBounds.bottom - lastBounds.bottom;
-    if (tailGap <= 2) return false;
-
-    const measuredTailEnd = Math.ceil(
-      viewport.measureScrollOffset('top') + lastBounds.bottom - hostBounds.top,
+    // CDK owns total-size estimation. Correct only the independently positioned
+    // wrapper; changing both values lets a later autosize measurement update
+    // the spacer alone and recreate the captured 20,249px/36,281px split.
+    viewport.setRenderedContentOffset(
+      assessment.correctedRenderedContentOffset,
     );
-    const correctedTotal = Math.max(
-      viewport.getViewportSize(),
-      measuredTailEnd,
-    );
-    viewport.setTotalContentSize(correctedTotal);
-    viewport.setRenderedContentOffset(correctedTotal, 'to-end');
     viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
     return true;
+  }
+
+  private measureTranscriptGeometry():
+    | TranscriptGeometryMeasurement
+    | undefined {
+    const viewport = this.viewport();
+    const host = viewport.elementRef.nativeElement;
+    const contentWrapper = host.querySelector<HTMLElement>(
+      '.cdk-virtual-scroll-content-wrapper',
+    );
+    const spacer = host.querySelector<HTMLElement>(
+      '.cdk-virtual-scroll-spacer',
+    );
+    if (contentWrapper === null || spacer === null) return undefined;
+
+    const hostBounds = host.getBoundingClientRect();
+    const contentBounds = contentWrapper.getBoundingClientRect();
+    return {
+      dataLength: this.renderMessages().length,
+      renderedRange: viewport.getRenderedRange(),
+      viewportSize: host.clientHeight,
+      scrollOffset: viewport.measureScrollOffset('top'),
+      scrollSize: host.scrollHeight,
+      totalContentSize: spacer.getBoundingClientRect().height,
+      renderedContentOffset:
+        viewport.measureScrollOffset('top') +
+        contentBounds.top -
+        hostBounds.top,
+      renderedContentSize: contentBounds.height,
+    };
   }
 
   private materializeTailRange(): void {
@@ -795,14 +880,12 @@ export class TranscriptViewportComponent {
     const currentRange = viewport.getRenderedRange();
     const windowSize = Math.max(20, currentRange.end - currentRange.start);
     const start = Math.max(0, length - windowSize);
-    const estimatedTotal = Math.max(
-      viewport.measureScrollOffset('top') + viewport.getViewportSize(),
-      length * this.averageRenderedItemSize(),
-    );
-    viewport.setTotalContentSize(estimatedTotal);
+    // Render the real tail and let the autosize strategy measure it. Do not
+    // write a guessed total or a paired `to-end` offset: CDK updates its total
+    // after rendering, and that pair can otherwise split into two incompatible
+    // values. The next settlement pass aligns the wrapper to CDK's measured
+    // spacer through `reconcileMaterializedTailGeometry`.
     viewport.setRenderedRange({ start, end: length });
-    viewport.setRenderedContentOffset(estimatedTotal, 'to-end');
-    viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
   }
 
   /**
