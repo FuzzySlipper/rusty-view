@@ -320,9 +320,20 @@ test('session cycling does not leave blank space after the transcript tail', asy
         transcript.locator('.rv-transcript__item').last(),
       ).toHaveAttribute('data-message-id', tailIds.get(threadId) ?? '');
       const geometry = await transcriptGeometryAfter(transcript, 700);
-      expect(geometry.tailGap).toBeLessThanOrEqual(2);
-      expect(geometry.bottomOffset).toBeLessThanOrEqual(80);
-      expect(Math.abs(geometry.renderedEndMismatch)).toBeLessThanOrEqual(2);
+      expect(
+        {
+          tailAligned: geometry.tailGap <= 2,
+          atBottom: geometry.bottomOffset <= 80,
+          wrapperEndCoherent: Math.abs(geometry.renderedEndMismatch) <= 2,
+          viewportCovered: geometry.viewportCoverageGap <= 2,
+        },
+        JSON.stringify(geometry),
+      ).toEqual({
+        tailAligned: true,
+        atBottom: true,
+        wrapperEndCoherent: true,
+        viewportCovered: true,
+      });
     }
   }
 });
@@ -630,6 +641,7 @@ async function transcriptGeometryAfter(
   tailGap: number;
   bottomOffset: number;
   renderedEndMismatch: number;
+  viewportCoverageGap: number;
 }> {
   return transcript.evaluate(
     (viewport, delay) =>
@@ -650,6 +662,7 @@ async function transcriptGeometryAfter(
               tailGap: Number.POSITIVE_INFINITY,
               bottomOffset: Number.POSITIVE_INFINITY,
               renderedEndMismatch: Number.POSITIVE_INFINITY,
+              viewportCoverageGap: Number.POSITIVE_INFINITY,
             });
             return;
           }
@@ -669,6 +682,10 @@ async function transcriptGeometryAfter(
               renderedOffset +
               wrapperBounds.height -
               spacer.getBoundingClientRect().height,
+            viewportCoverageGap: Math.max(
+              0,
+              wrapperBounds.top - viewportBounds.top,
+            ),
           });
         }, delay);
       }),

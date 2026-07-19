@@ -34,6 +34,10 @@ export interface TranscriptGeometryAssessment {
   readonly tailRangeMaterialized: boolean;
   readonly renderedContentEnd: number;
   readonly tailEndMismatch: number;
+  readonly tailEndCoherent: boolean;
+  /** Blank pixels between the viewport start and the first rendered tail row. */
+  readonly tailViewportCoverageGap: number;
+  readonly tailViewportCovered: boolean;
   readonly coherent: boolean;
   readonly correctedRenderedContentOffset: number;
 }
@@ -67,13 +71,27 @@ export function assessTranscriptGeometry(
   const renderedContentEnd =
     measurement.renderedContentOffset + measurement.renderedContentSize;
   const tailEndMismatch = renderedContentEnd - measurement.totalContentSize;
+  const tailEndCoherent =
+    !tailRangeMaterialized || Math.abs(tailEndMismatch) <= tolerancePx;
+  const tailViewportCoverageGap =
+    tailRangeMaterialized &&
+    measurement.renderedRange.start > 0 &&
+    measurement.totalContentSize > measurement.viewportSize
+      ? Math.max(
+          0,
+          measurement.renderedContentOffset - measurement.scrollOffset,
+        )
+      : 0;
+  const tailViewportCovered = tailViewportCoverageGap <= tolerancePx;
 
   return {
     tailRangeMaterialized,
     renderedContentEnd,
     tailEndMismatch,
-    coherent:
-      !tailRangeMaterialized || Math.abs(tailEndMismatch) <= tolerancePx,
+    tailEndCoherent,
+    tailViewportCoverageGap,
+    tailViewportCovered,
+    coherent: tailEndCoherent && tailViewportCovered,
     correctedRenderedContentOffset: Math.max(
       0,
       measurement.totalContentSize - measurement.renderedContentSize,

@@ -23,6 +23,7 @@ describe('transcript geometry', () => {
 
     expect(result.tailRangeMaterialized).toBe(true);
     expect(result.coherent).toBe(false);
+    expect(result.tailEndCoherent).toBe(false);
     expect(result.renderedContentEnd).toBeCloseTo(36_280.6);
     expect(result.tailEndMismatch).toBeCloseTo(16_031.8);
     expect(result.correctedRenderedContentOffset).toBeCloseTo(15_673.2);
@@ -36,13 +37,34 @@ describe('transcript geometry', () => {
       scrollOffset: 1_200,
       scrollSize: 2_000,
       totalContentSize: 2_000,
-      renderedContentOffset: 1_250,
-      renderedContentSize: 750,
+      renderedContentOffset: 1_200,
+      renderedContentSize: 800,
     });
 
     expect(result.coherent).toBe(true);
+    expect(result.tailViewportCovered).toBe(true);
     expect(result.tailEndMismatch).toBe(0);
-    expect(result.correctedRenderedContentOffset).toBe(1_250);
+    expect(result.correctedRenderedContentOffset).toBe(1_200);
+  });
+
+  it('detects the captured one-row tail when a biased average leaves the viewport blank', () => {
+    const captured: TranscriptGeometryMeasurement = {
+      dataLength: 121,
+      renderedRange: { start: 120, end: 121 },
+      viewportSize: 1_311,
+      scrollOffset: 21_640,
+      scrollSize: 22_951,
+      totalContentSize: 22_951,
+      renderedContentOffset: 22_778.9,
+      renderedContentSize: 172.1,
+    };
+
+    const result = assessTranscriptGeometry(captured);
+
+    expect(result.tailEndCoherent).toBe(true);
+    expect(result.tailViewportCovered).toBe(false);
+    expect(result.tailViewportCoverageGap).toBeCloseTo(1_138.9);
+    expect(result.coherent).toBe(false);
   });
 
   it('centralizes presentation inputs which can invalidate height estimates', () => {

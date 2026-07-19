@@ -16,7 +16,10 @@ import {
   CdkVirtualScrollViewport,
   ScrollingModule,
 } from '@angular/cdk/scrolling';
-import { ScrollingModule as ExperimentalScrollingModule } from '@angular/cdk-experimental/scrolling';
+import {
+  CdkAutoSizeVirtualScroll,
+  ScrollingModule as ExperimentalScrollingModule,
+} from '@angular/cdk-experimental/scrolling';
 import type { ChatMessage, MessageRole } from '@rusty-view/chat-domain';
 import {
   branchBreadcrumbs as buildBranchBreadcrumbs,
@@ -85,6 +88,7 @@ const EMPTY_BLOCK_SET = new Set<string>();
 })
 export class TranscriptViewportComponent {
   private readonly viewport = viewChild.required(CdkVirtualScrollViewport);
+  private readonly autoSize = viewChild.required(CdkAutoSizeVirtualScroll);
 
   /** Messages to render (from ChatStore.projection().messages). */
   readonly messages = input.required<readonly ChatMessage[]>();
@@ -141,6 +145,14 @@ export class TranscriptViewportComponent {
    */
   private static readonly TAIL_GEOMETRY_QUIET_MS = 150;
 
+  /**
+   * A session switch can replace an expanded multi-thousand-pixel reasoning row
+   * with a short tail. Experimental autosize may need several observer/render
+   * cycles to discard the retained average, so bound settlement by elapsed time
+   * rather than an unrealistically small fixed number of passes.
+   */
+  private static readonly TAIL_SETTLE_MAX_MS = 2_500;
+
   /** Default estimated item height used for offset estimation when the autosize
    * strategy hasn't measured enough items yet. Matches the CSS-based minimum
    * height of a single-line message row. */
@@ -163,6 +175,7 @@ export class TranscriptViewportComponent {
   private tailFollowRenderPending = false;
   private tailGeometryChangedAt = Number.NEGATIVE_INFINITY;
   private renderedContentHeight: number | undefined;
+  private estimatedTotalHeight: number | undefined;
   private geometryPresentationKey: string | undefined;
 
   /**
@@ -358,9 +371,19 @@ export class TranscriptViewportComponent {
         });
         if (contentWrapper !== null) contentObserver.observe(contentWrapper);
 
+        const spacer = host.querySelector<HTMLElement>(
+          '.cdk-virtual-scroll-spacer',
+        );
+        const spacerObserver = new ResizeObserver((entries) => {
+          const height = entries.at(-1)?.contentRect.height;
+          if (height !== undefined) this.onEstimatedTotalResize(height);
+        });
+        if (spacer !== null) spacerObserver.observe(spacer);
+
         this.destroyRef.onDestroy(() => {
           viewportObserver.disconnect();
           contentObserver.disconnect();
+          spacerObserver.disconnect();
         });
       }
     });
@@ -386,6 +409,7 @@ export class TranscriptViewportComponent {
       if (replaced) {
         this.isAtBottom.set(true);
         this.resumeTailFollow();
+        this.afterNextRender(() => this.resetAutoSizeEstimator());
       }
 
       if (prependedCount > 0 && !this.followingTail()) {
@@ -500,6 +524,20 @@ export class TranscriptViewportComponent {
     this.tailGeometryChangedAt = Date.now();
   }
 
+  /**
+   * Experimental autosize retains a lifetime-weighted item-height average even
+   * when a wholly different data set replaces the transcript. Reattach only on
+   * a proven session replacement so expanded content from the prior session
+   * cannot determine the next session's rendered range.
+   */
+  private resetAutoSizeEstimator(): void {
+    const strategy = this.autoSize()._scrollStrategy;
+    strategy.detach();
+    strategy.attach(this.viewport());
+    this.noteTailGeometryChange();
+    this.scrollToBottomOffset();
+  }
+
   private onRenderedContentResize(height: number): void {
     if (
       this.renderedContentHeight !== undefined &&
@@ -508,6 +546,20 @@ export class TranscriptViewportComponent {
       return;
     }
     this.renderedContentHeight = height;
+    this.noteTailGeometryChange();
+    if (this.viewportReady && this.tailFollow() && this.followingTail()) {
+      this.requestTailFollow();
+    }
+  }
+
+  private onEstimatedTotalResize(height: number): void {
+    if (
+      this.estimatedTotalHeight !== undefined &&
+      Math.abs(this.estimatedTotalHeight - height) <= 0.5
+    ) {
+      return;
+    }
+    this.estimatedTotalHeight = height;
     this.noteTailGeometryChange();
     if (this.viewportReady && this.tailFollow() && this.followingTail()) {
       this.requestTailFollow();
@@ -740,8 +792,18 @@ export class TranscriptViewportComponent {
     return null;
   }
 
-  private settleScrollToBottom(attempt: number, generation: number): void {
-    if (attempt >= 12) return;
+  private settleScrollToBottom(
+    attempt: number,
+    generation: number,
+    startedAt = Date.now(),
+  ): void {
+    if (
+      Date.now() - startedAt >=
+      TranscriptViewportComponent.TAIL_SETTLE_MAX_MS
+    ) {
+      this.recomputeBottomState();
+      return;
+    }
     if (this.tailSettleTimer !== undefined) {
       clearTimeout(this.tailSettleTimer);
     }
@@ -757,6 +819,14 @@ export class TranscriptViewportComponent {
         }
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
         const tailMaterialized = this.isTailMaterialized();
+        if (
+          tailMaterialized &&
+          !this.tailIsStreaming() &&
+          this.reconcileMaterializedTailGeometry(false)
+        ) {
+          this.settleScrollToBottom(attempt + 1, generation, startedAt);
+          return;
+        }
         if (!this.tailGeometryCanReconcile()) {
           // Keep following real growth, but leave CDK's size estimate alone
           // until the active row stops changing. A later settlement attempt
@@ -764,11 +834,11 @@ export class TranscriptViewportComponent {
           if (bottomOffset > TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
             this.scrollToBottomOffset();
           }
-          this.settleScrollToBottom(attempt + 1, generation);
+          this.settleScrollToBottom(attempt + 1, generation, startedAt);
           return;
         }
-        if (tailMaterialized && this.reconcileMaterializedTailGeometry()) {
-          this.settleScrollToBottom(attempt + 1, generation);
+        if (tailMaterialized && this.reconcileMaterializedTailGeometry(true)) {
+          this.settleScrollToBottom(attempt + 1, generation, startedAt);
           return;
         }
         // Autosize may temporarily report a zero bottom offset while its
@@ -793,21 +863,25 @@ export class TranscriptViewportComponent {
         } else {
           this.scrollToBottomOffset();
         }
-        this.settleScrollToBottom(attempt + 1, generation);
+        this.settleScrollToBottom(attempt + 1, generation, startedAt);
       });
     }, 50);
   }
 
   private tailGeometryCanReconcile(): boolean {
     return (
-      !this.renderMessages().some(
-        (message) => message.status === 'streaming',
-      ) &&
+      !this.tailIsStreaming() &&
       tailGeometryIsStable(
         this.tailGeometryChangedAt,
         Date.now(),
         TranscriptViewportComponent.TAIL_GEOMETRY_QUIET_MS,
       )
+    );
+  }
+
+  private tailIsStreaming(): boolean {
+    return this.renderMessages().some(
+      (message) => message.status === 'streaming',
     );
   }
 
@@ -820,7 +894,9 @@ export class TranscriptViewportComponent {
   }
 
   /** Keep a materialized tail wrapper aligned with CDK's authoritative spacer. */
-  private reconcileMaterializedTailGeometry(): boolean {
+  private reconcileMaterializedTailGeometry(
+    includeViewportCoverageRepair: boolean,
+  ): boolean {
     const viewport = this.viewport();
     const measurement = this.measureTranscriptGeometry();
     if (measurement === undefined) return false;
@@ -831,15 +907,29 @@ export class TranscriptViewportComponent {
       return false;
     }
     const assessment = assessTranscriptGeometry(measurement);
-    if (!assessment.tailRangeMaterialized || assessment.coherent) return false;
+    if (!assessment.tailRangeMaterialized) return false;
 
-    // CDK owns total-size estimation. Correct only the independently positioned
-    // wrapper; changing both values lets a later autosize measurement update
-    // the spacer alone and recreate the captured 20,249px/36,281px split.
-    viewport.setRenderedContentOffset(
-      assessment.correctedRenderedContentOffset,
-    );
-    viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
+    if (!assessment.tailEndCoherent) {
+      // CDK owns total-size estimation. Correct only the independently
+      // positioned wrapper; changing both values lets a later autosize
+      // measurement update the spacer alone and recreate the captured
+      // 20,249px/36,281px split.
+      viewport.setRenderedContentOffset(
+        assessment.correctedRenderedContentOffset,
+      );
+      viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
+      return true;
+    }
+
+    if (!includeViewportCoverageRepair) return false;
+
+    if (assessment.tailViewportCovered) return false;
+
+    // A retained average dominated by tall expanded content can predict that
+    // one short row fills the viewport. Reset the estimator and let its normal
+    // render path choose a default-size tail window. Directly forcing a range
+    // here would bypass autosize's cached offset/size bookkeeping.
+    this.resetAutoSizeEstimator();
     return true;
   }
 
@@ -874,18 +964,11 @@ export class TranscriptViewportComponent {
   }
 
   private materializeTailRange(): void {
-    const viewport = this.viewport();
     const length = this.renderMessages().length;
     if (length === 0) return;
-    const currentRange = viewport.getRenderedRange();
-    const windowSize = Math.max(20, currentRange.end - currentRange.start);
-    const start = Math.max(0, length - windowSize);
-    // Render the real tail and let the autosize strategy measure it. Do not
-    // write a guessed total or a paired `to-end` offset: CDK updates its total
-    // after rendering, and that pair can otherwise split into two incompatible
-    // values. The next settlement pass aligns the wrapper to CDK's measured
-    // spacer through `reconcileMaterializedTailGeometry`.
-    viewport.setRenderedRange({ start, end: length });
+    // Reattaching resets the retained average and uses autosize's own range,
+    // offset, and total-size update path to materialize the tail coherently.
+    this.resetAutoSizeEstimator();
   }
 
   /**
