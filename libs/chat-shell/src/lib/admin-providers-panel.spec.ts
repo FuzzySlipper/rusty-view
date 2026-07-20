@@ -866,6 +866,100 @@ describe('AdminProvidersPanelComponent', () => {
     expect(readback).toContain('budget 8192');
   });
 
+  it('preserves pending reasoning values across reversible control transitions', async () => {
+    const fixture = await createPanel([]);
+    const component = fixture.componentInstance as unknown as {
+      form(): {
+        protocol: string;
+        chatCompletionsDialect: string;
+        thinkingMode: string;
+        reasoningHistory: string;
+        reasoningBudgetTokens: string;
+      };
+      reasoningConfigurationIssues(): readonly string[];
+      updateProtocol(event: { target: { value: string } }): void;
+      updateChatCompletionsDialect(event: { target: { value: string } }): void;
+      updateThinkingMode(event: { target: { value: string } }): void;
+      updateReasoningHistory(event: { target: { value: string } }): void;
+      updateText(
+        field: 'reasoningBudgetTokens',
+        event: { target: { value: string } },
+      ): void;
+      clearIncompatibleReasoningSettings(): void;
+    };
+
+    component.updateChatCompletionsDialect({ target: { value: 'qwen' } });
+    component.updateThinkingMode({ target: { value: 'enabled' } });
+    component.updateReasoningHistory({ target: { value: 'preserve_all' } });
+    component.updateText('reasoningBudgetTokens', {
+      target: { value: '8192' },
+    });
+    const qwenSettings = {
+      chatCompletionsDialect: 'qwen',
+      thinkingMode: 'enabled',
+      reasoningHistory: 'preserve_all',
+      reasoningBudgetTokens: '8192',
+    };
+
+    component.updateProtocol({ target: { value: 'responses' } });
+    expect(component.reasoningConfigurationIssues()).toEqual([]);
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    expect(component.form()).toMatchObject(qwenSettings);
+
+    component.updateChatCompletionsDialect({ target: { value: 'standard' } });
+    expect(component.form()).toMatchObject({
+      ...qwenSettings,
+      chatCompletionsDialect: 'standard',
+    });
+    fixture.detectChanges();
+    const warning = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="provider-reasoning-configuration-warning"]',
+    );
+    expect(warning?.textContent).toContain(
+      'The standard dialect requires provider-default thinking.',
+    );
+    expect(component.reasoningConfigurationIssues()).toEqual([
+      'The standard dialect requires provider-default thinking.',
+      'The standard dialect requires provider-default history.',
+      'The standard dialect does not support a reasoning budget.',
+    ]);
+    component.updateChatCompletionsDialect({ target: { value: 'qwen' } });
+    expect(component.form()).toMatchObject(qwenSettings);
+
+    component.updateThinkingMode({ target: { value: 'disabled' } });
+    expect(component.form()).toMatchObject({
+      ...qwenSettings,
+      thinkingMode: 'disabled',
+    });
+    component.updateThinkingMode({ target: { value: 'enabled' } });
+    expect(component.form()).toMatchObject(qwenSettings);
+
+    component.updateChatCompletionsDialect({ target: { value: 'standard' } });
+    component.clearIncompatibleReasoningSettings();
+    expect(component.form()).toMatchObject({
+      chatCompletionsDialect: 'standard',
+      thinkingMode: 'provider_default',
+      reasoningHistory: 'provider_default',
+      reasoningBudgetTokens: '',
+    });
+  });
+
+  it('explains all reasoning history policies', async () => {
+    const fixture = await createPanel([]);
+    const rendered = textContent(fixture);
+
+    expect(rendered).toContain(
+      'provider_default strips historical reasoning without a vendor history control',
+    );
+    expect(rendered).toContain(
+      'discard strips it and sends a clear control where supported',
+    );
+    expect(rendered).toContain('preserve_all replays all reasoning');
+    expect(rendered).toContain(
+      'tool_calls_only keeps DeepSeek reasoning only on assistant tool-call messages',
+    );
+  });
+
   it('round-trips DeepSeek discard and tool-call-only history as distinct policies', async () => {
     const discard = {
       ...makeProvider('deepseek-legacy'),

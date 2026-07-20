@@ -215,7 +215,10 @@
           }
         </select>
         <small>
-          preserve_all replays all reasoning; tool_calls_only is DeepSeek-only.
+          provider_default strips historical reasoning without a vendor history
+          control; discard strips it and sends a clear control where supported;
+          preserve_all replays all reasoning; tool_calls_only keeps DeepSeek
+          reasoning only on assistant tool-call messages.
         </small>
       </label>
       <label>
@@ -232,7 +235,24 @@
         />
         <small>Available only for Qwen with thinking enabled.</small>
       </label>
-      } @if (kimiThinkingConstraintsActive()) {
+      @if (reasoningConfigurationIssues().length > 0) {
+      <div
+        class="rv-admin-providers__policy-warning"
+        data-testid="provider-reasoning-configuration-warning"
+        role="alert"
+      >
+        @for (issue of reasoningConfigurationIssues(); track issue) {
+        <span>{{ issue }}</span>
+        }
+        <button
+          type="button"
+          class="rv-admin-providers__button"
+          (click)="clearIncompatibleReasoningSettings()"
+        >
+          Clear incompatible reasoning settings
+        </button>
+      </div>
+      } } @if (kimiThinkingConstraintsActive()) {
       <p class="rv-admin-providers__policy-warning" role="note">
         Kimi thinking rejects temperature overrides and requires Max Output
         Tokens of at least 16,000. Clear Temperature before saving.

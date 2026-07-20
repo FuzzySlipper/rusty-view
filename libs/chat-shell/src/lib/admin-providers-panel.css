@@ -94,6 +94,8 @@
 }
 
 .rv-admin-providers__policy-warning {
+  display: grid;
+  gap: var(--rv-space-xs);
   align-self: end;
   margin: 0;
   padding: var(--rv-space-xs) var(--rv-space-sm);
@@ -101,6 +103,10 @@
   color: var(--rv-color-text-secondary);
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);
+}
+
+.rv-admin-providers__policy-warning .rv-admin-providers__button {
+  justify-self: start;
 }
 
 .rv-admin-providers__error {

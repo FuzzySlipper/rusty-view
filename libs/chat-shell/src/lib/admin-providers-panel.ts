@@ -228,13 +228,17 @@ export class AdminProvidersPanelComponent {
       form.thinkingMode !== 'disabled'
     );
   });
+  protected readonly reasoningConfigurationIssues = computed(() =>
+    reasoningConfigurationIssues(this.form()),
+  );
 
   protected readonly saveDisabled = computed(() => {
     const form = this.form();
     if (this.admin.saving()) return true;
     // Create requires an alias and model id; edit uses the path alias.
     if (this.editingAlias() === null && form.alias.trim() === '') return true;
-    return form.modelId.trim() === '';
+    if (form.modelId.trim() === '') return true;
+    return this.reasoningConfigurationIssues().length > 0;
   });
 
   constructor() {
@@ -339,18 +343,7 @@ export class AdminProvidersPanelComponent {
   protected updateProtocol(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     if (value === 'responses' || value === 'chat_completions') {
-      this.form.update((current) =>
-        value === 'chat_completions'
-          ? { ...current, protocol: value }
-          : {
-              ...current,
-              protocol: value,
-              chatCompletionsDialect: 'standard',
-              thinkingMode: 'provider_default',
-              reasoningHistory: 'provider_default',
-              reasoningBudgetTokens: '',
-            },
-      );
+      this.form.update((current) => ({ ...current, protocol: value }));
     }
   }
 
@@ -360,17 +353,6 @@ export class AdminProvidersPanelComponent {
     this.form.update((current) => ({
       ...current,
       chatCompletionsDialect: value,
-      ...(value === 'standard'
-        ? {
-            thinkingMode: 'provider_default' as const,
-            reasoningHistory: 'provider_default' as const,
-            reasoningBudgetTokens: '',
-          }
-        : {}),
-      ...(value !== 'deepseek' && current.reasoningHistory === 'tool_calls_only'
-        ? { reasoningHistory: 'provider_default' as const }
-        : {}),
-      ...(value !== 'qwen' ? { reasoningBudgetTokens: '' } : {}),
     }));
   }
 
@@ -380,13 +362,6 @@ export class AdminProvidersPanelComponent {
     this.form.update((current) => ({
       ...current,
       thinkingMode: value,
-      ...(value === 'disabled'
-        ? {
-            reasoningHistory: 'provider_default' as const,
-            reasoningBudgetTokens: '',
-          }
-        : {}),
-      ...(value !== 'enabled' ? { reasoningBudgetTokens: '' } : {}),
     }));
   }
 
@@ -394,6 +369,36 @@ export class AdminProvidersPanelComponent {
     const value = (event.target as HTMLSelectElement).value;
     if (!isReasoningHistory(value)) return;
     this.form.update((current) => ({ ...current, reasoningHistory: value }));
+  }
+
+  protected clearIncompatibleReasoningSettings(): void {
+    this.form.update((current) => {
+      if (current.protocol !== 'chat_completions') return current;
+      if (current.chatCompletionsDialect === 'standard') {
+        return {
+          ...current,
+          thinkingMode: 'provider_default',
+          reasoningHistory: 'provider_default',
+          reasoningBudgetTokens: '',
+        };
+      }
+      return {
+        ...current,
+        ...(current.reasoningHistory === 'tool_calls_only' &&
+        current.chatCompletionsDialect !== 'deepseek'
+          ? { reasoningHistory: 'provider_default' as const }
+          : {}),
+        ...(current.thinkingMode === 'disabled' &&
+        current.reasoningHistory !== 'provider_default'
+          ? { reasoningHistory: 'provider_default' as const }
+          : {}),
+        ...(current.reasoningBudgetTokens.trim() !== '' &&
+        (current.chatCompletionsDialect !== 'qwen' ||
+          current.thinkingMode !== 'enabled')
+          ? { reasoningBudgetTokens: '' }
+          : {}),
+      };
+    });
   }
 
   protected reasoningHistoryDisabled(
@@ -775,6 +780,47 @@ function isReasoningHistory(
   value: string,
 ): value is ChatCompletionsReasoningHistory {
   return REASONING_HISTORY_OPTIONS.some((candidate) => candidate === value);
+}
+
+function reasoningConfigurationIssues(
+  form: ProviderFormState,
+): readonly string[] {
+  if (form.protocol !== 'chat_completions') return [];
+  const issues: string[] = [];
+  const hasBudget = form.reasoningBudgetTokens.trim() !== '';
+
+  if (form.chatCompletionsDialect === 'standard') {
+    if (form.thinkingMode !== 'provider_default') {
+      issues.push('The standard dialect requires provider-default thinking.');
+    }
+    if (form.reasoningHistory !== 'provider_default') {
+      issues.push('The standard dialect requires provider-default history.');
+    }
+    if (hasBudget) {
+      issues.push('The standard dialect does not support a reasoning budget.');
+    }
+    return issues;
+  }
+
+  if (
+    form.reasoningHistory === 'tool_calls_only' &&
+    form.chatCompletionsDialect !== 'deepseek'
+  ) {
+    issues.push('Tool-call-only history requires the DeepSeek dialect.');
+  }
+  if (
+    form.thinkingMode === 'disabled' &&
+    form.reasoningHistory !== 'provider_default'
+  ) {
+    issues.push('Disabled thinking requires provider-default history.');
+  }
+  if (hasBudget && form.chatCompletionsDialect !== 'qwen') {
+    issues.push('A reasoning budget requires the Qwen dialect.');
+  }
+  if (hasBudget && form.thinkingMode !== 'enabled') {
+    issues.push('A reasoning budget requires enabled thinking.');
+  }
+  return issues;
 }
 
 function optionalStringField<TKey extends string>(
