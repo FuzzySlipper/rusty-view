@@ -143,7 +143,7 @@ describe('processRequestInline (inline worker fallback)', () => {
       }
     });
 
-    it('renders safe links with rel=noopener', () => {
+    it('renders safe links in an isolated new window', () => {
       const response = processRequestInline({
         kind: 'parse-markdown',
         id: 10,
@@ -151,7 +151,7 @@ describe('processRequestInline (inline worker fallback)', () => {
       });
       if (response.kind === 'parse-markdown') {
         expect(response.html).toContain(
-          '<a href="https://example.com" rel="noopener noreferrer">click here</a>',
+          '<a href="https://example.com" target="_blank" rel="noopener noreferrer">click here</a>',
         );
       }
     });
@@ -472,7 +472,18 @@ describe('processRequestInline (inline worker fallback)', () => {
       const html = sanitize('<a href="https://example.com">link</a>');
       expect(html).toContain('<a');
       expect(html).toContain('href="https://example.com"');
+      expect(html).toContain('target="_blank"');
+      expect(html).toContain('rel="noopener noreferrer"');
       expect(html).toContain('>link</a>');
+    });
+
+    it('overrides author-supplied link browsing context and relationship', () => {
+      const html = sanitize(
+        '<a href="https://example.com" target="_self" rel="opener">link</a>',
+      );
+      expect(html).toBe(
+        '<a href="https://example.com" target="_blank" rel="noopener noreferrer">link</a>',
+      );
     });
 
     it('allows relative links', () => {

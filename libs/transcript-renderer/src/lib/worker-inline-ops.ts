@@ -386,7 +386,7 @@ function formatInline(text: string): string {
         (match, linkText: string, url: string) => {
           const safe = safeUrl(url);
           if (safe === null) return match; // render as plain text if unsafe
-          return `<a href="${safe}" rel="noopener noreferrer">${linkText}</a>`;
+          return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
         },
       )
       // Bold
@@ -512,8 +512,17 @@ function sanitizeHtml(content: string, policy: HtmlSanitizerPolicy): string {
       }
 
       // Sanitize attributes.
-      const sanitizedAttrs = sanitizeAttributes(attrs, allowedAttrs, policy);
-      return `<${tag}${sanitizedAttrs}>`;
+      const sanitizedAttrs = sanitizeAttributes(
+        attrs,
+        allowedAttrs,
+        policy,
+        tag,
+      );
+      const fixedLinkAttrs =
+        tag === 'a' && sanitizedAttrs.includes(' href="')
+          ? ' target="_blank" rel="noopener noreferrer"'
+          : '';
+      return `<${tag}${sanitizedAttrs}${fixedLinkAttrs}>`;
     },
   );
 
@@ -525,6 +534,7 @@ function sanitizeAttributes(
   attrs: string,
   allowedAttrs: Set<string>,
   policy: HtmlSanitizerPolicy,
+  tagName: string,
 ): string {
   const kept: string[] = [];
 
@@ -544,6 +554,12 @@ function sanitizeAttributes(
 
     // Check if attribute is allowed.
     if (!allowedAttrs.has(attrName)) continue;
+
+    // Transcript links always open outside the app shell. Ignore author-supplied
+    // target/rel values so sanitizeHtml can append one fixed isolated policy.
+    if (tagName === 'a' && (attrName === 'target' || attrName === 'rel')) {
+      continue;
+    }
 
     const value = match[2] ?? match[3] ?? match[4] ?? '';
 

@@ -1238,6 +1238,23 @@ describe('MessageBlockComponent markdown toggle', () => {
     expect(host.innerHTML).toContain('<strong>bold</strong>');
   });
 
+  it('opens rendered markdown links outside the application shell', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: '[report](https://example.com/report)',
+      }),
+      'markdown',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const link = fixture.nativeElement.querySelector('a') as HTMLAnchorElement;
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toBe('noopener noreferrer');
+  });
+
   it('renders raw text when mode is raw', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: '**bold**' }),
@@ -1322,6 +1339,24 @@ describe('MessageBlockComponent markdown toggle', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('.rv-block__markdown')).not.toBeNull();
     expect(host.innerHTML).toContain('<b>world</b>');
+  });
+
+  it('opens sanitized HTML links outside the application shell', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content:
+          '<a href="https://example.com/report" target="_self" rel="opener">report</a>',
+      }),
+      'sanitized-html',
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const link = fixture.nativeElement.querySelector('a') as HTMLAnchorElement;
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toBe('noopener noreferrer');
   });
 
   it('sanitized-html mode strips dangerous content', async () => {

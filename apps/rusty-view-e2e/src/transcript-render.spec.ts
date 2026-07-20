@@ -46,7 +46,9 @@ const REPRESENTATIVE_TABLE = [
 ].join('\n');
 const ASSISTANT_LEAD =
   'A figure steps through the doorway, into the amber light.';
-const ASSISTANT_BODY = `${ASSISTANT_LEAD}\n\n${REPRESENTATIVE_TABLE}`;
+const ASSISTANT_LINK_LABEL = 'Open the encounter report';
+const ASSISTANT_LINK_URL = 'https://example.com/encounter-report';
+const ASSISTANT_BODY = `${ASSISTANT_LEAD}\n\n[${ASSISTANT_LINK_LABEL}](${ASSISTANT_LINK_URL})\n\n${REPRESENTATIVE_TABLE}`;
 const TOOL_DEBUG_DETAIL_ID = 'debug_tc1';
 const LIVE_SCROLL_SESSION_ID = 'render-live-scroll-session';
 const LIVE_SCROLL_ASSISTANT_ID = 'msg_live_scroll_asst';
@@ -255,6 +257,13 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(page.locator('.rv-message--assistant')).not.toContainText(
     'responses replay wake completed',
   );
+
+  const transcriptLink = page.getByRole('link', {
+    name: ASSISTANT_LINK_LABEL,
+  });
+  await expect(transcriptLink).toHaveAttribute('href', ASSISTANT_LINK_URL);
+  await expect(transcriptLink).toHaveAttribute('target', '_blank');
+  await expect(transcriptLink).toHaveAttribute('rel', 'noopener noreferrer');
 
   // Role classes are applied (user vs assistant), proving the rows are real
   // message items and not placeholders.
