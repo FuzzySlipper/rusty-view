@@ -599,6 +599,17 @@ export interface components {
                 temperature?: number;
                 reasoning_effort?: string;
                 reasoning_format?: string;
+                /** @enum {string} */
+                chat_completions_dialect?: "standard" | "kimi" | "glm" | "qwen" | "deepseek";
+                /** @enum {string} */
+                thinking_mode?: "provider_default" | "enabled" | "disabled";
+                /** @enum {string} */
+                reasoning_history?: "provider_default" | "discard" | "preserve_all" | "tool_calls_only";
+                reasoning_budget_tokens?: number;
+                thinking_settings_applied?: boolean;
+                thinking_mode_applied?: boolean;
+                reasoning_history_applied?: boolean;
+                reasoning_budget_applied?: boolean;
                 revision?: number;
             };
             brain: {

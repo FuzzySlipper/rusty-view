@@ -97,7 +97,7 @@
   align-self: end;
   margin: 0;
   padding: var(--rv-space-xs) var(--rv-space-sm);
-  border-left: 3px solid var(--rv-color-warning, #d6a84b);
+  border-left: 3px solid var(--rv-color-warning);
   color: var(--rv-color-text-secondary);
   font-family: var(--rv-font-mono);
   font-size: var(--rv-font-size-xs);

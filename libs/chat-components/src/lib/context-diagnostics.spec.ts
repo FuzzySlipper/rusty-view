@@ -12,7 +12,19 @@ function usageFixture(
     session_id: 'sess_1',
     agent_id: 'agent_1',
     profile_id: 'prof_1',
-    provider: { alias: 'main', status: 'active', model_id: 'gpt-x' },
+    provider: {
+      alias: 'main',
+      status: 'active',
+      model_id: 'gpt-x',
+      chat_completions_dialect: 'qwen',
+      thinking_mode: 'enabled',
+      reasoning_history: 'preserve_all',
+      reasoning_budget_tokens: 8192,
+      thinking_settings_applied: true,
+      thinking_mode_applied: true,
+      reasoning_history_applied: true,
+      reasoning_budget_applied: true,
+    },
     brain: { backend: 'openai' },
     context_strategy: {
       strategy_id: 'sliding-window',
@@ -90,6 +102,66 @@ describe('ContextDiagnosticsComponent', () => {
     // Compaction thresholds come straight from the backend, not constants.
     expect(text).toContain('80%');
     expect(text).toContain('40%');
+  });
+
+  it('distinguishes configured reasoning controls from applied states', async () => {
+    const fixture = await createComponent();
+    fixture.componentRef.setInput('usage', usageFixture());
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Configured Chat Completions dialect');
+    expect(text).toContain('qwen');
+    expect(text).toContain('Configured thinking mode');
+    expect(text).toContain('enabled');
+    expect(text).toContain('Configured reasoning history');
+    expect(text).toContain('preserve_all');
+    expect(text).toContain('Configured reasoning budget');
+    expect(text).toContain('8,192');
+    expect(text).toContain('Thinking settings applied');
+    expect(text).toContain('Thinking mode applied');
+    expect(text).toContain('Reasoning history applied');
+    expect(text).toContain('Reasoning budget applied');
+  });
+
+  it('renders explicit not-applied states instead of dropping false values', async () => {
+    const fixture = await createComponent();
+    fixture.componentRef.setInput(
+      'usage',
+      usageFixture({
+        provider: {
+          alias: 'standard',
+          status: 'active',
+          protocol: 'chat_completions',
+          chat_completions_dialect: 'standard',
+          thinking_mode: 'provider_default',
+          reasoning_history: 'provider_default',
+          thinking_settings_applied: false,
+          thinking_mode_applied: false,
+          reasoning_history_applied: false,
+          reasoning_budget_applied: false,
+        },
+      }),
+    );
+    fixture.detectChanges();
+
+    const rows = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '.rv-context__row',
+      ),
+    ).map((row) => row.textContent ?? '');
+    expect(
+      rows.find((row) => row.includes('Thinking settings applied')),
+    ).toContain('no');
+    expect(rows.find((row) => row.includes('Thinking mode applied'))).toContain(
+      'no',
+    );
+    expect(
+      rows.find((row) => row.includes('Reasoning history applied')),
+    ).toContain('no');
+    expect(
+      rows.find((row) => row.includes('Reasoning budget applied')),
+    ).toContain('no');
   });
 
   it('computes a fill percentage from used/window tokens', async () => {

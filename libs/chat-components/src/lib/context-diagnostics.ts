@@ -71,6 +71,32 @@ export class ContextDiagnosticsComponent {
         row('Temperature', formatNumber(provider.temperature)),
         row('Reasoning effort', provider.reasoning_effort),
         row('Reasoning format', provider.reasoning_format),
+        row(
+          'Configured Chat Completions dialect',
+          provider.chat_completions_dialect,
+        ),
+        row('Configured thinking mode', provider.thinking_mode),
+        row('Configured reasoning history', provider.reasoning_history),
+        row(
+          'Configured reasoning budget',
+          formatTokens(provider.reasoning_budget_tokens),
+        ),
+        row(
+          'Thinking settings applied',
+          formatBoolean(provider.thinking_settings_applied),
+        ),
+        row(
+          'Thinking mode applied',
+          formatBoolean(provider.thinking_mode_applied),
+        ),
+        row(
+          'Reasoning history applied',
+          formatBoolean(provider.reasoning_history_applied),
+        ),
+        row(
+          'Reasoning budget applied',
+          formatBoolean(provider.reasoning_budget_applied),
+        ),
       ]);
     },
   );
