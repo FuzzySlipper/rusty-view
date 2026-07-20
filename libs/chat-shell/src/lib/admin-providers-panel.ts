@@ -10,6 +10,9 @@ import {
 } from '@angular/core';
 import { AdminStore } from '@rusty-view/chat-store';
 import type {
+  ChatCompletionsDialect,
+  ChatCompletionsReasoningHistory,
+  ChatCompletionsThinkingMode,
   ModelProviderProtocol,
   ModelProviderRecord,
   ModelProviderRefreshMode,
@@ -39,7 +42,12 @@ interface ProviderFormState {
   /** Optional temperature override as a decimal (0–2); blank uses provider default. */
   readonly temperature: string;
   readonly reasoningEffort: string;
+  /** Probe/readback diagnostic only; Crew does not map this as configuration. */
   readonly reasoningFormat: string;
+  readonly chatCompletionsDialect: ChatCompletionsDialect;
+  readonly thinkingMode: ChatCompletionsThinkingMode;
+  readonly reasoningHistory: ChatCompletionsReasoningHistory;
+  readonly reasoningBudgetTokens: string;
   readonly credentialMode: ProviderCredentialMode;
   readonly credentialId: string;
   readonly credentialDisplayName: string;
@@ -62,6 +70,10 @@ function initialForm(): ProviderFormState {
     temperature: '',
     reasoningEffort: '',
     reasoningFormat: '',
+    chatCompletionsDialect: 'standard',
+    thinkingMode: 'provider_default',
+    reasoningHistory: 'provider_default',
+    reasoningBudgetTokens: '',
     credentialMode: 'unconfigured',
     credentialId: '',
     credentialDisplayName: '',
@@ -91,6 +103,27 @@ const REASONING_EFFORT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'xhigh', label: 'xhigh' },
 ];
 
+const CHAT_COMPLETIONS_DIALECTS: readonly ChatCompletionsDialect[] = [
+  'standard',
+  'kimi',
+  'glm',
+  'qwen',
+  'deepseek',
+];
+
+const THINKING_MODES: readonly ChatCompletionsThinkingMode[] = [
+  'provider_default',
+  'enabled',
+  'disabled',
+];
+
+const REASONING_HISTORY_OPTIONS: readonly ChatCompletionsReasoningHistory[] = [
+  'provider_default',
+  'discard',
+  'preserve_all',
+  'tool_calls_only',
+];
+
 /**
  * Admin panel for the service-level model provider registry (tasks #3534/#3537).
  *
@@ -114,6 +147,9 @@ export class AdminProvidersPanelComponent {
 
   protected readonly refreshModes = REFRESH_MODES;
   protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
+  protected readonly chatCompletionsDialects = CHAT_COMPLETIONS_DIALECTS;
+  protected readonly thinkingModes = THINKING_MODES;
+  protected readonly reasoningHistoryOptions = REASONING_HISTORY_OPTIONS;
   protected readonly form = signal<ProviderFormState>(initialForm());
   protected readonly editingAlias = signal<string | null>(null);
   protected readonly refreshMode = signal<ModelProviderRefreshMode>('none');
@@ -176,6 +212,22 @@ export class AdminProvidersPanelComponent {
       this.selectedCredential()?.credentialKind === 'openai_oauth'
     );
   });
+  protected readonly reasoningBudgetEnabled = computed(() => {
+    const form = this.form();
+    return (
+      form.protocol === 'chat_completions' &&
+      form.chatCompletionsDialect === 'qwen' &&
+      form.thinkingMode === 'enabled'
+    );
+  });
+  protected readonly kimiThinkingConstraintsActive = computed(() => {
+    const form = this.form();
+    return (
+      form.protocol === 'chat_completions' &&
+      form.chatCompletionsDialect === 'kimi' &&
+      form.thinkingMode !== 'disabled'
+    );
+  });
 
   protected readonly saveDisabled = computed(() => {
     const form = this.form();
@@ -200,7 +252,12 @@ export class AdminProvidersPanelComponent {
   protected updateText(
     field: Exclude<
       keyof ProviderFormState,
-      'protocol' | 'status' | 'credentialMode'
+      | 'protocol'
+      | 'status'
+      | 'credentialMode'
+      | 'chatCompletionsDialect'
+      | 'thinkingMode'
+      | 'reasoningHistory'
     >,
     event: Event,
   ): void {
@@ -282,8 +339,76 @@ export class AdminProvidersPanelComponent {
   protected updateProtocol(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     if (value === 'responses' || value === 'chat_completions') {
-      this.form.update((current) => ({ ...current, protocol: value }));
+      this.form.update((current) =>
+        value === 'chat_completions'
+          ? { ...current, protocol: value }
+          : {
+              ...current,
+              protocol: value,
+              chatCompletionsDialect: 'standard',
+              thinkingMode: 'provider_default',
+              reasoningHistory: 'provider_default',
+              reasoningBudgetTokens: '',
+            },
+      );
     }
+  }
+
+  protected updateChatCompletionsDialect(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!isChatCompletionsDialect(value)) return;
+    this.form.update((current) => ({
+      ...current,
+      chatCompletionsDialect: value,
+      ...(value === 'standard'
+        ? {
+            thinkingMode: 'provider_default' as const,
+            reasoningHistory: 'provider_default' as const,
+            reasoningBudgetTokens: '',
+          }
+        : {}),
+      ...(value !== 'deepseek' && current.reasoningHistory === 'tool_calls_only'
+        ? { reasoningHistory: 'provider_default' as const }
+        : {}),
+      ...(value !== 'qwen' ? { reasoningBudgetTokens: '' } : {}),
+    }));
+  }
+
+  protected updateThinkingMode(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!isThinkingMode(value)) return;
+    this.form.update((current) => ({
+      ...current,
+      thinkingMode: value,
+      ...(value === 'disabled'
+        ? {
+            reasoningHistory: 'provider_default' as const,
+            reasoningBudgetTokens: '',
+          }
+        : {}),
+      ...(value !== 'enabled' ? { reasoningBudgetTokens: '' } : {}),
+    }));
+  }
+
+  protected updateReasoningHistory(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!isReasoningHistory(value)) return;
+    this.form.update((current) => ({ ...current, reasoningHistory: value }));
+  }
+
+  protected reasoningHistoryDisabled(
+    option: ChatCompletionsReasoningHistory,
+  ): boolean {
+    const form = this.form();
+    if (form.chatCompletionsDialect === 'standard') {
+      return option !== 'provider_default';
+    }
+    if (form.thinkingMode === 'disabled') {
+      return option !== 'provider_default';
+    }
+    return (
+      option === 'tool_calls_only' && form.chatCompletionsDialect !== 'deepseek'
+    );
   }
 
   protected updateStatus(event: Event): void {
@@ -386,6 +511,13 @@ export class AdminProvidersPanelComponent {
           : milliToDecimal(provider.temperatureMilli),
       reasoningEffort: provider.reasoningEffort ?? '',
       reasoningFormat: provider.reasoningFormat ?? '',
+      chatCompletionsDialect: provider.chatCompletionsDialect,
+      thinkingMode: provider.thinkingMode,
+      reasoningHistory: provider.reasoningHistory,
+      reasoningBudgetTokens:
+        provider.reasoningBudgetTokens === undefined
+          ? ''
+          : String(provider.reasoningBudgetTokens),
       credentialMode,
       credentialId: provider.credentialId ?? '',
       credentialDisplayName: '',
@@ -607,16 +739,42 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
     ...optionalStringField('description', form.description),
     ...optionalStringField('baseUrl', form.baseUrl),
     ...optionalStringField('reasoningEffort', form.reasoningEffort),
-    ...optionalStringField('reasoningFormat', form.reasoningFormat),
     ...optionalNumberField('contextWindowTokens', form.contextWindowTokens),
     ...optionalNumberField('maxOutputTokens', form.maxOutputTokens),
     ...optionalTemperatureMilli(form.temperature),
+    ...(form.protocol === 'chat_completions'
+      ? {
+          chatCompletionsDialect: form.chatCompletionsDialect,
+          thinkingMode: form.thinkingMode,
+          reasoningHistory: form.reasoningHistory,
+          ...optionalNumberField(
+            'reasoningBudgetTokens',
+            form.reasoningBudgetTokens,
+          ),
+        }
+      : {}),
   };
   // NOTE: `expectedRevision` is intentionally omitted (task #3722). Crew
   // overwrites the current record when it is absent, so normal edits succeed
   // even after the record advanced elsewhere. Reintroduce it only behind an
   // explicit compare-and-swap/advanced edit mode.
   return request;
+}
+
+function isChatCompletionsDialect(
+  value: string,
+): value is ChatCompletionsDialect {
+  return CHAT_COMPLETIONS_DIALECTS.some((candidate) => candidate === value);
+}
+
+function isThinkingMode(value: string): value is ChatCompletionsThinkingMode {
+  return THINKING_MODES.some((candidate) => candidate === value);
+}
+
+function isReasoningHistory(
+  value: string,
+): value is ChatCompletionsReasoningHistory {
+  return REASONING_HISTORY_OPTIONS.some((candidate) => candidate === value);
 }
 
 function optionalStringField<TKey extends string>(

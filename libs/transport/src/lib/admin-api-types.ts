@@ -1,3 +1,11 @@
+import type {
+  ChatCompletionsDialect,
+  ChatCompletionsReasoningHistory,
+  ChatCompletionsThinkingMode,
+  ProviderAdminModelProviderRecord,
+  ProviderAdminModelProviderWrite,
+} from '@rusty-view/protocol';
+
 export interface AdminApiMeta {
   readonly request_id: string;
   readonly schema_version: 1;
@@ -1333,6 +1341,10 @@ export interface ModelProviderRecord {
   readonly temperatureMilli?: number;
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
+  readonly chatCompletionsDialect: ProviderAdminModelProviderRecord['chatCompletionsDialect'];
+  readonly thinkingMode: ProviderAdminModelProviderRecord['thinkingMode'];
+  readonly reasoningHistory: ProviderAdminModelProviderRecord['reasoningHistory'];
+  readonly reasoningBudgetTokens?: ProviderAdminModelProviderRecord['reasoningBudgetTokens'];
   /** Service-scoped credential identity linked to this alias, when configured. */
   readonly credentialId?: string;
   readonly credential: ModelProviderCredential;
@@ -1370,6 +1382,10 @@ export interface ModelProviderWriteRequest {
   readonly temperatureMilli?: number | null;
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
+  readonly chatCompletionsDialect?: ProviderAdminModelProviderWrite['chatCompletionsDialect'];
+  readonly thinkingMode?: ProviderAdminModelProviderWrite['thinkingMode'];
+  readonly reasoningHistory?: ProviderAdminModelProviderWrite['reasoningHistory'];
+  readonly reasoningBudgetTokens?: ProviderAdminModelProviderWrite['reasoningBudgetTokens'];
   readonly secret?: string;
   readonly apiKey?: string;
   readonly credentialSecret?: ModelProviderCredentialSecretInput;
@@ -1377,6 +1393,12 @@ export interface ModelProviderWriteRequest {
   readonly metadataJson?: Record<string, unknown>;
   readonly expectedRevision?: number;
 }
+
+export type {
+  ChatCompletionsDialect,
+  ChatCompletionsReasoningHistory,
+  ChatCompletionsThinkingMode,
+};
 
 /** Explicit typed credential write for provider setup. Do not use for raw OAuth bundles in UI. */
 export type ModelProviderCredentialSecretInput =

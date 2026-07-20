@@ -945,6 +945,18 @@ function providerWriteBody(
   if (request.reasoningFormat !== undefined) {
     body['reasoningFormat'] = request.reasoningFormat;
   }
+  if (request.chatCompletionsDialect !== undefined) {
+    body['chatCompletionsDialect'] = request.chatCompletionsDialect;
+  }
+  if (request.thinkingMode !== undefined) {
+    body['thinkingMode'] = request.thinkingMode;
+  }
+  if (request.reasoningHistory !== undefined) {
+    body['reasoningHistory'] = request.reasoningHistory;
+  }
+  if (request.reasoningBudgetTokens !== undefined) {
+    body['reasoningBudgetTokens'] = request.reasoningBudgetTokens;
+  }
   if (request.clearSecret !== undefined) {
     body['clearSecret'] = request.clearSecret;
   }

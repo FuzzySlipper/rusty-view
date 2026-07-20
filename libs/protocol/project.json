@@ -29,7 +29,8 @@
       "options": {
         "commands": [
           "pnpm exec openapi-typescript \"${RUSTY_VIEW_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json}\" -o {projectRoot}/src/generated/openapi.ts",
-          "pnpm exec openapi-typescript \"${RUSTY_VIEW_EXTERNAL_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/external-runtime-api-v0.openapi.json}\" -o {projectRoot}/src/generated/external-openapi.ts"
+          "pnpm exec openapi-typescript \"${RUSTY_VIEW_EXTERNAL_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/external-runtime-api-v0.openapi.json}\" -o {projectRoot}/src/generated/external-openapi.ts",
+          "pnpm exec openapi-typescript \"${RUSTY_VIEW_PROVIDER_ADMIN_OPENAPI_SOURCE:-/home/dev/rusty-crew/docs/model-provider-admin-api-v0.openapi.json}\" -o {projectRoot}/src/generated/provider-admin-openapi.ts"
         ],
         "parallel": false
       }

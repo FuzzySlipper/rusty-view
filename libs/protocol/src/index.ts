@@ -4,9 +4,8 @@
  * Wire-contract types for the Rusty Crew chat API. Type-only package: no
  * runtime code, no Angular, no transport helpers, no domain reducers.
  *
- * Source of truth: the OpenAPI 3.1 artifact at
- *   /home/dev/rusty-crew/docs/rusty-view-chat-api-v0.openapi.json
- * (human-readable companion: rusty-crew/docs/rusty-view-chat-api-contract.md).
+ * Sources of truth: the OpenAPI 3.1 artifacts in `/home/dev/rusty-crew/docs/`
+ * for the Rusty View chat, external runtime, and model-provider admin APIs.
  *
  * The generated types live in `./generated/openapi.ts` and are produced by
  * `openapi-typescript` via `nx run protocol:generate`. Generated files are not
@@ -35,6 +34,7 @@ import type {
   components as externalComponents,
   operations as externalOperations,
 } from './generated/external-openapi';
+import type { components as providerAdminComponents } from './generated/provider-admin-openapi';
 
 /**
  * Schemas namespace from the generated OpenAPI artifact. Re-exported so the
@@ -47,10 +47,32 @@ export type {
   operations as ExternalApiOperations,
   paths as ExternalApiPaths,
 } from './generated/external-openapi';
+export type {
+  components as ProviderAdminApiComponents,
+  operations as ProviderAdminApiOperations,
+  paths as ProviderAdminApiPaths,
+} from './generated/provider-admin-openapi';
 
 /** Shortcut into the generated schemas map, for the aliases below. */
 type Schemas = components['schemas'];
 type ExternalSchemas = externalComponents['schemas'];
+type ProviderAdminSchemas = providerAdminComponents['schemas'];
+
+// ---- model-provider admin contract ----
+//
+// The admin transport still contains UI-oriented projections for older Crew
+// compatibility fields. New provider policy controls are deliberately sourced
+// from the dedicated generated admin contract rather than duplicated by hand.
+export type ChatCompletionsDialect =
+  ProviderAdminSchemas['ChatCompletionsDialect'];
+export type ChatCompletionsThinkingMode =
+  ProviderAdminSchemas['ChatCompletionsThinkingMode'];
+export type ChatCompletionsReasoningHistory =
+  ProviderAdminSchemas['ChatCompletionsReasoningHistory'];
+export type ProviderAdminModelProviderRecord =
+  ProviderAdminSchemas['ModelProviderRecord'];
+export type ProviderAdminModelProviderWrite =
+  ProviderAdminSchemas['ModelProviderWrite'];
 
 // ---- external-agent runtime ----
 export type ExternalRuntimeFleet = ExternalSchemas['ExternalRuntimeFleet'];

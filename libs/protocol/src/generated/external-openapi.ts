@@ -750,6 +750,7 @@ export interface components {
         BrainWakeFailure: {
             kind: components["schemas"]["CoreErrorKind"];
             message: string;
+            reason_code?: string | null;
             session_id: string;
             wake_id: string;
         };

@@ -25,6 +25,9 @@ function makeProvider(alias: string, hasSecret = false): ModelProviderRecord {
     protocol: 'chat_completions',
     providerKind: 'local',
     modelId: 'deterministic',
+    chatCompletionsDialect: 'standard',
+    thinkingMode: 'provider_default',
+    reasoningHistory: 'provider_default',
     credential: hasSecret
       ? { hasSecret: true, secretRef: 'kv//default', updatedAt: 't' }
       : { hasSecret: false },
@@ -301,7 +304,18 @@ function makeTransport(
       async (
         request: ModelProviderWriteRequest,
       ): Promise<ModelProviderWriteResponse> => {
-        const provider = makeProvider(request.alias ?? request.modelId);
+        const provider = {
+          ...makeProvider(request.alias ?? request.modelId),
+          protocol: request.protocol,
+          providerKind: request.providerKind ?? 'custom',
+          modelId: request.modelId,
+          chatCompletionsDialect: request.chatCompletionsDialect ?? 'standard',
+          thinkingMode: request.thinkingMode ?? 'provider_default',
+          reasoningHistory: request.reasoningHistory ?? 'provider_default',
+          ...(request.reasoningBudgetTokens === undefined
+            ? {}
+            : { reasoningBudgetTokens: request.reasoningBudgetTokens }),
+        } satisfies ModelProviderRecord;
         currentProviders = [...currentProviders, provider];
         return {
           provider,
@@ -319,8 +333,15 @@ function makeTransport(
         );
         const provider = {
           ...(current ?? makeProvider(alias)),
+          protocol: request.protocol,
           modelId: request.modelId,
-        };
+          chatCompletionsDialect: request.chatCompletionsDialect ?? 'standard',
+          thinkingMode: request.thinkingMode ?? 'provider_default',
+          reasoningHistory: request.reasoningHistory ?? 'provider_default',
+          ...(request.reasoningBudgetTokens === undefined
+            ? {}
+            : { reasoningBudgetTokens: request.reasoningBudgetTokens }),
+        } satisfies ModelProviderRecord;
         currentProviders = [
           ...currentProviders.filter((candidate) => candidate.alias !== alias),
           provider,
@@ -467,6 +488,11 @@ describe('AdminProvidersPanelComponent', () => {
     fixture.detectChanges();
 
     expect(component.form().credentialMode).toBe('unconfigured');
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="provider-chat-completions-dialect"]',
+      ),
+    ).toBeNull();
     const credentialSelect = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll('select'),
     ).find((select) => select.textContent?.includes('OpenAI OAuth'));
@@ -791,6 +817,176 @@ describe('AdminProvidersPanelComponent', () => {
     const [request] = call;
     expect(request.maxOutputTokens).toBe(4096);
     expect(request.temperatureMilli).toBeNull();
+  });
+
+  it('creates and reads back typed Qwen thinking controls exactly', async () => {
+    const fixture = await createPanel([]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mock: { calls: [ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      updateText(
+        field: 'alias' | 'modelId' | 'reasoningBudgetTokens',
+        event: { target: { value: string } },
+      ): void;
+      updateChatCompletionsDialect(event: { target: { value: string } }): void;
+      updateThinkingMode(event: { target: { value: string } }): void;
+      updateReasoningHistory(event: { target: { value: string } }): void;
+      saveProvider(): void;
+    };
+
+    component.updateText('alias', { target: { value: 'qwen-thinking' } });
+    component.updateText('modelId', { target: { value: 'qwen3' } });
+    component.updateChatCompletionsDialect({ target: { value: 'qwen' } });
+    component.updateThinkingMode({ target: { value: 'enabled' } });
+    component.updateReasoningHistory({ target: { value: 'preserve_all' } });
+    component.updateText('reasoningBudgetTokens', {
+      target: { value: '8192' },
+    });
+    component.saveProvider();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const call = transport.createAdminModelProvider.mock.calls[0];
+    if (call === undefined) throw new Error('expected a create call');
+    expect(call[0]).toMatchObject({
+      chatCompletionsDialect: 'qwen',
+      thinkingMode: 'enabled',
+      reasoningHistory: 'preserve_all',
+      reasoningBudgetTokens: 8192,
+    });
+    const readback = fixture.nativeElement.querySelector(
+      '[data-testid="provider-reasoning-policy-readback"]',
+    )?.textContent;
+    expect(readback).toContain('dialect qwen');
+    expect(readback).toContain('thinking enabled');
+    expect(readback).toContain('history preserve_all');
+    expect(readback).toContain('budget 8192');
+  });
+
+  it('round-trips DeepSeek discard and tool-call-only history as distinct policies', async () => {
+    const discard = {
+      ...makeProvider('deepseek-legacy'),
+      chatCompletionsDialect: 'deepseek' as const,
+      thinkingMode: 'enabled' as const,
+      reasoningHistory: 'discard' as const,
+    };
+    const toolCalls = {
+      ...makeProvider('deepseek-tools'),
+      chatCompletionsDialect: 'deepseek' as const,
+      thinkingMode: 'enabled' as const,
+      reasoningHistory: 'tool_calls_only' as const,
+    };
+    const fixture = await createPanel([discard, toolCalls]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      saveProvider(): void;
+    };
+
+    component.selectProviderForEdit(discard);
+    component.saveProvider();
+    await fixture.whenStable();
+    component.selectProviderForEdit(toolCalls);
+    component.saveProvider();
+    await fixture.whenStable();
+
+    expect(transport.updateAdminModelProvider.mock.calls[0]?.[1]).toMatchObject(
+      { reasoningHistory: 'discard' },
+    );
+    expect(transport.updateAdminModelProvider.mock.calls[1]?.[1]).toMatchObject(
+      { reasoningHistory: 'tool_calls_only' },
+    );
+  });
+
+  it('keeps typed form state when Crew rejects a Kimi policy', async () => {
+    const provider = {
+      ...makeProvider('kimi-invalid'),
+      maxOutputTokens: 4096,
+      temperatureMilli: 700,
+      chatCompletionsDialect: 'kimi' as const,
+      thinkingMode: 'enabled' as const,
+      reasoningHistory: 'preserve_all' as const,
+    };
+    const fixture = await createPanel([provider]);
+    const store = TestBed.inject(AdminStore);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mockImplementationOnce(fn: () => Promise<never>): void;
+      };
+    };
+    transport.updateAdminModelProvider.mockImplementationOnce(async () => {
+      throw new ChatTransportError({
+        code: 'http_error',
+        message: 'kimi thinking models do not accept a temperature override',
+        statusCode: 400,
+        apiError: {
+          code: 'invalid_input',
+          reason_code: 'invalid_model_provider',
+          message: 'kimi thinking models do not accept a temperature override',
+          retryable: false,
+        },
+      });
+    });
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      form(): {
+        chatCompletionsDialect: string;
+        thinkingMode: string;
+        reasoningHistory: string;
+        temperature: string;
+      };
+      saveProvider(): void;
+    };
+
+    component.selectProviderForEdit(provider);
+    component.saveProvider();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.error()).toContain('temperature override');
+    expect(component.form()).toMatchObject({
+      chatCompletionsDialect: 'kimi',
+      thinkingMode: 'enabled',
+      reasoningHistory: 'preserve_all',
+      temperature: '0.7',
+    });
+    expect(textContent(fixture)).toContain(
+      'requires Max Output Tokens of at least 16,000',
+    );
+  });
+
+  it('shows reasoning format as diagnostic readback and does not write it', async () => {
+    const provider = { ...makeProvider('format'), reasoningFormat: 'qwen' };
+    const fixture = await createPanel([provider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      saveProvider(): void;
+    };
+
+    component.selectProviderForEdit(provider);
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector(
+      'input[aria-describedby="provider-reasoning-format-help"]',
+    ) as HTMLInputElement | null;
+    expect(input?.readOnly).toBe(true);
+    expect(input?.value).toBe('qwen');
+    component.saveProvider();
+    await fixture.whenStable();
+    expect(
+      transport.updateAdminModelProvider.mock.calls[0]?.[1],
+    ).not.toHaveProperty('reasoningFormat');
   });
 
   it('round-trips an existing provider temperature from milli to the decimal field', async () => {

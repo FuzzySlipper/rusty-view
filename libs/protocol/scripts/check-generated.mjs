@@ -53,6 +53,20 @@ const CONTRACTS = [
       'external-openapi.ts',
     ),
   },
+  {
+    name: 'provider admin',
+    source:
+      process.env['RUSTY_VIEW_PROVIDER_ADMIN_OPENAPI_SOURCE'] ??
+      '/home/dev/rusty-crew/docs/model-provider-admin-api-v0.openapi.json',
+    checkedIn: join(
+      REPO_ROOT,
+      'libs',
+      'protocol',
+      'src',
+      'generated',
+      'provider-admin-openapi.ts',
+    ),
+  },
 ];
 
 const tmpDir = mkdtempSync(join(tmpdir(), 'rv-protocol-check-'));

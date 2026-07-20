@@ -1118,6 +1118,10 @@ describe('AdminHttpTransport', () => {
         modelId: 'deterministic-updated',
         status: 'disabled',
         temperatureMilli: null,
+        chatCompletionsDialect: 'qwen',
+        thinkingMode: 'enabled',
+        reasoningHistory: 'preserve_all',
+        reasoningBudgetTokens: 2048,
         expectedRevision: 3,
       },
       'apply',
@@ -1130,6 +1134,10 @@ describe('AdminHttpTransport', () => {
     expect(req.body).toContain('disabled');
     expect(req.body).toContain('"expectedRevision":3');
     expect(req.body).toContain('"temperatureMilli":null');
+    expect(req.body).toContain('"chatCompletionsDialect":"qwen"');
+    expect(req.body).toContain('"thinkingMode":"enabled"');
+    expect(req.body).toContain('"reasoningHistory":"preserve_all"');
+    expect(req.body).toContain('"reasoningBudgetTokens":2048');
   });
 
   it('uses service-scoped credential registry, link, impact, and unlink routes', async () => {

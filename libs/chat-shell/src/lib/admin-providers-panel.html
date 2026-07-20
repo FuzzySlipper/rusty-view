@@ -156,10 +156,88 @@
         <input
           type="text"
           [value]="form().reasoningFormat"
-          (input)="updateText('reasoningFormat', $event)"
+          readonly
+          aria-describedby="provider-reasoning-format-help"
+          placeholder="Not detected"
+        />
+        <small id="provider-reasoning-format-help">
+          Diagnostic readback only; Crew does not apply this as configuration.
+        </small>
+      </label>
+      @if (form().protocol === 'chat_completions') {
+      <label>
+        <span>Chat Completions Dialect</span>
+        <select
+          data-testid="provider-chat-completions-dialect"
+          [value]="form().chatCompletionsDialect"
+          (change)="updateChatCompletionsDialect($event)"
+        >
+          @for (dialect of chatCompletionsDialects; track dialect) {
+          <option [value]="dialect">{{ dialect }}</option>
+          }
+        </select>
+        <small>
+          Explicit wire behavior; never inferred from alias, model, or URL.
+        </small>
+      </label>
+      <label>
+        <span>Thinking Mode</span>
+        <select
+          data-testid="provider-thinking-mode"
+          [value]="form().thinkingMode"
+          (change)="updateThinkingMode($event)"
+        >
+          @for (mode of thinkingModes; track mode) {
+          <option
+            [value]="mode"
+            [disabled]="form().chatCompletionsDialect === 'standard' && mode !== 'provider_default'"
+          >
+            {{ mode }}
+          </option>
+          }
+        </select>
+        <small>Whether the selected dialect sends its thinking control.</small>
+      </label>
+      <label>
+        <span>Reasoning History</span>
+        <select
+          data-testid="provider-reasoning-history"
+          [value]="form().reasoningHistory"
+          (change)="updateReasoningHistory($event)"
+        >
+          @for (history of reasoningHistoryOptions; track history) {
+          <option
+            [value]="history"
+            [disabled]="reasoningHistoryDisabled(history)"
+          >
+            {{ history }}
+          </option>
+          }
+        </select>
+        <small>
+          preserve_all replays all reasoning; tool_calls_only is DeepSeek-only.
+        </small>
+      </label>
+      <label>
+        <span>Reasoning Budget Tokens</span>
+        <input
+          data-testid="provider-reasoning-budget"
+          type="number"
+          min="1"
+          placeholder="No explicit budget"
+          [value]="form().reasoningBudgetTokens"
+          [disabled]="!reasoningBudgetEnabled()"
+          (input)="updateText('reasoningBudgetTokens', $event)"
           autocomplete="off"
         />
+        <small>Available only for Qwen with thinking enabled.</small>
       </label>
+      } @if (kimiThinkingConstraintsActive()) {
+      <p class="rv-admin-providers__policy-warning" role="note">
+        Kimi thinking rejects temperature overrides and requires Max Output
+        Tokens of at least 16,000. Clear Temperature before saving.
+      </p>
+      }
       <label>
         <span>Status</span>
         <select [value]="form().status" (change)="updateStatus($event)">
@@ -411,7 +489,20 @@
           <span>{{ credentialKindLabel(provider) }}</span>
           <span>{{ credentialUpdatedLabel(provider) }}</span>
         </div>
-        @if (provider.baseUrl) {
+        @if (provider.protocol === 'chat_completions') {
+        <div
+          class="rv-admin-providers__meta rv-admin-providers__meta--policy"
+          data-testid="provider-reasoning-policy-readback"
+        >
+          <span>dialect {{ provider.chatCompletionsDialect }}</span>
+          <span>thinking {{ provider.thinkingMode }}</span>
+          <span>history {{ provider.reasoningHistory }}</span>
+          <span>
+            budget {{ provider.reasoningBudgetTokens ?? 'provider default' }}
+          </span>
+          <span>format {{ provider.reasoningFormat ?? 'not reported' }}</span>
+        </div>
+        } @if (provider.baseUrl) {
         <div class="rv-admin-providers__meta">
           <span>{{ provider.baseUrl }}</span>
         </div>
