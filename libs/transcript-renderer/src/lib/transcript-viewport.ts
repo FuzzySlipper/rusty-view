@@ -5,6 +5,7 @@ import {
   computed,
   DestroyRef,
   effect,
+  HostListener,
   inject,
   Injector,
   input,
@@ -93,6 +94,10 @@ export class TranscriptViewportComponent {
   /** Messages to render (from ChatStore.projection().messages). */
   readonly messages = input.required<readonly ChatMessage[]>();
 
+  /** Stable identity for the selected conversation. Projection row IDs may be
+   * replaced within one conversation and must not be mistaken for a switch. */
+  readonly transcriptKey = input<string | undefined>(undefined);
+
   /** When true (default), auto-scroll to bottom when new content arrives and
    * the user is already at the bottom. */
   readonly tailFollow = input<boolean>(true);
@@ -159,9 +164,11 @@ export class TranscriptViewportComponent {
   private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
 
   protected readonly isAtBottom = signal(true);
-  private readonly followingTail = signal(true);
+  protected readonly followingTail = signal(true);
   protected readonly showScrollToBottom = computed(
-    () => this.renderMessages().length > 0 && !this.isAtBottom(),
+    () =>
+      this.renderMessages().length > 0 &&
+      (!this.isAtBottom() || !this.followingTail()),
   );
 
   /** Previous messages reference — used to detect prepends for anchor preservation. */
@@ -170,13 +177,22 @@ export class TranscriptViewportComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly pendingSeekTimers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly pausedScrollHoldTimers = new Set<
+    ReturnType<typeof setTimeout>
+  >();
   private tailSettleTimer: ReturnType<typeof setTimeout> | undefined;
   private tailFollowGeneration = 0;
+  private pausedScrollHoldGeneration = 0;
   private tailFollowRenderPending = false;
   private tailGeometryChangedAt = Number.NEGATIVE_INFINITY;
   private renderedContentHeight: number | undefined;
   private estimatedTotalHeight: number | undefined;
   private geometryPresentationKey: string | undefined;
+  private previousTranscriptKey: string | undefined;
+  private pendingPausedScrollOffset: number | undefined;
+  private resumeFollowOnUserScrollToTail = false;
+  private scrollbarDragActive = false;
+  private touchScrollActive = false;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -297,8 +313,32 @@ export class TranscriptViewportComponent {
         clearTimeout(timer);
       }
       this.pendingSeekTimers.clear();
+      this.cancelPausedScrollHold();
       if (this.tailSettleTimer !== undefined) {
         clearTimeout(this.tailSettleTimer);
+      }
+    });
+
+    // Conversation identity is supplied by the composition layer. Do not
+    // infer it from projected row IDs: Codex can replace every row while
+    // reconciling one thread, and that must not seize scrolling from the user.
+    effect(() => {
+      const key = this.transcriptKey();
+      const previousKey = this.previousTranscriptKey;
+      this.previousTranscriptKey = key;
+      if (
+        previousKey === undefined ||
+        key === undefined ||
+        previousKey === key
+      ) {
+        return;
+      }
+
+      this.previousMessages = [];
+      this.isAtBottom.set(true);
+      this.resumeTailFollow();
+      if (this.viewportReady) {
+        this.afterNextRender(() => this.resetAutoSizeEstimator());
       }
     });
 
@@ -306,6 +346,9 @@ export class TranscriptViewportComponent {
     effect(() => {
       const msgs = this.messages();
       if (this.viewportReady) {
+        this.pendingPausedScrollOffset = !this.followingTail()
+          ? this.viewport().measureScrollOffset('top')
+          : undefined;
         this.renderMessages.set(msgs);
       }
     });
@@ -401,11 +444,25 @@ export class TranscriptViewportComponent {
 
       const prependedCount = countPrependedMessages(prev, msgs);
       const tailChanged = transcriptTailChanged(prev, msgs);
+      const projectionChanged = transcriptPresentationChanged(prev, msgs);
+      const offsetBeforeProjection = this.pendingPausedScrollOffset;
+      this.pendingPausedScrollOffset = undefined;
+      const pausedScrollOffset =
+        projectionChanged &&
+        prependedCount === 0 &&
+        !this.followingTail() &&
+        !this.scrollbarDragActive &&
+        !this.touchScrollActive
+          ? offsetBeforeProjection
+          : undefined;
       if (tailChanged) {
         this.noteTailGeometryChange();
       }
 
-      const replaced = messagesWereReplaced(prev, msgs);
+      // Keep a compatibility fallback for standalone consumers that have not
+      // supplied a transcript key. The app shell always supplies one.
+      const replaced =
+        this.transcriptKey() === undefined && messagesWereReplaced(prev, msgs);
       if (replaced) {
         this.isAtBottom.set(true);
         this.resumeTailFollow();
@@ -418,6 +475,11 @@ export class TranscriptViewportComponent {
         this.afterNextRender(() => {
           this.preserveScrollAnchor();
         });
+        return;
+      }
+
+      if (pausedScrollOffset !== undefined) {
+        this.holdPausedScrollOffset(pausedScrollOffset);
         return;
       }
 
@@ -462,19 +524,38 @@ export class TranscriptViewportComponent {
   /** Called on viewport scroll to track whether the user is at the bottom. */
   protected onScroll(): void {
     this.recomputeBottomState();
-    if (this.isAtBottom() && !this.followingTail()) {
-      this.followingTail.set(true);
+    if (
+      this.resumeFollowOnUserScrollToTail &&
+      !this.scrollbarDragActive &&
+      this.viewport().measureScrollOffset('bottom') <= 1
+    ) {
+      this.resumeTailFollow();
     }
   }
 
-  /** An upward wheel gesture is an explicit request to inspect older content. */
+  /** Wheel direction records explicit user intent independently from the
+   * broader visual "near bottom" threshold. */
   protected onWheel(event: WheelEvent): void {
-    if (event.deltaY < 0) this.pauseTailFollow();
+    this.cancelPausedScrollHold();
+    if (event.deltaY < 0) {
+      this.resumeFollowOnUserScrollToTail = false;
+      this.pauseTailFollow();
+    } else if (event.deltaY > 0 && !this.followingTail()) {
+      this.resumeFollowOnUserScrollToTail = true;
+    }
   }
 
   /** Touch scrolling always begins under user control. */
   protected onTouchStart(): void {
+    this.cancelPausedScrollHold();
+    this.touchScrollActive = true;
+    this.resumeFollowOnUserScrollToTail = false;
     this.pauseTailFollow();
+  }
+
+  protected onTouchEnd(): void {
+    this.touchScrollActive = false;
+    this.resumeFollowIfUserReachedTail();
   }
 
   /** Stop pending tail settlement before a native scrollbar drag begins. */
@@ -483,7 +564,25 @@ export class TranscriptViewportComponent {
     const bounds = host.getBoundingClientRect();
     const scrollbarWidth = Math.max(16, host.offsetWidth - host.clientWidth);
     if (event.clientX >= bounds.right - scrollbarWidth) {
+      this.cancelPausedScrollHold();
+      this.scrollbarDragActive = true;
+      this.resumeFollowOnUserScrollToTail = false;
       this.pauseTailFollow();
+    }
+  }
+
+  @HostListener('document:pointerup')
+  @HostListener('document:pointercancel')
+  protected onPointerUp(): void {
+    if (!this.scrollbarDragActive) return;
+    this.scrollbarDragActive = false;
+    this.resumeFollowIfUserReachedTail();
+  }
+
+  private resumeFollowIfUserReachedTail(): void {
+    this.recomputeBottomState();
+    if (this.viewport().measureScrollOffset('bottom') <= 1) {
+      this.resumeTailFollow();
     }
   }
 
@@ -567,6 +666,7 @@ export class TranscriptViewportComponent {
   }
 
   private pauseTailFollow(): void {
+    this.cancelPausedScrollHold();
     if (!this.followingTail()) return;
     this.followingTail.set(false);
     this.cancelTailFollowWork();
@@ -575,7 +675,56 @@ export class TranscriptViewportComponent {
 
   private resumeTailFollow(): void {
     this.cancelTailFollowWork();
+    this.cancelPausedScrollHold();
+    this.resumeFollowOnUserScrollToTail = false;
+    this.scrollbarDragActive = false;
+    this.touchScrollActive = false;
     this.followingTail.set(true);
+  }
+
+  /** CDK autosize can preserve the provisional bottom instead of the user's
+   * top offset while appending a variable-height row. Hold the pre-render
+   * offset across its bounded measurement passes, but let the next gesture
+   * cancel the hold immediately. */
+  private holdPausedScrollOffset(offset: number): void {
+    this.cancelPausedScrollHold();
+    const generation = this.pausedScrollHoldGeneration;
+    const startedAt = Date.now();
+
+    const restore = (): void => {
+      this.afterNextRender(() => {
+        if (
+          generation !== this.pausedScrollHoldGeneration ||
+          this.followingTail()
+        ) {
+          return;
+        }
+        const viewport = this.viewport();
+        if (Math.abs(viewport.measureScrollOffset('top') - offset) > 0.5) {
+          viewport.scrollToOffset(offset);
+        }
+        if (
+          Date.now() - startedAt >=
+          TranscriptViewportComponent.TAIL_SETTLE_MAX_MS
+        ) {
+          this.recomputeBottomState();
+          return;
+        }
+        const timer = setTimeout(() => {
+          this.pausedScrollHoldTimers.delete(timer);
+          restore();
+        }, 50);
+        this.pausedScrollHoldTimers.add(timer);
+      });
+    };
+
+    restore();
+  }
+
+  private cancelPausedScrollHold(): void {
+    this.pausedScrollHoldGeneration += 1;
+    for (const timer of this.pausedScrollHoldTimers) clearTimeout(timer);
+    this.pausedScrollHoldTimers.clear();
   }
 
   private cancelTailFollowWork(): void {
@@ -1024,6 +1173,18 @@ export function transcriptTailChanged(
     if (messagePresentationChanged(before, after)) return true;
   }
   return false;
+}
+
+/** Detect any visible projection change without treating fresh identical
+ * objects from idle polling as transcript activity. */
+export function transcriptPresentationChanged(
+  previous: readonly ChatMessage[],
+  current: readonly ChatMessage[],
+): boolean {
+  if (previous.length !== current.length) return true;
+  return current.some((message, index) =>
+    messagePresentationChanged(previous[index], message),
+  );
 }
 
 function messagePresentationChanged(

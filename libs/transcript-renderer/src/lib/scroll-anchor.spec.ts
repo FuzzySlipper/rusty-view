@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChatMessage } from '@rusty-view/chat-domain';
 import {
   tailGeometryIsStable,
+  transcriptPresentationChanged,
   transcriptTailChanged,
 } from './transcript-viewport';
 
@@ -189,6 +190,34 @@ describe('transcriptTailChanged', () => {
     ];
 
     expect(transcriptTailChanged(previous, current)).toBe(true);
+  });
+});
+
+describe('transcriptPresentationChanged', () => {
+  it('ignores idle projections made of fresh but identical objects', () => {
+    expect(
+      transcriptPresentationChanged(
+        [makeMessage('a'), makeMessage('b')],
+        [makeMessage('a'), makeMessage('b')],
+      ),
+    ).toBe(false);
+  });
+
+  it('detects visible replacement content anywhere in the projection', () => {
+    const original = makeMessage('a');
+    const block = original.blocks[0];
+    if (block === undefined) throw new Error('expected message block');
+    const changed: ChatMessage = {
+      ...original,
+      blocks: [{ ...block, content: 'Reprojected content' }],
+    };
+
+    expect(
+      transcriptPresentationChanged(
+        [makeMessage('a'), makeMessage('b')],
+        [changed, makeMessage('b')],
+      ),
+    ).toBe(true);
   });
 });
 

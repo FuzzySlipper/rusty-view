@@ -294,6 +294,71 @@ test('rapid streamed tail growth does not apply reverse scroll corrections', asy
     .toBeLessThanOrEqual(80);
 });
 
+test('an upward gesture near the tail keeps user scroll control during Codex updates', async ({
+  page,
+}) => {
+  const fixture = await installExternalSessionFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-1"]').click();
+
+  const transcript = page.getByTestId('transcript-viewport');
+  const latest = page.getByTestId('transcript-scroll-to-bottom');
+  await latest.evaluateAll((buttons: HTMLButtonElement[]) =>
+    buttons.at(0)?.click(),
+  );
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(80);
+  await transcript.evaluate(
+    () => new Promise<void>((resolve) => setTimeout(resolve, 500)),
+  );
+
+  await transcript.evaluate((element) => {
+    element.dispatchEvent(
+      new WheelEvent('wheel', { bubbles: true, deltaY: -40 }),
+    );
+    element.scrollTop = Math.max(
+      0,
+      element.scrollHeight - element.clientHeight - 40,
+    );
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await expect(latest).toBeVisible();
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(1);
+
+  fixture.startGrowingTail();
+  await page.getByTestId('external-agent-refresh').click();
+  await expect(page.getByTestId('transcript-shell')).toContainText(
+    'Streaming growth begins.',
+  );
+  await transcript.evaluate(
+    () => new Promise<void>((resolve) => setTimeout(resolve, 500)),
+  );
+
+  await expect(transcript).toHaveAttribute('data-tail-following', 'false');
+  const bottomOffset = await transcript.evaluate((element) =>
+    Math.max(
+      0,
+      element.scrollHeight - element.scrollTop - element.clientHeight,
+    ),
+  );
+  expect(bottomOffset).toBeGreaterThan(1);
+  await expect(latest).toBeVisible();
+});
+
 test('session cycling does not leave blank space after the transcript tail', async ({
   page,
 }) => {

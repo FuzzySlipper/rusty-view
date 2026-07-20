@@ -136,6 +136,7 @@
       <div class="rv-debug__transcript" data-testid="transcript-shell">
         <rv-transcript-viewport
           [messages]="displayedMessages()"
+          [transcriptKey]="transcriptKey()"
           [searchEnabled]="showTranscriptSearch()"
           [branches]="externalSelected() ? [] : store.branches()"
           [activeBranchId]="externalSelected() ? undefined : store.activeBranchId()"

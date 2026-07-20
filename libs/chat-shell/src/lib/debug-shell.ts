@@ -170,6 +170,14 @@ export class DebugShellComponent {
   protected readonly displayedMessages = computed(() =>
     this.externalSelected() ? this.external.messages() : this.store.messages(),
   );
+  protected readonly transcriptKey = computed(() => {
+    if (this.externalSelected()) {
+      const key = this.external.selectedSessionKey();
+      return key === undefined ? undefined : `external:${key}`;
+    }
+    const sessionId = this.store.activeSessionId();
+    return sessionId === null ? undefined : `native:${sessionId}`;
+  });
   protected readonly hasConversation = computed(
     () => this.externalSelected() || this.store.activeSessionId() !== undefined,
   );

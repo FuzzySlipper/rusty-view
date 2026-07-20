@@ -136,9 +136,12 @@
   autosize
   class="rv-transcript"
   data-testid="transcript-viewport"
+  [attr.data-tail-following]="followingTail()"
   (scroll)="onScroll()"
   (wheel)="onWheel($event)"
   (touchstart)="onTouchStart()"
+  (touchend)="onTouchEnd()"
+  (touchcancel)="onTouchEnd()"
   (pointerdown)="onPointerDown($event)"
 >
   <div
