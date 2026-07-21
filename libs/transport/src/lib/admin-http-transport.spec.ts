@@ -75,6 +75,29 @@ function capturingFetch(response: Response): {
 }
 
 describe('AdminHttpTransport', () => {
+  it('does not infer debug coordination from the backend port', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return jsonOk({ deploymentRole: 'production', agents: [] });
+    };
+    const transport = new AdminHttpTransport(
+      makeConfig(fetch, { baseUrl: 'http://localhost:9348' }),
+    );
+
+    const directory = await transport.coordinationAgentDirectory();
+
+    expect(directory.deploymentRole).toBe('production');
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      '/v1/coordination/agents',
+    ]);
+  });
+
   it('uses the fixed debug coordination surface without a rejected production probe', async () => {
     const requests: CapturedRequest[] = [];
     const fetch: FetchImpl = async (input, init) => {

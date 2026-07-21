@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 const live = process.env['RV_SWITCHBOARD_LIVE_RUN'] === '1';
 const backend = process.env['RV_LIVE_BACKEND_URL'] ?? 'http://127.0.0.1:9348';
+const appUrl = process.env['RV_SWITCHBOARD_APP_URL'] ?? backend;
 
 interface Envelope<T> {
   readonly ok: boolean;
@@ -40,10 +41,15 @@ test.describe('Service switchboard @live-switchboard', () => {
     const address = `@${routeKey}`;
     const replyMarker = `RV_SWITCHBOARD_5971_REPLY_${Date.now()}`;
     const errors: string[] = [];
+    const coordinationRequestPaths: string[] = [];
     page.on('console', (message) => {
       if (message.type() === 'error') errors.push(`console: ${message.text()}`);
     });
     page.on('pageerror', (error) => errors.push(`page: ${error.message}`));
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (path.includes('/coordination/')) coordinationRequestPaths.push(path);
+    });
 
     const [directoryResponse, bindingsResponse] = await Promise.all([
       request.get(`${backend}/v1/debug/coordination/agents`),
@@ -96,7 +102,11 @@ test.describe('Service switchboard @live-switchboard', () => {
 
     try {
       await page.setViewportSize({ width: 1600, height: 1000 });
-      await page.goto(`${backend}/?api=${encodeURIComponent(backend)}`);
+      const targetUrl = new URL(appUrl);
+      if (targetUrl.origin !== new URL(backend).origin) {
+        targetUrl.searchParams.set('api', backend);
+      }
+      await page.goto(targetUrl.href);
       await page.locator('[data-menu-id="service"]').click();
       const servicePanel = page.getByTestId('top-menu-panel-service');
       await servicePanel.getByRole('button', { name: 'Switchboard' }).click();
@@ -168,6 +178,14 @@ test.describe('Service switchboard @live-switchboard', () => {
       page.once('dialog', (dialog) => dialog.accept());
       await routeRow.getByRole('button', { name: 'Delete' }).click();
       await expect(routeRow).toHaveCount(0, { timeout: 30_000 });
+      expect(coordinationRequestPaths).toContain(
+        '/v1/debug/coordination/agents',
+      );
+      expect(
+        coordinationRequestPaths.filter((path) =>
+          path.startsWith('/v1/coordination/'),
+        ),
+      ).toEqual([]);
       expect(errors).toEqual([]);
     } finally {
       const routesResponse = await request.get(

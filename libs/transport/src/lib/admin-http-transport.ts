@@ -930,8 +930,7 @@ function coordinationPrefix(role: CoordinationDeploymentRole): string {
 function coordinationRole(
   config: ChatTransportConfig,
 ): CoordinationDeploymentRole {
-  if (config.coordinationRole !== undefined) return config.coordinationRole;
-  return new URL(config.baseUrl).port === '9348' ? 'debug' : 'production';
+  return config.coordinationRole ?? 'production';
 }
 
 function optionsForRegistryQuery(

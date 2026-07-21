@@ -14,8 +14,9 @@ export interface ChatTransportConfig {
   readonly baseUrl: string;
   /**
    * Role-bound coordination surface for this service origin. This is deploy
-   * configuration, never an operator-facing switch; omitting it safely
-   * defaults to production except for the standard direct debug port.
+   * configuration, never an operator-facing switch. Callers that target a
+   * debug service must set it explicitly; omission safely defaults to
+   * production.
    */
   readonly coordinationRole?: 'production' | 'debug';
   readonly bearerToken?: string;
