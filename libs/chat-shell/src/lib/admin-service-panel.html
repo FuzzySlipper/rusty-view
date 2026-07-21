@@ -13,6 +13,25 @@
   </header>
   }
 
+  <nav class="rv-admin-service__tabs" aria-label="Service sections">
+    <button
+      type="button"
+      [class.rv-admin-service__tab--active]="activeTab() === 'runtime'"
+      (click)="selectTab('runtime')"
+    >
+      Runtime
+    </button>
+    <button
+      type="button"
+      [class.rv-admin-service__tab--active]="activeTab() === 'switchboard'"
+      (click)="selectTab('switchboard')"
+    >
+      Switchboard
+    </button>
+  </nav>
+
+  @if (activeTab() === 'runtime') {
+
   <div class="rv-admin-service__toolbar">
     <button
       type="button"
@@ -232,4 +251,9 @@
       }
     </div>
   </section>
+  } @else {
+  <div class="rv-admin-service__switchboard">
+    <rv-admin-switchboard-panel />
+  </div>
+  }
 </div>

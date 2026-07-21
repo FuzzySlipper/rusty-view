@@ -116,6 +116,37 @@ describe('resolveRustyViewConfig', () => {
       baseUrl: 'https://proxy.example',
     });
   });
+
+  it('pins the standard debug service port to the debug coordination surface', () => {
+    expect(
+      resolveRustyViewConfig({
+        location: {
+          origin: 'http://den-k8:9348',
+          port: '9348',
+          protocol: 'http:',
+          hostname: 'den-k8',
+          search: '',
+        },
+      }),
+    ).toEqual({
+      baseUrl: 'http://den-k8:9348',
+      coordinationRole: 'debug',
+    });
+  });
+
+  it('accepts an injected debug role for a reverse-proxied debug deployment', () => {
+    expect(
+      resolveRustyViewConfig(
+        runtimeWindow('', {
+          baseUrl: 'https://debug-proxy.example',
+          coordinationRole: 'debug',
+        }),
+      ),
+    ).toEqual({
+      baseUrl: 'https://debug-proxy.example',
+      coordinationRole: 'debug',
+    });
+  });
 });
 
 function runtimeWindow(

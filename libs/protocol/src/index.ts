@@ -143,6 +143,23 @@ export type ExternalRuntimeThreadReplacementResult =
   ExternalSchemas['ExternalRuntimeThreadReplacementResult'];
 export type ExternalRuntimeCommandExecutionResult =
   ExternalSchemas['ExternalRuntimeCommandExecutionResult'];
+export type AgentDirectoryEntry = ExternalSchemas['AgentDirectoryEntry'];
+export type AgentDirectoryRuntimeKind =
+  ExternalSchemas['AgentDirectoryRuntimeKind'];
+export type AgentMessageDeliveryReceipt =
+  ExternalSchemas['AgentMessageDeliveryReceipt'];
+export type AgentMessageDeliveryStatus =
+  ExternalSchemas['AgentMessageDeliveryStatus'];
+export type AgentCorrelatedRound = ExternalSchemas['AgentCorrelatedRound'];
+export type AgentRoundStatus = ExternalSchemas['AgentRoundStatus'];
+export type AgentRouteRecord = ExternalSchemas['AgentRouteRecord'];
+export type AgentRouteResolution = ExternalSchemas['AgentRouteResolution'];
+export type AgentRouteResolvedTarget =
+  ExternalSchemas['AgentRouteResolvedTarget'];
+export type AgentRouteTarget = ExternalSchemas['AgentRouteTarget'];
+export type AgentRouteWrite = ExternalSchemas['AgentRouteWrite'];
+export type ExternalMessageDeliveryPolicy =
+  ExternalSchemas['ExternalMessageDeliveryPolicy'];
 
 export type ListExternalRuntimesResponse =
   externalOperations['listExternalRuntimes']['responses'][200]['content']['application/json'];

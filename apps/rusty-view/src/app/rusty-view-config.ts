@@ -10,6 +10,7 @@ import {
   AdminStore,
   ChatStore,
   ExternalAgentStore,
+  SwitchboardStore,
   CHAT_STORAGE_ADAPTER,
   IndexedDbChatStorage,
 } from '@rusty-view/chat-store';
@@ -33,6 +34,8 @@ export interface RustyViewConfig {
   readonly baseUrl: string;
   /** Optional bearer token (omit for no-auth LAN mode). */
   readonly bearerToken?: string;
+  /** Fixed service coordination role; this is deploy config, not a UI toggle. */
+  readonly coordinationRole?: 'production' | 'debug';
 }
 
 /** Default rusty-crew HTTP port used by the recognized split dev topology. */
@@ -47,6 +50,7 @@ const SPLIT_DEV_SERVER_PORTS = new Set(['4200', '4210']);
 export interface RustyViewWindowConfig {
   readonly baseUrl?: string;
   readonly bearerToken?: string;
+  readonly coordinationRole?: 'production' | 'debug';
 }
 
 export interface RustyViewRuntimeWindow {
@@ -100,6 +104,11 @@ export function resolveRustyViewConfig(
     ...(windowConfig?.bearerToken !== undefined
       ? { bearerToken: windowConfig.bearerToken }
       : {}),
+    ...(windowConfig?.coordinationRole !== undefined
+      ? { coordinationRole: windowConfig.coordinationRole }
+      : new URL(baseUrl).port === '9348'
+        ? { coordinationRole: 'debug' as const }
+        : {}),
   };
 }
 
@@ -129,6 +138,9 @@ export function provideRustyView(
     ...(config.bearerToken !== undefined
       ? { bearerToken: config.bearerToken }
       : {}),
+    ...(config.coordinationRole !== undefined
+      ? { coordinationRole: config.coordinationRole }
+      : {}),
   });
 
   return makeEnvironmentProviders([
@@ -149,6 +161,7 @@ export function provideRustyView(
     },
     ChatStore,
     ExternalAgentStore,
+    SwitchboardStore,
     AdminStore,
     provideAppInitializer(() => {
       const store = inject(ChatStore);

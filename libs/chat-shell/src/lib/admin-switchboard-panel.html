@@ -1,0 +1,319 @@
+<section
+  class="rv-switchboard"
+  aria-label="Crew agent switchboard"
+  data-testid="service-switchboard"
+>
+  <div class="rv-switchboard__identity">
+    <div>
+      <strong>Agent routing switchboard</strong>
+      <span>Stable aliases resolve to one exact Crew session or binding.</span>
+    </div>
+    <dl>
+      <dt>service</dt>
+      <dd>{{ switchboard.deploymentRole() ?? 'detecting' }}</dd>
+      <dt>base</dt>
+      <dd>{{ switchboard.serviceBaseUrl }}</dd>
+    </dl>
+  </div>
+
+  <div class="rv-switchboard__toolbar">
+    <button type="button" (click)="newRoute()">New route</button>
+    <button
+      type="button"
+      (click)="refresh()"
+      [disabled]="switchboard.loading() || switchboard.saving()"
+    >
+      Refresh
+    </button>
+    <span>{{ switchboard.rows().length }} routes</span>
+    <span>{{ switchboard.agents().length }} raw targets</span>
+  </div>
+
+  @if (switchboard.error(); as error) {
+  <div class="rv-switchboard__error" role="alert">
+    <span>{{ error }}</span>
+    <button type="button" (click)="refresh()">Refresh and retry</button>
+  </div>
+  } @if (localNotice(); as notice) {
+  <div class="rv-switchboard__notice" role="status">{{ notice }}</div>
+  }
+
+  <div class="rv-switchboard__workspace">
+    <div class="rv-switchboard__table-wrap">
+      @if (switchboard.loading() && switchboard.rows().length === 0) {
+      <div class="rv-switchboard__empty">Loading switchboard…</div>
+      } @else if (switchboard.rows().length === 0) {
+      <div class="rv-switchboard__empty">
+        No routes on this {{ switchboard.deploymentRole() ?? 'Crew' }} service.
+      </div>
+      } @else {
+      <table class="rv-switchboard__table">
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>State</th>
+            <th>Concrete target</th>
+            <th>Runtime / policy</th>
+            <th>Revision</th>
+            <th>Last delivery</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of switchboard.rows(); track row.routeKey) {
+          <tr
+            [class.rv-switchboard__row--stale]="!row.routable"
+            [title]="rowTitle(row)"
+          >
+            <td>
+              <button
+                type="button"
+                class="rv-switchboard__address"
+                (click)="copyAddress(row.address)"
+                title="Copy route address"
+              >
+                {{ row.address }}
+              </button>
+              <small>{{ row.label }}</small>
+            </td>
+            <td>
+              <strong>{{ row.enabled ? 'enabled' : 'disabled' }}</strong>
+              <span [class.rv-switchboard__ok]="row.routable">
+                {{ row.routable ? 'routable' : (row.reasonCode ?? 'stale') }}
+              </span>
+            </td>
+            <td>
+              <strong>{{ row.displayLabel }}</strong>
+              <code>profile {{ row.profileId }}</code>
+              <code>agent {{ row.agentId }}</code>
+              <code>session {{ row.sessionId }}</code>
+              @if (row.bindingId) {
+              <code
+                >binding {{ row.bindingId }} r{{ row.bindingRevision }}</code
+              >
+              }
+            </td>
+            <td>
+              <strong>{{ row.runtimeKind }}</strong>
+              <span>{{ row.deliveryPolicy ?? 'default policy' }}</span>
+            </td>
+            <td>r{{ row.revision }}</td>
+            <td>
+              <strong>{{ row.lastOutcome ?? 'none' }}</strong>
+              @if (row.lastReasonCode) {<span>{{ row.lastReasonCode }}</span>}
+            </td>
+            <td>
+              <div class="rv-switchboard__actions">
+                <button
+                  type="button"
+                  (click)="editRoute(row)"
+                  title="Edit route"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  (click)="toggleRoute(row)"
+                  [title]="row.enabled ? 'Disable route' : 'Enable route'"
+                >
+                  {{ row.enabled ? 'Disable' : 'Enable' }}
+                </button>
+                <button
+                  type="button"
+                  (click)="resolveRoute(row)"
+                  title="Dry-run resolve"
+                >
+                  Resolve
+                </button>
+                <button
+                  type="button"
+                  (click)="testDelivery(row)"
+                  title="Send bounded test delivery"
+                >
+                  Test
+                </button>
+                <button
+                  type="button"
+                  (click)="testRound(row)"
+                  title="Wait for correlated reply"
+                >
+                  Round
+                </button>
+                <button
+                  type="button"
+                  class="rv-switchboard__danger"
+                  (click)="deleteRoute(row)"
+                  title="Delete route"
+                >
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+          }
+        </tbody>
+      </table>
+      }
+    </div>
+
+    <aside class="rv-switchboard__editor" data-testid="switchboard-editor">
+      <header>
+        <strong
+          >{{ editingRouteKey() === null ? 'Create route' : 'Edit @' +
+          editingRouteKey() }}</strong
+        >
+        @if (editingRouteKey() !== null) {
+        <button type="button" (click)="newRoute()">Cancel edit</button>
+        }
+      </header>
+
+      <label>
+        <span>Route address</span>
+        <div class="rv-switchboard__prefixed-input">
+          <span>@</span>
+          <input
+            type="text"
+            [value]="draft().routeKey"
+            [disabled]="editingRouteKey() !== null"
+            (input)="setText('routeKey', $event)"
+            autocomplete="off"
+          />
+        </div>
+      </label>
+      <label>
+        <span>Operator label</span>
+        <input
+          type="text"
+          [value]="draft().label"
+          (input)="setText('label', $event)"
+        />
+      </label>
+      <label>
+        <span>Description</span>
+        <textarea
+          rows="2"
+          [value]="draft().description"
+          (input)="setText('description', $event)"
+        ></textarea>
+      </label>
+      <label class="rv-switchboard__check">
+        <input
+          type="checkbox"
+          [checked]="draft().enabled"
+          (change)="setEnabled($event)"
+        />
+        <span>Enabled</span>
+      </label>
+      <label>
+        <span>Exact target</span>
+        <select [value]="draft().targetKey" (change)="setTarget($event)">
+          <option value="">Select a concrete session or binding</option>
+          @for (target of switchboard.targetOptions(); track target.key) {
+          <option [value]="target.key" [disabled]="!target.selectable">
+            {{ target.summary }}{{ target.selectable ? '' : ' · ' +
+            target.reasonCode }}
+          </option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Required delivery policy</span>
+        <select
+          [value]="draft().requiredDeliveryPolicy ?? ''"
+          [disabled]="selectedTarget()?.runtimeKind === 'direct_brain'"
+          (change)="setPolicy($event)"
+        >
+          <option value="">No additional requirement</option>
+          <option value="immediate_steer">immediate_steer</option>
+          <option value="serial_next_turn">serial_next_turn</option>
+        </select>
+      </label>
+
+      @if (selectedTarget(); as target) {
+      <div class="rv-switchboard__target-details">
+        <strong>Selected target</strong>
+        <span>runtime {{ target.runtimeKind }}</span>
+        <span
+          >profile {{ target.agent.profileId }} / {{ target.agent.displayLabel
+          }}</span
+        >
+        <span>agent {{ target.agent.agentId }}</span>
+        <span>session {{ target.agent.sessionId }}</span>
+        @if (target.binding; as binding) {
+        <span
+          >binding {{ binding.bindingId }} revision {{ binding.revision }}</span
+        >
+        <span>policy {{ binding.messageDeliveryPolicy }}</span>
+        } @if (target.duplicateIdentity) {
+        <em
+          >Duplicate profile/display identity: concrete IDs above determine
+          routing.</em
+        >
+        }
+      </div>
+      } @if (!validation().valid) {
+      <ul class="rv-switchboard__validation" role="alert">
+        @for (error of validation().errors; track error) {
+        <li>{{ error }}</li>
+        }
+      </ul>
+      }
+      <button
+        type="button"
+        class="rv-switchboard__save"
+        (click)="save()"
+        [disabled]="saveDisabled()"
+      >
+        {{ switchboard.saving() ? 'Saving…' : 'Save route' }}
+      </button>
+
+      <fieldset>
+        <legend>Bounded test defaults</legend>
+        <label>
+          <span>Message</span>
+          <textarea
+            rows="3"
+            [value]="testBody()"
+            (input)="setTestBody($event)"
+          ></textarea>
+        </label>
+        <label>
+          <span>TTL seconds</span>
+          <input
+            type="number"
+            min="1"
+            max="300"
+            [value]="testTtlSeconds()"
+            (input)="setTestTtl($event)"
+          />
+        </label>
+      </fieldset>
+    </aside>
+  </div>
+
+  @if (switchboard.lastAction(); as action) {
+  <section
+    class="rv-switchboard__result"
+    [attr.data-outcome]="action.outcome"
+    data-testid="switchboard-result"
+    role="status"
+  >
+    <header>
+      <strong>{{ action.kind }} · {{ action.outcome }}</strong>
+      <code>{{ action.address }}</code>
+    </header>
+    <p>{{ action.summary }}</p>
+    @if (action.reasonCode) {<code>{{ action.reasonCode }}</code>} @if
+    (action.resolution?.resolvedTarget; as target) {
+    <div>
+      <span>{{ target.runtimeKind }}</span>
+      <span>agent {{ target.agentId }}</span>
+      <span>session {{ target.sessionId }}</span>
+      @if (target.bindingId) {<span
+        >binding {{ target.bindingId }} r{{ target.bindingRevision }}</span
+      >}
+    </div>
+    }
+  </section>
+  }
+</section>

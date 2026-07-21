@@ -14,6 +14,23 @@
 
 export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
 export { AdminStore } from './lib/admin-store';
+export { SwitchboardStore } from './lib/switchboard-store';
+export {
+  buildSwitchboardTargetOptions,
+  deliveryOutcome,
+  normalizeSwitchboardOutcome,
+  projectSwitchboardRouteRows,
+  targetKey,
+  validateSwitchboardDraft,
+} from './lib/switchboard-model';
+export type { SwitchboardActionResult } from './lib/switchboard-store';
+export type {
+  SwitchboardDraftValidation,
+  SwitchboardOutcomeKind,
+  SwitchboardRouteDraft,
+  SwitchboardRouteRow,
+  SwitchboardTargetOption,
+} from './lib/switchboard-model';
 export {
   createExternalAgentRequestKey,
   ExternalAgentStore,

@@ -19,6 +19,16 @@ import type {
   AdminToolCatalog,
   AdminPage,
   ContextStrategyCatalog,
+  CoordinationAgentDirectory,
+  CoordinationDeliveryResult,
+  CoordinationDeploymentRole,
+  CoordinationResolveResult,
+  CoordinationRoundRequest,
+  CoordinationRoundResult,
+  CoordinationRouteList,
+  CoordinationRouteResult,
+  CoordinationRouteTestRequest,
+  CoordinationRouteWriteRequest,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
   AdminProfileRegistryRecord,
@@ -213,6 +223,101 @@ export class AdminHttpTransport {
 
   capabilities(): Promise<ApiCapabilityRegistry> {
     return this.request('GET', '/v1/admin/capabilities');
+  }
+
+  /** Read the directory through this deployment's fixed coordination surface. */
+  async coordinationAgentDirectory(): Promise<CoordinationAgentDirectory> {
+    const expectedRole = coordinationRole(this.config);
+    const directory = await this.request<CoordinationAgentDirectory>(
+      'GET',
+      `${coordinationPrefix(expectedRole)}/agents`,
+    );
+    if (directory.deploymentRole !== expectedRole) {
+      throw new ChatTransportError({
+        code: 'envelope_error',
+        message: `Crew coordination endpoint expected ${expectedRole} but reported ${directory.deploymentRole}`,
+      });
+    }
+    return directory;
+  }
+
+  coordinationRoutes(
+    role: CoordinationDeploymentRole,
+  ): Promise<CoordinationRouteList> {
+    return this.request('GET', `${coordinationPrefix(role)}/routes`);
+  }
+
+  coordinationCreateRoute(
+    role: CoordinationDeploymentRole,
+    request: CoordinationRouteWriteRequest,
+  ): Promise<CoordinationRouteResult> {
+    return this.request('POST', `${coordinationPrefix(role)}/routes`, {
+      body: request,
+    });
+  }
+
+  coordinationUpdateRoute(
+    role: CoordinationDeploymentRole,
+    routeKey: string,
+    request: CoordinationRouteWriteRequest,
+  ): Promise<CoordinationRouteResult> {
+    return this.request(
+      'PATCH',
+      `${coordinationPrefix(role)}/routes/${encodeURIComponent(routeKey)}`,
+      { body: request },
+    );
+  }
+
+  coordinationDeleteRoute(
+    role: CoordinationDeploymentRole,
+    routeKey: string,
+    expectedRevision: number,
+  ): Promise<CoordinationRouteResult> {
+    return this.request(
+      'DELETE',
+      `${coordinationPrefix(role)}/routes/${encodeURIComponent(routeKey)}`,
+      { query: { expectedRevision } },
+    );
+  }
+
+  coordinationResolveAddress(
+    role: CoordinationDeploymentRole,
+    address: string,
+  ): Promise<CoordinationResolveResult> {
+    return this.request('POST', `${coordinationPrefix(role)}/routes/resolve`, {
+      body: { address },
+    });
+  }
+
+  coordinationTestRoute(
+    role: CoordinationDeploymentRole,
+    routeKey: string,
+    request: CoordinationRouteTestRequest,
+  ): Promise<CoordinationDeliveryResult> {
+    return this.request(
+      'POST',
+      `${coordinationPrefix(role)}/routes/${encodeURIComponent(routeKey)}/test`,
+      { body: request },
+    );
+  }
+
+  coordinationStartRound(
+    role: CoordinationDeploymentRole,
+    request: CoordinationRoundRequest,
+  ): Promise<CoordinationRoundResult> {
+    return this.request('POST', `${coordinationPrefix(role)}/rounds`, {
+      body: request,
+    });
+  }
+
+  coordinationRound(
+    role: CoordinationDeploymentRole,
+    roundId: string,
+  ): Promise<CoordinationRoundResult> {
+    return this.request(
+      'GET',
+      `${coordinationPrefix(role)}/rounds/${encodeURIComponent(roundId)}`,
+    );
   }
 
   /** List curated read-only Rusty Crew storage queries. */
@@ -816,6 +921,17 @@ export class AdminHttpTransport {
 
 function optionsForQuery(query?: AdminListQuery): RequestOptions {
   return query === undefined ? {} : { query: { ...query } };
+}
+
+function coordinationPrefix(role: CoordinationDeploymentRole): string {
+  return role === 'debug' ? '/v1/debug/coordination' : '/v1/coordination';
+}
+
+function coordinationRole(
+  config: ChatTransportConfig,
+): CoordinationDeploymentRole {
+  if (config.coordinationRole !== undefined) return config.coordinationRole;
+  return new URL(config.baseUrl).port === '9348' ? 'debug' : 'production';
 }
 
 function optionsForRegistryQuery(

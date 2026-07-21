@@ -51,6 +51,16 @@ import type {
   AdminToolCatalog,
   AdminPage,
   ContextStrategyCatalog,
+  CoordinationAgentDirectory,
+  CoordinationDeliveryResult,
+  CoordinationDeploymentRole,
+  CoordinationResolveResult,
+  CoordinationRoundRequest,
+  CoordinationRoundResult,
+  CoordinationRouteList,
+  CoordinationRouteResult,
+  CoordinationRouteTestRequest,
+  CoordinationRouteWriteRequest,
   AdminProfileRegistryDiagnostics,
   AdminProfileRegistryQuery,
   AdminProfileRegistryRecord,
@@ -343,6 +353,72 @@ export class ChatTransport {
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {
     return this.adminHttp.capabilities();
+  }
+
+  coordinationAgentDirectory(): Promise<CoordinationAgentDirectory> {
+    return this.adminHttp.coordinationAgentDirectory();
+  }
+
+  coordinationRoutes(
+    role: CoordinationDeploymentRole,
+  ): Promise<CoordinationRouteList> {
+    return this.adminHttp.coordinationRoutes(role);
+  }
+
+  coordinationCreateRoute(
+    role: CoordinationDeploymentRole,
+    request: CoordinationRouteWriteRequest,
+  ): Promise<CoordinationRouteResult> {
+    return this.adminHttp.coordinationCreateRoute(role, request);
+  }
+
+  coordinationUpdateRoute(
+    role: CoordinationDeploymentRole,
+    routeKey: string,
+    request: CoordinationRouteWriteRequest,
+  ): Promise<CoordinationRouteResult> {
+    return this.adminHttp.coordinationUpdateRoute(role, routeKey, request);
+  }
+
+  coordinationDeleteRoute(
+    role: CoordinationDeploymentRole,
+    routeKey: string,
+    expectedRevision: number,
+  ): Promise<CoordinationRouteResult> {
+    return this.adminHttp.coordinationDeleteRoute(
+      role,
+      routeKey,
+      expectedRevision,
+    );
+  }
+
+  coordinationResolveAddress(
+    role: CoordinationDeploymentRole,
+    address: string,
+  ): Promise<CoordinationResolveResult> {
+    return this.adminHttp.coordinationResolveAddress(role, address);
+  }
+
+  coordinationTestRoute(
+    role: CoordinationDeploymentRole,
+    routeKey: string,
+    request: CoordinationRouteTestRequest,
+  ): Promise<CoordinationDeliveryResult> {
+    return this.adminHttp.coordinationTestRoute(role, routeKey, request);
+  }
+
+  coordinationStartRound(
+    role: CoordinationDeploymentRole,
+    request: CoordinationRoundRequest,
+  ): Promise<CoordinationRoundResult> {
+    return this.adminHttp.coordinationStartRound(role, request);
+  }
+
+  coordinationRound(
+    role: CoordinationDeploymentRole,
+    roundId: string,
+  ): Promise<CoordinationRoundResult> {
+    return this.adminHttp.coordinationRound(role, roundId);
   }
 
   adminStorageQueryCatalog(): Promise<StorageQueryCatalog> {

@@ -545,7 +545,7 @@ export interface components {
             inputKind: components["schemas"]["AgentMessageInputKind"];
             messageId: string;
             requireWake: boolean;
-            toAgentId: string;
+            toAddress: string;
         };
         AgentMessageDeliveryCompletion: {
             completedAt: string;
@@ -580,7 +580,9 @@ export interface components {
             inputKind: components["schemas"]["AgentMessageInputKind"];
             messageId: string;
             replyToMessageId?: string | null;
+            requestedAddress: string;
             requireWake: boolean;
+            routing?: components["schemas"]["AgentRouteDeliveryProvenance"] | null;
             toAgentId: string;
             toSessionId?: string | null;
         };
@@ -628,7 +630,7 @@ export interface components {
             idempotencyKey: string;
             messageId: string;
             roundId: string;
-            toAgentId: string;
+            toAddress: string;
         };
         AgentRoundStartReceipt: {
             delivery: components["schemas"]["AgentMessageDeliveryReceipt"];
@@ -636,6 +638,85 @@ export interface components {
         };
         /** @enum {string} */
         AgentRoundStatus: "pending" | "replied" | "expired" | "cancelled" | "failed";
+        AgentRouteDelete: {
+            /** Format: uint64 */
+            expectedRevision: number;
+            routeKey: string;
+        };
+        AgentRouteDeliveryProvenance: {
+            address: string;
+            resolvedTarget: components["schemas"]["AgentRouteResolvedTarget"];
+            routeKey: string;
+            /** Format: uint64 */
+            routeRevision: number;
+        };
+        AgentRouteLastDelivery: {
+            createdAt: string;
+            deliveryId: string;
+            reasonCode?: string | null;
+            /** Format: uint64 */
+            routeRevision: number;
+            status: components["schemas"]["AgentMessageDeliveryStatus"];
+            terminalAt?: string | null;
+        };
+        AgentRouteRecord: {
+            createdAt: string;
+            description?: string | null;
+            enabled: boolean;
+            label: string;
+            requiredDeliveryPolicy?: components["schemas"]["ExternalMessageDeliveryPolicy"] | null;
+            requiredRuntimeKind?: components["schemas"]["AgentDirectoryRuntimeKind"] | null;
+            /** Format: uint64 */
+            revision: number;
+            routeKey: string;
+            target: components["schemas"]["AgentRouteTarget"];
+            updatedAt: string;
+        };
+        AgentRouteResolution: {
+            address: string;
+            lastDelivery?: components["schemas"]["AgentRouteLastDelivery"] | null;
+            reasonCode?: string | null;
+            resolvedTarget?: components["schemas"]["AgentRouteResolvedTarget"] | null;
+            routable: boolean;
+            route?: components["schemas"]["AgentRouteRecord"] | null;
+        };
+        AgentRouteResolvedTarget: {
+            agentId: string;
+            bindingId?: string | null;
+            /** Format: uint64 */
+            bindingRevision?: number | null;
+            deliveryPolicy?: components["schemas"]["ExternalMessageDeliveryPolicy"] | null;
+            displayLabel: string;
+            profileId: string;
+            runtimeId?: string | null;
+            runtimeKind: components["schemas"]["AgentDirectoryRuntimeKind"];
+            sessionId: string;
+        };
+        AgentRouteTarget: {
+            agentId: string;
+            sessionId: string;
+            /** @constant */
+            type: "direct_brain";
+        } | {
+            agentId: string;
+            bindingId: string;
+            /** Format: uint64 */
+            bindingRevision: number;
+            /** @constant */
+            type: "managed_external";
+        };
+        AgentRouteWrite: {
+            description?: string | null;
+            enabled: boolean;
+            /** Format: uint64 */
+            expectedRevision?: number | null;
+            label: string;
+            requiredDeliveryPolicy?: components["schemas"]["ExternalMessageDeliveryPolicy"] | null;
+            requiredRuntimeKind?: components["schemas"]["AgentDirectoryRuntimeKind"] | null;
+            routeKey: string;
+            target: components["schemas"]["AgentRouteTarget"];
+            updatedAt: string;
+        };
         BodyDeltaPolicy: {
             /** Format: uint32 */
             max_queued_messages: number;

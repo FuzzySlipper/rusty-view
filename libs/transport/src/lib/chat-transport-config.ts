@@ -12,6 +12,12 @@ export type FetchImpl = typeof fetch;
  */
 export interface ChatTransportConfig {
   readonly baseUrl: string;
+  /**
+   * Role-bound coordination surface for this service origin. This is deploy
+   * configuration, never an operator-facing switch; omitting it safely
+   * defaults to production except for the standard direct debug port.
+   */
+  readonly coordinationRole?: 'production' | 'debug';
   readonly bearerToken?: string;
   readonly timeoutMs: number;
   /**
@@ -77,6 +83,9 @@ export function resolveChatTransportConfig(
     // Conditional spread: only include optional fields when they have values,
     // to satisfy exactOptionalPropertyTypes (never assign explicit undefined).
     ...(bearerToken !== undefined ? { bearerToken } : {}),
+    ...(input.coordinationRole !== undefined
+      ? { coordinationRole: input.coordinationRole }
+      : {}),
     ...(input.fetchImpl !== undefined ? { fetchImpl: input.fetchImpl } : {}),
   };
 

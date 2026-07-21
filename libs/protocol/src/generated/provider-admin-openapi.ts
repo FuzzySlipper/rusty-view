@@ -351,7 +351,7 @@ export interface components {
         /** @enum {string} */
         ModelProviderCredentialKind: "api_key" | "openai_oauth" | "legacy_raw_api_key";
         /** @enum {string} */
-        ModelProviderReasonCode: "invalid_model_provider_status" | "model_provider_not_found" | "model_provider_revision_mismatch" | "model_provider_method_not_allowed" | "service_credential_not_found" | "invalid_service_credential" | "service_credential_revision_mismatch" | "service_credential_linked" | "service_credential_link_mismatch" | "service_credential_method_not_allowed" | "openai_oauth_provider_method_not_allowed" | "openai_oauth_incompatible_target" | "openai_oauth_unregistered_redirect_uri" | "openai_oauth_invalid_callback_url" | "openai_oauth_callback_error" | "openai_oauth_pending_login_not_found" | "openai_oauth_state_mismatch" | "openai_oauth_test_mode_required";
+        ModelProviderReasonCode: "invalid_model_provider" | "invalid_model_provider_status" | "model_provider_not_found" | "model_provider_revision_mismatch" | "model_provider_method_not_allowed" | "service_credential_not_found" | "invalid_service_credential" | "service_credential_revision_mismatch" | "service_credential_linked" | "service_credential_link_mismatch" | "service_credential_method_not_allowed" | "openai_oauth_provider_method_not_allowed" | "openai_oauth_incompatible_target" | "openai_oauth_unregistered_redirect_uri" | "openai_oauth_invalid_callback_url" | "openai_oauth_callback_error" | "openai_oauth_pending_login_not_found" | "openai_oauth_state_mismatch" | "openai_oauth_test_mode_required";
         ModelProviderCredential: {
             hasSecret: boolean;
             secretRef?: string;
@@ -760,6 +760,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ErrorEnvelope"];
             409: components["responses"]["RevisionConflictEnvelope"];
         };
     };
@@ -816,6 +817,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ErrorEnvelope"];
             409: components["responses"]["RevisionConflictEnvelope"];
         };
     };

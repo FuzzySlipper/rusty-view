@@ -16,7 +16,10 @@ interface CapturedRequest {
   readonly body: string | undefined;
 }
 
-function makeConfig(fetchImpl: FetchImpl): ChatTransportConfig {
+function makeConfig(
+  fetchImpl: FetchImpl,
+  override: Partial<ChatTransportConfig> = {},
+): ChatTransportConfig {
   return resolveChatTransportConfig({
     baseUrl: 'http://localhost:9347',
     bearerToken: 'admin-token',
@@ -25,6 +28,7 @@ function makeConfig(fetchImpl: FetchImpl): ChatTransportConfig {
     reconnectMaxMs: 1_000,
     reconnectMaxAttempts: 3,
     fetchImpl,
+    ...override,
   });
 }
 
@@ -71,6 +75,167 @@ function capturingFetch(response: Response): {
 }
 
 describe('AdminHttpTransport', () => {
+  it('uses the fixed debug coordination surface without a rejected production probe', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return jsonOk({ deploymentRole: 'debug', agents: [] });
+    };
+    const transport = new AdminHttpTransport(
+      makeConfig(fetch, {
+        baseUrl: 'http://localhost:9348',
+        coordinationRole: 'debug',
+      }),
+    );
+
+    const directory = await transport.coordinationAgentDirectory();
+
+    expect(directory.deploymentRole).toBe('debug');
+    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
+      '/v1/debug/coordination/agents',
+    ]);
+  });
+
+  it('rejects a directory response whose role differs from deploy configuration', async () => {
+    const transport = new AdminHttpTransport(
+      makeConfig(
+        async () => jsonOk({ deploymentRole: 'production', agents: [] }),
+        {
+          baseUrl: 'http://localhost:9348',
+          coordinationRole: 'debug',
+        },
+      ),
+    );
+
+    await expect(transport.coordinationAgentDirectory()).rejects.toMatchObject({
+      code: 'envelope_error',
+    });
+  });
+
+  it('uses generated route, resolve, delivery, and round payloads on one role-bound prefix', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return jsonOk({ deploymentRole: 'debug' });
+    };
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.coordinationCreateRoute('debug', {
+      routeKey: 'reviewer',
+      label: 'Reviewer',
+      enabled: true,
+      target: {
+        type: 'direct_brain',
+        agentId: 'reviewer-agent',
+        sessionId: 'reviewer-session',
+      },
+    });
+    await transport.coordinationResolveAddress('debug', '@reviewer');
+    await transport.coordinationTestRoute('debug', 'reviewer', {
+      body: 'test delivery',
+      ttlMs: 30_000,
+      requireWake: true,
+    });
+    await transport.coordinationStartRound('debug', {
+      toAddress: '@reviewer',
+      body: 'test round',
+      ttlMs: 60_000,
+    });
+    await transport.coordinationRound('debug', 'round-1');
+
+    expect(
+      requests.map((request) => [
+        request.method,
+        new URL(request.url).pathname,
+        request.body === undefined ? undefined : JSON.parse(request.body),
+      ]),
+    ).toEqual([
+      [
+        'POST',
+        '/v1/debug/coordination/routes',
+        expect.objectContaining({ routeKey: 'reviewer' }),
+      ],
+      [
+        'POST',
+        '/v1/debug/coordination/routes/resolve',
+        { address: '@reviewer' },
+      ],
+      [
+        'POST',
+        '/v1/debug/coordination/routes/reviewer/test',
+        { body: 'test delivery', ttlMs: 30_000, requireWake: true },
+      ],
+      [
+        'POST',
+        '/v1/debug/coordination/rounds',
+        { toAddress: '@reviewer', body: 'test round', ttlMs: 60_000 },
+      ],
+      ['GET', '/v1/debug/coordination/rounds/round-1', undefined],
+    ]);
+  });
+
+  it('uses the explicit discovered role for revision-checked route writes', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return jsonOk({
+        deploymentRole: 'debug',
+        route: {
+          routeKey: 'reviewer',
+          label: 'Reviewer',
+          enabled: true,
+          target: {
+            type: 'direct_brain',
+            agentId: 'reviewer-agent',
+            sessionId: 'reviewer-session',
+          },
+          revision: 8,
+          createdAt: '2026-07-21T00:00:00Z',
+          updatedAt: '2026-07-21T00:00:00Z',
+        },
+      });
+    };
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.coordinationUpdateRoute('debug', 'reviewer', {
+      routeKey: 'reviewer',
+      label: 'Reviewer',
+      enabled: true,
+      target: {
+        type: 'direct_brain',
+        agentId: 'reviewer-agent',
+        sessionId: 'reviewer-session',
+      },
+      expectedRevision: 7,
+    });
+    await transport.coordinationDeleteRoute('debug', 'reviewer', 8);
+
+    expect(requests[0]?.method).toBe('PATCH');
+    expect(new URL(requests[0]?.url ?? '').pathname).toBe(
+      '/v1/debug/coordination/routes/reviewer',
+    );
+    expect(JSON.parse(requests[0]?.body ?? '{}').expectedRevision).toBe(7);
+    expect(requests[1]?.method).toBe('DELETE');
+    expect(
+      new URL(requests[1]?.url ?? '').searchParams.get('expectedRevision'),
+    ).toBe('8');
+  });
+
   it('reads the diagnostics bundle with bearer auth', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

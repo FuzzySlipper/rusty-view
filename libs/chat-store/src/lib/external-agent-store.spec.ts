@@ -1723,6 +1723,7 @@ function deliveryReceipt(
       idempotencyKey: 'delivery-key-1',
       inputKind: 'operator',
       messageId: 'message-1',
+      requestedAddress: '@agent-1',
       requireWake: true,
       toAgentId: 'agent-1',
     },

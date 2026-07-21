@@ -1,7 +1,7 @@
 :host {
   display: block;
-  width: min(900px, 94vw);
-  max-height: 82vh;
+  width: min(1440px, 96vw);
+  max-height: 90vh;
   background: var(--rv-color-surface);
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
@@ -12,8 +12,40 @@
 .rv-admin-service {
   display: flex;
   flex-direction: column;
-  max-height: 82vh;
+  max-height: 90vh;
   font-family: var(--rv-font-ui);
+}
+
+.rv-admin-service__tabs {
+  display: flex;
+  gap: var(--rv-space-xs);
+  padding: var(--rv-space-xs) var(--rv-space-md) 0;
+  border-bottom: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-admin-service__tabs button {
+  appearance: none;
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--rv-radius) var(--rv-radius) 0 0;
+  background: transparent;
+  color: var(--rv-color-text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.rv-admin-service__tabs .rv-admin-service__tab--active {
+  border-color: var(--rv-color-border);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-admin-service__switchboard {
+  min-height: 0;
+  padding: var(--rv-space-sm);
+  overflow: auto;
 }
 
 .rv-admin-service__header,

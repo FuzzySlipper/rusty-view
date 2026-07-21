@@ -12,6 +12,7 @@ import type {
 } from '@rusty-view/transport';
 import { AdminStore } from '@rusty-view/chat-store';
 import { CHAT_DEBUG_TAB_CONTEXT } from './shell-extension-tokens';
+import { AdminSwitchboardPanelComponent } from './admin-switchboard-panel';
 
 import {
   formatDurationMs,
@@ -80,6 +81,7 @@ const APPLY_SEMANTICS_ROWS: readonly ServiceCapabilityRow[] = [
 
 @Component({
   selector: 'rv-admin-service-panel',
+  imports: [AdminSwitchboardPanelComponent],
   templateUrl: './admin-service-panel.html',
   styleUrl: './admin-service-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -114,6 +116,7 @@ export class AdminServicePanelComponent {
     serviceWakeTimeoutPolicy(this.admin.configValidation()),
   );
   protected readonly draftMode = signal<'disabled' | 'default'>('disabled');
+  protected readonly activeTab = signal<'runtime' | 'switchboard'>('runtime');
   protected readonly draftDefaultMs = signal(600_000);
   protected readonly localError = signal<string | null>(null);
   protected readonly hasRuntimeConfigDraftBase = computed(
@@ -143,6 +146,10 @@ export class AdminServicePanelComponent {
 
   protected closePanel(): void {
     this.dismissed.emit();
+  }
+
+  protected selectTab(tab: 'runtime' | 'switchboard'): void {
+    this.activeTab.set(tab);
   }
 
   protected refresh(): void {

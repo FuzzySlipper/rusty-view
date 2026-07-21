@@ -1,10 +1,75 @@
 import type {
+  AgentCorrelatedRound,
+  AgentDirectoryEntry,
+  AgentMessageDeliveryReceipt,
+  AgentRouteRecord,
+  AgentRouteResolution,
+  AgentRouteWrite,
   ChatCompletionsDialect,
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
   ProviderAdminModelProviderRecord,
   ProviderAdminModelProviderWrite,
 } from '@rusty-view/protocol';
+
+export type CoordinationDeploymentRole = 'production' | 'debug';
+
+export interface CoordinationAgentDirectory {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly agents: readonly AgentDirectoryEntry[];
+}
+
+export interface CoordinationRouteList {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly routes: readonly AgentRouteResolution[];
+}
+
+export interface CoordinationRouteResult {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly route: AgentRouteRecord;
+  readonly resolution?: AgentRouteResolution | null;
+}
+
+export interface CoordinationResolveResult {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly resolution: AgentRouteResolution;
+}
+
+export interface CoordinationDeliveryResult {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly targetAgentId: string;
+  readonly deliveryId: string;
+  readonly roundId?: string | null;
+  readonly status: string;
+  readonly terminalReason?: string | null;
+  readonly delivery: AgentMessageDeliveryReceipt;
+}
+
+export interface CoordinationRoundResult {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly targetAgentId: string;
+  readonly deliveryId: string;
+  readonly roundId: string;
+  readonly status: string;
+  readonly terminalReason?: string | null;
+  readonly delivery?: AgentMessageDeliveryReceipt;
+  readonly round: AgentCorrelatedRound;
+}
+
+export type CoordinationRouteWriteRequest = Omit<AgentRouteWrite, 'updatedAt'>;
+
+export interface CoordinationRouteTestRequest {
+  readonly body: string;
+  readonly ttlMs: number;
+  readonly requireWake?: boolean;
+  readonly correlationId?: string;
+}
+
+export interface CoordinationRoundRequest {
+  readonly toAddress: string;
+  readonly body: string;
+  readonly ttlMs: number;
+}
 
 export interface AdminApiMeta {
   readonly request_id: string;
