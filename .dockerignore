@@ -1,0 +1,9 @@
+.git
+.den-serve.json
+**/.angular
+**/.nx
+**/coverage
+**/dist
+**/node_modules
+**/playwright-report
+**/test-results
