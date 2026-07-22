@@ -21,7 +21,6 @@ import type {
   ContextStrategyDescriptor,
   ContextStrategyPolicy,
   CreateProfileMcpBinding,
-  ProfileBrainRebuildResult,
   ProfileBundleExportEntry,
   ProfileDeleteResult,
   ProfileRegistryFieldUpdateRequest,
@@ -103,14 +102,6 @@ const CONTEXT_DEBUG_VISIBILITIES: readonly ContextDebugVisibility[] = [
 
 type CapabilityStatus = 'available' | 'partial' | 'checking' | 'missing';
 
-const PROFILE_BRAIN_REBUILD_PLAN_CAPABILITY_ID =
-  'admin.control.profiles.rebuild_brain.plan';
-const PROFILE_BRAIN_REBUILD_APPLY_CAPABILITY_ID =
-  'admin.control.profiles.rebuild_brain.apply';
-const PROFILE_BRAIN_REBUILD_CAPABILITY_IDS = [
-  PROFILE_BRAIN_REBUILD_PLAN_CAPABILITY_ID,
-  PROFILE_BRAIN_REBUILD_APPLY_CAPABILITY_ID,
-] as const;
 const PROFILE_DELETE_CAPABILITY_ID = 'admin.control.profiles.delete';
 const PROFILE_DELETE_REASON = 'profile hard-deleted from Rusty View';
 
@@ -255,17 +246,6 @@ export class AdminProfileEditComponent {
         : null;
     });
 
-  protected readonly brainRebuildResult =
-    computed<AdminControlResponse<ProfileBrainRebuildResult> | null>(() => {
-      const result = this.admin.profileBrainRebuildResult();
-      if (result === null) return null;
-      const target = result.command.target;
-      const targetProfile =
-        target['profile_id'] ?? target['profileId'] ?? target['profile'];
-      return targetProfile === undefined || targetProfile === this.profileId()
-        ? result
-        : null;
-    });
   protected readonly profileDeleteResult =
     computed<AdminControlResponse<ProfileDeleteResult> | null>(() => {
       const result = this.admin.profileDeleteResult();
@@ -280,23 +260,8 @@ export class AdminProfileEditComponent {
         ? result
         : null;
     });
-  protected readonly brainRebuildCapabilityStatus = computed<CapabilityStatus>(
-    () => this.capabilityStatusFor(PROFILE_BRAIN_REBUILD_CAPABILITY_IDS),
-  );
   protected readonly deleteCapabilityStatus = computed<CapabilityStatus>(() =>
     this.capabilityStatusFor([PROFILE_DELETE_CAPABILITY_ID]),
-  );
-  protected readonly canPlanBrainRebuild = computed(
-    () =>
-      this.admin.controlCapabilityState(
-        PROFILE_BRAIN_REBUILD_PLAN_CAPABILITY_ID,
-      ) === 'available',
-  );
-  protected readonly canApplyBrainRebuild = computed(
-    () =>
-      this.admin.controlCapabilityState(
-        PROFILE_BRAIN_REBUILD_APPLY_CAPABILITY_ID,
-      ) === 'available',
   );
   protected readonly canDeleteProfile = computed(
     () =>
@@ -932,20 +897,6 @@ export class AdminProfileEditComponent {
     );
   }
 
-  protected planBrainRebuild(record: AdminProfileRegistryRecord): void {
-    if (!this.canPlanBrainRebuild()) return;
-    void this.admin.planProfileBrainRebuild(record.profileId, {
-      reason: 'profile runtime config changed from Rusty View',
-    });
-  }
-
-  protected applyBrainRebuild(record: AdminProfileRegistryRecord): void {
-    if (!this.canApplyBrainRebuild()) return;
-    void this.admin.applyProfileBrainRebuild(record.profileId, {
-      reason: 'profile runtime config changed from Rusty View',
-    });
-  }
-
   protected updateDeleteConfirmation(event: Event): void {
     this.deleteConfirmation.set((event.target as HTMLInputElement).value);
   }
@@ -990,51 +941,6 @@ export class AdminProfileEditComponent {
     if (states.some((state) => state === 'unknown')) return 'checking';
     if (states.some((state) => state === 'available')) return 'partial';
     return 'missing';
-  }
-
-  protected rebuildOutcomeDetails(
-    response: AdminControlResponse<ProfileBrainRebuildResult>,
-  ): readonly string[] {
-    const details: string[] = [];
-    const affected = response.outcome.affectedIds;
-    if (affected !== undefined) {
-      for (const [key, value] of Object.entries(affected)) {
-        details.push(`${key} ${value}`);
-      }
-    }
-    const result = response.outcome.result;
-    if (result === undefined) return details;
-    details.push(...labeledList('sessions', result.sessionIds));
-    details.push(
-      ...labeledList('affected sessions', result.affectedSessionIds),
-    );
-    details.push(...labeledList('active sessions', result.activeSessionIds));
-    details.push(...labeledList('blocked sessions', result.blockedSessionIds));
-    details.push(
-      ...labeledList('blocked wakes', result.blockedInFlightWakeIds),
-    );
-    if (result.sessionIdsPreserved !== undefined) {
-      details.push(`session ids preserved ${result.sessionIdsPreserved}`);
-    }
-    if (result.sessionHistoryPreserved !== undefined) {
-      details.push(`history preserved ${result.sessionHistoryPreserved}`);
-    }
-    if (result.reasonCode !== undefined) {
-      details.push(`reason ${result.reasonCode}`);
-    }
-    return details;
-  }
-
-  protected rebuildResultJson(
-    response: AdminControlResponse<ProfileBrainRebuildResult>,
-  ): string {
-    const result = response.outcome.result;
-    if (result === undefined) return '';
-    try {
-      return JSON.stringify(result, null, 2);
-    } catch {
-      return String(result);
-    }
   }
 
   protected deleteOutcomeDetails(

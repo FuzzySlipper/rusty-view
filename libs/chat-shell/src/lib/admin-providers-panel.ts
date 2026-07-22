@@ -15,7 +15,6 @@ import type {
   ChatCompletionsThinkingMode,
   ModelProviderProtocol,
   ModelProviderRecord,
-  ModelProviderRefreshMode,
   ModelProviderStatus,
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
@@ -83,12 +82,6 @@ function initialForm(): ProviderFormState {
   };
 }
 
-const REFRESH_MODES: readonly ModelProviderRefreshMode[] = [
-  'none',
-  'plan',
-  'apply',
-];
-
 /**
  * Reasoning effort levels offered in the dropdown. `''` leaves the field unset
  * (omitted from the request, provider default applies). The named levels mirror
@@ -145,14 +138,12 @@ export class AdminProvidersPanelComponent {
 
   readonly dismissed = output<void>();
 
-  protected readonly refreshModes = REFRESH_MODES;
   protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
   protected readonly chatCompletionsDialects = CHAT_COMPLETIONS_DIALECTS;
   protected readonly thinkingModes = THINKING_MODES;
   protected readonly reasoningHistoryOptions = REASONING_HISTORY_OPTIONS;
   protected readonly form = signal<ProviderFormState>(initialForm());
   protected readonly editingAlias = signal<string | null>(null);
-  protected readonly refreshMode = signal<ModelProviderRefreshMode>('none');
   /** Status line for the most recent base-URL capability probe (#3722 follow-up). */
   protected readonly probeStatus = signal<string>('');
   protected readonly oauthCallbackReady = computed(
@@ -483,13 +474,6 @@ export class AdminProvidersPanelComponent {
     }
   }
 
-  protected updateRefreshMode(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    if (value === 'none' || value === 'plan' || value === 'apply') {
-      this.refreshMode.set(value);
-    }
-  }
-
   protected selectProviderForEdit(provider: ModelProviderRecord): void {
     const credentialMode: ProviderCredentialMode =
       provider.credentialId === undefined ? 'unconfigured' : 'reuse';
@@ -543,16 +527,14 @@ export class AdminProvidersPanelComponent {
   protected async saveProvider(): Promise<void> {
     const form = this.form();
     const request = buildWriteRequest(form);
-    const refresh = this.refreshMode();
     let result: ModelProviderWriteResponse | undefined;
     if (this.editingAlias() !== null) {
       result = await this.admin.updateModelProvider(
         this.editingAlias() as string,
         request,
-        refresh,
       );
     } else {
-      result = await this.admin.createModelProvider(request, refresh);
+      result = await this.admin.createModelProvider(request);
     }
     if (result === undefined) return;
     const alias = result.provider.alias;
@@ -631,6 +613,24 @@ export class AdminProvidersPanelComponent {
 
   protected credentialUpdatedLabel(provider: ModelProviderRecord): string {
     return provider.credential.updatedAt ?? 'not updated';
+  }
+
+  protected providerRefreshNeedsAttention(
+    result: ModelProviderWriteResponse,
+  ): boolean {
+    return result.refresh.outcomes.some(
+      (outcome) => outcome.status === 'blocked' || outcome.status === 'failed',
+    );
+  }
+
+  protected providerRefreshSummary(result: ModelProviderWriteResponse): string {
+    if (this.providerRefreshNeedsAttention(result)) {
+      return 'Provider saved; automatic Profile rebuild incomplete';
+    }
+    if (result.refresh.affectedProfiles.length === 0) {
+      return 'Provider saved; no Profile rebuild required';
+    }
+    return 'Provider saved; affected Profiles rebuilt';
   }
 
   protected oauthPendingLogin(): OpenAiOauthPendingLogin | null {

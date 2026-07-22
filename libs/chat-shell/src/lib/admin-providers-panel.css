@@ -175,11 +175,6 @@
   gap: var(--rv-space-xs);
 }
 
-.rv-admin-providers__refresh-row {
-  display: flex;
-  gap: var(--rv-space-sm);
-}
-
 .rv-admin-providers__actions {
   display: flex;
   gap: var(--rv-space-sm);
@@ -194,6 +189,14 @@
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
+}
+
+.rv-admin-providers__refresh-summary {
+  flex-basis: 100%;
+}
+
+.rv-admin-providers__refresh-summary--attention {
+  color: var(--rv-color-danger);
 }
 
 .rv-admin-providers__oauth {

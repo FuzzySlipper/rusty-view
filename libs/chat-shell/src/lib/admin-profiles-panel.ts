@@ -15,7 +15,6 @@ import { AdminToolProfileEditorComponent } from './admin-tool-profile-editor';
 interface CapabilityRow {
   readonly label: string;
   readonly capabilityIds: readonly string[];
-  readonly availableLabel?: string;
 }
 
 const CAPABILITY_ROWS: readonly CapabilityRow[] = [
@@ -38,18 +37,6 @@ const CAPABILITY_ROWS: readonly CapabilityRow[] = [
       'admin.control.profiles.update.plan',
       'admin.control.profiles.update.apply',
     ],
-  },
-  {
-    label: 'Model/provider changes',
-    capabilityIds: [
-      'admin.control.profiles.update.plan',
-      'admin.control.profiles.update.apply',
-      'admin.control.sessions.rebuild_runtime.plan',
-      'admin.control.sessions.rebuild_runtime.apply',
-      'admin.control.profiles.rebuild_brain.plan',
-      'admin.control.profiles.rebuild_brain.apply',
-    ],
-    availableLabel: 'guarded rebuild available',
   },
 ];
 
@@ -167,7 +154,7 @@ export class AdminProfilesPanelComponent {
       this.admin.controlCapabilityState(id),
     );
     if (states.every((state) => state === 'available')) {
-      return row.availableLabel ?? 'available';
+      return 'available';
     }
     if (states.some((state) => state === 'unknown')) return 'checking';
     if (states.some((state) => state === 'available')) return 'partial';

@@ -31,7 +31,7 @@ async function createPanel(options: TransportOptions = {}) {
 }
 
 describe('AdminProfilesPanelComponent (list coordinator)', () => {
-  it('reflects landed profile update and rebuild capabilities', async () => {
+  it('does not advertise manual model/provider rebuild controls', async () => {
     const fixture = await createPanel({
       capabilityIds: LANDED_PROFILE_CONTROL_CAPABILITY_IDS,
     });
@@ -41,7 +41,8 @@ describe('AdminProfilesPanelComponent (list coordinator)', () => {
       )?.textContent ?? '';
 
     expect(capabilityText).toContain('Profile file edits');
-    expect(capabilityText).toContain('guarded rebuild available');
+    expect(capabilityText).not.toContain('Model/provider changes');
+    expect(capabilityText).not.toContain('rebuild');
     expect(capabilityText).not.toContain('backend API needed');
   });
 

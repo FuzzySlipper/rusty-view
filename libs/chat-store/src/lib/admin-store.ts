@@ -24,7 +24,6 @@ import {
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
   type ModelProviderPage,
-  type ModelProviderRefreshMode,
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
@@ -46,8 +45,6 @@ import {
   type ServiceCredentialRecord,
   type ServiceCredentialWriteRequest,
   type ProfileBundleExportPlan,
-  type ProfileBrainRebuildRequest,
-  type ProfileBrainRebuildResult,
   type ProfileDeleteRequest,
   type ProfileDeleteResult,
   type ProfileRegistryFieldUpdateRequest,
@@ -192,8 +189,6 @@ export class AdminStore {
     signal<AdminControlResponse<RuntimeConfigDraftPlan> | null>(null);
   private readonly _wakeTimeoutPatchResult =
     signal<AdminControlResponse<RuntimeWakeTimeoutPatchResult> | null>(null);
-  private readonly _profileBrainRebuildResult =
-    signal<AdminControlResponse<ProfileBrainRebuildResult> | null>(null);
   private readonly _profileDeleteResult =
     signal<AdminControlResponse<ProfileDeleteResult> | null>(null);
   private readonly _runtimePauseResult =
@@ -264,8 +259,6 @@ export class AdminStore {
   readonly runtimeConfigDraftResult =
     this._runtimeConfigDraftResult.asReadonly();
   readonly wakeTimeoutPatchResult = this._wakeTimeoutPatchResult.asReadonly();
-  readonly profileBrainRebuildResult =
-    this._profileBrainRebuildResult.asReadonly();
   readonly profileDeleteResult = this._profileDeleteResult.asReadonly();
   readonly runtimePauseResult = this._runtimePauseResult.asReadonly();
   readonly runtimeResumeResult = this._runtimeResumeResult.asReadonly();
@@ -895,43 +888,6 @@ export class AdminStore {
     }
   }
 
-  async planProfileBrainRebuild(
-    profileId: string,
-    request: ProfileBrainRebuildRequest = {},
-  ): Promise<void> {
-    this._saving.set(true);
-    this._error.set(null);
-    this._profileBrainRebuildResult.set(null);
-    try {
-      this._profileBrainRebuildResult.set(
-        await this.transport.planAdminProfileBrainRebuild(profileId, request),
-      );
-    } catch (error) {
-      this._error.set(storeErrorDetail(error));
-    } finally {
-      this._saving.set(false);
-    }
-  }
-
-  async applyProfileBrainRebuild(
-    profileId: string,
-    request: ProfileBrainRebuildRequest = {},
-  ): Promise<void> {
-    this._saving.set(true);
-    this._error.set(null);
-    this._profileBrainRebuildResult.set(null);
-    try {
-      this._profileBrainRebuildResult.set(
-        await this.transport.applyAdminProfileBrainRebuild(profileId, request),
-      );
-      await this.refresh();
-    } catch (error) {
-      this._error.set(storeErrorDetail(error));
-    } finally {
-      this._saving.set(false);
-    }
-  }
-
   async deleteProfile(
     profileId: string,
     request: ProfileDeleteRequest,
@@ -957,7 +913,6 @@ export class AdminStore {
     this._registryWriteResult.set(null);
     this._runtimeConfigPlan.set(null);
     this._runtimeConfigResult.set(null);
-    this._profileBrainRebuildResult.set(null);
     this._profileDeleteResult.set(null);
   }
 
@@ -981,12 +936,11 @@ export class AdminStore {
   }
 
   /**
-   * Create a reusable model provider alias (task #3534). Optionally trigger a
-   * runtime refresh of profiles referencing this alias via `refresh`.
+   * Create a reusable model provider alias and automatically rebuild affected
+   * profile runtimes so no separate operator step is required (#6066).
    */
   async createModelProvider(
     request: ModelProviderWriteRequest,
-    refresh: ModelProviderRefreshMode = 'none',
   ): Promise<ModelProviderWriteResponse | undefined> {
     this._saving.set(true);
     this._error.set(null);
@@ -994,7 +948,7 @@ export class AdminStore {
     try {
       const result = await this.transport.createAdminModelProvider(
         request,
-        refresh,
+        'apply',
       );
       this._providerWriteResult.set(result);
       await this.refresh();
@@ -1007,14 +961,10 @@ export class AdminStore {
     }
   }
 
-  /**
-   * Update a model provider alias by alias (task #3534). Use `refresh` to plan
-   * or apply runtime rebuilds for affected profiles.
-   */
+  /** Update a provider alias and automatically rebuild affected profiles. */
   async updateModelProvider(
     alias: string,
     request: ModelProviderWriteRequest,
-    refresh: ModelProviderRefreshMode = 'none',
   ): Promise<ModelProviderWriteResponse | undefined> {
     this._saving.set(true);
     this._error.set(null);
@@ -1023,7 +973,7 @@ export class AdminStore {
       const result = await this.transport.updateAdminModelProvider(
         alias,
         request,
-        refresh,
+        'apply',
       );
       this._providerWriteResult.set(result);
       await this.refresh();

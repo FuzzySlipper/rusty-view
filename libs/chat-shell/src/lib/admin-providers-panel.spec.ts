@@ -7,6 +7,7 @@ import {
   ChatTransportError,
   type ModelProviderPage,
   type ModelProviderRecord,
+  type ModelProviderRefreshMode,
   type ModelProviderWriteRequest,
   type ModelProviderWriteResponse,
   type OpenAiOauthCompleteRequest,
@@ -303,6 +304,7 @@ function makeTransport(
     createAdminModelProvider: vi.fn(
       async (
         request: ModelProviderWriteRequest,
+        refresh: ModelProviderRefreshMode,
       ): Promise<ModelProviderWriteResponse> => {
         const provider = {
           ...makeProvider(request.alias ?? request.modelId),
@@ -319,7 +321,7 @@ function makeTransport(
         currentProviders = [...currentProviders, provider];
         return {
           provider,
-          refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
+          refresh: { mode: refresh, affectedProfiles: [], outcomes: [] },
         };
       },
     ),
@@ -327,6 +329,7 @@ function makeTransport(
       async (
         alias: string,
         request: ModelProviderWriteRequest,
+        refresh: ModelProviderRefreshMode,
       ): Promise<ModelProviderWriteResponse> => {
         const current = currentProviders.find(
           (provider) => provider.alias === alias,
@@ -348,7 +351,7 @@ function makeTransport(
         ];
         return {
           provider,
-          refresh: { mode: 'none', affectedProfiles: [], outcomes: [] },
+          refresh: { mode: refresh, affectedProfiles: [], outcomes: [] },
         };
       },
     ),
@@ -533,10 +536,14 @@ describe('AdminProvidersPanelComponent', () => {
     expect(editor?.contains(listRegion ?? null)).toBe(false);
   });
 
-  it('creates a provider through the store when the form is valid', async () => {
+  it('creates a provider and automatically applies affected Profile rebuilds', async () => {
     const fixture = await createPanel([]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
-      createAdminModelProvider: { mock: { calls: unknown[] } };
+      createAdminModelProvider: {
+        mock: {
+          calls: [ModelProviderWriteRequest, ModelProviderRefreshMode][];
+        };
+      };
     };
     const component = fixture.componentInstance as unknown as {
       updateText(
@@ -553,6 +560,72 @@ describe('AdminProvidersPanelComponent', () => {
     await fixture.whenStable();
 
     expect(transport.createAdminModelProvider.mock.calls).toHaveLength(1);
+    expect(transport.createAdminModelProvider.mock.calls[0]?.[1]).toBe('apply');
+    expect(textContent(fixture)).not.toContain('Refresh profiles after save');
+  });
+
+  it('updates a provider with automatic rebuilds and surfaces blocked outcomes', async () => {
+    const provider = makeProvider('blocked-provider');
+    const fixture = await createPanel([provider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: {
+          calls: [
+            string,
+            ModelProviderWriteRequest,
+            ModelProviderRefreshMode,
+          ][];
+        };
+        mockImplementationOnce(
+          fn: (
+            alias: string,
+            request: ModelProviderWriteRequest,
+            refresh: ModelProviderRefreshMode,
+          ) => Promise<ModelProviderWriteResponse>,
+        ): void;
+      };
+    };
+    transport.updateAdminModelProvider.mockImplementationOnce(
+      async (_alias, _request, refresh) => ({
+        provider,
+        refresh: {
+          mode: refresh,
+          affectedProfiles: [
+            {
+              profileId: 'brain-one',
+              sessionIds: ['session-one'],
+              configuredSessionIds: ['session-one'],
+              activeSessionIds: ['session-one'],
+            },
+          ],
+          outcomes: [
+            {
+              profileId: 'brain-one',
+              status: 'blocked',
+              summary: 'active wake must finish before rebuild',
+              reasonCode: 'profile_rebuild_in_flight',
+            },
+          ],
+        },
+      }),
+    );
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      saveProvider(): Promise<void>;
+    };
+
+    component.selectProviderForEdit(provider);
+    await component.saveProvider();
+    fixture.detectChanges();
+
+    expect(transport.updateAdminModelProvider.mock.calls[0]?.[2]).toBe('apply');
+    expect(textContent(fixture)).toContain(
+      'Provider saved; automatic Profile rebuild incomplete',
+    );
+    expect(textContent(fixture)).toContain(
+      'brain-one: blocked — active wake must finish before rebuild',
+    );
+    expect(textContent(fixture)).toContain('reason profile_rebuild_in_flight');
   });
 
   it('creates an OpenAI OAuth provider without asking for raw OAuth credentials', async () => {

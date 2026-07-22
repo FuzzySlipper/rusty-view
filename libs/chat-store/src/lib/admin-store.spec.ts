@@ -1109,7 +1109,7 @@ describe('AdminStore behavior', () => {
     expect(store.saving()).toBe(false);
   });
 
-  it('createModelProvider stores write result and forwards refresh mode', async () => {
+  it('createModelProvider always applies affected profile rebuilds', async () => {
     const transport = createTransport();
     const store = setupAdminStore(transport);
     const request: ModelProviderWriteRequest = {
@@ -1118,7 +1118,7 @@ describe('AdminStore behavior', () => {
       modelId: 'gpt-test',
     };
 
-    await store.createModelProvider(request, 'apply');
+    await store.createModelProvider(request);
 
     expect(transport.createAdminModelProvider).toHaveBeenCalledWith(
       request,
@@ -1128,7 +1128,7 @@ describe('AdminStore behavior', () => {
     expect(store.saving()).toBe(false);
   });
 
-  it('updateModelProvider stores write result and refreshes data', async () => {
+  it('updateModelProvider always applies rebuilds and refreshes data', async () => {
     const transport = createTransport();
     const store = setupAdminStore(transport);
     const request: ModelProviderWriteRequest = {
@@ -1136,12 +1136,12 @@ describe('AdminStore behavior', () => {
       modelId: 'gpt-next',
     };
 
-    await store.updateModelProvider('main', request, 'plan');
+    await store.updateModelProvider('main', request);
 
     expect(transport.updateAdminModelProvider).toHaveBeenCalledWith(
       'main',
       request,
-      'plan',
+      'apply',
     );
     expect(store.providerWriteResult()?.provider.alias).toBe('main');
     expect(transport.adminDiagnostics).toHaveBeenCalledTimes(1);

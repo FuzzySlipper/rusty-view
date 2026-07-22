@@ -830,45 +830,6 @@
         }
       </div>
       }
-
-      <div class="rv-admin-profiles__registry-group">
-        <span class="rv-admin-profiles__group-label">Brain rebuild</span>
-        <div class="rv-admin-profiles__runtime-refs">
-          <span>capability {{ brainRebuildCapabilityStatus() }}</span>
-        </div>
-        <div class="rv-admin-profiles__actions">
-          <button
-            type="button"
-            class="rv-admin-profiles__button"
-            (click)="planBrainRebuild(record)"
-            [disabled]="admin.saving() || !canPlanBrainRebuild()"
-          >
-            Plan rebuild
-          </button>
-          <button
-            type="button"
-            class="rv-admin-profiles__button rv-admin-profiles__button--primary"
-            (click)="applyBrainRebuild(record)"
-            [disabled]="admin.saving() || !canApplyBrainRebuild()"
-          >
-            Apply rebuild
-          </button>
-        </div>
-        @if (brainRebuildResult(); as rebuild) {
-        <div class="rv-admin-profiles__result" role="status">
-          <span>{{ rebuild.command.name }}</span>
-          <span>{{ rebuild.outcome.status }}</span>
-          <span>{{ rebuild.outcome.summary }}</span>
-          @if (rebuild.outcome.reasonCode) {
-          <span>reason {{ rebuild.outcome.reasonCode }}</span>
-          } @for (detail of rebuildOutcomeDetails(rebuild); track detail) {
-          <span>{{ detail }}</span>
-          } @if (rebuildResultJson(rebuild) !== '') {
-          <pre>{{ rebuildResultJson(rebuild) }}</pre>
-          }
-        </div>
-        }
-      </div>
     </section>
     }
 

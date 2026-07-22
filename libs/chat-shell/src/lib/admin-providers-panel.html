@@ -339,17 +339,6 @@
     <p class="rv-admin-providers__probe" role="status">{{ probeStatus() }}</p>
     }
 
-    <div class="rv-admin-providers__refresh-row">
-      <label>
-        <span>Refresh profiles after save</span>
-        <select [value]="refreshMode()" (change)="updateRefreshMode($event)">
-          @for (mode of refreshModes; track mode) {
-          <option [value]="mode">{{ mode }}</option>
-          }
-        </select>
-      </label>
-    </div>
-
     <div class="rv-admin-providers__actions">
       <button
         type="button"
@@ -461,6 +450,12 @@
     </div>
     } @if (admin.providerWriteResult(); as result) {
     <div class="rv-admin-providers__result" role="status">
+      <strong
+        class="rv-admin-providers__refresh-summary"
+        [class.rv-admin-providers__refresh-summary--attention]="providerRefreshNeedsAttention(result)"
+      >
+        {{ providerRefreshSummary(result) }}
+      </strong>
       <span>provider {{ result.provider.alias }}</span>
       <span>{{ credentialLabel(result.provider) }}</span>
       <span>refresh {{ result.refresh.mode }}</span>
@@ -469,7 +464,8 @@
       <span
         class="rv-admin-providers__outcome rv-admin-providers__outcome--{{ outcome.status }}"
       >
-        {{ outcome.profileId }}: {{ outcome.status }}
+        {{ outcome.profileId }}: {{ outcome.status }} — {{ outcome.summary }}
+        @if (outcome.reasonCode) { (reason {{ outcome.reasonCode }}) }
       </span>
       }
     </div>
