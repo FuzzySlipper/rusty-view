@@ -116,6 +116,12 @@ export class ChatStore implements OnDestroy {
   private activeStream: ChatEventStream | null = null;
   private readonly seenEventIds = new Set<string>();
   private selectionRevision = 0;
+  /**
+   * Distinguishes operations created in the same millisecond. This sequence is
+   * shared by sends and commands so every pending operation in this store has
+   * a collision-proof identity even when the clock is fixed or coarse.
+   */
+  private pendingOperationSequence = 0;
   private readonly transcriptCache = new WeightedLruCache<
     string,
     CachedNativeTranscript
@@ -591,7 +597,7 @@ export class ChatStore implements OnDestroy {
     }
     const revision = this.selectionRevision;
 
-    const pendingId = `pending_${Date.now()}`;
+    const pendingId = this.nextPendingOperationId('pending');
     const pending: PendingSend = {
       id: pendingId,
       sessionId,
@@ -609,14 +615,16 @@ export class ChatStore implements OnDestroy {
       });
       await this.catchUpAfterWrite(sessionId, cursorBeforeSend, revision);
       this._pendingSends.update((sends) =>
-        sends.filter((s) => s.id !== pendingId),
+        sends.filter(
+          (send) => send.id !== pendingId || send.sessionId !== sessionId,
+        ),
       );
     } catch (error) {
       this._pendingSends.update((sends) =>
-        sends.map((s) =>
-          s.id === pendingId
-            ? { ...s, status: 'error', error: storeErrorDetail(error) }
-            : s,
+        sends.map((send) =>
+          send.id === pendingId && send.sessionId === sessionId
+            ? { ...send, status: 'error', error: storeErrorDetail(error) }
+            : send,
         ),
       );
     }
@@ -670,7 +678,7 @@ export class ChatStore implements OnDestroy {
       throw new Error('No active session — call selectSession first.');
     }
 
-    const pendingId = `cmd_${Date.now()}`;
+    const pendingId = this.nextPendingOperationId('cmd');
     const pending: PendingSend = {
       id: pendingId,
       sessionId,
@@ -683,7 +691,11 @@ export class ChatStore implements OnDestroy {
     try {
       const result = await this.transport.sendCommand(sessionId, { command });
       this._pendingCommands.update((cmds) =>
-        cmds.filter((c) => c.id !== pendingId),
+        cmds.filter(
+          (pendingCommand) =>
+            pendingCommand.id !== pendingId ||
+            pendingCommand.sessionId !== sessionId,
+        ),
       );
 
       // Record in command history for Up/Down navigation.
@@ -696,13 +708,24 @@ export class ChatStore implements OnDestroy {
       }
     } catch (error) {
       this._pendingCommands.update((cmds) =>
-        cmds.map((c) =>
-          c.id === pendingId
-            ? { ...c, status: 'error', error: storeErrorDetail(error) }
-            : c,
+        cmds.map((pendingCommand) =>
+          pendingCommand.id === pendingId &&
+          pendingCommand.sessionId === sessionId
+            ? {
+                ...pendingCommand,
+                status: 'error',
+                error: storeErrorDetail(error),
+              }
+            : pendingCommand,
         ),
       );
     }
+  }
+
+  private nextPendingOperationId(kind: 'pending' | 'cmd'): string {
+    const sequence = this.pendingOperationSequence;
+    this.pendingOperationSequence += 1;
+    return `${kind}_${Date.now()}_${sequence}`;
   }
 
   /** Close and reopen the SSE stream (manual reconnect). */
@@ -876,7 +899,7 @@ function createAssistantPlaceholderMessage(input: {
 }
 
 function pendingCreatedAt(pendingId: string): string {
-  const timestamp = Number(pendingId.replace(/^pending_/, ''));
+  const timestamp = Number(/^pending_(\d+)/.exec(pendingId)?.[1]);
   if (Number.isFinite(timestamp) && timestamp > 0) {
     return new Date(timestamp).toISOString();
   }

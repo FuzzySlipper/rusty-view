@@ -680,6 +680,109 @@ describe('ChatStore', () => {
     await slowSubmission;
   });
 
+  it('keeps session A pending when a same-millisecond send in session B succeeds', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_784_700_000_000);
+    const sendA = deferred<SendChatMessageResult>();
+    const sendB = deferred<SendChatMessageResult>();
+    const transport = createMockTransport({});
+    (
+      transport as unknown as {
+        sendMessage: ReturnType<typeof vi.fn>;
+      }
+    ).sendMessage = vi.fn((sessionId: string) =>
+      sessionId === 'sess_a' ? sendA.promise : sendB.promise,
+    );
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    try {
+      await store.selectSession('sess_a');
+      const submissionA = store.sendMessage('still running');
+      await store.selectSession('sess_b');
+      const submissionB = store.sendMessage('finishes first');
+
+      expect(store.pendingSends().map((pending) => pending.id)).toHaveLength(2);
+      expect(
+        new Set(store.pendingSends().map((pending) => pending.id)).size,
+      ).toBe(2);
+
+      sendB.resolve(acceptedResult());
+      await submissionB;
+
+      expect(store.pendingSends()).toEqual([
+        expect.objectContaining({ sessionId: 'sess_a', status: 'sending' }),
+      ]);
+      expect(store.isSubmitting()).toBe(false);
+
+      await store.selectSession('sess_a');
+      expect(store.isSubmitting()).toBe(true);
+      expect(store.messages().at(-1)?.id).toMatch(
+        /^pending-assistant-pending_/,
+      );
+
+      sendA.resolve(acceptedResult());
+      await submissionA;
+      expect(store.pendingSends()).toHaveLength(0);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('does not rewrite session A when a same-millisecond send in session B fails', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_784_700_000_000);
+    const sendA = deferred<SendChatMessageResult>();
+    let rejectSendB!: (reason: unknown) => void;
+    const sendB = new Promise<SendChatMessageResult>((_resolve, reject) => {
+      rejectSendB = reject;
+    });
+    const transport = createMockTransport({});
+    (
+      transport as unknown as {
+        sendMessage: ReturnType<typeof vi.fn>;
+      }
+    ).sendMessage = vi.fn((sessionId: string) =>
+      sessionId === 'sess_a' ? sendA.promise : sendB,
+    );
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    try {
+      await store.selectSession('sess_a');
+      const submissionA = store.sendMessage('still running');
+      await store.selectSession('sess_b');
+      const submissionB = store.sendMessage('fails first');
+
+      rejectSendB(new Error('session B failed'));
+      await submissionB;
+
+      expect(store.pendingSends()).toEqual([
+        expect.objectContaining({
+          sessionId: 'sess_a',
+          status: 'sending',
+          error: undefined,
+        }),
+        expect.objectContaining({
+          sessionId: 'sess_b',
+          status: 'error',
+          error: expect.objectContaining({ message: 'session B failed' }),
+        }),
+      ]);
+      expect(store.isSubmitting()).toBe(false);
+
+      await store.selectSession('sess_a');
+      expect(store.isSubmitting()).toBe(true);
+      expect(store.messages().at(-1)?.id).toMatch(
+        /^pending-assistant-pending_/,
+      );
+
+      sendA.resolve(acceptedResult());
+      await submissionA;
+      expect(store.pendingSends()).toEqual([
+        expect.objectContaining({ sessionId: 'sess_b', status: 'error' }),
+      ]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('sendMessage clears pending send on success', async () => {
     const transport = createMockTransport({});
     const store = setupStore(transport, new InMemoryChatStorage());
