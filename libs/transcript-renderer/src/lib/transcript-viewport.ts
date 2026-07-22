@@ -193,6 +193,7 @@ export class TranscriptViewportComponent {
   private resumeFollowOnUserScrollToTail = false;
   private scrollbarDragActive = false;
   private touchScrollActive = false;
+  private transcriptTransitionFrame: number | undefined;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -204,6 +205,7 @@ export class TranscriptViewportComponent {
    * the viewport has a real size, then keep it in sync with the input.
    */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
+  protected readonly transcriptTransitioning = signal(false);
   protected readonly searchQuery = signal('');
   protected readonly searchRole = signal<MessageRole | 'all'>('all');
   protected readonly searchDateFrom = signal('');
@@ -317,6 +319,9 @@ export class TranscriptViewportComponent {
       if (this.tailSettleTimer !== undefined) {
         clearTimeout(this.tailSettleTimer);
       }
+      if (this.transcriptTransitionFrame !== undefined) {
+        cancelAnimationFrame(this.transcriptTransitionFrame);
+      }
     });
 
     // Conversation identity is supplied by the composition layer. Do not
@@ -334,11 +339,27 @@ export class TranscriptViewportComponent {
         return;
       }
 
+      this.transcriptTransitioning.set(true);
       this.previousMessages = [];
       this.isAtBottom.set(true);
       this.resumeTailFollow();
       if (this.viewportReady) {
-        this.afterNextRender(() => this.resetAutoSizeEstimator());
+        // Install both the replacement data and a valid tail range in the same
+        // signal turn. If CDK first observes the new data through the old
+        // transcript's range, a short/very-tall predecessor can leave the
+        // range outside the replacement and produce a blank frame.
+        const messages = this.messages();
+        this.renderMessages.set(messages);
+        this.viewport().setRenderedRange({
+          start: Math.max(0, messages.length - 20),
+          end: messages.length,
+        });
+        this.afterNextRender(() => {
+          this.resetAutoSizeEstimator();
+          this.finishTranscriptTransitionWhenRendered();
+        });
+      } else {
+        this.transcriptTransitioning.set(false);
       }
     });
 
@@ -625,16 +646,36 @@ export class TranscriptViewportComponent {
 
   /**
    * Experimental autosize retains a lifetime-weighted item-height average even
-   * when a wholly different data set replaces the transcript. Reattach only on
-   * a proven session replacement so expanded content from the prior session
-   * cannot determine the next session's rendered range.
+   * when a wholly different data set replaces the transcript. Reset only on a
+   * proven session replacement so expanded content from the prior session
+   * cannot determine the next session's rendered range. Calling `attach`
+   * directly is deliberate: the strategy's attach path resets its averager and
+   * recalculates the range, while a preceding detach creates a real empty-row
+   * interval before CDK materializes the replacement range.
    */
   private resetAutoSizeEstimator(): void {
     const strategy = this.autoSize()._scrollStrategy;
-    strategy.detach();
     strategy.attach(this.viewport());
     this.noteTailGeometryChange();
     this.scrollToBottomOffset();
+  }
+
+  private finishTranscriptTransitionWhenRendered(attempt = 0): void {
+    if (this.transcriptTransitionFrame !== undefined) {
+      cancelAnimationFrame(this.transcriptTransitionFrame);
+    }
+    this.transcriptTransitionFrame = requestAnimationFrame(() => {
+      this.transcriptTransitionFrame = undefined;
+      const hasRenderedRow =
+        this.viewport().elementRef.nativeElement.querySelector(
+          '.rv-transcript__item',
+        ) !== null;
+      if (hasRenderedRow || attempt >= 10) {
+        this.transcriptTransitioning.set(false);
+        return;
+      }
+      this.finishTranscriptTransitionWhenRendered(attempt + 1);
+    });
   }
 
   private onRenderedContentResize(height: number): void {

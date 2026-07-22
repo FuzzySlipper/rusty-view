@@ -53,6 +53,19 @@
   margin-inline: auto;
 }
 
+.rv-transcript__transition {
+  position: absolute;
+  z-index: var(--rv-z-sticky);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
+  pointer-events: none;
+}
+
 .rv-transcript-search {
   display: grid;
   flex: 0 0 auto;

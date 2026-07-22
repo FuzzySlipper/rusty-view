@@ -165,7 +165,15 @@
     />
   </div>
 </cdk-virtual-scroll-viewport>
-@if (showScrollToBottom()) {
+@if (transcriptTransitioning()) {
+<div
+  class="rv-transcript__item rv-transcript__transition"
+  data-testid="transcript-transition"
+  role="status"
+>
+  Switching transcript…
+</div>
+} @if (showScrollToBottom()) {
 <button
   type="button"
   class="rv-transcript-tail"

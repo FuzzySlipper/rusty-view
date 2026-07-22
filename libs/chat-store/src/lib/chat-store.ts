@@ -32,6 +32,17 @@ import type { ChatEventStream } from '@rusty-view/transport';
 
 import { DEBUG_ACTOR, type PendingSend } from './pending-operations';
 import { storeErrorDetail } from './store-error';
+import { WeightedLruCache } from './weighted-lru-cache';
+
+interface CachedNativeTranscript {
+  readonly projection: ConversationProjection;
+  readonly rawEvents: readonly ChatEvent[];
+  readonly sessionStatus: ChatSessionStatus | null;
+  readonly contextUsage: SessionContextUsageResult | null;
+}
+
+const NATIVE_TRANSCRIPT_CACHE_CAPACITY = 8;
+const NATIVE_TRANSCRIPT_CACHE_WEIGHT = 60_000;
 
 /**
  * DI token for the {@link ChatStorageAdapter}. The shell provides a concrete
@@ -89,6 +100,7 @@ export class ChatStore implements OnDestroy {
   private readonly _activeSessionStatus = signal<ChatSessionStatus | null>(
     null,
   );
+  private readonly _sessionLoading = signal(false);
   /** Brain profile the user has selected in the sidebar. Persisted. */
   private readonly _selectedProfileId = signal<string | null>(null);
   /** Submitted slash commands for Up/Down history navigation. Persisted. */
@@ -103,6 +115,11 @@ export class ChatStore implements OnDestroy {
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
   private readonly seenEventIds = new Set<string>();
+  private selectionRevision = 0;
+  private readonly transcriptCache = new WeightedLruCache<
+    string,
+    CachedNativeTranscript
+  >(NATIVE_TRANSCRIPT_CACHE_CAPACITY, NATIVE_TRANSCRIPT_CACHE_WEIGHT);
 
   // ---- public readonly signals ----
   readonly sessions = this._sessions.asReadonly();
@@ -115,6 +132,8 @@ export class ChatStore implements OnDestroy {
   readonly contextUsage = this._contextUsage.asReadonly();
   readonly pendingSends = this._pendingSends.asReadonly();
   readonly pendingCommands = this._pendingCommands.asReadonly();
+  /** True only while an uncached selected session has no materialized state. */
+  readonly sessionLoading = this._sessionLoading.asReadonly();
   /** True when a message or command is currently in flight. */
   readonly isSubmitting = computed(
     () => this._pendingSends().length > 0 || this._pendingCommands().length > 0,
@@ -336,7 +355,9 @@ export class ChatStore implements OnDestroy {
     ) {
       return;
     }
+    this.selectionRevision += 1;
     this.closeStream();
+    this.transcriptCache.clear();
     this.seenEventIds.clear();
     this._selectedProfileId.set(null);
     this._viewingHistoricalSessionId.set(null);
@@ -345,6 +366,7 @@ export class ChatStore implements OnDestroy {
     this._rawEvents.set([]);
     this._activeSessionStatus.set(null);
     this._contextUsage.set(null);
+    this._sessionLoading.set(false);
     this.persistUiState();
   }
 
@@ -359,46 +381,69 @@ export class ChatStore implements OnDestroy {
    * backend, then connect the live SSE stream.
    */
   async selectSession(sessionId: string): Promise<void> {
+    const revision = ++this.selectionRevision;
+    this.cacheActiveTranscript();
     this.closeStream();
     this.seenEventIds.clear();
+    const cached = this.transcriptCache.get(sessionId);
     this._activeSessionId.set(sessionId);
-    this._projection.set(emptyProjection());
-    this._rawEvents.set([]);
-    this._activeSessionStatus.set(null);
-    this._contextUsage.set(null);
-
-    // 1. Load cached events from IndexedDB (survives refresh).
-    const cachedEvents = await this.storage
-      .getEvents(sessionId)
-      .catch(() => [] as ChatEvent[]);
-    if (cachedEvents.length > 0) {
-      this.ingestEvents(cachedEvents);
+    if (cached === undefined) {
+      this._projection.set(emptyProjection());
+      this._rawEvents.set([]);
+      this._activeSessionStatus.set(null);
+      this._contextUsage.set(null);
+      this._sessionLoading.set(true);
+    } else {
+      for (const event of cached.rawEvents) {
+        this.seenEventIds.add(event.event_id);
+      }
+      this._projection.set(cached.projection);
+      this._rawEvents.set([...cached.rawEvents]);
+      this._activeSessionStatus.set(cached.sessionStatus);
+      this._contextUsage.set(cached.contextUsage);
+      this._sessionLoading.set(false);
     }
 
-    // 2. Open fresh from backend.
-    const result = await this.transport.openSession(sessionId);
-    this._activeSessionStatus.set(result.session.status);
-    this.ingestEvents(result.events);
-    void this.storage
-      .putEvents(sessionId, result.events)
-      .catch(() => undefined);
+    // Begin the backend read alongside the first cold IndexedDB materialization.
+    const opened = this.transport.openSession(sessionId);
+    // Storage may finish after a newer selection makes this result irrelevant;
+    // attach immediately so an early rejected open never becomes unhandled.
+    void opened.catch(() => undefined);
+    try {
+      if (cached === undefined) {
+        const cachedEvents = await this.storage
+          .getEvents(sessionId)
+          .catch(() => [] as ChatEvent[]);
+        if (!this.isCurrentSelection(revision, sessionId)) return;
+        if (cachedEvents.length > 0) this.ingestEvents(cachedEvents);
+      }
 
-    // Reconcile a stale active turn. Replayed events are historical; if a turn
-    // record is incomplete (deltas/tools with no terminal `assistant_turn_finished`),
-    // the projection leaves `activeTurn` set, which wedges the UI as "streaming"
-    // (disabled input) on an idle session. Only an `active` session can have a
-    // genuinely live turn — for any other status, drop the stale turn. A truly
-    // live turn is re-established by the SSE stream's deltas below.
-    if (result.session.status !== 'active') {
-      this.clearStaleActiveTurn();
+      const result = await opened;
+      if (!this.isCurrentSelection(revision, sessionId)) return;
+      this._activeSessionStatus.set(result.session.status);
+      this.ingestEvents(result.events);
+      void this.storage
+        .putEvents(sessionId, result.events)
+        .catch(() => undefined);
+
+      // Reconcile a stale active turn. Replayed events are historical; if a turn
+      // record is incomplete (deltas/tools with no terminal `assistant_turn_finished`),
+      // the projection leaves `activeTurn` set, which wedges the UI as "streaming"
+      // (disabled input) on an idle session. Only an `active` session can have a
+      // genuinely live turn — for any other status, drop the stale turn. A truly
+      // live turn is re-established by the SSE stream's deltas below.
+      if (result.session.status !== 'active') this.clearStaleActiveTurn();
+      this.cacheActiveTranscript();
+
+      await this.startStream(sessionId, revision);
+
+      // Best-effort context diagnostics must not hold the transcript paint.
+      void this.loadContextUsage(revision, sessionId);
+    } finally {
+      if (this.isCurrentSelection(revision, sessionId)) {
+        this._sessionLoading.set(false);
+      }
     }
-
-    // 3. Start the live SSE stream.
-    await this.startStream(sessionId);
-
-    // 4. Best-effort context-usage diagnostics. Non-fatal: older backends may
-    // not expose the route, and the transcript must not depend on it.
-    void this.loadContextUsage();
   }
 
   /**
@@ -406,14 +451,17 @@ export class ChatStore implements OnDestroy {
    * session and store them. Best-effort: failures (e.g. a backend without the
    * route) leave {@link contextUsage} null rather than throwing.
    */
-  async loadContextUsage(): Promise<void> {
-    const sessionId = this._activeSessionId();
+  async loadContextUsage(
+    revision = this.selectionRevision,
+    sessionId = this._activeSessionId(),
+  ): Promise<void> {
     if (sessionId === null) return;
     try {
       const usage = await this.transport.sessionContext(sessionId);
       // Guard against a late response after the user switched sessions.
-      if (this._activeSessionId() === sessionId) {
+      if (this.isCurrentSelection(revision, sessionId)) {
         this._contextUsage.set(usage);
+        this.cacheActiveTranscript();
       }
     } catch {
       // Diagnostics are optional; keep the current (or null) value.
@@ -477,6 +525,7 @@ export class ChatStore implements OnDestroy {
     this._projection.update((prev) =>
       prev.activeTurn === undefined ? prev : { ...prev, activeTurn: undefined },
     );
+    this.cacheActiveTranscript();
   }
 
   /**
@@ -529,6 +578,7 @@ export class ChatStore implements OnDestroy {
     if (sessionId === null) {
       throw new Error('No active session — call selectSession first.');
     }
+    const revision = this.selectionRevision;
 
     const pendingId = `pending_${Date.now()}`;
     const pending: PendingSend = {
@@ -541,15 +591,11 @@ export class ChatStore implements OnDestroy {
 
     try {
       const cursorBeforeSend = this.lastCursor();
-      const result = await this.transport.sendMessage(sessionId, {
+      await this.transport.sendMessage(sessionId, {
         actor: DEBUG_ACTOR,
         body: text,
       });
-      await this.catchUpAfterWrite(
-        sessionId,
-        cursorBeforeSend,
-        result.latest_cursor,
-      );
+      await this.catchUpAfterWrite(sessionId, cursorBeforeSend, revision);
       this._pendingSends.update((sends) =>
         sends.filter((s) => s.id !== pendingId),
       );
@@ -578,12 +624,14 @@ export class ChatStore implements OnDestroy {
   private async catchUpAfterWrite(
     sessionId: string,
     cursorBeforeWrite: string | null,
-    _latestCursor: string,
+    revision: number,
   ): Promise<void> {
     const events = await this.transport.replayAllEvents(sessionId, {
       ...(cursorBeforeWrite !== null ? { cursor: cursorBeforeWrite } : {}),
     });
-    this.ingestEvents(events);
+    if (this.isCurrentSelection(revision, sessionId)) {
+      this.ingestEvents(events);
+    }
   }
 
   /**
@@ -649,7 +697,7 @@ export class ChatStore implements OnDestroy {
     const sessionId = this._activeSessionId();
     if (sessionId === null) return;
     this.closeStream();
-    await this.startStream(sessionId);
+    await this.startStream(sessionId, this.selectionRevision);
   }
 
   // ---- event ingestion (called by stream consumer + tests) ----
@@ -686,6 +734,7 @@ export class ChatStore implements OnDestroy {
     }
     this._rawEvents.set(nextRawEvents);
     this._projection.set(nextProjection);
+    this.cacheActiveTranscript();
 
     // Persist (fire and forget — storage failures are non-fatal).
     const sessionId = this._activeSessionId();
@@ -698,26 +747,43 @@ export class ChatStore implements OnDestroy {
 
   // ---- SSE stream lifecycle ----
 
-  private async startStream(sessionId: string): Promise<void> {
+  private async startStream(
+    sessionId: string,
+    revision: number,
+  ): Promise<void> {
+    if (!this.isCurrentSelection(revision, sessionId)) return;
     const cursor = this.lastCursor();
-    this.activeStream = this.transport.streamEvents(sessionId, {
+    const stream = this.transport.streamEvents(sessionId, {
       ...(cursor !== null ? { initialCursor: cursor } : {}),
     });
+    this.activeStream = stream;
 
-    this.activeStream.onStateChange((state) => {
-      this._connectionState.set(state);
+    stream.onStateChange((state) => {
+      if (
+        this.activeStream === stream &&
+        this.isCurrentSelection(revision, sessionId)
+      ) {
+        this._connectionState.set(state);
+      }
     });
 
     // Consume events in the background.
-    void this.consumeStream();
+    void this.consumeStream(stream, sessionId, revision);
   }
 
-  private async consumeStream(): Promise<void> {
-    const stream = this.activeStream;
-    if (stream === null) return;
-
+  private async consumeStream(
+    stream: ChatEventStream,
+    sessionId: string,
+    revision: number,
+  ): Promise<void> {
     try {
       for await (const event of stream.events()) {
+        if (
+          this.activeStream !== stream ||
+          !this.isCurrentSelection(revision, sessionId)
+        ) {
+          break;
+        }
         // Per-event isolation: a reducer/storage failure on one event must not
         // tear down the live consumer loop (that would freeze the transcript
         // while the connection still shows green — task #3848). Ingest each
@@ -739,6 +805,30 @@ export class ChatStore implements OnDestroy {
       this.activeStream = null;
       this._connectionState.set({ status: 'idle' });
     }
+  }
+
+  private cacheActiveTranscript(): void {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) return;
+    const rawEvents = this._rawEvents();
+    const projection = this._projection();
+    this.transcriptCache.set(
+      sessionId,
+      {
+        projection,
+        rawEvents,
+        sessionStatus: this._activeSessionStatus(),
+        contextUsage: this._contextUsage(),
+      },
+      rawEvents.length + projection.messages.length * 8,
+    );
+  }
+
+  private isCurrentSelection(revision: number, sessionId: string): boolean {
+    return (
+      revision === this.selectionRevision &&
+      this._activeSessionId() === sessionId
+    );
   }
 
   /** Clean up resources when the store is destroyed. */

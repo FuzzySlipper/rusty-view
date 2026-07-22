@@ -157,7 +157,9 @@ export class DebugShellComponent {
   protected readonly inputDisabled = computed(
     () =>
       (this.external.selectedThreadId() === undefined &&
-        (this.store.isGenerating() || this.store.isSubmitting())) ||
+        (this.store.sessionLoading() ||
+          this.store.isGenerating() ||
+          this.store.isSubmitting())) ||
       (this.external.selectedThreadId() !== undefined &&
         this.external.loading()) ||
       this.external.pending() ||
@@ -169,6 +171,11 @@ export class DebugShellComponent {
   );
   protected readonly displayedMessages = computed(() =>
     this.externalSelected() ? this.external.messages() : this.store.messages(),
+  );
+  protected readonly transcriptLoading = computed(() =>
+    this.externalSelected()
+      ? this.external.loading()
+      : this.store.sessionLoading(),
   );
   protected readonly transcriptKey = computed(() => {
     if (this.externalSelected()) {
@@ -212,6 +219,7 @@ export class DebugShellComponent {
       }
       return 'idle';
     }
+    if (this.store.sessionLoading()) return 'loading';
     if (this.store.isGenerating() || this.store.isSubmitting())
       return 'working';
     if (this.store.activeSession()?.status === 'blocked') return 'waiting';

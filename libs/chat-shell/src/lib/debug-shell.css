@@ -206,8 +206,21 @@
 }
 
 .rv-debug__transcript {
+  position: relative;
   flex: 1;
   overflow: hidden;
+}
+
+.rv-debug__transcript-loading {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-mono);
+  font-size: var(--rv-font-size-sm);
 }
 
 .rv-debug__command-error {

@@ -17,6 +17,7 @@ import {
   activeExternalTurnId,
   ExternalAgentStore,
   latestExternalTurnPhase,
+  type ExternalAgentSession,
 } from './external-agent-store';
 
 afterEach(() => TestBed.resetTestingModule());
@@ -1147,6 +1148,51 @@ describe('ExternalAgentStore', () => {
 
     expect(readThread).toHaveBeenCalledTimes(2);
     expect(store.selectedThread()?.updatedAt).toBe(20);
+  });
+
+  it('paints a cached active thread immediately while revalidating it', async () => {
+    const runtime = registration('runtime-1');
+    const firstThread = threadWithUserPrompts('hot transcript');
+    const secondThread = thread('thread-2', 20);
+    const revalidation = deferred<{
+      readonly thread: ExternalThreadProjection;
+    }>();
+    const readThread = vi
+      .fn()
+      .mockResolvedValueOnce({ thread: firstThread })
+      .mockResolvedValueOnce({ thread: secondThread })
+      .mockImplementationOnce(() => revalidation.promise);
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(),
+      listEvents: vi.fn(async () => ({ events: [] })),
+      readThread,
+    });
+    const first: ExternalAgentSession = {
+      key: 'runtime-1:thread-1',
+      runtime,
+      thread: firstThread,
+      unread: false,
+      needsAttention: false,
+    };
+    const second: ExternalAgentSession = {
+      key: 'runtime-1:thread-2',
+      runtime,
+      thread: secondThread,
+      unread: false,
+      needsAttention: false,
+    };
+
+    await store.selectSession(first);
+    await store.selectSession(second);
+    const returning = store.selectSession(first);
+
+    expect(store.loading()).toBe(false);
+    expect(store.selectedThread()?.threadId).toBe('thread-1');
+    expect(store.messages()[0]?.blocks[0]?.content).toBe('hot transcript');
+
+    revalidation.resolve({ thread: firstThread });
+    await expect(returning).resolves.toBe(true);
   });
 
   it('keeps the newest session selected when an older thread read finishes late', async () => {

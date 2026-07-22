@@ -24,6 +24,7 @@ import { ChatStore, CHAT_STORAGE_ADAPTER } from './chat-store';
 class InMemoryChatStorage implements ChatStorageAdapter {
   readonly sessionsMap = new Map<string, ChatSessionSummary>();
   readonly eventsMap = new Map<string, ChatEvent[]>();
+  readonly getEventsCalls: string[] = [];
   private uiState: ChatUiState | null = null;
 
   async putSession(session: ChatSessionSummary): Promise<void> {
@@ -37,6 +38,7 @@ class InMemoryChatStorage implements ChatStorageAdapter {
     this.eventsMap.set(sessionId, [...existing, ...events]);
   }
   async getEvents(sessionId: string): Promise<ChatEvent[]> {
+    this.getEventsCalls.push(sessionId);
     return this.eventsMap.get(sessionId) ?? [];
   }
   async getSessions(): Promise<ChatSessionSummary[]> {
@@ -210,6 +212,32 @@ function completedCommandResult(): ExecuteChatCommandResult {
   };
 }
 
+function messageEvent(
+  sessionId: string,
+  eventId: string,
+  body: string,
+): ChatEvent {
+  return {
+    event_id: eventId,
+    session_id: sessionId,
+    sequence_id: 1,
+    created_at: '2026-06-22T10:00:00Z',
+    kind: 'message_created',
+    payload: { message_id: `message-${eventId}`, role: 'user', body },
+  };
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function setupStore(
   transport: ChatTransport,
   storage: ChatStorageAdapter,
@@ -286,6 +314,61 @@ describe('ChatStore', () => {
     expect(store.activeSessionId()).toBe('sess_test');
     expect(store.projection().messages).toHaveLength(1);
     expect(store.projection().messages[0]?.blocks[0]?.content).toBe('hello');
+  });
+
+  it('atomically restores a hot transcript without rescanning storage', async () => {
+    const storage = new InMemoryChatStorage();
+    const transport = createMockTransport({});
+    vi.mocked(transport.openSession).mockImplementation(async (sessionId) => ({
+      ...emptyOpenResult(),
+      session: { ...emptyOpenResult().session, session_id: sessionId },
+      events: [messageEvent(sessionId, `event-${sessionId}`, sessionId)],
+    }));
+    const store = setupStore(transport, storage);
+
+    await store.selectSession('session-a');
+    await store.selectSession('session-b');
+    expect(storage.getEventsCalls).toEqual(['session-a', 'session-b']);
+
+    const returning = store.selectSession('session-a');
+    expect(store.activeSessionId()).toBe('session-a');
+    expect(store.sessionLoading()).toBe(false);
+    expect(store.messages()[0]?.blocks[0]?.content).toBe('session-a');
+    expect(storage.getEventsCalls).toEqual(['session-a', 'session-b']);
+    await returning;
+  });
+
+  it('ignores a late backend open from an older native selection', async () => {
+    const first = deferred<ChatSessionOpenResult>();
+    const second = deferred<ChatSessionOpenResult>();
+    const transport = createMockTransport({});
+    vi.mocked(transport.openSession)
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    const selectingFirst = store.selectSession('session-a');
+    const selectingSecond = store.selectSession('session-b');
+    second.resolve({
+      ...emptyOpenResult(),
+      session: { ...emptyOpenResult().session, session_id: 'session-b' },
+      events: [messageEvent('session-b', 'event-b', 'newest')],
+    });
+    await selectingSecond;
+    first.resolve({
+      ...emptyOpenResult(),
+      session: { ...emptyOpenResult().session, session_id: 'session-a' },
+      events: [messageEvent('session-a', 'event-a', 'stale')],
+    });
+    await selectingFirst;
+
+    expect(store.activeSessionId()).toBe('session-b');
+    expect(store.messages()[0]?.blocks[0]?.content).toBe('newest');
+    expect(transport.streamEvents).toHaveBeenCalledTimes(1);
+    expect(transport.streamEvents).toHaveBeenCalledWith(
+      'session-b',
+      expect.any(Object),
+    );
   });
 
   it('clears a stale active turn from an incomplete replay on a non-active session', async () => {
