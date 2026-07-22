@@ -135,11 +135,19 @@ export class ChatStore implements OnDestroy {
   /** True only while an uncached selected session has no materialized state. */
   readonly sessionLoading = this._sessionLoading.asReadonly();
   /** True when a message or command is currently in flight. */
-  readonly isSubmitting = computed(
-    () =>
-      this._pendingSends().some((send) => send.status === 'sending') ||
-      this._pendingCommands().some((command) => command.status === 'sending'),
-  );
+  readonly isSubmitting = computed(() => {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) return false;
+    return (
+      this._pendingSends().some(
+        (send) => send.sessionId === sessionId && send.status === 'sending',
+      ) ||
+      this._pendingCommands().some(
+        (command) =>
+          command.sessionId === sessionId && command.status === 'sending',
+      )
+    );
+  });
 
   // ---- computed signals ----
   readonly messages = computed(() => this.messagesWithAssistantPlaceholder());
@@ -558,7 +566,8 @@ export class ChatStore implements OnDestroy {
     }
 
     const pendingSend = this._pendingSends().find(
-      (send) => send.status === 'sending',
+      (send) =>
+        send.sessionId === this._activeSessionId() && send.status === 'sending',
     );
     if (pendingSend === undefined) {
       return messages;
@@ -585,6 +594,7 @@ export class ChatStore implements OnDestroy {
     const pendingId = `pending_${Date.now()}`;
     const pending: PendingSend = {
       id: pendingId,
+      sessionId,
       text,
       status: 'sending',
       error: undefined,
@@ -663,6 +673,7 @@ export class ChatStore implements OnDestroy {
     const pendingId = `cmd_${Date.now()}`;
     const pending: PendingSend = {
       id: pendingId,
+      sessionId,
       text: command,
       status: 'sending',
       error: undefined,

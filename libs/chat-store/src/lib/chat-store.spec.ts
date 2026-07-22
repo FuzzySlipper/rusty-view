@@ -617,6 +617,69 @@ describe('ChatStore', () => {
     expect(store.messages()).toHaveLength(0);
   });
 
+  it('does not let a pending send disable or render in another session', async () => {
+    const transport = createMockTransport({});
+    let resolveFirstSend!: (value: SendChatMessageResult) => void;
+    const firstSend = new Promise<SendChatMessageResult>((resolve) => {
+      resolveFirstSend = resolve;
+    });
+    (
+      transport as unknown as {
+        sendMessage: ReturnType<typeof vi.fn>;
+      }
+    ).sendMessage = vi
+      .fn()
+      .mockImplementationOnce(() => firstSend)
+      .mockResolvedValue(acceptedResult());
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_slow');
+    const slowSubmission = store.sendMessage('long-running turn');
+
+    expect(store.isSubmitting()).toBe(true);
+    expect(store.messages().at(-1)?.id).toMatch(/^pending-assistant-pending_/);
+    expect(store.pendingSends()[0]?.sessionId).toBe('sess_slow');
+
+    await store.selectSession('sess_complete');
+    store.ingestEvents([
+      {
+        event_id: 'sess_complete:1',
+        session_id: 'sess_complete',
+        sequence_id: 1,
+        created_at: '2026-07-22T08:00:00Z',
+        kind: 'assistant_turn_started',
+        payload: { wake_id: 'wake-complete' },
+      },
+      {
+        event_id: 'sess_complete:2',
+        session_id: 'sess_complete',
+        sequence_id: 2,
+        created_at: '2026-07-22T08:00:01Z',
+        kind: 'assistant_message_completed',
+        payload: {
+          wake_id: 'wake-complete',
+          status: 'completed',
+          summary: 'done',
+        },
+      },
+      {
+        event_id: 'sess_complete:3',
+        session_id: 'sess_complete',
+        sequence_id: 3,
+        created_at: '2026-07-22T08:00:02Z',
+        kind: 'assistant_turn_finished',
+        payload: { wake_id: 'wake-complete' },
+      },
+    ]);
+
+    expect(store.isStreaming()).toBe(false);
+    expect(store.isSubmitting()).toBe(false);
+    expect(store.messages()).toHaveLength(1);
+
+    resolveFirstSend(acceptedResult());
+    await slowSubmission;
+  });
+
   it('sendMessage clears pending send on success', async () => {
     const transport = createMockTransport({});
     const store = setupStore(transport, new InMemoryChatStorage());

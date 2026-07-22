@@ -4,6 +4,7 @@ import type { StoreErrorDetail } from './store-error';
 /** A pending send-message operation tracked by the store. */
 export interface PendingSend {
   readonly id: string;
+  readonly sessionId: string;
   readonly text: string;
   readonly status: 'sending' | 'error';
   readonly error: StoreErrorDetail | undefined;
