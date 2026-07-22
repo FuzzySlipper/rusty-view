@@ -604,6 +604,7 @@ describe('ChatStore', () => {
     await store.selectSession('sess_test');
     const submitted = store.sendMessage('slow response please');
 
+    expect(store.isSubmitting()).toBe(true);
     const placeholder = store.messages().at(-1);
     expect(placeholder?.id).toMatch(/^pending-assistant-pending_/);
     expect(placeholder?.author.role).toBe('assistant');
@@ -612,6 +613,7 @@ describe('ChatStore', () => {
     resolveSend(acceptedResult());
     await submitted;
 
+    expect(store.isSubmitting()).toBe(false);
     expect(store.messages()).toHaveLength(0);
   });
 
@@ -676,6 +678,7 @@ describe('ChatStore', () => {
     expect(pending?.error?.endpoint).toContain('/v1/chat/sessions/');
     expect(pending?.error?.apiError?.reasonCode).toBe('session_archived');
     expect(pending?.error?.retryable).toBe(false);
+    expect(store.isSubmitting()).toBe(false);
   });
 
   it('sendMessage replays missed events from the pre-send cursor', async () => {
@@ -1344,7 +1347,7 @@ describe('ChatStore.submit (slash-command routing)', () => {
     expect(store.pendingCommands()[0]?.status).toBe('error');
     expect(store.pendingCommands()[0]?.error?.message).toBe('boom');
     expect(store.pendingCommands()[0]?.error?.source).toBe('error');
-    expect(store.isSubmitting()).toBe(true);
+    expect(store.isSubmitting()).toBe(false);
   });
 });
 

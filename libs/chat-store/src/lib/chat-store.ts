@@ -136,7 +136,9 @@ export class ChatStore implements OnDestroy {
   readonly sessionLoading = this._sessionLoading.asReadonly();
   /** True when a message or command is currently in flight. */
   readonly isSubmitting = computed(
-    () => this._pendingSends().length > 0 || this._pendingCommands().length > 0,
+    () =>
+      this._pendingSends().some((send) => send.status === 'sending') ||
+      this._pendingCommands().some((command) => command.status === 'sending'),
   );
 
   // ---- computed signals ----
