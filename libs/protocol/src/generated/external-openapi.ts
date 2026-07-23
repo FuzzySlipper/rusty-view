@@ -1676,6 +1676,136 @@ export interface components {
             max_duration_ms?: number | null;
             workdir?: string | null;
         };
+        RuntimeActivityBegin: {
+            activityId: string;
+            agentId?: string | null;
+            debugDetailId?: string | null;
+            kind: components["schemas"]["RuntimeActivityKind"];
+            model?: string | null;
+            owner: components["schemas"]["RuntimeActivityOwner"];
+            parentActivityId?: string | null;
+            phase: string;
+            /** Format: uint32 */
+            processId?: number | null;
+            profileId?: string | null;
+            providerAlias?: string | null;
+            sessionId?: string | null;
+            summary?: string | null;
+            toolName?: string | null;
+            wakeId?: string | null;
+        };
+        RuntimeActivityCensus: {
+            active: components["schemas"]["RuntimeActivityView"][];
+            automaticCancellationEnabled: boolean;
+            findings: components["schemas"]["RuntimeActivityFinding"][];
+            generatedAt: string;
+            recentlyAbnormal: components["schemas"]["RuntimeActivityView"][];
+            serviceInstanceId: string;
+            summary: components["schemas"]["RuntimeActivityCensusSummary"];
+        };
+        RuntimeActivityCensusQuery: {
+            /** @default [] */
+            liveEvidence: components["schemas"]["RuntimeActivityLiveEvidence"][];
+            /**
+             * @description Transitional service projection of sessions currently executing a
+             *     wake. Rust compares it with durable activity; it never treats it as
+             *     execution authority.
+             * @default null
+             */
+            projectedActiveSessionIds: string[] | null;
+            /** Format: uint32 */
+            recentAbnormalLimit?: number | null;
+            /** Format: uint64 */
+            stallAfterMs?: number | null;
+        };
+        RuntimeActivityCensusSummary: {
+            /** Format: uint32 */
+            active: number;
+            /** Format: uint32 */
+            findings: number;
+            /** Format: uint32 */
+            recentlyAbnormal: number;
+            /** Format: uint32 */
+            untrackedProcesses: number;
+        };
+        RuntimeActivityFinding: {
+            activityId: string;
+            code: components["schemas"]["RuntimeActivityFindingCode"];
+            message: string;
+            relatedActivityId?: string | null;
+        };
+        /** @enum {string} */
+        RuntimeActivityFindingCode: "session_projection_mismatch" | "untracked_native_run" | "detached_dispatch" | "orphan_tool_execution" | "stale_ledger_entry" | "stalled" | "restart_interrupted" | "untracked_service_process";
+        RuntimeActivityFinish: {
+            activityId: string;
+            phase: string;
+            reasonCode?: string | null;
+            status: components["schemas"]["RuntimeActivityStatus"];
+            summary?: string | null;
+        };
+        /** @enum {string} */
+        RuntimeActivityKind: "dispatch" | "wake" | "provider_request" | "tool_call" | "subprocess" | "browser" | "external_turn";
+        RuntimeActivityLiveEvidence: {
+            activityId: string;
+            agentId?: string | null;
+            kind: components["schemas"]["RuntimeActivityKind"];
+            lastProgressAt: string;
+            owner: components["schemas"]["RuntimeActivityOwner"];
+            parentActivityId?: string | null;
+            phase: string;
+            /** Format: uint32 */
+            processId?: number | null;
+            profileId?: string | null;
+            sessionId?: string | null;
+            startedAt: string;
+            summary?: string | null;
+            wakeId?: string | null;
+        };
+        /** @enum {string} */
+        RuntimeActivityOwner: "rust_coordination" | "rust_brain" | "type_script_host" | "external_runtime";
+        RuntimeActivityProgress: {
+            activityId: string;
+            debugDetailId?: string | null;
+            phase: string;
+            /** Format: uint32 */
+            processId?: number | null;
+            summary?: string | null;
+        };
+        RuntimeActivityRecord: {
+            activityId: string;
+            agentId?: string | null;
+            debugDetailId?: string | null;
+            kind: components["schemas"]["RuntimeActivityKind"];
+            lastProgressAt: string;
+            model?: string | null;
+            owner: components["schemas"]["RuntimeActivityOwner"];
+            parentActivityId?: string | null;
+            phase: string;
+            /** Format: uint32 */
+            processId?: number | null;
+            profileId?: string | null;
+            providerAlias?: string | null;
+            reasonCode?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            serviceInstanceId: string;
+            sessionId?: string | null;
+            startedAt: string;
+            status: components["schemas"]["RuntimeActivityStatus"];
+            summary?: string | null;
+            terminalAt?: string | null;
+            toolName?: string | null;
+            wakeId?: string | null;
+        };
+        /** @enum {string} */
+        RuntimeActivityStatus: "active" | "completed" | "failed" | "cancelled" | "interrupted";
+        RuntimeActivityView: {
+            activity: components["schemas"]["RuntimeActivityRecord"];
+            /** Format: uint64 */
+            elapsedMs: number;
+            /** Format: uint64 */
+            sinceProgressMs: number;
+        };
         /**
          * @description Bounded per-wake activity digest used by the post-wake capture producer.
          *

@@ -44,6 +44,7 @@ import {
   type ServiceCredentialWriteRequest,
   type ServiceCredentialWriteResponse,
   type RuntimeBrainModuleDiagnostics,
+  type RuntimeActivityCensus,
   type RuntimeConfigApplyResult,
   type RuntimePauseControlRequest,
   type RuntimePauseControlResult,
@@ -71,6 +72,13 @@ interface AdminTransportMock {
   >;
   readonly adminAgents: ReturnType<
     typeof vi.fn<() => Promise<AdminPage<AdminAgentDiagnostics>>>
+  >;
+  readonly adminActivities: ReturnType<
+    typeof vi.fn<
+      (query?: {
+        readonly sessionProjection?: 'service' | 'durable';
+      }) => Promise<RuntimeActivityCensus | null>
+    >
   >;
   readonly adminMcpSurfaces: ReturnType<
     typeof vi.fn<() => Promise<AdminPage<McpSurfaceDiagnostics>>>
@@ -354,6 +362,39 @@ function diagnosticsWithBrains(
   };
 }
 
+function activityCensus(activityId = 'wake:test'): RuntimeActivityCensus {
+  return {
+    generatedAt: '2026-07-23T00:00:00Z',
+    serviceInstanceId: 'service-test',
+    active: [
+      {
+        activity: {
+          activityId,
+          serviceInstanceId: 'service-test',
+          kind: 'wake',
+          owner: 'rust_brain',
+          status: 'active',
+          phase: 'running',
+          startedAt: '2026-07-23T00:00:00Z',
+          lastProgressAt: '2026-07-23T00:00:01Z',
+          revision: 1,
+        },
+        elapsedMs: 1_000,
+        sinceProgressMs: 100,
+      },
+    ],
+    recentlyAbnormal: [],
+    findings: [],
+    summary: {
+      active: 1,
+      recentlyAbnormal: 0,
+      findings: 0,
+      untrackedProcesses: 0,
+    },
+    automaticCancellationEnabled: false,
+  };
+}
+
 function controlResponse<TResult>(
   name: string,
   result: TResult,
@@ -618,6 +659,7 @@ function createTransport(
     adminDiagnostics: vi.fn(async () => diagnosticsBundle()),
     adminSessions: vi.fn(async () => emptyPage<RuntimeSessionDiagnostics>()),
     adminAgents: vi.fn(async () => emptyPage<AdminAgentDiagnostics>()),
+    adminActivities: vi.fn(async () => activityCensus()),
     adminMcpSurfaces: vi.fn(async () => emptyPage<McpSurfaceDiagnostics>()),
     adminConfigValidation: vi.fn(async () => null),
     adminCapabilities: vi.fn(
@@ -910,6 +952,45 @@ describe('AdminStore structured errors', () => {
 });
 
 describe('AdminStore behavior', () => {
+  it('preserves the last activity snapshot and marks it stale after a poll error', async () => {
+    const first = activityCensus('wake:first');
+    const adminActivities = vi
+      .fn()
+      .mockResolvedValueOnce(first)
+      .mockRejectedValueOnce(
+        apiError('activity_census_unavailable', 'Activity census failed'),
+      );
+    const store = setupAdminStore(createTransport({ adminActivities }));
+
+    expect(await store.refreshActivities('durable')).toBe(true);
+    expect(adminActivities).toHaveBeenCalledWith({
+      sessionProjection: 'durable',
+    });
+    expect(store.activityCensus()).toBe(first);
+    expect(store.activityProjectionMode()).toBe('durable');
+    expect(store.activitySnapshotStale()).toBe(false);
+
+    expect(await store.refreshActivities('durable')).toBe(false);
+    expect(store.activityCensus()).toBe(first);
+    expect(store.activitySnapshotStale()).toBe(true);
+    expect(store.activityError()).toBe(
+      'Activity census failed (activity_census_unavailable)',
+    );
+    expect(store.activityLoading()).toBe(false);
+  });
+
+  it('does not turn a missing activity response into an empty census', async () => {
+    const store = setupAdminStore(
+      createTransport({ adminActivities: vi.fn(async () => null) }),
+    );
+
+    expect(await store.refreshActivities()).toBe(false);
+    expect(store.activityCensus()).toBeNull();
+    expect(store.activityError()).toBe(
+      'Crew returned no runtime activity census.',
+    );
+  });
+
   it('refresh populates diagnostics, providers, and profile summaries', async () => {
     const alphaSessions = [
       session('session-alpha-live', 'alpha', 'active'),

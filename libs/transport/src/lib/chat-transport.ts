@@ -118,13 +118,17 @@ import type {
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimePauseScope,
+  RuntimeActivityCensus,
   RuntimeResumeNoopResult,
   RuntimeSessionDiagnostics,
   StorageQueryCatalog,
   StorageQueryInput,
   StorageQueryResult,
 } from './admin-api-types';
-import type { AdminListQuery } from './admin-http-transport';
+import type {
+  AdminActivityQuery,
+  AdminListQuery,
+} from './admin-http-transport';
 
 /** Options for {@link ChatTransport.streamEvents}. */
 export interface StreamEventsOptions {
@@ -310,6 +314,12 @@ export class ChatTransport {
     query?: AdminListQuery,
   ): Promise<AdminPage<AdminAgentDiagnostics>> {
     return this.adminHttp.agents(query);
+  }
+
+  adminActivities(
+    query?: AdminActivityQuery,
+  ): Promise<RuntimeActivityCensus | null> {
+    return this.adminHttp.activities(query);
   }
 
   adminMcpSurfaces(

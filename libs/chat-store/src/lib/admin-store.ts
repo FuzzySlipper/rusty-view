@@ -66,6 +66,7 @@ import {
   type RuntimePauseControlResult,
   type RuntimePauseDiagnostics,
   type RuntimePauseScope,
+  type RuntimeActivityCensus,
   type RuntimeResumeNoopResult,
   type RuntimeSessionDiagnostics,
   type StorageQueryCatalog,
@@ -122,6 +123,13 @@ export class AdminStore {
   );
   private readonly _storageQueryError = signal<StoreErrorDetail | null>(null);
   private readonly _storageQueryLoading = signal(false);
+  private readonly _activityCensus = signal<RuntimeActivityCensus | null>(null);
+  private readonly _activityLoading = signal(false);
+  private readonly _activityError = signal<StoreErrorDetail | null>(null);
+  private readonly _activityLastSuccessfulUpdate = signal<string | null>(null);
+  private readonly _activityProjectionMode = signal<
+    'service' | 'durable' | null
+  >(null);
   /**
    * Error from the most recent local-tool-profile write (#3689). First-class
    * (unlike the read which degrades to empty) so the editor surfaces failures.
@@ -196,6 +204,7 @@ export class AdminStore {
   private readonly _runtimeResumeResult = signal<AdminControlResponse<
     RuntimePauseControlResult | RuntimeResumeNoopResult
   > | null>(null);
+  private activityRequestRevision = 0;
 
   readonly diagnostics = this._diagnostics.asReadonly();
   readonly sessions = this._sessions.asReadonly();
@@ -215,6 +224,19 @@ export class AdminStore {
     const error = this._storageQueryError();
     return error === null ? null : storeErrorDetailMessage(error);
   });
+  readonly activityCensus = this._activityCensus.asReadonly();
+  readonly activityLoading = this._activityLoading.asReadonly();
+  readonly activityErrorDetail = this._activityError.asReadonly();
+  readonly activityError = computed(() => {
+    const error = this._activityError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
+  readonly activityLastSuccessfulUpdate =
+    this._activityLastSuccessfulUpdate.asReadonly();
+  readonly activityProjectionMode = this._activityProjectionMode.asReadonly();
+  readonly activitySnapshotStale = computed(
+    () => this._activityCensus() !== null && this._activityError() !== null,
+  );
   readonly exportPlan = this._exportPlan.asReadonly();
   readonly registryWritePlan = this._registryWritePlan.asReadonly();
   readonly registryWriteResult = this._registryWriteResult.asReadonly();
@@ -461,6 +483,43 @@ export class AdminStore {
       this._storageQueryError.set(storeErrorDetail(error));
     } finally {
       this._storageQueryLoading.set(false);
+    }
+  }
+
+  /**
+   * Refresh Crew's Rust-owned activity census.
+   *
+   * A failed poll deliberately leaves the last successful snapshot intact and
+   * marks it stale. Request revisions prevent a slower prior projection-mode
+   * read from overwriting a newer operator selection.
+   */
+  async refreshActivities(
+    sessionProjection: 'service' | 'durable' = 'service',
+  ): Promise<boolean> {
+    const revision = ++this.activityRequestRevision;
+    this._activityLoading.set(true);
+    try {
+      const census = await this.transport.adminActivities({
+        sessionProjection,
+      });
+      if (revision !== this.activityRequestRevision) return false;
+      if (census === null) {
+        throw new Error('Crew returned no runtime activity census.');
+      }
+      this._activityCensus.set(census);
+      this._activityProjectionMode.set(sessionProjection);
+      this._activityLastSuccessfulUpdate.set(new Date().toISOString());
+      this._activityError.set(null);
+      return true;
+    } catch (error) {
+      if (revision === this.activityRequestRevision) {
+        this._activityError.set(storeErrorDetail(error));
+      }
+      return false;
+    } finally {
+      if (revision === this.activityRequestRevision) {
+        this._activityLoading.set(false);
+      }
     }
   }
 

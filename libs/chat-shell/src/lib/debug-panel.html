@@ -16,7 +16,11 @@
     }
   </nav>
 
-  @if (activeTab() === 'providers') {
+  @if (activeTab() === 'activities') {
+  <section class="rv-debug-panel__body">
+    <rv-runtime-activity-panel />
+  </section>
+  } @else if (activeTab() === 'providers') {
   <section class="rv-debug-panel__body">
     <p class="rv-debug-panel__note">
       Provider request snapshots are temporary, bounded, and redacted runtime

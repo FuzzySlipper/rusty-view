@@ -14,6 +14,7 @@ interface CapturedRequest {
   readonly method: string;
   readonly headers: Headers;
   readonly body: string | undefined;
+  readonly cache: RequestCache | undefined;
 }
 
 function makeConfig(
@@ -60,6 +61,7 @@ function capturingFetch(response: Response): {
       method: init?.method ?? 'GET',
       headers: new Headers(init?.headers),
       body: typeof init?.body === 'string' ? init.body : undefined,
+      cache: init?.cache,
     };
     return response;
   };
@@ -290,6 +292,39 @@ describe('AdminHttpTransport', () => {
 
     expect(lastRequest().method).toBe('GET');
     expect(lastRequest().url).toContain('/v1/admin/diagnostics');
+    expect(lastRequest().headers.get('Authorization')).toBe(
+      'Bearer admin-token',
+    );
+  });
+
+  it('reads the activity census from the configured Crew origin', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        generatedAt: '2026-07-23T00:00:00Z',
+        serviceInstanceId: 'service-test',
+        active: [],
+        recentlyAbnormal: [],
+        findings: [],
+        summary: {
+          active: 0,
+          recentlyAbnormal: 0,
+          findings: 0,
+          untrackedProcesses: 0,
+        },
+        automaticCancellationEnabled: false,
+      }),
+    );
+    const transport = new AdminHttpTransport(
+      makeConfig(fetch, { baseUrl: 'https://crew.example.test/root' }),
+    );
+
+    await transport.activities({ sessionProjection: 'durable' });
+
+    const url = new URL(lastRequest().url);
+    expect(url.origin).toBe('https://crew.example.test');
+    expect(url.pathname).toBe('/v1/admin/diagnostics/activities');
+    expect(url.searchParams.get('sessionProjection')).toBe('durable');
+    expect(lastRequest().cache).toBe('no-store');
     expect(lastRequest().headers.get('Authorization')).toBe(
       'Bearer admin-token',
     );

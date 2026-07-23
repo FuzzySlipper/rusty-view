@@ -45,6 +45,14 @@ export type {
 } from './lib/external-agent-store';
 export type { AdminProfileSummary } from './lib/admin-store';
 export {
+  INITIAL_RUNTIME_ACTIVITY_FINDING_CODES,
+  projectRuntimeActivityRows,
+  runtimeActivityFindingLabel,
+  runtimeActivityKindLabel,
+  runtimeActivityOwnerLabel,
+} from './lib/runtime-activity-model';
+export type { RuntimeActivityRow } from './lib/runtime-activity-model';
+export {
   storeErrorDetail,
   storeErrorDetailMessage,
   storeErrorMessage,

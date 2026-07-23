@@ -86,6 +86,7 @@ import type {
   RuntimeWakeTimeoutPatchRequest,
   RuntimeWakeTimeoutPatchResult,
   RuntimePauseScope,
+  RuntimeActivityCensus,
   RuntimeSessionDiagnostics,
   StorageQueryCatalog,
   StorageQueryInput,
@@ -102,6 +103,10 @@ export interface AdminListQuery {
   readonly offset?: number;
   readonly status?: string;
   readonly profile_id?: string;
+}
+
+export interface AdminActivityQuery {
+  readonly sessionProjection?: 'service' | 'durable';
 }
 
 export class AdminHttpTransport {
@@ -133,6 +138,16 @@ export class AdminHttpTransport {
     return this.request(
       'GET',
       '/v1/admin/diagnostics/agents',
+      optionsForQuery(query),
+    );
+  }
+
+  activities(
+    query?: AdminActivityQuery,
+  ): Promise<RuntimeActivityCensus | null> {
+    return this.request(
+      'GET',
+      '/v1/admin/diagnostics/activities',
       optionsForQuery(query),
     );
   }
@@ -869,6 +884,9 @@ export class AdminHttpTransport {
       headers: this.buildHeaders(options.body),
       signal: AbortSignal.timeout(this.config.timeoutMs),
     };
+    if (method === 'GET') {
+      init.cache = 'no-store';
+    }
     if (options.body !== undefined) {
       init.body = JSON.stringify(options.body);
     }
@@ -919,7 +937,9 @@ export class AdminHttpTransport {
   }
 }
 
-function optionsForQuery(query?: AdminListQuery): RequestOptions {
+function optionsForQuery(
+  query?: AdminListQuery | AdminActivityQuery,
+): RequestOptions {
   return query === undefined ? {} : { query: { ...query } };
 }
 

@@ -1,0 +1,226 @@
+<div class="rv-activity" data-testid="runtime-activity-panel">
+  <div class="rv-activity__toolbar">
+    <div class="rv-activity__freshness">
+      <span
+        class="rv-activity__freshness-badge"
+        [attr.data-tone]="freshnessTone()"
+        data-testid="activity-freshness"
+      >
+        {{ freshnessLabel() }}
+      </span>
+      <span>
+        Crew snapshot {{ timestampLabel(admin.activityCensus()?.generatedAt) }}
+      </span>
+      <span>
+        last successful fetch {{
+        timestampLabel(admin.activityLastSuccessfulUpdate()) }}
+      </span>
+      @if (admin.activityProjectionMode(); as mode) {
+      <span>showing {{ mode }} projection</span>
+      }
+    </div>
+    <label>
+      Session comparison
+      <select
+        [value]="requestedProjection()"
+        (change)="selectProjection($event)"
+        data-testid="activity-projection-mode"
+      >
+        <option value="service">Service projection</option>
+        <option value="durable">Durable Rust projection</option>
+      </select>
+    </label>
+    <button
+      type="button"
+      (click)="refresh()"
+      [disabled]="admin.activityLoading()"
+    >
+      {{ admin.activityLoading() ? 'Refreshing…' : 'Refresh now' }}
+    </button>
+    <button type="button" (click)="openStopControls()">
+      Explicit stop controls
+    </button>
+  </div>
+
+  <p class="rv-activity__policy">
+    Stale and stalled states are diagnostic only. Crew reports automatic timeout
+    termination:
+    <strong>
+      @if (admin.activityCensus(); as census) { {{
+      census.automaticCancellationEnabled ? 'enabled' : 'disabled' }} } @else {
+      unknown (no successful snapshot) }
+    </strong>
+  </p>
+
+  @if (admin.activityError()) {
+  <div
+    class="rv-activity__error"
+    [class.rv-activity__error--stale]="admin.activitySnapshotStale()"
+    role="alert"
+  >
+    {{ admin.activityError() }} @if (admin.activitySnapshotStale()) {
+    <span>Showing the last successful snapshot.</span>
+    }
+  </div>
+  } @if (navigationError()) {
+  <div class="rv-activity__error" role="alert">{{ navigationError() }}</div>
+  } @if (admin.activityCensus(); as census) {
+  <div class="rv-activity__summary">
+    <span><strong>{{ census.summary.active }}</strong> active</span>
+    <span
+      ><strong>{{ census.summary.recentlyAbnormal }}</strong> recently
+      abnormal</span
+    >
+    <span><strong>{{ census.summary.findings }}</strong> findings</span>
+    <span
+      ><strong>{{ census.summary.untrackedProcesses }}</strong> untracked
+      processes</span
+    >
+    <span>instance <code>{{ census.serviceInstanceId }}</code></span>
+  </div>
+
+  <section>
+    <h3>Active executions</h3>
+    @if (activeRows().length === 0) {
+    <div class="rv-activity__empty" data-testid="activity-empty">
+      Crew reports no active work for this projection.
+    </div>
+    } @else {
+    <ng-container
+      *ngTemplateOutlet="activityTable; context: { rows: activeRows() }"
+    />
+    }
+  </section>
+
+  <section>
+    <h3>Recently abnormal</h3>
+    @if (abnormalRows().length === 0) {
+    <div class="rv-activity__empty">
+      Crew reports no bounded recent abnormal activity.
+    </div>
+    } @else {
+    <ng-container
+      *ngTemplateOutlet="activityTable; context: { rows: abnormalRows() }"
+    />
+    }
+  </section>
+
+  <section>
+    <h3>Reconciliation findings</h3>
+    @if (census.findings.length === 0) {
+    <div class="rv-activity__empty">
+      Crew reports no reconciliation findings.
+    </div>
+    } @else {
+    <div class="rv-activity__findings">
+      @for (finding of census.findings; track finding.code + ':' +
+      finding.activityId + ':' + $index) {
+      <div class="rv-activity__finding" [attr.data-code]="finding.code">
+        <strong>{{ findingLabel(finding.code) }}</strong>
+        <code>{{ finding.code }}</code>
+        <span>{{ finding.message }}</span>
+        <small>
+          {{ finding.activityId }} @if (finding.relatedActivityId) { · related
+          {{ finding.relatedActivityId }} }
+        </small>
+      </div>
+      }
+    </div>
+    }
+  </section>
+  } @else if (!admin.activityLoading()) {
+  <div class="rv-activity__unavailable" data-testid="activity-unavailable">
+    No successful activity census has been received. This is not an empty-work
+    result.
+  </div>
+  } @if (detailTitle()) {
+  <section class="rv-activity__detail">
+    <h3>{{ detailTitle() }}</h3>
+    @if (detailLoading()) {
+    <div class="rv-activity__empty">Loading bounded debug detail…</div>
+    } @else if (detailError()) {
+    <div class="rv-activity__error" role="alert">{{ detailError() }}</div>
+    } @else if (detailValue()) {
+    <rv-json-inspector [data]="detailValue()" />
+    }
+  </section>
+  }
+</div>
+
+<ng-template #activityTable let-rows="rows">
+  <div class="rv-activity__table-wrap">
+    <table class="rv-activity__table">
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Identity</th>
+          <th>Owner / phase</th>
+          <th>Summary</th>
+          <th>Elapsed / progress</th>
+          <th>Findings</th>
+          <th>Targets</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows; track row.key) {
+        <tr
+          [attr.data-activity-kind]="row.view.activity.kind"
+          [attr.data-status]="row.view.activity.status"
+          [class.rv-activity__row--finding]="rowReasonCodes(row).length > 0"
+        >
+          <td>
+            <div class="rv-activity__tree" [style.--activity-depth]="row.depth">
+              <strong>{{ kindLabel(row.view.activity.kind) }}</strong>
+              <code title="{{ row.view.activity.activityId }}">
+                {{ row.view.activity.activityId }}
+              </code>
+            </div>
+          </td>
+          <td>
+            <span>agent {{ row.view.activity.agentId ?? '-' }}</span>
+            <span>profile {{ row.view.activity.profileId ?? '-' }}</span>
+            <span>session {{ row.view.activity.sessionId ?? '-' }}</span>
+            <span>wake {{ row.view.activity.wakeId ?? '-' }}</span>
+          </td>
+          <td>
+            <strong>{{ ownerLabel(row.view.activity.owner) }}</strong>
+            <span>{{ row.view.activity.phase }}</span>
+            <span>{{ row.view.activity.status }}</span>
+          </td>
+          <td>{{ detailSummary(row) }}</td>
+          <td>
+            <span>{{ durationLabel(row.view.elapsedMs) }} elapsed</span>
+            <span
+              >{{ durationLabel(row.view.sinceProgressMs) }} since
+              progress</span
+            >
+          </td>
+          <td>
+            @if (rowReasonCodes(row).length === 0) {
+            <span class="rv-activity__healthy">healthy</span>
+            } @else { @for (code of rowReasonCodes(row); track code) {
+            <span class="rv-activity__reason" [attr.data-code]="code">
+              {{ findingLabel(code) }}
+              <code>{{ code }}</code>
+            </span>
+            } }
+          </td>
+          <td>
+            <div class="rv-activity__actions">
+              @if (row.view.activity.sessionId; as sessionId) {
+              <button type="button" (click)="openSession(sessionId)">
+                Open session
+              </button>
+              } @if (canLoadDetail(row)) {
+              <button type="button" (click)="loadDetail(row)">
+                Debug detail
+              </button>
+              }
+            </div>
+          </td>
+        </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>

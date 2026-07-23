@@ -23,8 +23,10 @@ import {
   CHAT_DEBUG_TABS,
   type ChatDebugTab,
 } from './shell-extension-tokens';
+import { RuntimeActivityPanelComponent } from './runtime-activity-panel';
 
 const BUILT_IN_DEBUG_TABS = [
+  { id: 'activities', label: 'Active Agents', order: 5 },
   { id: 'providers', label: 'Provider Requests', order: 10 },
   { id: 'tools', label: 'Tool Calls', order: 20 },
   { id: 'storage', label: 'Storage Queries', order: 30 },
@@ -65,7 +67,11 @@ interface ToolDebugEntry {
 
 @Component({
   selector: 'rv-debug-panel',
-  imports: [JsonInspectorComponent, NgComponentOutlet],
+  imports: [
+    JsonInspectorComponent,
+    NgComponentOutlet,
+    RuntimeActivityPanelComponent,
+  ],
   templateUrl: './debug-panel.html',
   styleUrl: './debug-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

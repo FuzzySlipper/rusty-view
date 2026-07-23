@@ -10,7 +10,28 @@ import type {
   ChatCompletionsThinkingMode,
   ProviderAdminModelProviderRecord,
   ProviderAdminModelProviderWrite,
+  RuntimeActivityCensus,
+  RuntimeActivityCensusSummary,
+  RuntimeActivityFinding,
+  RuntimeActivityFindingCode,
+  RuntimeActivityKind,
+  RuntimeActivityOwner,
+  RuntimeActivityRecord,
+  RuntimeActivityStatus,
+  RuntimeActivityView,
 } from '@rusty-view/protocol';
+
+export type {
+  RuntimeActivityCensus,
+  RuntimeActivityCensusSummary,
+  RuntimeActivityFinding,
+  RuntimeActivityFindingCode,
+  RuntimeActivityKind,
+  RuntimeActivityOwner,
+  RuntimeActivityRecord,
+  RuntimeActivityStatus,
+  RuntimeActivityView,
+};
 
 export type CoordinationDeploymentRole = 'production' | 'debug';
 

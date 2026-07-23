@@ -28,7 +28,10 @@ export type {
 export { AdminHttpTransport } from './lib/admin-http-transport';
 export { ExternalRuntimeHttpTransport } from './lib/external-runtime-http-transport';
 export { ExternalRuntimeEventStream } from './lib/external-runtime-event-stream';
-export type { AdminListQuery } from './lib/admin-http-transport';
+export type {
+  AdminActivityQuery,
+  AdminListQuery,
+} from './lib/admin-http-transport';
 export type {
   AdminAgentDiagnostics,
   AdminApiEnvelope,
@@ -148,6 +151,15 @@ export type {
   ProfileRegistryWriteImplications,
   ProfileRegistryWritePlan,
   RuntimeBrainModuleDiagnostics,
+  RuntimeActivityCensus,
+  RuntimeActivityCensusSummary,
+  RuntimeActivityFinding,
+  RuntimeActivityFindingCode,
+  RuntimeActivityKind,
+  RuntimeActivityOwner,
+  RuntimeActivityRecord,
+  RuntimeActivityStatus,
+  RuntimeActivityView,
   RuntimeConfigApplyResult,
   RuntimeConfigDiagnostic,
   RuntimeConfigDraft,

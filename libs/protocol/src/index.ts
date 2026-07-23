@@ -160,6 +160,17 @@ export type AgentRouteTarget = ExternalSchemas['AgentRouteTarget'];
 export type AgentRouteWrite = ExternalSchemas['AgentRouteWrite'];
 export type ExternalMessageDeliveryPolicy =
   ExternalSchemas['ExternalMessageDeliveryPolicy'];
+export type RuntimeActivityCensus = ExternalSchemas['RuntimeActivityCensus'];
+export type RuntimeActivityCensusSummary =
+  ExternalSchemas['RuntimeActivityCensusSummary'];
+export type RuntimeActivityFinding = ExternalSchemas['RuntimeActivityFinding'];
+export type RuntimeActivityFindingCode =
+  ExternalSchemas['RuntimeActivityFindingCode'];
+export type RuntimeActivityKind = ExternalSchemas['RuntimeActivityKind'];
+export type RuntimeActivityOwner = ExternalSchemas['RuntimeActivityOwner'];
+export type RuntimeActivityRecord = ExternalSchemas['RuntimeActivityRecord'];
+export type RuntimeActivityStatus = ExternalSchemas['RuntimeActivityStatus'];
+export type RuntimeActivityView = ExternalSchemas['RuntimeActivityView'];
 
 export type ListExternalRuntimesResponse =
   externalOperations['listExternalRuntimes']['responses'][200]['content']['application/json'];
