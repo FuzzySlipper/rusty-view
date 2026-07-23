@@ -5,6 +5,7 @@ import type { RuntimeActivityCensus } from '@rusty-view/transport';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 
 import { RuntimeActivityPanelComponent } from './runtime-activity-panel';
+import { TopMenuComponent } from './top-menu';
 
 describe('RuntimeActivityPanelComponent', () => {
   it('renders dense hierarchy, every Crew finding, and unknown future values', async () => {
@@ -67,6 +68,47 @@ describe('RuntimeActivityPanelComponent', () => {
 
     fixture.destroy();
   });
+
+  it('opens the Sessions emergency control for the applicable activity session', async () => {
+    const fixture = await createPanel({
+      activityCensus: signal(activityCensus()),
+      refreshActivities: vi.fn(async () => true),
+      stale: false,
+      error: null,
+    });
+    const activityHost = fixture.nativeElement as HTMLElement;
+    const control = activityHost.querySelector<HTMLButtonElement>(
+      '[data-testid="activity-stop-controls"]',
+    );
+    if (control === null) throw new Error('stop controls button missing');
+
+    control.click();
+    fixture.detectChanges();
+
+    const menuFixture = TestBed.createComponent(TopMenuComponent);
+    menuFixture.detectChanges();
+    await menuFixture.whenStable();
+    menuFixture.detectChanges();
+    const menuHost = menuFixture.nativeElement as HTMLElement;
+    const target = menuHost.querySelector<HTMLElement>(
+      '[data-testid="session-control-target"]',
+    );
+    const pause = menuHost.querySelector<HTMLButtonElement>(
+      '[data-testid="session-pause-runtime"][data-session-id="session-1"]',
+    );
+
+    expect(
+      menuHost.querySelector('[data-testid="top-menu-panel-sessions"]'),
+    ).not.toBeNull();
+    expect(target?.dataset['sessionId']).toBe('session-1');
+    expect(pause).not.toBeNull();
+    expect(
+      menuHost.querySelector('[data-testid="top-menu-panel-service"]'),
+    ).toBeNull();
+
+    menuFixture.destroy();
+    fixture.destroy();
+  });
 });
 
 async function createPanel(input: {
@@ -79,7 +121,7 @@ async function createPanel(input: {
 }) {
   const activityLoading = signal(false);
   await TestBed.configureTestingModule({
-    imports: [RuntimeActivityPanelComponent],
+    imports: [RuntimeActivityPanelComponent, TopMenuComponent],
     providers: [
       {
         provide: AdminStore,
@@ -91,14 +133,40 @@ async function createPanel(input: {
           activityLastSuccessfulUpdate: () => '2026-07-23T00:00:02Z',
           activityProjectionMode: () => 'service',
           refreshActivities: input.refreshActivities,
+          refresh: vi.fn(async () => undefined),
+          error: () => null,
+          saving: () => false,
+          runtimePauseResult: () => null,
+          runtimeResumeResult: () => null,
+          pauseForSession: () => undefined,
+          runtimeSession: () => undefined,
+          controlCapabilityState: () => 'available',
         },
       },
       {
         provide: ChatStore,
         useValue: {
+          allSessions: () => [
+            {
+              session_id: 'another-session',
+              profile_id: 'profile-1',
+              agent_id: 'agent-1',
+              title: 'Another session',
+              status: 'active',
+              created_at: '2026-07-23T00:00:00Z',
+              updated_at: '2026-07-23T00:00:01Z',
+              message_count: 1,
+            },
+          ],
+          activeSessionId: () => 'another-session',
           selectSession: vi.fn(async () => undefined),
+          viewHistoricalSession: vi.fn(async () => undefined),
+          refreshSessions: vi.fn(async () => undefined),
           loadProviderRequestDebugDetail: vi.fn(async () => ({})),
           loadToolCallDebugDetail: vi.fn(async () => ({})),
+          commands: () => [],
+          rawEvents: () => [],
+          projection: () => ({ toolCalls: [] }),
         },
       },
     ],

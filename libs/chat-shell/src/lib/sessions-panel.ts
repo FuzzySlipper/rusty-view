@@ -10,6 +10,8 @@ import { DatePipe } from '@angular/common';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type { ChatSessionSummary } from '@rusty-view/protocol';
 
+import { SESSIONS_PANEL_ID } from './shell-extension-tokens';
+import { TopMenuController } from './top-menu-controller';
 import { effectiveWakeTimeoutLabel } from './wake-timeout-display';
 
 const SESSION_PAUSE_CAPABILITY_ID = 'admin.control.sessions.runtime.pause';
@@ -36,6 +38,7 @@ const SESSION_RESUME_CAPABILITY_ID = 'admin.control.sessions.runtime.resume';
 export class SessionsPanelComponent {
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
+  private readonly topMenu = inject(TopMenuController);
 
   readonly dismissed = output<void>();
 
@@ -45,8 +48,27 @@ export class SessionsPanelComponent {
   protected readonly sessions = computed(() => {
     const all = this.store.allSessions();
     const filter = this.filterProfileId();
-    if (filter === null) return all;
-    return all.filter((s) => s.profile_id === filter);
+    const filtered =
+      filter === null ? [...all] : all.filter((s) => s.profile_id === filter);
+    const target = this.targetSessionId();
+    if (target === null) return filtered;
+    return filtered.sort(
+      (left, right) =>
+        Number(right.session_id === target) -
+        Number(left.session_id === target),
+    );
+  });
+  protected readonly targetSessionId = computed(() =>
+    this.topMenu.openPanelId() === SESSIONS_PANEL_ID
+      ? this.topMenu.panelTargetId()
+      : null,
+  );
+  protected readonly targetSessionIsListed = computed(() => {
+    const target = this.targetSessionId();
+    return (
+      target !== null &&
+      this.store.allSessions().some((session) => session.session_id === target)
+    );
   });
 
   protected readonly profileIds = computed(() => {

@@ -118,6 +118,27 @@ test.describe('runtime activity census @live-activity', () => {
       fullPage: true,
     });
 
+    await activityPanel
+      .locator(
+        `tr[data-status="active"][data-activity-kind="subprocess"]:has-text("${sessionId}")`,
+      )
+      .getByTestId('activity-session-controls')
+      .click();
+    const sessionsPanel = page.getByTestId('top-menu-panel-sessions');
+    await expect(sessionsPanel).toBeVisible();
+    await expect(
+      sessionsPanel.getByTestId('session-control-target'),
+    ).toHaveAttribute('data-session-id', sessionId);
+    await expect(
+      sessionsPanel.locator(
+        `[data-testid="session-pause-runtime"][data-session-id="${sessionId}"]`,
+      ),
+    ).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath('runtime-activity-session-controls-live.png'),
+      fullPage: true,
+    });
+
     await sendAttempt;
   });
 });

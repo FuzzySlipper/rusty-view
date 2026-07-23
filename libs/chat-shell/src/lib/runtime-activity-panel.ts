@@ -18,7 +18,7 @@ import {
   type RuntimeActivityRow,
 } from '@rusty-view/chat-store';
 
-import { SERVICE_PANEL_ID } from './shell-extension-tokens';
+import { SESSIONS_PANEL_ID } from './shell-extension-tokens';
 import { TopMenuController } from './top-menu-controller';
 
 const ACTIVITY_POLL_INTERVAL_MS = 5_000;
@@ -61,6 +61,13 @@ export class RuntimeActivityPanelComponent {
         : projectRuntimeActivityRows(census.recentlyAbnormal, census.findings);
     },
   );
+  protected readonly defaultControlSessionId = computed<string | null>(() => {
+    for (const row of [...this.activeRows(), ...this.abnormalRows()]) {
+      const sessionId = row.view.activity.sessionId;
+      if (sessionId !== undefined && sessionId !== null) return sessionId;
+    }
+    return null;
+  });
 
   constructor() {
     void this.refresh();
@@ -203,8 +210,8 @@ export class RuntimeActivityPanelComponent {
     }
   }
 
-  protected openStopControls(): void {
-    this.topMenu.openPanel(SERVICE_PANEL_ID);
+  protected openStopControls(sessionId = this.defaultControlSessionId()): void {
+    this.topMenu.openPanel(SESSIONS_PANEL_ID, sessionId);
   }
 }
 

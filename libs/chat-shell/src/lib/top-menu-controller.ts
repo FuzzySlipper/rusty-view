@@ -10,20 +10,26 @@ import { Injectable, signal } from '@angular/core';
 @Injectable({ providedIn: 'root' })
 export class TopMenuController {
   private readonly _openPanelId = signal<string | null>(null);
+  private readonly _panelTargetId = signal<string | null>(null);
 
   readonly openPanelId = this._openPanelId.asReadonly();
+  readonly panelTargetId = this._panelTargetId.asReadonly();
 
-  openPanel(panelId: string): void {
+  openPanel(panelId: string, targetId: string | null = null): void {
+    this._panelTargetId.set(targetId);
     this._openPanelId.set(panelId);
   }
 
   closePanel(): void {
     this._openPanelId.set(null);
+    this._panelTargetId.set(null);
   }
 
   togglePanel(panelId: string): void {
-    this._openPanelId.update((current) =>
-      current === panelId ? null : panelId,
-    );
+    if (this._openPanelId() === panelId) {
+      this.closePanel();
+      return;
+    }
+    this.openPanel(panelId);
   }
 }

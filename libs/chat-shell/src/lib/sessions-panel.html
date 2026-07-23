@@ -37,7 +37,59 @@
   </div>
 
   <div class="rv-sessions-panel__body">
-    @if (admin.error() !== null) {
+    @if (targetSessionId(); as targetSessionId) {
+    <div
+      class="rv-sessions-panel__target"
+      data-testid="session-control-target"
+      [attr.data-session-id]="targetSessionId"
+    >
+      Emergency controls for <code>{{ targetSessionId }}</code>
+    </div>
+    @if (!targetSessionIsListed()) {
+    <div
+      class="rv-sessions-panel__target-controls"
+      data-testid="session-control-target-only"
+    >
+      <span>
+        This active runtime session is not present in the current chat-history
+        listing.
+      </span>
+      @if (admin.pauseForSession(targetSessionId); as pause) {
+      <span class="rv-sessions-panel__pause-limitation">
+        {{ pause.limitation }}
+      </span>
+      <button
+        type="button"
+        class="rv-sessions-panel__control"
+        data-testid="session-resume-runtime"
+        [attr.data-session-id]="targetSessionId"
+        (click)="resumeSessionRuntime(targetSessionId)"
+        [disabled]="
+              admin.saving() ||
+              sessionResumeCapabilityState() === 'unavailable'
+            "
+        title="Resume runtime wake/delivery claims for this session. This is not archive, delete, or shutdown."
+      >
+        Resume Runtime
+      </button>
+      } @else {
+      <button
+        type="button"
+        class="rv-sessions-panel__control rv-sessions-panel__control--danger"
+        data-testid="session-pause-runtime"
+        [attr.data-session-id]="targetSessionId"
+        (click)="pauseSessionRuntime(targetSessionId)"
+        [disabled]="
+              admin.saving() ||
+              sessionPauseCapabilityState() === 'unavailable'
+            "
+        title="Emergency runtime pause suppresses new wakes/delivery claims. It does not archive, delete, or shut down this session."
+      >
+        Pause Runtime
+      </button>
+      }
+    </div>
+    } } @if (admin.error() !== null) {
     <div class="rv-sessions-panel__error" role="alert">{{ admin.error() }}</div>
     } @if (localControlError() !== null) {
     <div class="rv-sessions-panel__error" role="alert">
@@ -68,6 +120,12 @@
         class="rv-sessions-panel__item"
         [class.rv-sessions-panel__item--paused]="
               admin.pauseForSession(session.session_id) !== undefined
+            "
+        [class.rv-sessions-panel__item--targeted]="
+              targetSessionId() === session.session_id
+            "
+        [attr.data-control-target]="
+              targetSessionId() === session.session_id ? 'true' : null
             "
       >
         <button

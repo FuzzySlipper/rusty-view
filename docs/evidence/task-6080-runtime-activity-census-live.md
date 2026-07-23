@@ -31,8 +31,18 @@ performed by View.
 The browser screenshot is
 [`runtime-activity-census-live.png`](task-6080-playwright-live-passed/live-runtime-activity-cens-ec2cb--and-managed-Codex-activity-chromium/runtime-activity-census-live.png).
 
+From the active `tester-session` subprocess row, the browser then selected
+**Emergency controls**. View opened the Sessions panel with `tester-session`
+preserved as the control target and rendered that runtime session's real
+**Pause Runtime** action. This also covers runtime sessions that are active in
+Crew's census but absent from the current chat-history listing.
+
+The routed control screenshot is
+[`runtime-activity-session-controls-live.png`](task-6080-playwright-live-passed/live-runtime-activity-cens-ec2cb--and-managed-Codex-activity-chromium/runtime-activity-session-controls-live.png).
+
 After capture, the debug service was restarted to terminate only the
-certificate wake and leave the shared debug deployment clean.
+certificate wake and leave the shared debug deployment clean. A fresh census
+reported zero active records for `tester-session`.
 
 ## Commands And Results
 
@@ -52,7 +62,7 @@ pnpm exec playwright test \
   --config apps/rusty-view-e2e/playwright.config.mts \
   apps/rusty-view-e2e/src/live/runtime-activity-census.live.spec.ts \
   --project=chromium
-  PASS: 1 passed (5.7s)
+  PASS: 1 passed (5.6s)
 ```
 
 The activity transport uses the configured Crew origin and `cache:

@@ -37,8 +37,12 @@
     >
       {{ admin.activityLoading() ? 'Refreshing…' : 'Refresh now' }}
     </button>
-    <button type="button" (click)="openStopControls()">
-      Explicit stop controls
+    <button
+      type="button"
+      (click)="openStopControls()"
+      data-testid="activity-stop-controls"
+    >
+      Emergency session controls
     </button>
   </div>
 
@@ -210,6 +214,14 @@
               @if (row.view.activity.sessionId; as sessionId) {
               <button type="button" (click)="openSession(sessionId)">
                 Open session
+              </button>
+              <button
+                type="button"
+                (click)="openStopControls(sessionId)"
+                data-testid="activity-session-controls"
+                [attr.data-session-id]="sessionId"
+              >
+                Emergency controls
               </button>
               } @if (canLoadDetail(row)) {
               <button type="button" (click)="loadDetail(row)">
