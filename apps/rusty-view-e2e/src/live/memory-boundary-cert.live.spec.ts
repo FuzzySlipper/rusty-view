@@ -26,7 +26,10 @@ test('Den planning and external memory remain distinct @live-agent @memory-bound
       'Reply with the document title and task title after both tool lookups succeed.',
     ].join('\n'),
     assistantCompletedTimeoutMs: 300_000,
-    finalTextMinLength: 40,
+    finalTextMustInclude: [
+      'Memory Surface Boundaries',
+      'Live-proof Den document/task lookup is distinct from external memory tools',
+    ],
   });
   const afterPlanning = await live.debugSnapshot();
   const planningEvents = await chatEventsSince(
@@ -35,9 +38,10 @@ test('Den planning and external memory remain distinct @live-agent @memory-bound
     planningCursor,
     afterPlanning?.lastCursor ?? undefined,
   );
-  const planningTools = startedToolNames(planningEvents);
-  expect(planningTools.some((name) => /^den_/.test(name))).toBe(true);
-  expect(planningTools.some((name) => /(document|task)/.test(name))).toBe(true);
+  const planningTools = observedToolNames(planningEvents);
+  const planningCoverage = successfulDenPlanningCoverage(planningEvents);
+  expect(planningCoverage.document).toBe(true);
+  expect(planningCoverage.task).toBe(true);
   expect(
     planningTools.some((name) => /^memory_(recall|read|search)$/.test(name)),
   ).toBe(false);
@@ -60,27 +64,66 @@ test('Den planning and external memory remain distinct @live-agent @memory-bound
     memoryCursor,
     afterMemory?.lastCursor ?? undefined,
   );
-  const memoryTools = startedToolNames(memoryEvents);
+  const memoryTools = observedToolNames(memoryEvents);
+  const successfulMemoryTools = successfulCompletedToolNames(memoryEvents);
   expect(
-    memoryTools.some((name) => /^memory_(recall|read|search)$/.test(name)),
-  ).toBe(true);
-  expect(
-    memoryEvents.some(
-      (event) =>
-        event.kind === 'tool_call_completed' &&
-        /^memory_(recall|read|search)$/.test(
-          String(event.payload['tool_name']),
-        ) &&
-        event.payload['is_error'] === false,
+    successfulMemoryTools.some((name) =>
+      /^memory_(recall|read|search)$/.test(name),
     ),
   ).toBe(true);
   expect(memoryTools.some((name) => /^den_/.test(name))).toBe(false);
 
   await live.screenshot('memory-boundary-both-turns-complete');
-  live.note(`Den planning tools observed: ${planningTools.join(', ')}`);
+  live.note(
+    `Successful Den planning tools observed: ${successfulCompletedToolNames(
+      planningEvents,
+    ).join(', ')}`,
+  );
   live.note(`External memory tools observed: ${memoryTools.join(', ')}`);
   live.note(
     'Manual close criterion: inspect the completed transcript screenshot and evidence packet; the first turn must render Den planning calls and the second must render the external-memory marker.',
+  );
+});
+
+test('Den planning completion contract rejects missing or failed families @memory-boundary-cert-contract', () => {
+  const completed = (
+    eventId: string,
+    toolName: string,
+    isError: boolean,
+  ): ChatEvent => ({
+    event_id: eventId,
+    kind: 'tool_call_completed',
+    payload: { tool_name: toolName, is_error: isError },
+  });
+  const documentSuccess = completed(
+    'document-success',
+    'den_get_document',
+    false,
+  );
+  const taskSuccess = completed('task-success', 'den_get_task', false);
+  const documentFailure = completed(
+    'document-failure',
+    'den_get_document',
+    true,
+  );
+  const taskFailure = completed('task-failure', 'den_get_task', true);
+
+  expect(successfulDenPlanningCoverage([documentSuccess, taskSuccess])).toEqual(
+    { document: true, task: true },
+  );
+  expect(successfulDenPlanningCoverage([documentSuccess])).toEqual({
+    document: true,
+    task: false,
+  });
+  expect(successfulDenPlanningCoverage([documentSuccess, taskFailure])).toEqual(
+    { document: true, task: false },
+  );
+  expect(successfulDenPlanningCoverage([taskSuccess])).toEqual({
+    document: false,
+    task: true,
+  });
+  expect(successfulDenPlanningCoverage([documentFailure, taskSuccess])).toEqual(
+    { document: false, task: true },
   );
 });
 
@@ -123,9 +166,34 @@ async function chatEventsSince(
   return events;
 }
 
-function startedToolNames(events: readonly ChatEvent[]): string[] {
+function observedToolNames(events: readonly ChatEvent[]): string[] {
   return events
-    .filter((event) => event.kind === 'tool_call_started')
+    .filter(
+      (event) =>
+        event.kind === 'tool_call_started' ||
+        event.kind === 'tool_call_completed',
+    )
     .map((event) => event.payload['tool_name'])
     .filter((name): name is string => typeof name === 'string');
+}
+
+function successfulCompletedToolNames(events: readonly ChatEvent[]): string[] {
+  return events
+    .filter(
+      (event) =>
+        event.kind === 'tool_call_completed' &&
+        event.payload['is_error'] === false,
+    )
+    .map((event) => event.payload['tool_name'])
+    .filter((name): name is string => typeof name === 'string');
+}
+
+function successfulDenPlanningCoverage(
+  events: readonly ChatEvent[],
+): Readonly<{ document: boolean; task: boolean }> {
+  const successfulTools = successfulCompletedToolNames(events);
+  return {
+    document: successfulTools.some((name) => /^den_.*document/.test(name)),
+    task: successfulTools.some((name) => /^den_.*task/.test(name)),
+  };
 }
