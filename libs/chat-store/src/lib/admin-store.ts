@@ -23,6 +23,7 @@ import {
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
+  type MemorySurfaceCatalogProjection,
   type ModelProviderPage,
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
@@ -104,6 +105,11 @@ export class AdminStore {
   );
   private readonly _mcpSurfaces =
     signal<AdminPage<McpSurfaceDiagnostics> | null>(null);
+  private readonly _memorySurfaces =
+    signal<MemorySurfaceCatalogProjection | null>(null);
+  private readonly _memorySurfacesLoadError = signal<StoreErrorDetail | null>(
+    null,
+  );
   private readonly _configValidation =
     signal<RuntimeConfigValidationReport | null>(null);
   private readonly _capabilities = signal<ApiCapabilityRegistry | null>(null);
@@ -210,6 +216,13 @@ export class AdminStore {
   readonly sessions = this._sessions.asReadonly();
   readonly agents = this._agents.asReadonly();
   readonly mcpSurfaces = this._mcpSurfaces.asReadonly();
+  readonly memorySurfaces = this._memorySurfaces.asReadonly();
+  readonly memorySurfacesLoadErrorDetail =
+    this._memorySurfacesLoadError.asReadonly();
+  readonly memorySurfacesLoadError = computed(() => {
+    const error = this._memorySurfacesLoadError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
   readonly configValidation = this._configValidation.asReadonly();
   readonly capabilities = this._capabilities.asReadonly();
   readonly profileDiagnostics = this._profileDiagnostics.asReadonly();
@@ -426,6 +439,7 @@ export class AdminStore {
         sessions,
         agents,
         mcpSurfaces,
+        memorySurfacesResult,
         configValidation,
         capabilities,
         profileDiagnostics,
@@ -440,6 +454,7 @@ export class AdminStore {
         this.transport.adminSessions({ limit: 100 }),
         this.transport.adminAgents({ limit: 100 }),
         this.transport.adminMcpSurfaces({ limit: 100 }),
+        loadMemorySurfaces(this.transport),
         this.transport.adminConfigValidation(),
         this.transport.adminCapabilities().catch(() => null),
         this.transport.adminProfileDiagnostics().catch(() => null),
@@ -454,6 +469,8 @@ export class AdminStore {
       this._sessions.set(sessions);
       this._agents.set(agents);
       this._mcpSurfaces.set(mcpSurfaces);
+      this._memorySurfaces.set(memorySurfacesResult.catalog);
+      this._memorySurfacesLoadError.set(memorySurfacesResult.error);
       this._configValidation.set(configValidation);
       this._capabilities.set(capabilities);
       this._profileDiagnostics.set(profileDiagnostics);
@@ -1690,6 +1707,22 @@ async function loadContextStrategyCatalog(
     return (await transport.adminContextStrategies?.()) ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Load the operator-facing memory catalog without making an unavailable
+ * diagnostics route invalidate the rest of the Service panel.
+ */
+async function loadMemorySurfaces(transport: ChatTransport): Promise<{
+  catalog: MemorySurfaceCatalogProjection | null;
+  error: StoreErrorDetail | null;
+}> {
+  try {
+    const catalog = await transport.adminMemorySurfaces();
+    return { catalog, error: null };
+  } catch (error) {
+    return { catalog: null, error: storeErrorDetail(error) };
   }
 }
 

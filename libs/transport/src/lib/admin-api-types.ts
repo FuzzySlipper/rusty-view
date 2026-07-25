@@ -8,6 +8,10 @@ import type {
   ChatCompletionsDialect,
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
+  MemorySurfaceAvailability,
+  MemorySurfaceCatalogItem,
+  MemorySurfaceCatalogProjection,
+  MemorySurfaceOwner,
   ProviderAdminModelProviderRecord,
   ProviderAdminModelProviderWrite,
   RuntimeActivityCensus,
@@ -22,6 +26,10 @@ import type {
 } from '@rusty-view/protocol';
 
 export type {
+  MemorySurfaceAvailability,
+  MemorySurfaceCatalogItem,
+  MemorySurfaceCatalogProjection,
+  MemorySurfaceOwner,
   RuntimeActivityCensus,
   RuntimeActivityCensusSummary,
   RuntimeActivityFinding,

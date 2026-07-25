@@ -7,6 +7,7 @@ import {
   output,
 } from '@angular/core';
 import type {
+  MemorySurfaceAvailability,
   RuntimeConfigDiagnostic,
   RuntimeWakeTimeoutConfig,
 } from '@rusty-view/transport';
@@ -116,7 +117,9 @@ export class AdminServicePanelComponent {
     serviceWakeTimeoutPolicy(this.admin.configValidation()),
   );
   protected readonly draftMode = signal<'disabled' | 'default'>('disabled');
-  protected readonly activeTab = signal<'runtime' | 'switchboard'>('runtime');
+  protected readonly activeTab = signal<'runtime' | 'switchboard' | 'memory'>(
+    'runtime',
+  );
   protected readonly draftDefaultMs = signal(600_000);
   protected readonly localError = signal<string | null>(null);
   protected readonly hasRuntimeConfigDraftBase = computed(
@@ -148,8 +151,12 @@ export class AdminServicePanelComponent {
     this.dismissed.emit();
   }
 
-  protected selectTab(tab: 'runtime' | 'switchboard'): void {
+  protected selectTab(tab: 'runtime' | 'switchboard' | 'memory'): void {
     this.activeTab.set(tab);
+  }
+
+  protected availabilityLabel(availability: MemorySurfaceAvailability): string {
+    return availability === 'profile_scoped' ? 'profile scoped' : availability;
   }
 
   protected refresh(): void {

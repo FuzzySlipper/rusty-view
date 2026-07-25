@@ -124,6 +124,122 @@ function configValidation(
 }
 
 describe('AdminServicePanelComponent', () => {
+  it('renders memory surfaces as separate rows with explicit availability semantics', async () => {
+    const transport = makeTransport({
+      memorySurfaces: {
+        generatedAt: '2026-07-25T00:00:00Z',
+        items: [
+          {
+            surfaceId: 'external_memory',
+            displayName: 'External memory',
+            owner: 'den',
+            storageHome: 'external Den memory service',
+            promptPolicy: 'tool-directed',
+            modelFacingToolNames: ['memory_recall', 'memory_store'],
+            backendProvenance: 'den-memory',
+            availability: 'unavailable',
+            availabilityReasonCode: 'memory_external_dependency_missing',
+            lastSafeError: 'den memory baseUrl is not configured',
+            notes: ['Optional external dependency.'],
+          },
+          {
+            surfaceId: 'den_planning',
+            displayName: 'Den documents, tasks, and guidance',
+            owner: 'den',
+            storageHome: 'Den planning service',
+            promptPolicy: 'profile tools',
+            modelFacingToolNames: ['den_get_task'],
+            backendProvenance: 'den',
+            availability: 'profile_scoped',
+            availabilityReasonCode: 'den_planning_profile_tools_active',
+            notes: ['Available only to profiles with Den tools.'],
+          },
+          {
+            surfaceId: 'runtime_search',
+            displayName: 'Runtime search',
+            owner: 'crew',
+            storageHome: 'coordination storage',
+            promptPolicy: 'tool-directed',
+            modelFacingToolNames: [],
+            backendProvenance: 'crew search',
+            availability: 'degraded',
+            availabilityReasonCode: 'runtime_search_partial',
+            notes: [],
+          },
+        ],
+      },
+    });
+    await TestBed.configureTestingModule({
+      imports: [AdminServicePanelComponent],
+      providers: [
+        AdminStore,
+        {
+          provide: ChatTransport,
+          useValue: transport,
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AdminServicePanelComponent);
+    fixture.detectChanges();
+    await TestBed.inject(AdminStore).refresh();
+    serviceButton(fixture, 'Memory').click();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const cards = Array.from(
+      host.querySelectorAll<HTMLElement>('.rv-admin-service__memory-card'),
+    );
+    const cardFor = (surfaceId: string): HTMLElement => {
+      const card = cards.find((candidate) =>
+        candidate.textContent?.includes(surfaceId),
+      );
+      if (card === undefined) throw new Error(`${surfaceId} card not found`);
+      return card;
+    };
+    const externalMemory = cardFor('external_memory');
+    const denPlanning = cardFor('den_planning');
+    const runtimeSearch = cardFor('runtime_search');
+
+    expect(cards).toHaveLength(3);
+    expect(
+      externalMemory.classList.contains(
+        'rv-admin-service__memory-card--unavailable',
+      ),
+    ).toBe(true);
+    expect(externalMemory.textContent).toContain('external Den memory service');
+    expect(externalMemory.textContent).toContain('memory_recall');
+    expect(externalMemory.textContent).toContain('memory_store');
+    expect(externalMemory.textContent).toContain('den-memory');
+    expect(externalMemory.textContent).toContain(
+      'memory_external_dependency_missing',
+    );
+    expect(externalMemory.textContent).toContain(
+      'den memory baseUrl is not configured',
+    );
+    expect(externalMemory.textContent).toContain(
+      'Optional external dependency.',
+    );
+    expect(
+      denPlanning.classList.contains(
+        'rv-admin-service__memory-card--profile-scoped',
+      ),
+    ).toBe(true);
+    expect(
+      denPlanning.classList.contains(
+        'rv-admin-service__memory-card--unavailable',
+      ),
+    ).toBe(false);
+    expect(denPlanning.textContent).toContain('profile scoped');
+    expect(
+      runtimeSearch.classList.contains(
+        'rv-admin-service__memory-card--degraded',
+      ),
+    ).toBe(true);
+    expect(textOf(fixture)).toContain(
+      'Profile scoped means availability depends on the active profile. It is not a service health failure.',
+    );
+  });
+
   it('renders available apply semantics from Crew capabilities', async () => {
     const fixture = await createPanel(SERVICE_CONTROL_CAPABILITY_IDS);
     const semantics = applySemantics(fixture);

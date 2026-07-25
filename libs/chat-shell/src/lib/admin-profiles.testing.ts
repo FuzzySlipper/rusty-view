@@ -10,6 +10,7 @@ import type {
   ContextStrategyCatalog,
   CreateAdminProfileRequest,
   CreatedServiceProfile,
+  MemorySurfaceCatalogProjection,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
   ProfileDeleteRequest,
@@ -88,6 +89,7 @@ export interface TransportOptions {
   readonly localToolProfiles?: AdminLocalToolProfileList | null;
   readonly contextStrategyCatalog?: ContextStrategyCatalog | null;
   readonly configValidation?: RuntimeConfigValidationReport | null;
+  readonly memorySurfaces?: MemorySurfaceCatalogProjection | null;
 }
 
 export function makeTransport(options: TransportOptions = {}): ChatTransport {
@@ -130,6 +132,11 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
       limit: 100,
       offset: 0,
     }),
+    adminMemorySurfaces: async () =>
+      options.memorySurfaces ?? {
+        generatedAt: '2026-07-25T00:00:00Z',
+        items: [],
+      },
     adminConfigValidation: async () => options.configValidation ?? null,
     adminCapabilities: async () => ({
       schema_version: 1,

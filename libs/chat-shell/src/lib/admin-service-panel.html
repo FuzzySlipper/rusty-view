@@ -23,6 +23,13 @@
     </button>
     <button
       type="button"
+      [class.rv-admin-service__tab--active]="activeTab() === 'memory'"
+      (click)="selectTab('memory')"
+    >
+      Memory
+    </button>
+    <button
+      type="button"
       [class.rv-admin-service__tab--active]="activeTab() === 'switchboard'"
       (click)="selectTab('switchboard')"
     >
@@ -251,6 +258,122 @@
       }
     </div>
   </section>
+  } @else if (activeTab() === 'memory') {
+  <div class="rv-admin-service__memory">
+    <div class="rv-admin-service__toolbar">
+      <button
+        type="button"
+        class="rv-admin-service__button"
+        (click)="refresh()"
+        [disabled]="admin.loading()"
+      >
+        Refresh
+      </button>
+    </div>
+
+    @if (admin.memorySurfacesLoadError(); as error) {
+    <div class="rv-admin-service__error" role="alert">{{ error }}</div>
+    } @if (admin.memorySurfaces(); as catalog) {
+    <section class="rv-admin-service__section">
+      <h2>Memory Surfaces</h2>
+      <div class="rv-admin-service__summary">
+        <span>generated</span><strong>{{ catalog.generatedAt }}</strong>
+        <span>surfaces</span><strong>{{ catalog.items.length }}</strong>
+      </div>
+      <p class="rv-admin-service__memory-help">
+        Profile scoped means availability depends on the active profile. It is
+        not a service health failure.
+      </p>
+    </section>
+
+    <div class="rv-admin-service__memory-list">
+      @for (surface of catalog.items; track surface.surfaceId) {
+      <article
+        class="rv-admin-service__memory-card"
+        [class.rv-admin-service__memory-card--degraded]="
+          surface.availability === 'degraded'
+        "
+        [class.rv-admin-service__memory-card--unavailable]="
+          surface.availability === 'unavailable'
+        "
+        [class.rv-admin-service__memory-card--profile-scoped]="
+          surface.availability === 'profile_scoped'
+        "
+      >
+        <header class="rv-admin-service__memory-card-header">
+          <div>
+            <h3>{{ surface.displayName }}</h3>
+            <code>{{ surface.surfaceId }}</code>
+          </div>
+          <span
+            class="rv-admin-service__availability"
+            [class.rv-admin-service__availability--available]="
+              surface.availability === 'available'
+            "
+            [class.rv-admin-service__availability--degraded]="
+              surface.availability === 'degraded'
+            "
+            [class.rv-admin-service__availability--unavailable]="
+              surface.availability === 'unavailable'
+            "
+            [class.rv-admin-service__availability--profile-scoped]="
+              surface.availability === 'profile_scoped'
+            "
+          >
+            {{ availabilityLabel(surface.availability) }}
+          </span>
+        </header>
+
+        <dl class="rv-admin-service__memory-details">
+          <dt>owner</dt>
+          <dd>{{ surface.owner }}</dd>
+          <dt>storage home</dt>
+          <dd>{{ surface.storageHome }}</dd>
+          <dt>prompt policy</dt>
+          <dd>{{ surface.promptPolicy }}</dd>
+          <dt>backend provenance</dt>
+          <dd>{{ surface.backendProvenance }}</dd>
+          <dt>reason</dt>
+          <dd>{{ surface.availabilityReasonCode }}</dd>
+          <dt>model-facing tools</dt>
+          <dd>
+            @if (surface.modelFacingToolNames.length > 0) {
+            <span class="rv-admin-service__memory-values">
+              @for (tool of surface.modelFacingToolNames; track tool) {
+              <code>{{ tool }}</code>
+              }
+            </span>
+            } @else { none }
+          </dd>
+        </dl>
+
+        @if (surface.lastSafeError; as lastSafeError) {
+        <div class="rv-admin-service__memory-error">
+          <strong>Last safe error</strong>
+          <span>{{ lastSafeError }}</span>
+        </div>
+        } @if (surface.notes.length > 0) {
+        <ul class="rv-admin-service__memory-notes">
+          @for (note of surface.notes; track note) {
+          <li>{{ note }}</li>
+          }
+        </ul>
+        }
+      </article>
+      } @empty {
+      <div class="rv-admin-service__memory-empty">
+        Crew returned an empty memory surface catalog.
+      </div>
+      }
+    </div>
+    } @else if (admin.loading()) {
+    <div class="rv-admin-service__memory-empty">Loading memory surfaces...</div>
+    } @else if (admin.memorySurfacesLoadError() === null) {
+    <div class="rv-admin-service__memory-empty">
+      No memory surface catalog payload.
+    </div>
+    }
+  </div>
   } @else {
   <div class="rv-admin-service__switchboard">
     <rv-admin-switchboard-panel />

@@ -501,6 +501,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/diagnostics/memory-surfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the operator-facing memory surface catalog */
+        get: operations["adminDiagnosticsMemorySurfaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/commands": {
         parameters: {
             query?: never;
@@ -539,6 +556,28 @@ export interface components {
             reason_code: string;
             message: string;
             retryable: boolean;
+        };
+        /** @enum {string} */
+        MemorySurfaceOwner: "crew" | "den" | "filesystem";
+        /** @enum {string} */
+        MemorySurfaceAvailability: "available" | "degraded" | "unavailable" | "profile_scoped";
+        MemorySurfaceCatalogItem: {
+            surfaceId: string;
+            displayName: string;
+            owner: components["schemas"]["MemorySurfaceOwner"];
+            storageHome: string;
+            promptPolicy: string;
+            modelFacingToolNames: string[];
+            backendProvenance: string;
+            availability: components["schemas"]["MemorySurfaceAvailability"];
+            availabilityReasonCode: string;
+            lastSafeError?: string;
+            notes: string[];
+        };
+        MemorySurfaceCatalogProjection: {
+            /** Format: date-time */
+            generatedAt: string;
+            items: components["schemas"]["MemorySurfaceCatalogItem"][];
         };
         /** @enum {string} */
         ChatSessionStatus: "active" | "idle" | "archived" | "blocked";
@@ -2425,6 +2464,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["schemas-ApiEnvelope"];
+                };
+            };
+        };
+    };
+    adminDiagnosticsMemorySurfaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Memory surface catalog projection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["MemorySurfaceCatalogProjection"];
+                    };
                 };
             };
         };

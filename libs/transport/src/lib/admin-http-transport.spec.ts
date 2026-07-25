@@ -297,6 +297,40 @@ describe('AdminHttpTransport', () => {
     );
   });
 
+  it('reads the generated memory-surface diagnostics projection', async () => {
+    const projection = {
+      generatedAt: '2026-07-25T00:00:00Z',
+      items: [
+        {
+          surfaceId: 'external_memory',
+          displayName: 'External memory',
+          owner: 'den' as const,
+          storageHome: 'external Den memory service',
+          promptPolicy: 'tool-directed',
+          modelFacingToolNames: ['memory_recall'],
+          backendProvenance: 'den-memory',
+          availability: 'unavailable' as const,
+          availabilityReasonCode: 'memory_external_dependency_missing',
+          lastSafeError: 'den memory baseUrl is not configured',
+          notes: ['Optional external dependency.'],
+        },
+      ],
+    };
+    const { fetch, lastRequest } = capturingFetch(jsonOk(projection));
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await expect(transport.memorySurfaces()).resolves.toEqual(projection);
+
+    expect(new URL(lastRequest().url).pathname).toBe(
+      '/v1/admin/diagnostics/memory-surfaces',
+    );
+    expect(lastRequest().method).toBe('GET');
+    expect(lastRequest().cache).toBe('no-store');
+    expect(lastRequest().headers.get('Authorization')).toBe(
+      'Bearer admin-token',
+    );
+  });
+
   it('reads the activity census from the configured Crew origin', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

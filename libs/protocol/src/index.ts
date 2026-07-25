@@ -212,6 +212,15 @@ export type ApiEnvelope = Schemas['ApiEnvelope'];
 export type ApiMeta = Schemas['ApiMeta'];
 export type ApiError = Schemas['ApiError'];
 
+// ---- admin memory-surface diagnostics ----
+export type MemorySurfaceOwner = Schemas['MemorySurfaceOwner'];
+export type MemorySurfaceAvailability = Schemas['MemorySurfaceAvailability'];
+export type MemorySurfaceCatalogItem = Schemas['MemorySurfaceCatalogItem'];
+export type MemorySurfaceCatalogProjection =
+  Schemas['MemorySurfaceCatalogProjection'];
+export type GetMemorySurfaceCatalogResponse =
+  operations['adminDiagnosticsMemorySurfaces']['responses'][200]['content']['application/json'];
+
 // ---- sessions ----
 export type ChatSessionStatus = Schemas['ChatSessionStatus'];
 export type ChatSessionSummary = Schemas['ChatSessionSummary'];

@@ -35,6 +35,7 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  MemorySurfaceCatalogProjection,
   ModelProviderPage,
   ModelProviderQuery,
   ModelProviderRecord,
@@ -160,6 +161,10 @@ export class AdminHttpTransport {
       '/v1/admin/diagnostics/mcp',
       optionsForQuery(query),
     );
+  }
+
+  memorySurfaces(): Promise<MemorySurfaceCatalogProjection> {
+    return this.request('GET', '/v1/admin/diagnostics/memory-surfaces');
   }
 
   configValidation(): Promise<RuntimeConfigValidationReport | null> {

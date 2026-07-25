@@ -9,6 +9,7 @@ import {
   type RuntimeSessionDiagnostics,
   type AdminAgentDiagnostics,
   type McpSurfaceDiagnostics,
+  type MemorySurfaceCatalogProjection,
   type RuntimeConfigValidationReport,
   type ApiCapabilityRegistry,
   type AdminProfileRegistryDiagnostics,
@@ -82,6 +83,9 @@ interface AdminTransportMock {
   >;
   readonly adminMcpSurfaces: ReturnType<
     typeof vi.fn<() => Promise<AdminPage<McpSurfaceDiagnostics>>>
+  >;
+  readonly adminMemorySurfaces: ReturnType<
+    typeof vi.fn<() => Promise<MemorySurfaceCatalogProjection>>
   >;
   readonly adminConfigValidation: ReturnType<
     typeof vi.fn<() => Promise<RuntimeConfigValidationReport | null>>
@@ -661,6 +665,10 @@ function createTransport(
     adminAgents: vi.fn(async () => emptyPage<AdminAgentDiagnostics>()),
     adminActivities: vi.fn(async () => activityCensus()),
     adminMcpSurfaces: vi.fn(async () => emptyPage<McpSurfaceDiagnostics>()),
+    adminMemorySurfaces: vi.fn(async () => ({
+      generatedAt: '2026-07-25T00:00:00Z',
+      items: [],
+    })),
     adminConfigValidation: vi.fn(async () => null),
     adminCapabilities: vi.fn(
       async () =>
@@ -924,6 +932,69 @@ describe('AdminStore structured errors', () => {
     );
     expect(store.providerLoadErrorDetail()?.apiError?.reasonCode).toBe(
       'provider_registry_unavailable',
+    );
+  });
+
+  it('loads memory surfaces without folding catalog availability into service health', async () => {
+    const catalog: MemorySurfaceCatalogProjection = {
+      generatedAt: '2026-07-25T00:00:00Z',
+      items: [
+        {
+          surfaceId: 'external_memory',
+          displayName: 'External memory',
+          owner: 'den',
+          storageHome: 'external Den memory service',
+          promptPolicy: 'tool-directed',
+          modelFacingToolNames: ['memory_recall'],
+          backendProvenance: 'den-memory',
+          availability: 'unavailable',
+          availabilityReasonCode: 'memory_external_dependency_missing',
+          notes: [],
+        },
+        {
+          surfaceId: 'den_planning',
+          displayName: 'Den documents, tasks, and guidance',
+          owner: 'den',
+          storageHome: 'Den planning service',
+          promptPolicy: 'profile tools',
+          modelFacingToolNames: ['den_get_task'],
+          backendProvenance: 'den',
+          availability: 'profile_scoped',
+          availabilityReasonCode: 'den_planning_profile_tools_active',
+          notes: [],
+        },
+      ],
+    };
+    const store = setupAdminStore(
+      createTransport({ adminMemorySurfaces: vi.fn(async () => catalog) }),
+    );
+
+    await store.refresh();
+
+    expect(store.error()).toBeNull();
+    expect(store.memorySurfaces()).toEqual(catalog);
+    expect(store.memorySurfaces()?.items.map((item) => item.surfaceId)).toEqual(
+      ['external_memory', 'den_planning'],
+    );
+  });
+
+  it('captures memory-surface load failures without failing the Service panel refresh', async () => {
+    const transport = createTransport({
+      adminMemorySurfaces: vi.fn(async () => {
+        throw apiError('memory_catalog_unavailable', 'Memory catalog failed');
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.refresh();
+
+    expect(store.error()).toBeNull();
+    expect(store.memorySurfaces()).toBeNull();
+    expect(store.memorySurfacesLoadError()).toBe(
+      'Memory catalog failed (memory_catalog_unavailable)',
+    );
+    expect(store.memorySurfacesLoadErrorDetail()?.apiError?.reasonCode).toBe(
+      'memory_catalog_unavailable',
     );
   });
 

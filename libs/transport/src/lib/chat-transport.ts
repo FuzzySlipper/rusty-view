@@ -68,6 +68,7 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
+  MemorySurfaceCatalogProjection,
   ModelProviderPage,
   ModelProviderQuery,
   ModelProviderRecord,
@@ -326,6 +327,10 @@ export class ChatTransport {
     query?: AdminListQuery,
   ): Promise<AdminPage<McpSurfaceDiagnostics>> {
     return this.adminHttp.mcpSurfaces(query);
+  }
+
+  adminMemorySurfaces(): Promise<MemorySurfaceCatalogProjection> {
+    return this.adminHttp.memorySurfaces();
   }
 
   adminConfigValidation(): Promise<RuntimeConfigValidationReport | null> {
