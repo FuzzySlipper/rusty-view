@@ -400,17 +400,101 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
     )
     .toBeLessThanOrEqual(80);
 
-  const geometry: Array<{
-    tailGap: number;
-    bottomOffset: number;
-    renderedEndMismatch: number;
-    viewportCoverageGap: number;
-  }> = [];
+  await transcript.evaluate((viewport) => {
+    type MultiItemGeometrySample = {
+      frame: number;
+      tailGap: number;
+      bottomOffset: number;
+      renderedEndMismatch: number;
+      viewportCoverageGap: number;
+      turnRowCount: number;
+      turnMessageCount: number;
+      lastVirtualRowId: string | undefined;
+      lastMessageId: string | undefined;
+      lastMessageStatus: string | undefined;
+      finalMessageStatus: string | undefined;
+    };
+    const state = window as typeof window & {
+      __rvMultiItemGeometrySamples?: MultiItemGeometrySample[];
+      __rvMultiItemGeometryCapture?: boolean;
+    };
+    state.__rvMultiItemGeometrySamples = [];
+    state.__rvMultiItemGeometryCapture = true;
+    let frame = 0;
+
+    const sampleAfterFrame = (): void => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!state.__rvMultiItemGeometryCapture) return;
+          frame += 1;
+          const wrapper = viewport.querySelector<HTMLElement>(
+            '.cdk-virtual-scroll-content-wrapper',
+          );
+          const spacer = viewport.querySelector<HTMLElement>(
+            '.cdk-virtual-scroll-spacer',
+          );
+          const items = viewport.querySelectorAll<HTMLElement>(
+            '.rv-transcript__item',
+          );
+          const lastItem = items.item(items.length - 1);
+          const virtualRows = viewport.querySelectorAll<HTMLElement>(
+            '[data-testid="transcript-virtual-row"]',
+          );
+          const lastVirtualRow = virtualRows.item(virtualRows.length - 1);
+          const turnRows = viewport.querySelectorAll<HTMLElement>(
+            '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
+          );
+          const turnRow = turnRows.item(0);
+          const finalMessage = viewport.querySelector<HTMLElement>(
+            '[data-testid="transcript-item"][data-message-id="external-event:multi-final"]',
+          );
+          const finalMessageRow =
+            finalMessage?.querySelector<HTMLElement>(
+              '[data-testid="message-row"]',
+            ) ?? null;
+          if (wrapper !== null && spacer !== null && lastItem !== null) {
+            const viewportBounds = viewport.getBoundingClientRect();
+            const wrapperBounds = wrapper.getBoundingClientRect();
+            const lastBounds = lastItem.getBoundingClientRect();
+            const renderedContentSize = lastBounds.bottom - wrapperBounds.top;
+            const renderedOffset =
+              viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
+            state.__rvMultiItemGeometrySamples?.push({
+              frame,
+              tailGap: viewportBounds.bottom - lastBounds.bottom,
+              bottomOffset:
+                viewport.scrollHeight -
+                viewport.scrollTop -
+                viewport.clientHeight,
+              renderedEndMismatch:
+                renderedOffset + renderedContentSize - viewport.scrollHeight,
+              viewportCoverageGap: Math.max(
+                0,
+                wrapperBounds.top - viewportBounds.top,
+              ),
+              turnRowCount: turnRows.length,
+              turnMessageCount:
+                turnRow?.querySelectorAll('[data-testid="transcript-item"]')
+                  .length ?? 0,
+              lastVirtualRowId: lastVirtualRow?.dataset['virtualRowId'],
+              lastMessageId: lastItem.dataset['messageId'],
+              lastMessageStatus: lastItem.querySelector<HTMLElement>(
+                '[data-testid="message-row"]',
+              )?.dataset['messageStatus'],
+              finalMessageStatus: finalMessageRow?.dataset['messageStatus'],
+            });
+          }
+          sampleAfterFrame();
+        }, 0);
+      });
+    };
+    sampleAfterFrame();
+  });
+
   for (let step = 0; step < 6; step += 1) {
     const marker = fixture.appendMultiItemTurnStep(step);
     await page.getByTestId('external-agent-refresh').click();
     await expect(page.getByTestId('transcript-shell')).toContainText(marker);
-    geometry.push(await transcriptGeometryAfter(transcript, 100));
 
     const turnRows = transcript.locator(
       '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
@@ -419,10 +503,99 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
     await expect(
       turnRows.locator('[data-testid="transcript-item"]'),
     ).toHaveCount(step + 1);
+    await transcript.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
   }
 
   fixture.completeMultiItemTurn();
   await page.getByTestId('external-agent-refresh').click();
+  await expect(
+    transcript.locator(
+      '[data-testid="transcript-item"][data-message-id="external-event:multi-final"] [data-testid="message-row"]',
+    ),
+  ).toHaveAttribute('data-message-status', 'completed');
+  await transcript.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  const samples = await page.evaluate(() => {
+    const state = window as typeof window & {
+      __rvMultiItemGeometrySamples?: Array<{
+        frame: number;
+        tailGap: number;
+        bottomOffset: number;
+        renderedEndMismatch: number;
+        viewportCoverageGap: number;
+        turnRowCount: number;
+        turnMessageCount: number;
+        lastVirtualRowId: string | undefined;
+        lastMessageId: string | undefined;
+        lastMessageStatus: string | undefined;
+        finalMessageStatus: string | undefined;
+      }>;
+      __rvMultiItemGeometryCapture?: boolean;
+    };
+    state.__rvMultiItemGeometryCapture = false;
+    return state.__rvMultiItemGeometrySamples ?? [];
+  });
+
+  const expectedMessageIds = [
+    'external-event:multi-reasoning-a',
+    'external-event:multi-command',
+    'external-event:multi-commentary',
+    'external-event:multi-reasoning-b',
+    'external-event:multi-tool',
+    'external-event:multi-final',
+  ];
+  const firstTurnSample = samples.findIndex(
+    (sample) => sample.turnRowCount > 0,
+  );
+  expect(firstTurnSample).toBeGreaterThanOrEqual(0);
+  const turnSamples = samples.slice(firstTurnSample);
+  expect(turnSamples.length).toBeGreaterThan(0);
+
+  let priorMessageIndex = -1;
+  const invalidSamples = turnSamples.filter((sample) => {
+    const messageIndex = expectedMessageIds.indexOf(sample.lastMessageId ?? '');
+    const reversed = messageIndex < priorMessageIndex;
+    priorMessageIndex = Math.max(priorMessageIndex, messageIndex);
+    return (
+      sample.turnRowCount !== 1 ||
+      sample.lastVirtualRowId !== 'external-turn:thread-1:multi-item-turn:0' ||
+      messageIndex < 0 ||
+      sample.turnMessageCount !== messageIndex + 1 ||
+      reversed ||
+      sample.tailGap > 2 ||
+      sample.bottomOffset > 80 ||
+      Math.abs(sample.renderedEndMismatch) > 2 ||
+      sample.viewportCoverageGap > 2
+    );
+  });
+  expect(invalidSamples, JSON.stringify(invalidSamples)).toEqual([]);
+  expect(new Set(turnSamples.map((sample) => sample.turnMessageCount))).toEqual(
+    new Set([1, 2, 3, 4, 5, 6]),
+  );
+
+  const finalSample = turnSamples.at(-1);
+  expect(finalSample).toMatchObject({
+    turnRowCount: 1,
+    turnMessageCount: 6,
+    lastVirtualRowId: 'external-turn:thread-1:multi-item-turn:0',
+    lastMessageId: 'external-event:multi-final',
+    finalMessageStatus: 'completed',
+  });
+  expect(finalSample?.tailGap).toBeLessThanOrEqual(2);
+  expect(finalSample?.bottomOffset).toBeLessThanOrEqual(80);
+  expect(
+    Math.abs(finalSample?.renderedEndMismatch ?? Infinity),
+  ).toBeLessThanOrEqual(2);
+  expect(finalSample?.viewportCoverageGap).toBeLessThanOrEqual(2);
   await expect
     .poll(() =>
       transcript.evaluate(
@@ -431,17 +604,6 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
       ),
     )
     .toBeLessThanOrEqual(80);
-  geometry.push(await transcriptGeometryAfter(transcript, 300));
-
-  expect(
-    geometry.every(
-      (sample) =>
-        sample.tailGap <= 2 &&
-        sample.bottomOffset <= 80 &&
-        Math.abs(sample.renderedEndMismatch) <= 2 &&
-        sample.viewportCoverageGap <= 2,
-    ),
-  ).toBe(true);
   await expect(
     transcript.locator(
       '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',

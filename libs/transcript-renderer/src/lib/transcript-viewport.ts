@@ -462,6 +462,42 @@ export class TranscriptViewportComponent {
           spacerObserver.disconnect();
         });
       }
+      if (typeof MutationObserver !== 'undefined') {
+        const contentWrapper = host.querySelector<HTMLElement>(
+          '.cdk-virtual-scroll-content-wrapper',
+        );
+        const spacer = host.querySelector<HTMLElement>(
+          '.cdk-virtual-scroll-spacer',
+        );
+        const geometryObserver = new MutationObserver(() => {
+          if (
+            !this.viewportReady ||
+            !this.tailFollow() ||
+            !this.followingTail() ||
+            !this.tailIsStreaming()
+          ) {
+            return;
+          }
+          this.followMaterializedTailGeometryNow();
+          this.scheduleMaterializedTailGeometryFollow();
+        });
+        if (contentWrapper !== null) {
+          geometryObserver.observe(contentWrapper, {
+            attributes: true,
+            attributeFilter: ['style'],
+            characterData: true,
+            childList: true,
+            subtree: true,
+          });
+        }
+        if (spacer !== null) {
+          geometryObserver.observe(spacer, {
+            attributes: true,
+            attributeFilter: ['style'],
+          });
+        }
+        this.destroyRef.onDestroy(() => geometryObserver.disconnect());
+      }
     });
 
     // Tail-follow + scroll anchor preservation: when the rendered messages
@@ -666,6 +702,16 @@ export class TranscriptViewportComponent {
       if (generation !== this.tailFollowGeneration) return;
       this.tailFollowRenderPending = false;
       if (!this.tailFollow() || !this.followingTail()) return;
+      // A newly materialized streaming row can inherit CDK autosize's
+      // provisional spacer extent until its first ResizeObserver pass. Repair
+      // that disagreement in Angular's render completion callback so the
+      // browser never paints a bottom-pinned blank frame in between.
+      if (this.tailIsStreaming()) {
+        if (this.isTailMaterialized()) {
+          this.followMaterializedTailGeometryNow();
+        }
+        this.scheduleMaterializedTailGeometryFollow();
+      }
       if (this.viewport().measureScrollOffset('bottom') > 2) {
         this.scrollToBottomOffset();
       }
@@ -759,14 +805,24 @@ export class TranscriptViewportComponent {
   /**
    * CDK's own ResizeObserver can run after ours and update the wrapper transform
    * without changing its measured height, which provides no second observer
-   * notification. Re-assert the coherent tail once after all resize callbacks
-   * for the frame have completed.
+   * notification. Re-assert the coherent tail after all resize callbacks for
+   * the frame have completed. A newly appended virtual row may materialize a
+   * few frames after its data signal, so follow that bounded render window
+   * until the streaming tail exists.
    */
-  private scheduleMaterializedTailGeometryFollow(): void {
+  private scheduleMaterializedTailGeometryFollow(attempt = 0): void {
     if (this.tailGeometryFrame !== undefined) return;
     this.tailGeometryFrame = requestAnimationFrame(() => {
       this.tailGeometryFrame = undefined;
       if (!this.viewportReady || !this.tailFollow() || !this.followingTail()) {
+        return;
+      }
+      if (
+        this.tailIsStreaming() &&
+        !this.isTailMaterialized() &&
+        attempt < 10
+      ) {
+        this.scheduleMaterializedTailGeometryFollow(attempt + 1);
         return;
       }
       this.followMaterializedTailGeometryNow();
