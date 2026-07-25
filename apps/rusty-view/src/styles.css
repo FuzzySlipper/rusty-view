@@ -22,3 +22,19 @@ body {
   padding: 0;
   height: 100%;
 }
+
+/*
+ * Reduced Motion is an explicit app-wide promise, including component styles
+ * that use literal durations instead of the shared motion tokens. Keep
+ * animation end states deterministic while removing visible interpolation.
+ */
+:root[data-rv-reduced-motion='true'] *,
+:root[data-rv-reduced-motion='true'] *::before,
+:root[data-rv-reduced-motion='true'] *::after {
+  animation-delay: 0ms !important;
+  animation-duration: 0ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-delay: 0ms !important;
+  transition-duration: 0ms !important;
+}

@@ -53,6 +53,11 @@ import {
 
 const EMPTY_BLOCK_SET = new Set<string>();
 
+export interface TranscriptVirtualRow {
+  readonly id: string;
+  readonly messages: readonly ChatMessage[];
+}
+
 /**
  * Virtualized transcript viewport.
  *
@@ -194,6 +199,7 @@ export class TranscriptViewportComponent {
   private scrollbarDragActive = false;
   private touchScrollActive = false;
   private transcriptTransitionFrame: number | undefined;
+  private tailGeometryFrame: number | undefined;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -205,6 +211,8 @@ export class TranscriptViewportComponent {
    * the viewport has a real size, then keep it in sync with the input.
    */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
+  protected readonly renderRows = signal<readonly TranscriptVirtualRow[]>([]);
+  private readonly groupedExternalTurnIds = new Set<string>();
   protected readonly transcriptTransitioning = signal(false);
   protected readonly searchQuery = signal('');
   protected readonly searchRole = signal<MessageRole | 'all'>('all');
@@ -322,6 +330,9 @@ export class TranscriptViewportComponent {
       if (this.transcriptTransitionFrame !== undefined) {
         cancelAnimationFrame(this.transcriptTransitionFrame);
       }
+      if (this.tailGeometryFrame !== undefined) {
+        cancelAnimationFrame(this.tailGeometryFrame);
+      }
     });
 
     // Conversation identity is supplied by the composition layer. Do not
@@ -341,6 +352,7 @@ export class TranscriptViewportComponent {
 
       this.transcriptTransitioning.set(true);
       this.previousMessages = [];
+      this.groupedExternalTurnIds.clear();
       this.isAtBottom.set(true);
       this.resumeTailFollow();
       if (this.viewportReady) {
@@ -349,10 +361,10 @@ export class TranscriptViewportComponent {
         // transcript's range, a short/very-tall predecessor can leave the
         // range outside the replacement and produce a blank frame.
         const messages = this.messages();
-        this.renderMessages.set(messages);
+        const rows = this.setRenderedMessages(messages);
         this.viewport().setRenderedRange({
-          start: Math.max(0, messages.length - 20),
-          end: messages.length,
+          start: Math.max(0, rows.length - 20),
+          end: rows.length,
         });
         this.afterNextRender(() => {
           this.resetAutoSizeEstimator();
@@ -370,7 +382,7 @@ export class TranscriptViewportComponent {
         this.pendingPausedScrollOffset = !this.followingTail()
           ? this.viewport().measureScrollOffset('top')
           : undefined;
-        this.renderMessages.set(msgs);
+        this.setRenderedMessages(msgs);
       }
     });
 
@@ -414,7 +426,7 @@ export class TranscriptViewportComponent {
       const emitWhenSized = () => {
         if (!this.viewportReady && host.clientHeight > 0) {
           this.viewportReady = true;
-          this.renderMessages.set(this.messages());
+          this.setRenderedMessages(this.messages());
         }
         if (this.viewportReady) {
           this.viewport().checkViewportSize();
@@ -536,10 +548,31 @@ export class TranscriptViewportComponent {
     });
   }
 
-  /** trackBy for *cdkVirtualFor: stable identity keeps streaming deltas from
-   * re-creating views (only the changed message re-renders). */
-  protected trackByMessageId(_index: number, message: ChatMessage): string {
-    return message.id;
+  /**
+   * Keep one external Codex turn in one CDK row while its separately projected
+   * reasoning, tool, and text items arrive. CDK autosize otherwise changes its
+   * data length for every item, re-estimates all unseen rows, and can visibly
+   * move the wrapper even while scrollTop remains pinned at the tail.
+   */
+  private setRenderedMessages(
+    messages: readonly ChatMessage[],
+  ): readonly TranscriptVirtualRow[] {
+    rememberStreamingExternalTurns(messages, this.groupedExternalTurnIds);
+    const rows = projectTranscriptVirtualRows(
+      messages,
+      this.groupedExternalTurnIds,
+    );
+    this.renderMessages.set(messages);
+    this.renderRows.set(rows);
+    return rows;
+  }
+
+  /** Stable CDK identity prevents a growing Codex turn from recreating its row. */
+  protected trackByVirtualRowId(
+    _index: number,
+    row: TranscriptVirtualRow,
+  ): string {
+    return row.id;
   }
 
   /** Called on viewport scroll to track whether the user is at the bottom. */
@@ -688,6 +721,8 @@ export class TranscriptViewportComponent {
     this.renderedContentHeight = height;
     this.noteTailGeometryChange();
     if (this.viewportReady && this.tailFollow() && this.followingTail()) {
+      this.followMaterializedTailGeometryNow();
+      this.scheduleMaterializedTailGeometryFollow();
       this.requestTailFollow();
     }
   }
@@ -702,8 +737,40 @@ export class TranscriptViewportComponent {
     this.estimatedTotalHeight = height;
     this.noteTailGeometryChange();
     if (this.viewportReady && this.tailFollow() && this.followingTail()) {
+      this.followMaterializedTailGeometryNow();
+      this.scheduleMaterializedTailGeometryFollow();
       this.requestTailFollow();
     }
+  }
+
+  /**
+   * ResizeObserver runs before paint. Keep the materialized tail aligned in
+   * that same frame instead of exposing CDK's intermediate spacer/wrapper
+   * disagreement until the next Angular render and settlement timer.
+   */
+  private followMaterializedTailGeometryNow(): void {
+    this.scrollToBottomOffset();
+    if (this.isTailMaterialized()) {
+      this.reconcileMaterializedTailGeometry(false);
+    }
+    this.recomputeBottomState();
+  }
+
+  /**
+   * CDK's own ResizeObserver can run after ours and update the wrapper transform
+   * without changing its measured height, which provides no second observer
+   * notification. Re-assert the coherent tail once after all resize callbacks
+   * for the frame have completed.
+   */
+  private scheduleMaterializedTailGeometryFollow(): void {
+    if (this.tailGeometryFrame !== undefined) return;
+    this.tailGeometryFrame = requestAnimationFrame(() => {
+      this.tailGeometryFrame = undefined;
+      if (!this.viewportReady || !this.tailFollow() || !this.followingTail()) {
+        return;
+      }
+      this.followMaterializedTailGeometryNow();
+    });
   }
 
   private pauseTailFollow(): void {
@@ -787,8 +854,7 @@ export class TranscriptViewportComponent {
   scrollToMessageId(messageId: string): void {
     this.pauseTailFollow();
     this.cancelPendingSeeks();
-    const msgs = this.currentMessagesForScroll();
-    const index = msgs.findIndex((m) => m.id === messageId);
+    const index = this.virtualRowIndexForMessage(messageId);
     if (index >= 0) {
       this.afterNextRender(() => {
         this.seekMessageIntoView(messageId, index, 0);
@@ -890,7 +956,7 @@ export class TranscriptViewportComponent {
     attempt: number,
   ): void {
     if (this.viewportReady) {
-      this.renderMessages.set(this.messages());
+      this.setRenderedMessages(this.messages());
     }
 
     const rendered = this.findRenderedMessageElement(messageId);
@@ -915,16 +981,16 @@ export class TranscriptViewportComponent {
     const vp = this.viewport();
     vp.checkViewportSize();
 
-    const msgs = this.currentMessagesForScroll();
-    if (msgs.length === 0) return;
+    const rows = this.renderRows();
+    if (rows.length === 0) return;
 
-    const clampedIndex = Math.max(0, Math.min(index, msgs.length - 1));
+    const clampedIndex = Math.max(0, Math.min(index, rows.length - 1));
     if (clampedIndex === 0) {
       vp.scrollToOffset(0);
       return;
     }
 
-    if (clampedIndex >= msgs.length - 1) {
+    if (clampedIndex >= rows.length - 1) {
       this.scrollToBottom();
       return;
     }
@@ -947,8 +1013,10 @@ export class TranscriptViewportComponent {
     vp.scrollToOffset(Math.max(0, nextOffset));
   }
 
-  private currentMessagesForScroll(): readonly ChatMessage[] {
-    return this.messages();
+  private virtualRowIndexForMessage(messageId: string): number {
+    return this.renderRows().findIndex((row) =>
+      row.messages.some((message) => message.id === messageId),
+    );
   }
 
   private averageRenderedItemSize(): number {
@@ -1009,11 +1077,10 @@ export class TranscriptViewportComponent {
         }
         const bottomOffset = this.viewport().measureScrollOffset('bottom');
         const tailMaterialized = this.isTailMaterialized();
-        if (
-          tailMaterialized &&
-          !this.tailIsStreaming() &&
-          this.reconcileMaterializedTailGeometry(false)
-        ) {
+        // Keep the materialized wrapper and spacer coherent even while a
+        // stable virtual row is streaming. Streaming trusts the freshly
+        // measured wrapper; terminal settlement trusts CDK's stable spacer.
+        if (tailMaterialized && this.reconcileMaterializedTailGeometry(false)) {
           this.settleScrollToBottom(attempt + 1, generation, startedAt);
           return;
         }
@@ -1083,7 +1150,7 @@ export class TranscriptViewportComponent {
     );
   }
 
-  /** Keep a materialized tail wrapper aligned with CDK's authoritative spacer. */
+  /** Keep a materialized tail aligned with the browser's authoritative scroll extent. */
   private reconcileMaterializedTailGeometry(
     includeViewportCoverageRepair: boolean,
   ): boolean {
@@ -1100,10 +1167,18 @@ export class TranscriptViewportComponent {
     if (!assessment.tailRangeMaterialized) return false;
 
     if (!assessment.tailEndCoherent) {
-      // CDK owns total-size estimation. Correct only the independently
-      // positioned wrapper; changing both values lets a later autosize
-      // measurement update the spacer alone and recreate the captured
-      // 20,249px/36,281px split.
+      if (this.tailIsStreaming()) {
+        // The rendered streaming tail is the fresh measurement; the spacer is
+        // an autosize estimate which can lag a growing row in either direction.
+        // Preserve the visible wrapper and make the scroll extent meet its real
+        // end, then pin the viewport to that corrected bottom.
+        viewport.setTotalContentSize(assessment.renderedContentEnd);
+        viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
+        return true;
+      }
+      // For settled content, correct only the independently positioned wrapper.
+      // The browser scroll extent already resolves whether the spacer or the
+      // rendered content reaches farther.
       viewport.setRenderedContentOffset(
         assessment.correctedRenderedContentOffset,
       );
@@ -1138,23 +1213,40 @@ export class TranscriptViewportComponent {
 
     const hostBounds = host.getBoundingClientRect();
     const contentBounds = contentWrapper.getBoundingClientRect();
+    const renderedItems = contentWrapper.querySelectorAll<HTMLElement>(
+      '.rv-transcript__item',
+    );
+    const lastRenderedItem = renderedItems.item(renderedItems.length - 1);
+    const measuredRenderedContentSize =
+      lastRenderedItem === null
+        ? contentBounds.height
+        : Math.max(
+            0,
+            lastRenderedItem.getBoundingClientRect().bottom - contentBounds.top,
+          );
     return {
-      dataLength: this.renderMessages().length,
+      dataLength: this.renderRows().length,
       renderedRange: viewport.getRenderedRange(),
       viewportSize: host.clientHeight,
       scrollOffset: viewport.measureScrollOffset('top'),
       scrollSize: host.scrollHeight,
-      totalContentSize: spacer.getBoundingClientRect().height,
+      // A grouped streaming row can temporarily extend beyond CDK's spacer.
+      // Browser scrollHeight already resolves both competing extents and is
+      // therefore the authoritative total the user can actually scroll.
+      totalContentSize: host.scrollHeight,
       renderedContentOffset:
         viewport.measureScrollOffset('top') +
         contentBounds.top -
         hostBounds.top,
-      renderedContentSize: contentBounds.height,
+      // The CDK wrapper and virtual row can retain trailing strategy space.
+      // The final semantic message is the authoritative visible content end
+      // for tail geometry and blank-space detection.
+      renderedContentSize: measuredRenderedContentSize,
     };
   }
 
   private materializeTailRange(): void {
-    const length = this.renderMessages().length;
+    const length = this.renderRows().length;
     if (length === 0) return;
     // Reattaching resets the retained average and uses autosize's own range,
     // offset, and total-size update path to materialize the tail coherently.
@@ -1178,6 +1270,85 @@ export class TranscriptViewportComponent {
     // remeasured and repositioned items after the data change.
     vp.scrollToOffset(scrollOffsetFromTop);
   }
+}
+
+/**
+ * Build the stable data rows owned by the virtualizer.
+ *
+ * External app-server turns deliberately project into multiple semantic
+ * ChatMessages so reasoning, commands, tool activity, and final text keep
+ * their own presentation. While such a turn is streaming, those messages are
+ * one variable-height virtual row: appending another semantic item then grows
+ * the existing row instead of changing CDK autosize's data length.
+ */
+export function projectTranscriptVirtualRows(
+  messages: readonly ChatMessage[],
+  groupedExternalTurnIds: ReadonlySet<string>,
+): readonly TranscriptVirtualRow[] {
+  const rows: Array<
+    TranscriptVirtualRow & { readonly externalTurnId?: string }
+  > = [];
+  const segmentByTurn = new Map<string, number>();
+
+  for (const message of messages) {
+    const externalTurnId = externalTurnGroupingId(message);
+    const previous = rows.at(-1);
+    if (
+      externalTurnId !== undefined &&
+      groupedExternalTurnIds.has(externalTurnId) &&
+      previous?.externalTurnId === externalTurnId
+    ) {
+      rows[rows.length - 1] = {
+        ...previous,
+        messages: [...previous.messages, message],
+      };
+      continue;
+    }
+
+    if (
+      externalTurnId !== undefined &&
+      groupedExternalTurnIds.has(externalTurnId)
+    ) {
+      const segment = segmentByTurn.get(externalTurnId) ?? 0;
+      segmentByTurn.set(externalTurnId, segment + 1);
+      rows.push({
+        id: `external-turn:${externalTurnId}:${segment}`,
+        messages: [message],
+        externalTurnId,
+      });
+      continue;
+    }
+
+    rows.push({ id: `message:${message.id}`, messages: [message] });
+  }
+
+  return rows;
+}
+
+function rememberStreamingExternalTurns(
+  messages: readonly ChatMessage[],
+  groupedExternalTurnIds: Set<string>,
+): void {
+  for (const message of messages) {
+    if (message.status !== 'streaming') continue;
+    const externalTurnId = externalTurnGroupingId(message);
+    if (externalTurnId !== undefined) {
+      groupedExternalTurnIds.add(externalTurnId);
+    }
+  }
+}
+
+function externalTurnGroupingId(message: ChatMessage): string | undefined {
+  if (message.author.role === 'user') return undefined;
+  const nativeThreadId = message.metadata?.['nativeThreadId'];
+  const nativeTurnId = message.metadata?.['nativeTurnId'];
+  if (typeof nativeThreadId !== 'string' || nativeThreadId.length === 0) {
+    return undefined;
+  }
+  if (typeof nativeTurnId !== 'string' || nativeTurnId.length === 0) {
+    return undefined;
+  }
+  return `${nativeThreadId}:${nativeTurnId}`;
 }
 
 /** Whether CDK has had enough quiet time to reconcile its autosize estimate. */

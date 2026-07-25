@@ -7,14 +7,14 @@ import {
 } from './transcript-geometry';
 
 describe('transcript geometry', () => {
-  it('repairs the captured stale-wrapper geometry without changing CDK total size', () => {
+  it('detects the captured stale geometry as an uncovered viewport using the browser extent', () => {
     const captured: TranscriptGeometryMeasurement = {
       dataLength: 121,
       renderedRange: { start: 101, end: 121 },
       viewportSize: 1_311,
       scrollOffset: 21_365.1,
       scrollSize: 36_281,
-      totalContentSize: 20_248.8,
+      totalContentSize: 36_281,
       renderedContentOffset: 31_705,
       renderedContentSize: 4_575.6,
     };
@@ -23,10 +23,12 @@ describe('transcript geometry', () => {
 
     expect(result.tailRangeMaterialized).toBe(true);
     expect(result.coherent).toBe(false);
-    expect(result.tailEndCoherent).toBe(false);
+    expect(result.tailEndCoherent).toBe(true);
+    expect(result.tailViewportCovered).toBe(false);
     expect(result.renderedContentEnd).toBeCloseTo(36_280.6);
-    expect(result.tailEndMismatch).toBeCloseTo(16_031.8);
-    expect(result.correctedRenderedContentOffset).toBeCloseTo(15_673.2);
+    expect(result.tailEndMismatch).toBeCloseTo(-0.4);
+    expect(result.tailViewportCoverageGap).toBeCloseTo(10_339.9);
+    expect(result.correctedRenderedContentOffset).toBeCloseTo(31_705.4);
   });
 
   it('leaves a coherent materialized tail unchanged', () => {

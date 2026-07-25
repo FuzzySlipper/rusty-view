@@ -23,7 +23,7 @@ export interface TranscriptGeometryMeasurement {
   readonly viewportSize: number;
   readonly scrollOffset: number;
   readonly scrollSize: number;
-  /** Authoritative total reported by CDK's spacer element. */
+  /** Authoritative browser scroll extent (the greater of CDK's spacer and rendered content). */
   readonly totalContentSize: number;
   /** Measured start of the rendered-content wrapper in scroll coordinates. */
   readonly renderedContentOffset: number;

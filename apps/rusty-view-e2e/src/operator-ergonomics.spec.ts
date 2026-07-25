@@ -224,7 +224,7 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
     .toBe(true);
 });
 
-test('rapid streamed tail growth does not apply reverse scroll corrections', async ({
+test('rapid streamed tail growth stays visually pinned without blank frames', async ({
   page,
 }) => {
   const fixture = await installExternalSessionFixture(page);
@@ -250,12 +250,59 @@ test('rapid streamed tail growth does not apply reverse scroll corrections', asy
     .toBeLessThanOrEqual(80);
 
   fixture.startGrowingTail();
-  await transcript.evaluate((element) => {
-    const samples: number[] = [];
-    (window as typeof window & { __rvTailScrollSamples?: number[] })[
-      '__rvTailScrollSamples'
-    ] = samples;
-    element.addEventListener('scroll', () => samples.push(element.scrollTop));
+  await page.getByTestId('external-agent-refresh').click();
+  await expect(transcript).toContainText('Streaming growth begins.');
+  await transcript.evaluate((viewport) => {
+    type TailGeometrySample = {
+      tailGap: number;
+      bottomOffset: number;
+      renderedEndMismatch: number;
+      lastMessageId: string | undefined;
+    };
+    const state = window as typeof window & {
+      __rvTailGeometrySamples?: TailGeometrySample[];
+      __rvTailGeometryCapture?: boolean;
+    };
+    state.__rvTailGeometrySamples = [];
+    state.__rvTailGeometryCapture = true;
+
+    const sampleAfterFrame = (): void => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!state.__rvTailGeometryCapture) return;
+          const wrapper = viewport.querySelector<HTMLElement>(
+            '.cdk-virtual-scroll-content-wrapper',
+          );
+          const spacer = viewport.querySelector<HTMLElement>(
+            '.cdk-virtual-scroll-spacer',
+          );
+          const items = viewport.querySelectorAll<HTMLElement>(
+            '.rv-transcript__item',
+          );
+          const lastItem = items.item(items.length - 1);
+          if (wrapper !== null && spacer !== null && lastItem !== null) {
+            const viewportBounds = viewport.getBoundingClientRect();
+            const wrapperBounds = wrapper.getBoundingClientRect();
+            const lastBounds = lastItem.getBoundingClientRect();
+            const renderedContentSize = lastBounds.bottom - wrapperBounds.top;
+            const renderedOffset =
+              viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
+            state.__rvTailGeometrySamples?.push({
+              tailGap: viewportBounds.bottom - lastBounds.bottom,
+              bottomOffset:
+                viewport.scrollHeight -
+                viewport.scrollTop -
+                viewport.clientHeight,
+              renderedEndMismatch:
+                renderedOffset + renderedContentSize - viewport.scrollHeight,
+              lastMessageId: lastItem.dataset['messageId'],
+            });
+          }
+          sampleAfterFrame();
+        }, 0);
+      });
+    };
+    sampleAfterFrame();
   });
 
   for (let index = 0; index < 12; index += 1) {
@@ -263,27 +310,44 @@ test('rapid streamed tail growth does not apply reverse scroll corrections', asy
       `\nStreaming line ${index}: ${'variable-height content '.repeat(10)}`,
     );
     await page.getByTestId('external-agent-refresh').click();
-    await expect(page.getByTestId('transcript-shell')).toContainText(
-      `Streaming line ${index}`,
-    );
+    await expect(transcript).toContainText(`Streaming line ${index}`);
   }
 
   await transcript.evaluate(
     () => new Promise<void>((resolve) => setTimeout(resolve, 400)),
   );
-  const samples = await page.evaluate(
-    () =>
-      (window as typeof window & { __rvTailScrollSamples?: number[] })
-        .__rvTailScrollSamples ?? [],
-  );
+  const samples = await page.evaluate(() => {
+    const state = window as typeof window & {
+      __rvTailGeometrySamples?: Array<{
+        tailGap: number;
+        bottomOffset: number;
+        renderedEndMismatch: number;
+        lastMessageId: string | undefined;
+      }>;
+      __rvTailGeometryCapture?: boolean;
+    };
+    state.__rvTailGeometryCapture = false;
+    return state.__rvTailGeometrySamples ?? [];
+  });
   expect(samples.length).toBeGreaterThan(0);
-  const largestReverseCorrection = samples.reduce((largest, value, index) => {
-    const previous = samples[index - 1];
-    return previous === undefined
-      ? largest
-      : Math.max(largest, previous - value);
-  }, 0);
-  expect(largestReverseCorrection).toBeLessThanOrEqual(2);
+  expect(
+    samples.every(
+      (sample) =>
+        sample.tailGap <= 2 &&
+        sample.bottomOffset <= 80 &&
+        Math.abs(sample.renderedEndMismatch) <= 2 &&
+        sample.lastMessageId === 'external-event:streaming-growth-tail',
+    ),
+    JSON.stringify(
+      samples.filter(
+        (sample) =>
+          sample.tailGap > 2 ||
+          sample.bottomOffset > 80 ||
+          Math.abs(sample.renderedEndMismatch) > 2 ||
+          sample.lastMessageId !== 'external-event:streaming-growth-tail',
+      ),
+    ),
+  ).toBe(true);
   await expect
     .poll(() =>
       transcript.evaluate(
@@ -292,6 +356,100 @@ test('rapid streamed tail growth does not apply reverse scroll corrections', asy
       ),
     )
     .toBeLessThanOrEqual(80);
+});
+
+test('multi-item Codex turns keep one coherent virtual tail while streaming', async ({
+  page,
+}) => {
+  const fixture = await installExternalSessionFixture(page);
+  await page.goto('/?api=http://crew.test');
+  await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await page.getByLabel('Reduced Motion').check();
+  await page.getByTestId('appearance-auto-expand-reasoning').check();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.transition = 'opacity 5s';
+        probe.style.animation = 'pulse 5s infinite';
+        document.body.append(probe);
+        const style = getComputedStyle(probe);
+        const result = {
+          transitionDuration: style.transitionDuration,
+          animationDuration: style.animationDuration,
+        };
+        probe.remove();
+        return result;
+      }),
+    )
+    .toEqual({ transitionDuration: '0s', animationDuration: '0s' });
+  await page.locator('.rv-options__close').click();
+  await page.getByTestId('external-agents-tab').click();
+  await page.locator('[data-thread-id="thread-1"]').click();
+
+  const transcript = page.getByTestId('transcript-viewport');
+  await page
+    .getByTestId('transcript-scroll-to-bottom')
+    .evaluateAll((buttons: HTMLButtonElement[]) => buttons.at(0)?.click());
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(80);
+
+  const geometry: Array<{
+    tailGap: number;
+    bottomOffset: number;
+    renderedEndMismatch: number;
+    viewportCoverageGap: number;
+  }> = [];
+  for (let step = 0; step < 6; step += 1) {
+    const marker = fixture.appendMultiItemTurnStep(step);
+    await page.getByTestId('external-agent-refresh').click();
+    await expect(page.getByTestId('transcript-shell')).toContainText(marker);
+    geometry.push(await transcriptGeometryAfter(transcript, 100));
+
+    const turnRows = transcript.locator(
+      '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
+    );
+    await expect(turnRows).toHaveCount(1);
+    await expect(
+      turnRows.locator('[data-testid="transcript-item"]'),
+    ).toHaveCount(step + 1);
+  }
+
+  fixture.completeMultiItemTurn();
+  await page.getByTestId('external-agent-refresh').click();
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) =>
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThanOrEqual(80);
+  geometry.push(await transcriptGeometryAfter(transcript, 300));
+
+  expect(
+    geometry.every(
+      (sample) =>
+        sample.tailGap <= 2 &&
+        sample.bottomOffset <= 80 &&
+        Math.abs(sample.renderedEndMismatch) <= 2 &&
+        sample.viewportCoverageGap <= 2,
+    ),
+  ).toBe(true);
+  await expect(
+    transcript.locator(
+      '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
+    ),
+  ).toHaveCount(1);
+  await expect(page.getByTestId('transcript-shell')).toContainText(
+    'Multi-item final answer.',
+  );
 });
 
 test('an upward gesture near the tail keeps user scroll control during Codex updates', async ({
@@ -456,6 +614,8 @@ test('auto-expand reasoning is live, manually collapsible, and persisted', async
 interface ExternalSessionFixtureController {
   startGrowingTail(): void;
   growTail(text: string): void;
+  appendMultiItemTurnStep(step: number): string;
+  completeMultiItemTurn(): void;
 }
 
 async function installExternalSessionFixture(
@@ -661,6 +821,89 @@ async function installExternalSessionFixture(
       },
     });
   };
+  const multiItemTurnSteps = [
+    {
+      itemId: 'multi-reasoning-a',
+      kind: 'reasoning_delta',
+      marker: 'Multi-item reasoning begins.',
+      payload: {
+        nativeMethod: 'item/reasoning/delta',
+        text: `Multi-item reasoning begins.\n${'Expanded analysis line. '.repeat(
+          80,
+        )}`,
+      },
+    },
+    {
+      itemId: 'multi-command',
+      kind: 'command_activity',
+      marker: 'MULTI_ITEM_COMMAND_OUTPUT',
+      payload: {
+        nativeMethod: 'item/commandExecution/completed',
+        command: 'pnpm test',
+        output: `MULTI_ITEM_COMMAND_OUTPUT\n${'command output '.repeat(80)}`,
+        status: 'completed',
+      },
+    },
+    {
+      itemId: 'multi-commentary',
+      kind: 'assistant_text_delta',
+      marker: 'Multi-item commentary update.',
+      payload: {
+        nativeMethod: 'item/agentMessage/delta',
+        text: 'Multi-item commentary update.',
+        messagePhase: 'commentary',
+      },
+    },
+    {
+      itemId: 'multi-reasoning-b',
+      kind: 'reasoning_delta',
+      marker: 'Second reasoning item.',
+      payload: {
+        nativeMethod: 'item/reasoning/delta',
+        text: `Second reasoning item.\n${'More expanded analysis. '.repeat(60)}`,
+      },
+    },
+    {
+      itemId: 'multi-tool',
+      kind: 'mcp_activity',
+      marker: 'MULTI_ITEM_TOOL_RESULT',
+      payload: {
+        nativeMethod: 'item/mcpToolCall/completed',
+        tool: 'den/get_task',
+        text: 'MULTI_ITEM_TOOL_RESULT',
+        status: 'completed',
+      },
+    },
+    {
+      itemId: 'multi-final',
+      kind: 'assistant_text_delta',
+      marker: 'Multi-item final answer.',
+      payload: {
+        nativeMethod: 'item/agentMessage/delta',
+        text: 'Multi-item final answer.',
+        messagePhase: 'final_answer',
+      },
+    },
+  ] as const;
+  const appendEvent = (
+    kind: string,
+    itemId: string | undefined,
+    payload: Record<string, unknown>,
+  ): void => {
+    const eventId = String(growingSequence++);
+    growingTailEvents.push({
+      eventId,
+      runtimeId: 'runtime-1',
+      sequenceId: Number(eventId),
+      createdAt: '2026-07-12T00:00:00Z',
+      kind,
+      sessionId: 'session-1',
+      nativeThreadId: 'thread-1',
+      nativeTurnId: 'multi-item-turn',
+      ...(itemId === undefined ? {} : { itemId }),
+      payload,
+    });
+  };
   return {
     startGrowingTail(): void {
       growingTailStarted = true;
@@ -671,6 +914,20 @@ async function installExternalSessionFixture(
         throw new Error('startGrowingTail must be called before growTail');
       }
       appendGrowingTailEvent(text);
+    },
+    appendMultiItemTurnStep(step: number): string {
+      const entry = multiItemTurnSteps[step];
+      if (entry === undefined) {
+        throw new Error(`Unknown multi-item turn step ${step}`);
+      }
+      appendEvent(entry.kind, entry.itemId, entry.payload);
+      return entry.marker;
+    },
+    completeMultiItemTurn(): void {
+      appendEvent('turn_lifecycle', undefined, {
+        nativeMethod: 'turn/completed',
+        status: 'completed',
+      });
     },
   };
 }
@@ -735,6 +992,7 @@ async function transcriptGeometryAfter(
           const viewportBounds = viewport.getBoundingClientRect();
           const wrapperBounds = wrapper.getBoundingClientRect();
           const lastBounds = lastItem.getBoundingClientRect();
+          const renderedContentSize = lastBounds.bottom - wrapperBounds.top;
           const renderedOffset =
             viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
           resolve({
@@ -744,9 +1002,7 @@ async function transcriptGeometryAfter(
               viewport.scrollTop -
               viewport.clientHeight,
             renderedEndMismatch:
-              renderedOffset +
-              wrapperBounds.height -
-              spacer.getBoundingClientRect().height,
+              renderedOffset + renderedContentSize - viewport.scrollHeight,
             viewportCoverageGap: Math.max(
               0,
               wrapperBounds.top - viewportBounds.top,

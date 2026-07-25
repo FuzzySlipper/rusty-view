@@ -85,9 +85,10 @@ test('renders commentary, activity, and one final answer identically after reloa
   await expect
     .poll(() =>
       page.getByTestId('transcript-viewport').evaluate((viewport) => {
-        const lastItem = viewport.querySelector<HTMLElement>(
-          '.rv-transcript__item:last-child',
+        const items = viewport.querySelectorAll<HTMLElement>(
+          '.rv-transcript__item',
         );
+        const lastItem = items.item(items.length - 1);
         if (lastItem === null) return Number.POSITIVE_INFINITY;
         return (
           viewport.getBoundingClientRect().bottom -

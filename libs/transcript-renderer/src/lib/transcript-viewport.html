@@ -145,24 +145,32 @@
   (pointerdown)="onPointerDown($event)"
 >
   <div
-    *cdkVirtualFor="let message of renderMessages(); trackBy: trackByMessageId"
-    class="rv-transcript__item"
-    data-testid="transcript-item"
-    [attr.data-message-id]="message.id"
+    *cdkVirtualFor="let row of renderRows(); trackBy: trackByVirtualRowId"
+    class="rv-transcript__virtual-row"
+    data-testid="transcript-virtual-row"
+    [attr.data-virtual-row-id]="row.id"
   >
-    <rv-message-item
-      [message]="message"
-      [searchQuery]="searchQuery()"
-      [matchedBlockIds]="matchedBlocksFor(message.id)"
-      [searchMatched]="matchedMessageIds().has(message.id)"
-      [searchActive]="activeSearchMessageId() === message.id"
-      [alternateSlot]="alternateSlotFor(message.id)"
-      [revisionCapabilities]="revisionCapabilities()"
-      [showRevisionActions]="showRevisionActions()"
-      [autoExpandReasoning]="autoExpandReasoning()"
-      [activityVisibility]="activityVisibility()"
-      (revisionAction)="onRevisionAction($event)"
-    />
+    @for (message of row.messages; track message.id) {
+    <div
+      class="rv-transcript__item"
+      data-testid="transcript-item"
+      [attr.data-message-id]="message.id"
+    >
+      <rv-message-item
+        [message]="message"
+        [searchQuery]="searchQuery()"
+        [matchedBlockIds]="matchedBlocksFor(message.id)"
+        [searchMatched]="matchedMessageIds().has(message.id)"
+        [searchActive]="activeSearchMessageId() === message.id"
+        [alternateSlot]="alternateSlotFor(message.id)"
+        [revisionCapabilities]="revisionCapabilities()"
+        [showRevisionActions]="showRevisionActions()"
+        [autoExpandReasoning]="autoExpandReasoning()"
+        [activityVisibility]="activityVisibility()"
+        (revisionAction)="onRevisionAction($event)"
+      />
+    </div>
+    }
   </div>
 </cdk-virtual-scroll-viewport>
 @if (transcriptTransitioning()) {

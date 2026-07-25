@@ -47,6 +47,11 @@
   contain: strict;
 }
 
+.rv-transcript__virtual-row {
+  contain: content;
+  width: 100%;
+}
+
 .rv-transcript__item {
   contain: content;
   width: min(100%, var(--rv-chat-width));
