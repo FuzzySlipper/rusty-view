@@ -47,7 +47,7 @@
   border: none;
   padding: var(--rv-space-xs) var(--rv-space-sm);
   border-bottom: 1px solid var(--rv-color-border);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   cursor: pointer;
 }

@@ -43,7 +43,7 @@
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   text-decoration: none;
 }
@@ -74,7 +74,7 @@
 }
 
 .rv-attachment__detail {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   color: var(--rv-color-text-muted);
 }
 
@@ -87,7 +87,7 @@
   border-radius: var(--rv-radius);
   background: var(--rv-color-bg);
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   line-height: var(--rv-line-height-normal);
   white-space: pre-wrap;
@@ -96,6 +96,6 @@
 
 .rv-attachment__truncated {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }

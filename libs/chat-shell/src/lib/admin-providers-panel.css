@@ -79,7 +79,7 @@
 .rv-admin-providers__result,
 .rv-admin-providers__oauth,
 .rv-admin-providers__probe {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
@@ -101,7 +101,7 @@
   padding: var(--rv-space-xs) var(--rv-space-sm);
   border-left: 3px solid var(--rv-color-warning);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -113,7 +113,7 @@
   padding: var(--rv-space-sm) var(--rv-space-md);
   border-bottom: 1px solid var(--rv-color-border);
   color: var(--rv-color-danger);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -148,7 +148,7 @@
   display: grid;
   gap: var(--rv-space-xs);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -249,7 +249,7 @@
 }
 
 .rv-admin-providers__provider-header {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   color: var(--rv-color-text-primary);
 }

@@ -136,7 +136,7 @@
   padding: 0 !important;
   background: transparent !important;
   color: var(--rv-color-accent) !important;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-weight: 700;
   text-align: left;
 }
@@ -146,7 +146,7 @@
 }
 
 .rv-switchboard code {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   overflow-wrap: anywhere;
 }
 

@@ -40,7 +40,7 @@
 .rv-debug-panel__row small,
 .rv-debug-panel__params small {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   font-weight: var(--rv-font-weight-regular);
 }
@@ -128,7 +128,7 @@
 
 .rv-debug-panel__row strong {
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   overflow-wrap: anywhere;
 }
 
@@ -145,7 +145,7 @@
   display: grid;
   grid-template-columns: minmax(90px, max-content) minmax(0, 1fr);
   gap: var(--rv-space-xs) var(--rv-space-sm);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
@@ -164,7 +164,7 @@
   border: 1px solid var(--rv-color-danger);
   border-radius: var(--rv-radius);
   color: var(--rv-color-danger);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -176,7 +176,7 @@
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface);
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   padding: var(--rv-space-xs);
 }
@@ -218,7 +218,7 @@
 .rv-debug-panel__table {
   width: 100%;
   border-collapse: collapse;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 

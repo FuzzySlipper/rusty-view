@@ -76,6 +76,7 @@ const COLOR_FIELD_TOKENS: Readonly<Record<keyof AppearanceColors, string>> = {
 const MANAGED_TOKENS: readonly string[] = [
   TYPOGRAPHY_TOKENS.fontFamilyUi,
   TYPOGRAPHY_TOKENS.fontFamilySans,
+  TYPOGRAPHY_TOKENS.fontFamilyTechnical,
   TYPOGRAPHY_TOKENS.fontSizeXs,
   TYPOGRAPHY_TOKENS.fontSizeSm,
   TYPOGRAPHY_TOKENS.fontSizeMd,
@@ -251,6 +252,11 @@ export class ChatTheme {
     return {
       themeId: normalizeThemeId(settings.themeId),
       fontFamily: normalizeFontFamily(settings.fontFamily),
+      // Stored settings from before task #6203 do not contain the technical
+      // role. Preserve their established monospace rendering on migration.
+      technicalFontFamily: normalizeFontFamily(
+        settings.technicalFontFamily ?? DEFAULT_APPEARANCE.technicalFontFamily,
+      ),
       fontScale: clampFontScale(settings.fontScale ?? 1),
       density,
       messageSpacing: normalizeMessageSpacing(settings.messageSpacing),
@@ -323,11 +329,16 @@ export class ChatTheme {
       root.style.removeProperty(token);
     }
 
-    // Font family: app UI and prose follow the selected readable stack. The
-    // mono token remains stable for code, JSON, event ids, and similar detail.
+    // The two deliberate typography roles are independently configurable.
+    // `--rv-font-mono` remains the base monospace stack used by the "Mono"
+    // choice; user-facing technical surfaces consume `--rv-font-technical`.
     const fontStack = FONT_FAMILY_STACKS[settings.fontFamily];
     root.style.setProperty(TYPOGRAPHY_TOKENS.fontFamilyUi, fontStack);
     root.style.setProperty(TYPOGRAPHY_TOKENS.fontFamilySans, fontStack);
+    root.style.setProperty(
+      TYPOGRAPHY_TOKENS.fontFamilyTechnical,
+      FONT_FAMILY_STACKS[settings.technicalFontFamily],
+    );
 
     // Font scale: recompute the size tokens from the base anchors.
     const scale = settings.fontScale;

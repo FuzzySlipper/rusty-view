@@ -73,7 +73,7 @@
 
 .rv-appearance__range-row strong {
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-weight: var(--rv-font-weight-bold);
   text-align: right;
 }
@@ -83,6 +83,13 @@
 .rv-appearance__range-row > span {
   min-width: 0;
   color: var(--rv-color-text-muted);
+}
+
+.rv-appearance__font-hint {
+  margin-top: calc(-1 * var(--rv-space-xs));
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-xs);
+  line-height: var(--rv-line-height-normal);
 }
 
 .rv-appearance__select {
@@ -229,7 +236,7 @@
   border-radius: var(--rv-radius);
   background: var(--rv-color-bg);
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   padding: var(--rv-space-xs) var(--rv-space-sm);
   resize: vertical;

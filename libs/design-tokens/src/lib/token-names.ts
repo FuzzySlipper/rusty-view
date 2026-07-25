@@ -58,6 +58,7 @@ export const SPACING_TOKENS = {
 
 export const TYPOGRAPHY_TOKENS = {
   fontFamilyMono: '--rv-font-mono',
+  fontFamilyTechnical: '--rv-font-technical',
   fontFamilySans: '--rv-font-sans',
   fontFamilyUi: '--rv-font-ui',
   fontSizeXs: '--rv-font-size-xs',

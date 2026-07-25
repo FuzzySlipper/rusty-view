@@ -15,18 +15,40 @@
         </select>
       </label>
 
-      <div class="rv-appearance__label">Font family</div>
+      <div class="rv-appearance__label">Interface &amp; prose font</div>
       <div class="rv-appearance__segmented rv-appearance__segmented--wrap">
         @for (option of fontFamilies; track option.id) {
         <button
           type="button"
           class="rv-appearance__seg"
+          [attr.data-testid]="'appearance-interface-font-' + option.id"
           [class.rv-appearance__seg--active]="theme.settings().fontFamily === option.id"
           (click)="setFontFamily(option.id)"
         >
           {{ option.label }}
         </button>
         }
+      </div>
+      <div class="rv-appearance__font-hint">
+        Chat messages, navigation titles, labels, buttons, and general UI.
+      </div>
+
+      <div class="rv-appearance__label">Technical font</div>
+      <div class="rv-appearance__segmented rv-appearance__segmented--wrap">
+        @for (option of fontFamilies; track option.id) {
+        <button
+          type="button"
+          class="rv-appearance__seg"
+          [attr.data-testid]="'appearance-technical-font-' + option.id"
+          [class.rv-appearance__seg--active]="theme.settings().technicalFontFamily === option.id"
+          (click)="setTechnicalFontFamily(option.id)"
+        >
+          {{ option.label }}
+        </button>
+        }
+      </div>
+      <div class="rv-appearance__font-hint">
+        Reasoning, code, IDs, diagnostics, and profile/agent metadata.
       </div>
 
       <label class="rv-appearance__range-row">

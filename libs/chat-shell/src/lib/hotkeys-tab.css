@@ -49,7 +49,7 @@
   border: 1px solid var(--rv-color-border-strong);
   border-radius: var(--rv-radius);
   background: var(--rv-color-bg);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   text-align: center;
 }
 

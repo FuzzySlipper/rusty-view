@@ -12,7 +12,7 @@
 
 .rv-profiles__header {
   padding: var(--rv-space-sm) var(--rv-space-md);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   font-weight: var(--rv-font-weight-bold);
   text-transform: uppercase;
@@ -31,7 +31,7 @@
 .rv-profiles__empty {
   padding: var(--rv-space-md);
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
 }
 
@@ -58,14 +58,14 @@
 }
 
 .rv-profile__name {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   font-weight: var(--rv-font-weight-bold);
   color: var(--rv-color-text-primary);
 }
 
 .rv-profile__meta {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
@@ -88,7 +88,7 @@
 }
 
 .rv-profile__live {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-accent);
 }
@@ -98,7 +98,7 @@
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   padding: 1px var(--rv-space-xs);
 }
@@ -108,7 +108,7 @@
   border: 1px solid var(--rv-color-warning);
   border-radius: var(--rv-radius);
   color: var(--rv-color-warning);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   padding: 1px var(--rv-space-xs);
   text-transform: uppercase;
@@ -120,7 +120,7 @@
   border-top: 1px solid var(--rv-color-border);
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-accent);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   cursor: pointer;
 }

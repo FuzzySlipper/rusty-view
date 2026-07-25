@@ -105,10 +105,40 @@ test('top menu opens options, applies an appearance change, opens help', async (
 
   // Font family changes must reach the menu chrome too, not only transcript
   // prose. This keeps downstream shells from inheriting a hardcoded mono menu.
-  await page.locator('.rv-appearance__seg', { hasText: 'Serif' }).click();
+  await page.getByTestId('appearance-interface-font-serif').click();
   await expect
     .poll(topMenuFontFamily.bind(null, page), { timeout: 5_000 })
     .toContain('Georgia');
+
+  await page.getByTestId('appearance-technical-font-arial').click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement)
+            .getPropertyValue('--rv-font-technical')
+            .trim(),
+        ),
+      { timeout: 5_000 },
+    )
+    .toContain('Arial');
+
+  // Appearance settings live in IndexedDB and must survive an app reload.
+  await page.locator('.rv-options__close').click();
+  await page.reload();
+  await expect(page.locator('.rv-debug__header')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect
+    .poll(topMenuFontFamily.bind(null, page), { timeout: 5_000 })
+    .toContain('Georgia');
+  await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await expect(page.getByTestId('appearance-interface-font-serif')).toHaveClass(
+    /rv-appearance__seg--active/,
+  );
+  await expect(page.getByTestId('appearance-technical-font-arial')).toHaveClass(
+    /rv-appearance__seg--active/,
+  );
 
   // 4. Close Options, open Help.
   await page.locator('.rv-options__close').click();

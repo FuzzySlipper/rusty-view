@@ -399,6 +399,18 @@ describe('MessageBlockComponent', () => {
     expect(host.textContent).toContain(
       'Weighing the options before answering.',
     );
+
+    const styles = Array.from(host.ownerDocument.styleSheets)
+      .flatMap((styleSheet) => {
+        try {
+          return Array.from(styleSheet.cssRules).map((rule) => rule.cssText);
+        } catch {
+          return [];
+        }
+      })
+      .join('\n');
+    expect(styles).toContain('rv-block--reasoning');
+    expect(styles).toContain('var(--rv-font-technical)');
   });
 
   it('truncates long collapsible content and expands on click', async () => {

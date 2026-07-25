@@ -80,6 +80,40 @@ describe('OptionsPanelComponent', () => {
     expect(theme.settings().autoExpandReasoning).toBe(true);
   });
 
+  it('configures interface and technical font roles independently', async () => {
+    const fixture = await createOptions();
+    const host: HTMLElement = fixture.nativeElement;
+    const theme = TestBed.inject(ChatTheme);
+
+    expect(host.textContent).toContain('Interface & prose font');
+    expect(host.textContent).toContain('Technical font');
+    expect(host.textContent).toContain(
+      'Reasoning, code, IDs, diagnostics, and profile/agent metadata.',
+    );
+
+    host
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="appearance-interface-font-serif"]',
+      )
+      ?.click();
+    host
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="appearance-technical-font-arial"]',
+      )
+      ?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(theme.settings().fontFamily).toBe('serif');
+    expect(theme.settings().technicalFontFamily).toBe('arial');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-ui'),
+    ).toContain('Georgia');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-technical'),
+    ).toContain('Arial');
+  });
+
   it('updates and resets the persisted composer height preference', async () => {
     const fixture = await createOptions();
     const host: HTMLElement = fixture.nativeElement;

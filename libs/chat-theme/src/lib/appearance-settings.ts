@@ -13,9 +13,8 @@
  */
 
 /**
- * Which typeface the app and chat prose render in. Applied by overriding the
- * `--rv-font-sans` and `--rv-font-ui` tokens while keeping `--rv-font-mono`
- * available for semantic code, event, and JSON detail surfaces.
+ * A selectable typeface stack. Appearance settings use this shared choice set
+ * for the interface/prose role and the technical role independently.
  */
 export type AppearanceFontFamily =
   | 'system'
@@ -176,7 +175,13 @@ export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
 export interface AppearanceSettings {
   /** Selected named base theme (task #3691). Defaults to `auto`. */
   readonly themeId: AppearanceThemeId;
+  /** Chat prose, navigation titles, labels, buttons, and general UI chrome. */
   readonly fontFamily: AppearanceFontFamily;
+  /**
+   * Reasoning, code/preformatted content, IDs, diagnostics, and technical
+   * profile/agent metadata. Defaults to the established monospace stack.
+   */
+  readonly technicalFontFamily: AppearanceFontFamily;
   /**
    * Multiplier applied to the base font-size tokens. `1` is the token default;
    * `0.85` is tighter, `1.25` is larger. Clamped to
@@ -270,6 +275,7 @@ export const MESSAGE_SPACING_Y: Readonly<
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   themeId: 'auto',
   fontFamily: 'system',
+  technicalFontFamily: 'mono',
   fontScale: 1,
   density: 'normal',
   messageSpacing: 'normal',

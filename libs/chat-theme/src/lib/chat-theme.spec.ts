@@ -203,6 +203,53 @@ describe('ChatTheme', () => {
     expect(theme.settings().fontFamily).toBe('readable');
   });
 
+  it('configures the technical font independently from interface and prose', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({
+      fontFamily: 'serif',
+      technicalFontFamily: 'arial',
+    });
+    TestBed.flushEffects?.();
+
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-ui'),
+    ).toContain('Georgia');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-technical'),
+    ).toContain('Arial');
+    expect(theme.settings().technicalFontFamily).toBe('arial');
+    expect((await storage.load())?.technicalFontFamily).toBe('arial');
+  });
+
+  it('migrates legacy settings to the default technical font role', async () => {
+    TestBed.resetTestingModule();
+    storage = new InMemoryChatSettingsStorage();
+    const legacySettings = Object.fromEntries(
+      Object.entries({
+        ...DEFAULT_APPEARANCE,
+        fontFamily: 'serif' as const,
+      }).filter(([key]) => key !== 'technicalFontFamily'),
+    ) as unknown as AppearanceSettings;
+    await storage.save(legacySettings);
+    TestBed.configureTestingModule({
+      providers: [
+        ChatTheme,
+        { provide: CHAT_SETTINGS_STORAGE, useValue: storage },
+      ],
+    });
+    document.documentElement.style.cssText = '';
+
+    const theme = TestBed.inject(ChatTheme);
+    await fixtureStabilize();
+    TestBed.flushEffects?.();
+
+    expect(theme.settings().fontFamily).toBe('serif');
+    expect(theme.settings().technicalFontFamily).toBe('mono');
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-font-technical'),
+    ).toContain('--rv-font-mono');
+  });
+
   it('flattens prose and UI chrome to mono when fontFamily is mono', async () => {
     const theme = TestBed.inject(ChatTheme);
     await theme.update({ fontFamily: 'mono' });

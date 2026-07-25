@@ -62,6 +62,6 @@
 .rv-revision__count {
   min-width: 2.75rem;
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   text-align: center;
 }

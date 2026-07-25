@@ -119,7 +119,7 @@ const COMPONENT_CSS = `:host {
   border: 1px dashed var(--rv-color-border);
   border-radius: var(--rv-radius);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
 }
 `;

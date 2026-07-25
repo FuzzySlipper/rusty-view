@@ -72,7 +72,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
 }
 
 .rv-context__section {
@@ -106,7 +106,7 @@
 
 .rv-context__row-value {
   margin: 0;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   overflow-wrap: anywhere;
 }
 
@@ -134,7 +134,7 @@
 }
 
 .rv-context__diagnostic-code {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-weight: var(--rv-font-weight-bold);
 }
 
@@ -152,7 +152,7 @@
   align-items: baseline;
   gap: var(--rv-space-xs);
   padding: 2px 0;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
 }
 
 .rv-context-timeline__kind {

@@ -87,7 +87,7 @@ export class AppearanceTabComponent {
   protected readonly colorFields = APPEARANCE_COLOR_FIELDS;
   /** Named base themes (task #3691). */
   protected readonly themes = APPEARANCE_THEMES;
-  /** App/prose font stacks. */
+  /** Shared choices for the interface/prose and technical font roles. */
   protected readonly fontFamilies = APPEARANCE_FONT_FAMILIES;
   /** Message row spacing choices. */
   protected readonly messageSpacingOptions = APPEARANCE_MESSAGE_SPACING;
@@ -126,6 +126,10 @@ export class AppearanceTabComponent {
 
   protected setFontFamily(value: AppearanceFontFamily): void {
     void this.theme.update({ fontFamily: value });
+  }
+
+  protected setTechnicalFontFamily(value: AppearanceFontFamily): void {
+    void this.theme.update({ technicalFontFamily: value });
   }
 
   protected setDensity(value: AppearanceDensity): void {

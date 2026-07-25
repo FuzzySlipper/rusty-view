@@ -66,7 +66,7 @@
   place-items: center;
   background: var(--rv-color-surface);
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   pointer-events: none;
 }
@@ -92,7 +92,7 @@
 .rv-transcript-search__label,
 .rv-transcript-search__status {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   white-space: nowrap;
 }
@@ -106,7 +106,7 @@
   border-radius: 4px;
   background: var(--rv-color-bg);
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -134,7 +134,7 @@
   border-radius: 4px;
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   cursor: pointer;
 }
@@ -191,7 +191,7 @@
 .rv-transcript-nav__crumb + .rv-transcript-nav__crumb::before {
   content: '/';
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   margin-right: var(--rv-space-xs);
 }
@@ -211,7 +211,7 @@
   padding: 0 var(--rv-space-sm);
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   line-height: 1.75;
   text-overflow: ellipsis;

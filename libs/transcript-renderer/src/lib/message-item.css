@@ -101,7 +101,7 @@
 }
 
 .rv-message__author {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   font-weight: var(--rv-font-weight-bold);
   color: var(--rv-color-text-secondary);
@@ -110,7 +110,7 @@
 }
 
 .rv-message__status {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-stream);
 }
@@ -120,7 +120,7 @@
   border: 1px solid var(--rv-color-border-strong);
   border-radius: var(--rv-radius);
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   text-transform: uppercase;
 }
@@ -133,7 +133,7 @@
 .rv-message__timestamp,
 .rv-message__id {
   display: none;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
@@ -154,7 +154,7 @@
   border: 1px solid var(--rv-color-danger);
   border-radius: var(--rv-radius);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 

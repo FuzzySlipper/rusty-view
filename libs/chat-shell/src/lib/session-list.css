@@ -12,7 +12,7 @@
 
 .rv-sessions__header {
   padding: var(--rv-space-sm) var(--rv-space-md);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   font-weight: var(--rv-font-weight-bold);
   text-transform: uppercase;
@@ -62,7 +62,7 @@
 }
 
 .rv-session__meta {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
@@ -73,7 +73,7 @@
   border-top: 1px solid var(--rv-color-border);
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-accent);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   cursor: pointer;
 }

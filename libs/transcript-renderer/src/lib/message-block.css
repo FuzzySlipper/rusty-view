@@ -62,7 +62,7 @@ rv-message-block {
 .rv-block__scope[data-rv-text-scope='code'],
 .rv-block__search-mark[data-rv-text-scope='code'] {
   color: var(--rv-text-scope-code);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
 }
 
@@ -116,7 +116,7 @@ rv-message-block {
 
 /* Inline code: monospace, subtle surface chip. */
 .rv-block__markdown code {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   padding: 0 var(--rv-space-xs);
   border-radius: var(--rv-radius);
@@ -132,7 +132,7 @@ rv-message-block {
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface);
   overflow-x: auto;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   line-height: var(--rv-line-height-normal);
   color: var(--rv-color-text-primary);
@@ -153,7 +153,7 @@ rv-message-block {
   border-radius: var(--rv-radius) var(--rv-radius) 0 0;
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -163,7 +163,7 @@ rv-message-block {
   border-radius: 3px;
   background: var(--rv-color-surface);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   text-decoration: none;
   cursor: pointer;
@@ -315,7 +315,7 @@ rv-message-block {
 
 .rv-block--collapsible .rv-block__content {
   padding: var(--rv-space-sm) var(--rv-space-md);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   max-height: 300px;
   overflow-y: auto;
@@ -335,7 +335,7 @@ rv-message-block {
   border-bottom: 1px solid var(--rv-color-border);
   background: var(--rv-color-surface-raised);
   cursor: pointer;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-secondary);
 }
@@ -366,7 +366,7 @@ rv-message-block {
 .rv-block--tool .rv-block__content {
   padding: var(--rv-space-sm) var(--rv-space-md);
   border-top: 1px solid var(--rv-color-border);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   max-height: 300px;
   overflow-y: auto;
@@ -427,7 +427,7 @@ rv-message-block {
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-secondary);
   cursor: pointer;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -447,7 +447,7 @@ rv-message-block {
 
 .rv-block__debug-status {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -460,7 +460,7 @@ rv-message-block {
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--rv-space-xs) var(--rv-space-md);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -494,13 +494,13 @@ rv-message-block {
   border: 1px solid var(--rv-color-border);
   border-radius: 3px;
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
 .rv-block__debug-muted {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -514,7 +514,7 @@ rv-message-block {
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface);
   color: var(--rv-color-text-primary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   line-height: var(--rv-line-height-normal);
   white-space: pre-wrap;
@@ -544,7 +544,7 @@ rv-message-block {
 .rv-block--reasoning .rv-block__content {
   padding: var(--rv-space-sm) var(--rv-space-md);
   border-top: 1px solid var(--rv-color-border);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   font-style: italic;
   color: var(--rv-color-text-secondary);
@@ -566,7 +566,7 @@ rv-message-block {
 
 .rv-block__service-notice-heading {
   color: var(--rv-color-warning);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   font-weight: var(--rv-font-weight-bold);
   text-transform: uppercase;
@@ -600,7 +600,7 @@ rv-message-block {
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-secondary);
   cursor: pointer;

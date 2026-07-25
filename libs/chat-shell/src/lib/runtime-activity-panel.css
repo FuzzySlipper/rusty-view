@@ -60,7 +60,7 @@
 .rv-activity__freshness {
   margin-right: auto;
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
 }
 
 .rv-activity__freshness-badge,
@@ -98,7 +98,7 @@
 .rv-activity__policy {
   margin: 0;
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
 }
 
 .rv-activity__summary {
@@ -135,7 +135,7 @@
   padding: var(--rv-space-sm);
   border: 1px solid var(--rv-color-danger);
   color: var(--rv-color-danger);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
 }
 
 .rv-activity__error--stale {
@@ -147,7 +147,7 @@
   padding: var(--rv-space-sm);
   border: 1px dashed var(--rv-color-border);
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
 }
 
 .rv-activity__table-wrap {
@@ -160,7 +160,7 @@
   width: 100%;
   min-width: 1040px;
   border-collapse: collapse;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: 11px;
 }
 
@@ -206,7 +206,7 @@
 
 .rv-activity code {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   overflow-wrap: anywhere;
 }
 

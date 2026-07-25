@@ -108,7 +108,7 @@
 .rv-admin-service__memory-card-header code,
 .rv-admin-service__memory-values code {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   overflow-wrap: anywhere;
 }
@@ -145,7 +145,7 @@
   grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
   gap: var(--rv-space-xs) var(--rv-space-sm);
   margin: 0;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -179,7 +179,7 @@
   border: 1px solid var(--rv-color-danger);
   border-radius: var(--rv-radius);
   color: var(--rv-color-danger);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -253,7 +253,7 @@
   padding: var(--rv-space-sm) var(--rv-space-md);
   border-bottom: 1px solid var(--rv-color-border);
   color: var(--rv-color-danger);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 
@@ -268,7 +268,7 @@
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(120px, 1fr);
   gap: var(--rv-space-xs) var(--rv-space-md);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-muted);
 }
@@ -283,7 +283,7 @@
   flex-wrap: wrap;
   gap: var(--rv-space-sm);
   align-items: center;
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   color: var(--rv-color-text-secondary);
 }
@@ -316,7 +316,7 @@
 .rv-admin-service__result,
 .rv-admin-service__chips,
 .rv-admin-service__diagnostics {
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 

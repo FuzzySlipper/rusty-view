@@ -16,7 +16,7 @@
   justify-content: space-between;
   padding: var(--rv-space-sm) var(--rv-space-md);
   border-bottom: 1px solid var(--rv-color-border);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   font-weight: var(--rv-font-weight-bold);
   text-transform: uppercase;
@@ -69,7 +69,7 @@
 .rv-agents__counts {
   padding: var(--rv-space-xs) var(--rv-space-sm) 0;
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
 }
 .rv-agents__list {
@@ -140,7 +140,7 @@
   align-items: center;
   gap: var(--rv-space-xs);
   color: var(--rv-color-text-secondary);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   text-transform: uppercase;
 }
@@ -156,14 +156,14 @@
 .rv-agent__meta {
   overflow: hidden;
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rv-agent__cwd {
   color: var(--rv-color-text-muted);
-  font-family: var(--rv-font-mono);
+  font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
   overflow-wrap: anywhere;
   white-space: normal;
