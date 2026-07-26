@@ -61,6 +61,24 @@ function makeTransport(sessions: ChatSessionSummary[]): ChatTransport {
       limit: 100,
       offset: 0,
     }),
+    coordinationAgentDirectory: async () => ({
+      deploymentRole: 'production',
+      agents: sessions.map((session) => ({
+        agentId: session.agent_id,
+        displayLabel: session.profile_id,
+        profileId: session.profile_id,
+        routable: session.status !== 'archived',
+        runtimeKind: session.agent_id.startsWith('external-agent-')
+          ? ('codex_app_server' as const)
+          : ('direct_brain' as const),
+        sessionId: session.session_id,
+        sessionKind: session.kind,
+        sessionStatus: session.status,
+        workdir: session.agent_id.startsWith('external-agent-')
+          ? '/home/dev/codex-project'
+          : '/home/dev/direct-project',
+      })),
+    }),
     openSession: async (sessionId: string) => ({
       session:
         sessions.find((s) => s.session_id === sessionId) ??
@@ -175,6 +193,47 @@ describe('ProfilePanelComponent', () => {
       '.rv-profile',
     );
     expect(rows.length).toBe(2);
+  });
+
+  it('renders every live same-profile session with runtime, workdir, and id', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'direct-session',
+        agent_id: 'software-engineer',
+        profile_id: 'p1',
+        status: 'idle',
+      }),
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'p1',
+        status: 'idle',
+      }),
+      makeSession({
+        session_id: 'archived-session',
+        profile_id: 'p1',
+        status: 'archived',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const rows = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '[data-testid="profile-session-row"]',
+      ),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.dataset['runtimeKind'])).toEqual([
+      'direct_brain',
+      'codex_app_server',
+    ]);
+    expect(rows.map((row) => row.textContent).join(' ')).toContain(
+      '/home/dev/direct-project',
+    );
+    expect(rows.map((row) => row.textContent).join(' ')).toContain(
+      'managed-session',
+    );
   });
 
   it('shows effective wake timeout summary per profile', async () => {

@@ -19,6 +19,7 @@ import {
   type ConversationSnapshot,
 } from '@rusty-view/chat-domain';
 import type {
+  AgentDirectoryEntry,
   ChatCommandDescriptor,
   ChatEvent,
   ChatSessionStatus,
@@ -103,14 +104,14 @@ export class ChatStore implements OnDestroy {
   private readonly _sessionLoading = signal(false);
   /** Brain profile the user has selected in the sidebar. Persisted. */
   private readonly _selectedProfileId = signal<string | null>(null);
+  /** Coordination directory details used to distinguish same-profile runtimes. */
+  private readonly _sessionDirectory = signal<readonly AgentDirectoryEntry[]>(
+    [],
+  );
   /** Submitted slash commands for Up/Down history navigation. Persisted. */
   private readonly _commandHistory = signal<readonly string[]>([]);
-  /**
-   * Non-null when the user is viewing a historical (non-active) session from
-   * the Sessions menu. The selected profile stays intact; the transcript shows
-   * the historical session read-only-ish until the user returns to active.
-   */
-  private readonly _viewingHistoricalSessionId = signal<string | null>(null);
+  /** Exact live session to restore after temporarily viewing an archive. */
+  private readonly _returnToSessionId = signal<string | null>(null);
 
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
@@ -129,6 +130,7 @@ export class ChatStore implements OnDestroy {
 
   // ---- public readonly signals ----
   readonly sessions = this._sessions.asReadonly();
+  readonly sessionDirectory = this._sessionDirectory.asReadonly();
   readonly activeSessionId = this._activeSessionId.asReadonly();
   readonly projection = this._projection.asReadonly();
   readonly rawEvents = this._rawEvents.asReadonly();
@@ -227,18 +229,23 @@ export class ChatStore implements OnDestroy {
   readonly selectedProfileId = this._selectedProfileId.asReadonly();
   /** Submitted slash commands, newest-first (for Up/Down navigation). */
   readonly commandHistory = this._commandHistory.asReadonly();
-  /** The selected profile's current live session id (null if no profile/none). */
-  readonly activeSessionIdForSelectedProfile = computed<string | null>(() => {
+  /** The selected profile's fallback live session (not lifecycle authority). */
+  readonly defaultSessionIdForSelectedProfile = computed<string | null>(() => {
     const id = this._selectedProfileId();
     if (id === null) return null;
     const profile = this.profiles().find((p) => p.profileId === id);
-    return profile?.activeSessionId ?? null;
+    return profile?.defaultSessionId ?? null;
   });
-  readonly viewingHistoricalSessionId =
-    this._viewingHistoricalSessionId.asReadonly();
-  /** True when the transcript is showing a historical session, not the live one. */
+  /**
+   * Historical state comes from the exact selected session's backend status,
+   * never from whether another same-profile session won a recency comparison.
+   */
+  readonly viewingHistoricalSessionId = computed<string | null>(() => {
+    const session = this.activeSession();
+    return session?.status === 'archived' ? session.session_id : null;
+  });
   readonly isViewingHistorical = computed(
-    () => this._viewingHistoricalSessionId() !== null,
+    () => this.viewingHistoricalSessionId() !== null,
   );
   /** Sessions for the selected profile (historical list), newest first. */
   readonly selectedProfileSessions = computed<readonly ChatSessionSummary[]>(
@@ -261,6 +268,7 @@ export class ChatStore implements OnDestroy {
   async refreshSessions(): Promise<void> {
     const page = await this.transport.listSessions();
     this._sessions.set(page.items);
+    void this.refreshSessionDirectory();
     for (const session of page.items) {
       void this.storage.putSession(session).catch(() => undefined);
     }
@@ -281,7 +289,17 @@ export class ChatStore implements OnDestroy {
         (s) => s.profile_id === persistedProfileId,
       );
       if (stillExists) {
-        await this.selectProfile(persistedProfileId);
+        const persistedSession = this._sessions().find(
+          (session) =>
+            session.session_id === state?.selectedSessionId &&
+            session.profile_id === persistedProfileId &&
+            session.status !== 'archived',
+        );
+        if (persistedSession !== undefined) {
+          await this.selectProfileSession(persistedSession.session_id);
+        } else {
+          await this.selectProfile(persistedProfileId);
+        }
       }
     }
 
@@ -296,12 +314,47 @@ export class ChatStore implements OnDestroy {
   private persistUiState(): void {
     const id = this._selectedProfileId();
     const history = this._commandHistory();
+    const selectedSessionId = this.liveSessionIdForPersistence();
     void this.storage
       .setUiState({
         ...(id !== null ? { selectedProfileId: id } : {}),
+        ...(selectedSessionId !== null ? { selectedSessionId } : {}),
         ...(history.length > 0 ? { commandHistory: history } : {}),
       })
       .catch(() => undefined);
+  }
+
+  private liveSessionIdForPersistence(): string | null {
+    const candidate = this._returnToSessionId() ?? this._activeSessionId();
+    if (candidate === null) return null;
+    const selectedProfileId = this._selectedProfileId();
+    const session = this._sessions().find(
+      (item) => item.session_id === candidate,
+    );
+    return session !== undefined &&
+      session.profile_id === selectedProfileId &&
+      session.status !== 'archived'
+      ? candidate
+      : null;
+  }
+
+  /**
+   * Best-effort runtime identity details for same-profile session labels.
+   * Chat remains usable when coordination is unavailable.
+   */
+  async refreshSessionDirectory(): Promise<void> {
+    try {
+      const directory = await this.transport.coordinationAgentDirectory();
+      this._sessionDirectory.set(directory.agents);
+    } catch {
+      // Runtime decoration is optional; session status remains chat authority.
+    }
+  }
+
+  sessionDirectoryEntry(sessionId: string): AgentDirectoryEntry | undefined {
+    return this._sessionDirectory().find(
+      (entry) => entry.sessionId === sessionId,
+    );
   }
 
   /** Maximum number of slash commands retained in history. */
@@ -325,19 +378,48 @@ export class ChatStore implements OnDestroy {
   }
 
   /**
-   * Select a brain profile and open its current active session. If the profile
-   * has no live session, the sidebar selection is still recorded but no session
-   * is opened.
+   * Select a brain profile. Preserve an already-selected exact live member;
+   * otherwise open the profile's deterministic fallback session.
    */
   async selectProfile(profileId: string): Promise<void> {
+    const currentSession = this.activeSession();
+    const preservedSessionId =
+      currentSession?.profile_id === profileId &&
+      currentSession.status !== 'archived'
+        ? currentSession.session_id
+        : null;
     this._selectedProfileId.set(profileId);
-    this._viewingHistoricalSessionId.set(null);
-    this.persistUiState();
+    this._returnToSessionId.set(null);
 
-    const activeSessionId = this.activeSessionIdForSelectedProfile();
-    if (activeSessionId !== null) {
-      await this.selectSession(activeSessionId);
+    const targetSessionId =
+      preservedSessionId ?? this.defaultSessionIdForSelectedProfile();
+    if (targetSessionId !== null) {
+      await this.selectSession(targetSessionId);
     }
+    this.persistUiState();
+  }
+
+  /**
+   * Select one exact profile member. Only archived backend sessions enter
+   * historical/read-only mode; active, idle, and blocked members stay live.
+   */
+  async selectProfileSession(sessionId: string): Promise<void> {
+    const session = this._sessions().find(
+      (candidate) => candidate.session_id === sessionId,
+    );
+    if (session === undefined) {
+      await this.selectSession(sessionId);
+      return;
+    }
+    if (session.status === 'archived') {
+      await this.viewHistoricalSession(sessionId);
+      return;
+    }
+
+    this._selectedProfileId.set(session.profile_id);
+    this._returnToSessionId.set(null);
+    await this.selectSession(sessionId);
+    this.persistUiState();
   }
 
   /**
@@ -346,17 +428,37 @@ export class ChatStore implements OnDestroy {
    * session read-only; use {@link returnToActiveSession} to go back.
    */
   async viewHistoricalSession(sessionId: string): Promise<void> {
-    this._viewingHistoricalSessionId.set(sessionId);
+    const session = this._sessions().find(
+      (candidate) => candidate.session_id === sessionId,
+    );
+    if (session?.status !== 'archived') {
+      await this.selectProfileSession(sessionId);
+      return;
+    }
+    const currentSession = this.activeSession();
+    if (currentSession !== null && currentSession.status !== 'archived') {
+      this._returnToSessionId.set(currentSession.session_id);
+    }
     await this.selectSession(sessionId);
+    this.persistUiState();
   }
 
-  /** Return the transcript to the selected profile's current active session. */
+  /** Return from an archive to the exact live session that preceded it. */
   async returnToActiveSession(): Promise<void> {
-    this._viewingHistoricalSessionId.set(null);
-    const activeSessionId = this.activeSessionIdForSelectedProfile();
-    if (activeSessionId !== null) {
-      await this.selectSession(activeSessionId);
+    const returnSessionId = this._returnToSessionId();
+    const returnSession = this._sessions().find(
+      (session) =>
+        session.session_id === returnSessionId &&
+        session.profile_id === this._selectedProfileId() &&
+        session.status !== 'archived',
+    );
+    this._returnToSessionId.set(null);
+    const targetSessionId =
+      returnSession?.session_id ?? this.defaultSessionIdForSelectedProfile();
+    if (targetSessionId !== null) {
+      await this.selectSession(targetSessionId);
     }
+    this.persistUiState();
   }
 
   /**
@@ -376,7 +478,7 @@ export class ChatStore implements OnDestroy {
     this.transcriptCache.clear();
     this.seenEventIds.clear();
     this._selectedProfileId.set(null);
-    this._viewingHistoricalSessionId.set(null);
+    this._returnToSessionId.set(null);
     this._activeSessionId.set(null);
     this._projection.set(emptyProjection());
     this._rawEvents.set([]);

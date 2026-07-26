@@ -21,9 +21,9 @@ const SESSION_RESUME_CAPABILITY_ID = 'admin.control.sessions.runtime.resume';
  * Sessions panel — opened from the top-menu Sessions entry.
  *
  * Container component — injects {@link ChatStore} and renders a flat list of
- * all sessions (newest first) across all profiles. Clicking a non-active
- * session enters "viewing historical" mode. If the user opens the currently
- * active session, the effect is a no-op beyond leaving historical mode.
+ * all sessions (newest first) across all profiles. Selecting an archived
+ * session enters historical mode; every other exact session stays writable
+ * according to its own backend state.
  *
  * Includes an optional filter-by-profile chip row so the user can narrow to
  * one brain's history. Empty state is shown when no sessions match.
@@ -96,7 +96,7 @@ export class SessionsPanelComponent {
   }
 
   protected onSelectSession(sessionId: string): void {
-    void this.store.viewHistoricalSession(sessionId);
+    void this.store.selectProfileSession(sessionId);
     this.dismissed.emit();
   }
 

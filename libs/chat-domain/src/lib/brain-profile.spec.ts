@@ -22,7 +22,7 @@ function makeSession(
 }
 
 describe('projectProfile', () => {
-  it('picks the active session as the live session', () => {
+  it('keeps every non-archived session live and picks an active default', () => {
     const p = projectProfile('p1', [
       makeSession({
         session_id: 'old',
@@ -40,7 +40,11 @@ describe('projectProfile', () => {
         updated_at: '2026-06-02T00:00:00Z',
       }),
     ]);
-    expect(p.activeSessionId).toBe('live');
+    expect(p.liveSessions.map((session) => session.session_id)).toEqual([
+      'idle',
+      'live',
+    ]);
+    expect(p.defaultSessionId).toBe('live');
     expect(p.status).toBe('active');
     expect(p.sessionCount).toBe(3);
   });
@@ -63,7 +67,11 @@ describe('projectProfile', () => {
         updated_at: '2026-06-01T00:00:00Z',
       }),
     ]);
-    expect(p.activeSessionId).toBe('idle-newer');
+    expect(p.liveSessions.map((session) => session.session_id)).toEqual([
+      'idle-newer',
+      'idle-older',
+    ]);
+    expect(p.defaultSessionId).toBe('idle-newer');
     expect(p.status).toBe('idle');
   });
 
@@ -80,7 +88,8 @@ describe('projectProfile', () => {
         updated_at: '2026-02-01T00:00:00Z',
       }),
     ]);
-    expect(p.activeSessionId).toBe('a2');
+    expect(p.liveSessions).toEqual([]);
+    expect(p.defaultSessionId).toBeNull();
     expect(p.status).toBe('archived');
   });
 
@@ -97,7 +106,8 @@ describe('projectProfile', () => {
 
   it('handles an empty session set', () => {
     const p = projectProfile('p1', []);
-    expect(p.activeSessionId).toBeNull();
+    expect(p.liveSessions).toEqual([]);
+    expect(p.defaultSessionId).toBeNull();
     expect(p.sessionCount).toBe(0);
     expect(p.status).toBe('archived');
   });
@@ -127,12 +137,36 @@ describe('projectProfiles', () => {
     const hot = profiles.find(
       (p) => p.profileId === 'hot-prof',
     ) as BrainProfile;
-    expect(hot.activeSessionId).toBe('s3');
+    expect(hot.defaultSessionId).toBe('s3');
     expect(hot.status).toBe('active');
     expect(hot.sessionCount).toBe(2);
   });
 
   it('returns an empty array for no sessions', () => {
     expect(projectProfiles([])).toEqual([]);
+  });
+
+  it('keeps concurrent direct and newer managed sessions as live candidates', () => {
+    const profiles = projectProfiles([
+      makeSession({
+        session_id: 'direct-session',
+        agent_id: 'software-engineer',
+        profile_id: 'software-engineer',
+        status: 'idle',
+        updated_at: '2026-07-25T23:42:25Z',
+      }),
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'software-engineer',
+        status: 'idle',
+        updated_at: '2026-07-26T02:12:52Z',
+      }),
+    ]);
+
+    expect(
+      profiles[0]?.liveSessions.map((session) => session.session_id),
+    ).toEqual(['managed-session', 'direct-session']);
+    expect(profiles[0]?.defaultSessionId).toBe('managed-session');
   });
 });

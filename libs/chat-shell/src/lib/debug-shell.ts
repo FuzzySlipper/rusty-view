@@ -306,7 +306,7 @@ export class DebugShellComponent {
   }
 
   protected onSelectSession(sessionId: string): void {
-    void this.store.selectSession(sessionId);
+    void this.store.selectProfileSession(sessionId);
   }
 
   private cycleSession(direction: 1 | -1): void {

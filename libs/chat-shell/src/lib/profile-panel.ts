@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import type { BrainProfile } from '@rusty-view/chat-domain';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
+import type { ChatSessionSummary } from '@rusty-view/protocol';
 
 import { sessionStatusLabel } from './session-status-label';
 import { profileWakeTimeoutLabel } from './wake-timeout-display';
@@ -16,9 +17,9 @@ import { profileWakeTimeoutLabel } from './wake-timeout-display';
  * rusty-view.
  *
  * Container component — injects {@link ChatStore} to read the derived
- * {@code BrainProfile[]} list and trigger profile selection. Each row shows
- * the profile id, aggregate status, session count, and an active-session
- * indicator. Clicking a profile opens its current live session.
+ * {@code BrainProfile[]} list and trigger profile selection. Each profile
+ * exposes every non-archived session with runtime kind, workdir, and exact
+ * session identity so reused profiles remain unambiguous.
  *
  * Empty, loading, and error states are surfaced so the shell can render
  * informative placeholders when there are no profiles yet or the session list
@@ -50,6 +51,11 @@ export class ProfilePanelComponent {
     this.profileSelected.emit();
   }
 
+  protected onSelectSession(sessionId: string): void {
+    void this.store.selectProfileSession(sessionId);
+    this.profileSelected.emit();
+  }
+
   protected onRefresh(): void {
     void this.store.refreshSessions();
   }
@@ -62,5 +68,42 @@ export class ProfilePanelComponent {
 
   protected profileStatusLabel(status: string): string {
     return sessionStatusLabel(status);
+  }
+
+  protected sessionRuntimeKind(session: ChatSessionSummary): string {
+    return (
+      this.store.sessionDirectoryEntry(session.session_id)?.runtimeKind ??
+      'chat_session'
+    );
+  }
+
+  protected sessionRuntimeLabel(session: ChatSessionSummary): string {
+    switch (this.sessionRuntimeKind(session)) {
+      case 'direct_brain':
+        return 'Crew brain';
+      case 'codex_app_server':
+        return 'Codex app-server';
+      default:
+        return 'Chat session';
+    }
+  }
+
+  protected sessionWorkdir(session: ChatSessionSummary): string | null {
+    const directoryWorkdir = this.store.sessionDirectoryEntry(
+      session.session_id,
+    )?.workdir;
+    if (directoryWorkdir !== undefined && directoryWorkdir !== null) {
+      return directoryWorkdir;
+    }
+    const resourceLimits = session.effective_defaults?.['resourceLimits'];
+    if (
+      typeof resourceLimits === 'object' &&
+      resourceLimits !== null &&
+      'workdir' in resourceLimits &&
+      typeof resourceLimits.workdir === 'string'
+    ) {
+      return resourceLimits.workdir;
+    }
+    return null;
   }
 }

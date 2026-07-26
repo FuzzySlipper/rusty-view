@@ -130,6 +130,10 @@ function makeTransport(
       limit: 100,
       offset: 0,
     }),
+    coordinationAgentDirectory: async () => ({
+      deploymentRole: 'production',
+      agents: [],
+    }),
     openSession: async (sessionId: string) => ({
       session:
         sessions.find((s) => s.session_id === sessionId) ??
@@ -273,6 +277,29 @@ describe('SessionsPanelComponent', () => {
       .map((r) => r.textContent)
       .join(' ');
     expect(text.indexOf('new')).toBeLessThan(text.indexOf('old'));
+  });
+
+  it('selects an idle same-profile session without entering historical mode', async () => {
+    const { fixture, store } = await createPanel([
+      makeSession({ session_id: 'direct', profile_id: 'p1', status: 'idle' }),
+      makeSession({
+        session_id: 'managed',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-06-23T00:00:00Z',
+      }),
+    ]);
+    await store.selectProfileSession('managed');
+    fixture.detectChanges();
+
+    const direct = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-session-id="direct"]',
+    ) as HTMLButtonElement;
+    direct.click();
+    await fixture.whenStable();
+
+    expect(store.activeSessionId()).toBe('direct');
+    expect(store.isViewingHistorical()).toBe(false);
   });
 
   it('filters sessions by profile chip', async () => {

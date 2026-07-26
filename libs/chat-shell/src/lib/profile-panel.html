@@ -8,14 +8,14 @@
   } @else {
   <ul class="rv-profiles__list">
     @for (profile of profiles(); track profile.profileId) {
-    <li>
+    <li class="rv-profile-group">
       <button
         type="button"
         class="rv-profile"
         data-testid="profile-row"
         [attr.data-profile-id]="profile.profileId"
         [attr.data-profile-status]="profile.status"
-        [attr.data-active-session-id]="profile.activeSessionId"
+        [attr.data-default-session-id]="profile.defaultSessionId"
         [class.rv-profile--selected]="selectedProfileId() === profile.profileId"
         (click)="onSelectProfile(profile.profileId)"
       >
@@ -30,15 +30,47 @@
           >
           · {{ profile.sessionCount }} session(s)
         </span>
-        @if (profile.activeSessionId) {
-        <span class="rv-profile__live">▸ {{ profile.activeSessionId }}</span>
-        } @if (wakeTimeoutLabel(profile); as timeoutLabel) {
+        <span class="rv-profile__live">
+          {{ profile.liveSessions.length }} live · {{ profile.sessionCount }}
+          total
+        </span>
+        @if (wakeTimeoutLabel(profile); as timeoutLabel) {
         <span class="rv-profile__timeout">{{ timeoutLabel }}</span>
         } @if (admin.profilePauseCount(profile.profileId, profile.sessions) > 0)
         {
         <span class="rv-profile__paused">runtime paused</span>
         }
       </button>
+      @if (profile.liveSessions.length > 0) {
+      <ul class="rv-profile-sessions">
+        @for (session of profile.liveSessions; track session.session_id) {
+        <li>
+          <button
+            type="button"
+            class="rv-profile-session"
+            data-testid="profile-session-row"
+            [attr.data-session-id]="session.session_id"
+            [attr.data-session-status]="session.status"
+            [attr.data-runtime-kind]="sessionRuntimeKind(session)"
+            [attr.data-workdir]="sessionWorkdir(session)"
+            [class.rv-profile-session--selected]="
+              store.activeSessionId() === session.session_id
+            "
+            (click)="onSelectSession(session.session_id)"
+          >
+            <span class="rv-profile-session__heading">
+              <strong>{{ sessionRuntimeLabel(session) }}</strong>
+              <span>{{ profileStatusLabel(session.status) }}</span>
+            </span>
+            @if (sessionWorkdir(session); as workdir) {
+            <span class="rv-profile-session__workdir">{{ workdir }}</span>
+            }
+            <span class="rv-profile-session__id">{{ session.session_id }}</span>
+          </button>
+        </li>
+        }
+      </ul>
+      }
     </li>
     }
   </ul>

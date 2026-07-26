@@ -22,11 +22,17 @@ export interface BrainProfile {
   /** All sessions belonging to this profile, newest-updated first. */
   readonly sessions: readonly ChatSessionSummary[];
   /**
-   * The profile's current live session: prefer status `active`; otherwise the
-   * most recently updated non-archived session; otherwise the most recently
-   * updated session overall. `null` only if the profile has no sessions.
+   * Every independently live session belonging to the profile. Backend status
+   * is authoritative: active, idle, and blocked sessions are live candidates;
+   * archived sessions are not.
    */
-  readonly activeSessionId: string | null;
+  readonly liveSessions: readonly ChatSessionSummary[];
+  /**
+   * Stable fallback used when selecting a profile without an already-selected
+   * live member. Prefer active, then idle, then blocked; ties use recency.
+   * This is navigation convenience, not lifecycle authority.
+   */
+  readonly defaultSessionId: string | null;
   /** Aggregate liveness derived from member session statuses. */
   readonly status: BrainProfileStatus;
   /** Most recent `updated_at` across the profile's sessions (ISO). */
@@ -37,7 +43,7 @@ export interface BrainProfile {
 /** Aggregate status of a profile, derived from its sessions. */
 export type BrainProfileStatus = 'active' | 'idle' | 'archived';
 
-/** Rank used to pick the live session: lower is more live. */
+/** Rank used to pick a default session: lower is more immediately active. */
 function statusRank(status: ChatSessionStatus): number {
   switch (status) {
     case 'active':
@@ -64,15 +70,19 @@ export function projectProfile(
     b.updated_at.localeCompare(a.updated_at),
   );
 
-  // Pick the live session: lowest status rank, ties broken by recency (the
-  // sort above already put newest first, so the first match wins ties).
-  let live: ChatSessionSummary | null = null;
-  let liveRank = Number.POSITIVE_INFINITY;
-  for (const session of sorted) {
+  const liveSessions = sorted.filter(
+    (session) => session.status !== 'archived',
+  );
+
+  // Pick a navigation default from live candidates only. The full
+  // `liveSessions` collection remains authoritative for profile navigation.
+  let defaultSession: ChatSessionSummary | null = null;
+  let defaultRank = Number.POSITIVE_INFINITY;
+  for (const session of liveSessions) {
     const rank = statusRank(session.status);
-    if (rank < liveRank) {
-      live = session;
-      liveRank = rank;
+    if (rank < defaultRank) {
+      defaultSession = session;
+      defaultRank = rank;
     }
   }
 
@@ -93,7 +103,9 @@ export function projectProfile(
     profileId,
     label: profileId,
     sessions: sorted,
-    activeSessionId: live === null ? null : live.session_id,
+    liveSessions,
+    defaultSessionId:
+      defaultSession === null ? null : defaultSession.session_id,
     status,
     lastActivityAt,
     sessionCount: sorted.length,

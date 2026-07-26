@@ -3,13 +3,13 @@ import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 /**
  * Small, product-agnostic UI-state blob persisted alongside the chat cache.
  *
- * Currently holds the selected brain-profile id so the sidebar selection
- * survives refresh/reconnect, and the command history (submitted slash
- * commands) for Up/Down navigation in the composer. Optional fields keep the
- * shape forward-compatible; unknown keys are ignored by storage impls.
+ * Holds the exact selected profile/session so concurrent sessions under one
+ * reusable profile survive refresh/reconnect without a recency winner
+ * displacing the user's choice, plus composer command history.
  */
 export interface ChatUiState {
   readonly selectedProfileId?: string;
+  readonly selectedSessionId?: string;
   /** Submitted slash commands, newest-first, bounded. */
   readonly commandHistory?: readonly string[];
 }

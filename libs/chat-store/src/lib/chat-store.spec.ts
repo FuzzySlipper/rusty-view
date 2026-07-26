@@ -75,6 +75,10 @@ function createMockTransport(opts: {
   const mock = {
     getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
     listSessions: vi.fn(async () => opts.sessions ?? emptySessionPage()),
+    coordinationAgentDirectory: vi.fn(async () => ({
+      deploymentRole: 'production' as const,
+      agents: [],
+    })),
     openSession: vi.fn(async () => opts.openResult ?? emptyOpenResult()),
     replayEvents: vi.fn(async () => opts.replayEvents ?? []),
     replayAllEvents: vi.fn(async () => opts.replayEvents ?? []),
@@ -1337,7 +1341,7 @@ describe('ChatStore profiles', () => {
     // Most-recently active profile first.
     expect(store.profiles()[0]?.profileId).toBe('p2');
     expect(store.profiles()[0]?.status).toBe('active');
-    expect(store.profiles()[0]?.activeSessionId).toBe('s3');
+    expect(store.profiles()[0]?.defaultSessionId).toBe('s3');
   });
 
   it('selectProfile opens the profile active session', async () => {
@@ -1368,6 +1372,46 @@ describe('ChatStore profiles', () => {
     await store.selectProfile('p1');
     expect(store.selectedProfileId()).toBe('p1');
     expect(store.activeSessionId()).toBe('live');
+    expect(store.isViewingHistorical()).toBe(false);
+  });
+
+  it('keeps concurrent same-profile live sessions independently selectable', async () => {
+    const direct = makeSession({
+      session_id: 'direct',
+      agent_id: 'software-engineer',
+      profile_id: 'p1',
+      status: 'idle',
+      updated_at: '2026-07-25T23:42:25Z',
+    });
+    const managed = makeSession({
+      session_id: 'managed',
+      agent_id: 'external-agent-1',
+      profile_id: 'p1',
+      status: 'idle',
+      updated_at: '2026-07-26T02:12:52Z',
+    });
+    const transport = createMockTransport({
+      sessions: {
+        items: [direct, managed],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+
+    await store.selectProfileSession('direct');
+    expect(store.activeSessionId()).toBe('direct');
+    expect(store.isViewingHistorical()).toBe(false);
+
+    await store.selectProfileSession('managed');
+    expect(store.activeSessionId()).toBe('managed');
+    expect(store.isViewingHistorical()).toBe(false);
+
+    await store.selectProfileSession('direct');
+    await store.refreshSessions();
+    expect(store.activeSessionId()).toBe('direct');
     expect(store.isViewingHistorical()).toBe(false);
   });
 
@@ -1437,32 +1481,39 @@ describe('ChatStore profiles', () => {
     expect(store.isViewingHistorical()).toBe(false);
   });
 
-  it('persists and restores selectedProfileId across refreshes', async () => {
+  it('persists and restores the exact selected live session', async () => {
     const storage = new InMemoryChatStorage();
     const transport = createMockTransport({
       sessions: {
         items: [
           makeSession({
-            session_id: 'live',
+            session_id: 'older-live',
             profile_id: 'p1',
-            status: 'active',
+            status: 'idle',
             updated_at: '2026-06-10T00:00:00Z',
           }),
+          makeSession({
+            session_id: 'newer-live',
+            profile_id: 'p1',
+            status: 'idle',
+            updated_at: '2026-06-11T00:00:00Z',
+          }),
         ],
-        total: 1,
+        total: 2,
         limit: 100,
         offset: 0,
       },
     });
     const store1 = setupStore(transport, storage);
     await store1.refreshSessions();
-    await store1.selectProfile('p1');
+    await store1.selectProfileSession('older-live');
 
     // Simulate a fresh store with the same storage.
     TestBed.resetTestingModule();
     const store2 = setupStore(transport, storage);
     await store2.refreshSessions();
     expect(store2.selectedProfileId()).toBe('p1');
+    expect(store2.activeSessionId()).toBe('older-live');
   });
 
   it('does not restore a profile id that no longer exists', async () => {

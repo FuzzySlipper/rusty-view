@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
  * Covers the acceptance path end-to-end in a real browser:
  *   1. The sidebar shows profiles (not a raw session list).
  *   2. Clicking a profile selects it and opens the active session.
- *   3. The top-menu Sessions entry opens a panel listing historical sessions.
+ *   3. The top-menu Sessions entry opens the exact session inventory.
  *   4. Opening a historical session shows the banner and disables the input.
  *   5. "Return to active" restores the live session.
  *
@@ -53,19 +53,18 @@ test('profile sidebar, active session, and sessions menu historical flow', async
   const rowCount = await sessionRows.count();
   expect(rowCount).toBeGreaterThan(0);
 
-  // 4. Click the first non-active session to enter historical mode.
-  // Find a row that's not currently active (most rows should qualify).
-  const nonActiveRows = sessionRows.filter({
-    hasNot: page.locator('.rv-sessions-panel__row--active'),
-  });
-  const hasNonActive = (await nonActiveRows.count()) > 0;
-  if (hasNonActive) {
-    await nonActiveRows.first().click();
-    // Historical banner should appear.
-    await expect(page.locator('.rv-debug__historical-banner')).toBeVisible();
-    // Message input should be disabled.
-    await expect(page.locator('rv-message-input')).toHaveCount(0);
-  }
+  // 4. Only an exact archived backend session enters historical mode. Another
+  // idle/active same-profile session remains writable.
+  const archivedRows = page.locator(
+    '.rv-sessions-panel__row[data-session-status="archived"]',
+  );
+  test.skip(
+    (await archivedRows.count()) === 0,
+    'no archived session available for historical-mode certification',
+  );
+  await archivedRows.first().click();
+  await expect(page.locator('.rv-debug__historical-banner')).toBeVisible();
+  await expect(page.locator('rv-message-input')).toHaveCount(0);
 
   // 5. Return to active.
   await page.locator('.rv-debug__historical-banner__return').click();
