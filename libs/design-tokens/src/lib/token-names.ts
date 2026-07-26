@@ -42,6 +42,20 @@ export const TEXT_SCOPE_TOKENS = {
   danger: '--rv-text-scope-danger',
 } as const;
 
+export const SYNTAX_TOKENS = {
+  background: '--rv-syntax-bg',
+  foreground: '--rv-syntax-fg',
+  comment: '--rv-syntax-comment',
+  keyword: '--rv-syntax-keyword',
+  string: '--rv-syntax-string',
+  number: '--rv-syntax-number',
+  title: '--rv-syntax-title',
+  variable: '--rv-syntax-variable',
+  meta: '--rv-syntax-meta',
+  addition: '--rv-syntax-addition',
+  deletion: '--rv-syntax-deletion',
+} as const;
+
 export const SHADOW_TOKENS = {
   sm: '--rv-shadow-sm',
   overlay: '--rv-shadow-overlay',
@@ -102,6 +116,7 @@ export const MOTION_TOKENS = {
 export type DesignTokenName =
   | (typeof COLOR_TOKENS)[keyof typeof COLOR_TOKENS]
   | (typeof TEXT_SCOPE_TOKENS)[keyof typeof TEXT_SCOPE_TOKENS]
+  | (typeof SYNTAX_TOKENS)[keyof typeof SYNTAX_TOKENS]
   | (typeof SHADOW_TOKENS)[keyof typeof SHADOW_TOKENS]
   | (typeof SPACING_TOKENS)[keyof typeof SPACING_TOKENS]
   | (typeof TYPOGRAPHY_TOKENS)[keyof typeof TYPOGRAPHY_TOKENS]
@@ -118,6 +133,7 @@ export type DesignTokenName =
 export const ALL_DESIGN_TOKEN_NAMES: readonly DesignTokenName[] = [
   ...Object.values(COLOR_TOKENS),
   ...Object.values(TEXT_SCOPE_TOKENS),
+  ...Object.values(SYNTAX_TOKENS),
   ...Object.values(SHADOW_TOKENS),
   ...Object.values(SPACING_TOKENS),
   ...Object.values(TYPOGRAPHY_TOKENS),

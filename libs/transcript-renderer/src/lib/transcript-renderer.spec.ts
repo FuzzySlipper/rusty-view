@@ -469,6 +469,39 @@ describe('MessageBlockComponent', () => {
     expect(sheet).toContain('var(--rv-font-size-md)');
   });
 
+  it('renders fenced code with semantic syntax spans bound to palette tokens', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: '```ts\nconst greeting = "hello";\n```',
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(host.querySelector('.rv-md-code .hljs-keyword')?.textContent).toBe(
+      'const',
+    );
+    expect(host.querySelector('.rv-md-code .hljs-string')?.textContent).toBe(
+      '"hello"',
+    );
+
+    const sheet = Array.from(host.ownerDocument.styleSheets)
+      .flatMap((styleSheet) => {
+        try {
+          return Array.from(styleSheet.cssRules).map((rule) => rule.cssText);
+        } catch {
+          return [];
+        }
+      })
+      .join('\n');
+    expect(sheet).toContain('var(--rv-syntax-keyword)');
+    expect(sheet).toContain('var(--rv-syntax-string)');
+    expect(sheet).toContain('var(--rv-text-scope-code)');
+  });
+
   it('renders aligned semantic tables in a themed overflow container', async () => {
     const fixture = await createBlock(
       makeBlock({

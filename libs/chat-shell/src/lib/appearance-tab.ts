@@ -11,12 +11,14 @@ import {
   type AppearanceDensity,
   type AppearanceFontFamily,
   type AppearanceMessageSpacing,
+  type AppearanceSyntaxTheme,
   type AppearanceThemeId,
   type TextRenderMode,
   APPEARANCE_BACKGROUND_PRESETS,
   APPEARANCE_COLOR_FIELDS,
   APPEARANCE_FONT_FAMILIES,
   APPEARANCE_MESSAGE_SPACING,
+  APPEARANCE_SYNTAX_THEMES,
   APPEARANCE_THEMES,
   CHAT_WIDTH_MAX,
   CHAT_WIDTH_MIN,
@@ -93,6 +95,8 @@ export class AppearanceTabComponent {
   protected readonly messageSpacingOptions = APPEARANCE_MESSAGE_SPACING;
   /** Reusable shell background treatments. */
   protected readonly backgroundPresets = APPEARANCE_BACKGROUND_PRESETS;
+  /** Semantic code/transcript color palettes. */
+  protected readonly syntaxThemes = APPEARANCE_SYNTAX_THEMES;
 
   /** Status line for the most recent import attempt (task #3691). */
   protected readonly importStatus = signal<string>('');
@@ -146,6 +150,10 @@ export class AppearanceTabComponent {
 
   protected setBackgroundPreset(value: AppearanceBackgroundPreset): void {
     void this.theme.update({ backgroundPreset: value });
+  }
+
+  protected setSyntaxTheme(value: AppearanceSyntaxTheme): void {
+    void this.theme.update({ syntaxTheme: value });
   }
 
   protected onScale(event: Event): void {

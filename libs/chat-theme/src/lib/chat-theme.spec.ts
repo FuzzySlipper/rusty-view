@@ -6,6 +6,7 @@ import {
   ChatTheme,
   DEFAULT_APPEARANCE,
   InMemoryChatSettingsStorage,
+  type ChatSettingsStorage,
   type AppearanceSettings,
 } from '../index';
 
@@ -27,6 +28,7 @@ describe('ChatTheme', () => {
     document.documentElement.style.cssText = '';
     document.documentElement.removeAttribute('data-rv-theme');
     document.documentElement.removeAttribute('data-rv-background-preset');
+    document.documentElement.removeAttribute('data-rv-syntax-theme');
   }
 
   beforeEach(() => {
@@ -118,6 +120,72 @@ describe('ChatTheme', () => {
     expect(document.documentElement.getAttribute('data-rv-theme')).toBe(
       'light',
     );
+  });
+
+  it('does not let a late startup load overwrite an immediate user change', async () => {
+    TestBed.resetTestingModule();
+    let resolveLoad: ((value: AppearanceSettings) => void) | undefined;
+    const delayedStorage: ChatSettingsStorage = {
+      load: () =>
+        new Promise<AppearanceSettings>((resolve) => {
+          resolveLoad = resolve;
+        }),
+      save: async () => undefined,
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        ChatTheme,
+        { provide: CHAT_SETTINGS_STORAGE, useValue: delayedStorage },
+      ],
+    });
+
+    const theme = TestBed.inject(ChatTheme);
+    await theme.update({ syntaxTheme: 'dracula' });
+    resolveLoad?.({ ...DEFAULT_APPEARANCE, syntaxTheme: 'off' });
+    await fixtureStabilize();
+    TestBed.flushEffects?.();
+
+    expect(theme.settings().syntaxTheme).toBe('dracula');
+  });
+
+  it('persists whole appearance snapshots in user-change order', async () => {
+    TestBed.resetTestingModule();
+    const saved: AppearanceSettings[] = [];
+    let releaseFirstSave: (() => void) | undefined;
+    let saveCount = 0;
+    const delayedStorage: ChatSettingsStorage = {
+      load: async () => null,
+      save: async (settings) => {
+        saveCount++;
+        if (saveCount === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirstSave = resolve;
+          });
+        }
+        saved.push(settings);
+      },
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        ChatTheme,
+        { provide: CHAT_SETTINGS_STORAGE, useValue: delayedStorage },
+      ],
+    });
+
+    const theme = TestBed.inject(ChatTheme);
+    const first = theme.update({ fontFamily: 'serif' });
+    const second = theme.update({ syntaxTheme: 'dracula' });
+    await fixtureStabilize();
+    expect(saveCount).toBe(1);
+
+    releaseFirstSave?.();
+    await Promise.all([first, second]);
+
+    expect(saved).toHaveLength(2);
+    expect(saved[0]?.fontFamily).toBe('serif');
+    expect(saved[0]?.syntaxTheme).toBe('off');
+    expect(saved[1]?.fontFamily).toBe('serif');
+    expect(saved[1]?.syntaxTheme).toBe('dracula');
   });
 
   it('reset restores host-provided defaults and persists that baseline', async () => {
@@ -228,7 +296,9 @@ describe('ChatTheme', () => {
       Object.entries({
         ...DEFAULT_APPEARANCE,
         fontFamily: 'serif' as const,
-      }).filter(([key]) => key !== 'technicalFontFamily'),
+      }).filter(
+        ([key]) => key !== 'technicalFontFamily' && key !== 'syntaxTheme',
+      ),
     ) as unknown as AppearanceSettings;
     await storage.save(legacySettings);
     TestBed.configureTestingModule({
@@ -245,6 +315,10 @@ describe('ChatTheme', () => {
 
     expect(theme.settings().fontFamily).toBe('serif');
     expect(theme.settings().technicalFontFamily).toBe('mono');
+    expect(theme.settings().syntaxTheme).toBe('off');
+    expect(document.documentElement.hasAttribute('data-rv-syntax-theme')).toBe(
+      false,
+    );
     expect(
       document.documentElement.style.getPropertyValue('--rv-font-technical'),
     ).toContain('--rv-font-mono');
@@ -362,6 +436,28 @@ describe('ChatTheme', () => {
     await theme.update({ backgroundPreset: 'none' });
     TestBed.flushEffects?.();
     expect(root.hasAttribute('data-rv-background-preset')).toBe(false);
+  });
+
+  it('applies, persists, and resets transcript syntax palettes', async () => {
+    const theme = TestBed.inject(ChatTheme);
+    TestBed.flushEffects?.();
+    const root = document.documentElement;
+
+    expect(theme.settings().syntaxTheme).toBe('off');
+    expect(root.hasAttribute('data-rv-syntax-theme')).toBe(false);
+
+    await theme.update({ syntaxTheme: 'dracula' });
+    TestBed.flushEffects?.();
+    expect(root.getAttribute('data-rv-syntax-theme')).toBe('dracula');
+    expect((await storage.load())?.syntaxTheme).toBe('dracula');
+
+    await theme.update({ syntaxTheme: 'solarized-light' });
+    TestBed.flushEffects?.();
+    expect(root.getAttribute('data-rv-syntax-theme')).toBe('solarized-light');
+
+    await theme.reset();
+    TestBed.flushEffects?.();
+    expect(root.hasAttribute('data-rv-syntax-theme')).toBe(false);
   });
 
   it('selects a named base theme via the data-rv-theme attribute (#3691)', async () => {

@@ -160,6 +160,29 @@
         </select>
       </label>
 
+      <label class="rv-appearance__row">
+        <span>Syntax colors</span>
+        <select
+          class="rv-appearance__select"
+          data-testid="appearance-syntax-theme"
+          [value]="theme.settings().syntaxTheme"
+          (change)="setSyntaxTheme($any($event.target).value)"
+        >
+          @for (option of syntaxThemes; track option.id) {
+          <option
+            [value]="option.id"
+            [selected]="option.id === theme.settings().syntaxTheme"
+          >
+            {{ option.label }}
+          </option>
+          }
+        </select>
+      </label>
+      <div class="rv-appearance__font-hint">
+        Colors fenced code and typed transcript emphasis; ordinary prose stays
+        unchanged.
+      </div>
+
       <label class="rv-appearance__check">
         <input
           type="checkbox"

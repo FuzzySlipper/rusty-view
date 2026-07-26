@@ -1,4 +1,16 @@
 import type { WorkerRequest, WorkerResponse } from './worker-message-protocol';
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import css from 'highlight.js/lib/languages/css';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+import python from 'highlight.js/lib/languages/python';
+import rust from 'highlight.js/lib/languages/rust';
+import sql from 'highlight.js/lib/languages/sql';
+import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
 import {
   DEFAULT_HTML_SANITIZER_POLICY,
   DEFAULT_MARKDOWN_RENDER_POLICY,
@@ -10,10 +22,38 @@ import {
  * Inline (main-thread) implementations of all worker operations.
  *
  * Used as a fallback when Web Workers are unavailable (SSR, test environments,
- * or environments without worker support). These are intentionally simple — no
- * external dependencies, no syntax highlighting libraries. They produce safe
- * HTML via escaping.
+ * or environments without worker support). Markdown remains deliberately
+ * bounded; fenced code uses a registered, worker-safe highlight.js subset.
+ * Both paths produce safe HTML via escaping/token markup.
  */
+
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('yaml', yaml);
+
+const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
+  html: 'xml',
+  js: 'javascript',
+  jsx: 'javascript',
+  md: 'markdown',
+  py: 'python',
+  rs: 'rust',
+  sh: 'bash',
+  shell: 'bash',
+  svg: 'xml',
+  ts: 'typescript',
+  tsx: 'typescript',
+  yml: 'yaml',
+  zsh: 'bash',
+};
 
 /** Escape HTML special characters to prevent injection. */
 function escapeHtml(text: string): string {
@@ -23,6 +63,16 @@ function escapeHtml(text: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+/** Reverse only the exact entity set emitted by {@link escapeHtml}. */
+function unescapeHtml(text: string): string {
+  return text
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&amp;', '&');
 }
 
 /**
@@ -80,11 +130,12 @@ function parseMarkdown(
         codeLine = lines[i];
       }
       i++; // skip closing fence (or move past end)
-      const code = codeLines.join('\n');
+      const code = unescapeHtml(codeLines.join('\n'));
       const langClass = lang ? ` lang-${escapeHtml(lang)}` : '';
       const controls = codeBlockControls(lang, policy);
+      const highlighted = highlightCodeBody(code, lang);
       htmlParts.push(
-        `<figure class="rv-md-code-block">${controls}<pre class="rv-md-code${langClass}"><code>${code}</code></pre></figure>`,
+        `<figure class="rv-md-code-block">${controls}<pre class="rv-md-code${langClass}"><code class="hljs">${highlighted}</code></pre></figure>`,
       );
       continue;
     }
@@ -429,13 +480,25 @@ function highlightJson(content: string): string {
 }
 
 /**
- * Syntax-highlight code. Currently wraps in a <pre><code> with a language class.
- * A full highlighter (Shiki, highlight.js) can be added in the worker later.
+ * Syntax-highlight code using the registered language subset. Unknown or empty
+ * language names deliberately fall back to escaped plain code; there is no
+ * potentially misleading auto-detection.
  */
 function highlightCode(content: string, language: string): string {
-  const escaped = escapeHtml(content);
-  const langClass = language ? ` class="lang-${escapeHtml(language)}"` : '';
-  return `<pre class="rv-code"${langClass}><code>${escaped}</code></pre>`;
+  const langClass = language ? ` lang-${escapeHtml(language)}` : '';
+  return `<pre class="rv-code${langClass}"><code class="hljs">${highlightCodeBody(content, language)}</code></pre>`;
+}
+
+function highlightCodeBody(content: string, language: string): string {
+  const normalized = language.trim().toLowerCase();
+  const resolved = LANGUAGE_ALIASES[normalized] ?? normalized;
+  if (resolved === '' || hljs.getLanguage(resolved) === undefined) {
+    return escapeHtml(content);
+  }
+  return hljs.highlight(content, {
+    language: resolved,
+    ignoreIllegals: true,
+  }).value;
 }
 
 /**

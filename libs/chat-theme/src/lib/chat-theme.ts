@@ -23,6 +23,7 @@ import {
   type AppearanceDensity,
   type AppearanceFontFamily,
   type AppearanceSettings,
+  type AppearanceSyntaxTheme,
   type TextRenderMode,
   APPEARANCE_BACKGROUND_PRESETS,
   APPEARANCE_COLOR_FIELDS,
@@ -37,6 +38,7 @@ import {
   normalizeBackgroundPreset,
   normalizeFontFamily,
   normalizeMessageSpacing,
+  normalizeSyntaxTheme,
   normalizeThemeId,
 } from './appearance-settings';
 import { CHAT_SETTINGS_STORAGE } from './chat-settings-storage';
@@ -101,6 +103,7 @@ const SHOW_MESSAGE_IDS_ATTRIBUTE = 'data-rv-show-message-ids';
 const REDUCED_MOTION_ATTRIBUTE = 'data-rv-reduced-motion';
 const DISABLE_SHADOWS_ATTRIBUTE = 'data-rv-disable-shadows';
 const BACKGROUND_PRESET_ATTRIBUTE = 'data-rv-background-preset';
+const SYNTAX_THEME_ATTRIBUTE = 'data-rv-syntax-theme';
 
 const FONT_FAMILY_STACKS: Readonly<Record<AppearanceFontFamily, string>> = {
   system:
@@ -147,6 +150,10 @@ export class ChatTheme {
   });
 
   private readonly _settings = signal<AppearanceSettings>(this.defaultSettings);
+  /** Monotonic guard against a late startup load replacing a user change. */
+  private settingsRevision = 0;
+  /** Serializes whole-object snapshots so an older IndexedDB write cannot win. */
+  private persistQueue: Promise<void> = Promise.resolve();
 
   /** Current appearance preferences (readonly). */
   readonly settings = this._settings.asReadonly();
@@ -171,6 +178,7 @@ export class ChatTheme {
    */
   async set(settings: AppearanceSettings): Promise<void> {
     const normalized = this.normalize(settings);
+    this.settingsRevision++;
     this._settings.set(normalized);
     await this.persist(normalized);
   }
@@ -189,6 +197,7 @@ export class ChatTheme {
       ...patch,
       colors: { ...this._settings().colors, ...patch.colors },
     });
+    this.settingsRevision++;
     this._settings.set(next);
     await this.persist(next);
   }
@@ -200,6 +209,7 @@ export class ChatTheme {
 
   /** Reset to the host-provided default baseline, apply live, and persist. */
   async reset(): Promise<void> {
+    this.settingsRevision++;
     this._settings.set(this.defaultSettings);
     await this.persist(this.defaultSettings);
   }
@@ -209,15 +219,20 @@ export class ChatTheme {
   /** Load persisted settings into the signal (no further persist). */
   private async load(): Promise<void> {
     if (this.storage === null) return;
+    const revisionAtStart = this.settingsRevision;
     const stored = await this.storage.load();
-    if (stored !== null) {
+    if (stored !== null && this.settingsRevision === revisionAtStart) {
       this._settings.set(this.normalize(stored));
     }
   }
 
   private async persist(settings: AppearanceSettings): Promise<void> {
     if (this.storage === null) return;
-    await this.storage.save(settings);
+    const pending = this.persistQueue.then(() => this.storage?.save(settings));
+    // Storage is deliberately non-fatal. Keep the queue usable even when an
+    // embedding adapter rejects a write, while still awaiting this snapshot.
+    this.persistQueue = pending.catch(() => undefined);
+    await this.persistQueue;
   }
 
   /**
@@ -276,6 +291,9 @@ export class ChatTheme {
       showProfiles: settings.showProfiles !== false,
       showInspector: settings.showInspector !== false,
       backgroundPreset: normalizeBackgroundPreset(settings.backgroundPreset),
+      syntaxTheme: normalizeSyntaxTheme(
+        settings.syntaxTheme ?? DEFAULT_APPEARANCE.syntaxTheme,
+      ),
       colors: normalizeColors(settings.colors),
       textRenderMode: normalizeTextRenderMode(settings.textRenderMode),
     };
@@ -323,6 +341,7 @@ export class ChatTheme {
     } else {
       root.setAttribute(BACKGROUND_PRESET_ATTRIBUTE, settings.backgroundPreset);
     }
+    this.applySyntaxTheme(root, settings.syntaxTheme);
 
     // Clear all managed overrides so defaults cascade cleanly.
     for (const token of MANAGED_TOKENS) {
@@ -422,6 +441,17 @@ export class ChatTheme {
     } else {
       root.removeAttribute(attribute);
     }
+  }
+
+  private applySyntaxTheme(
+    root: HTMLElement,
+    syntaxTheme: AppearanceSyntaxTheme,
+  ): void {
+    if (syntaxTheme === 'off') {
+      root.removeAttribute(SYNTAX_THEME_ATTRIBUTE);
+      return;
+    }
+    root.setAttribute(SYNTAX_THEME_ATTRIBUTE, syntaxTheme);
   }
 }
 

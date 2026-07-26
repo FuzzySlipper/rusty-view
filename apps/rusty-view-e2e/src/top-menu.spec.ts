@@ -32,6 +32,28 @@ async function topMenuFontFamily(page: Page): Promise<string> {
     .evaluate((el) => getComputedStyle(el).fontFamily);
 }
 
+async function appearanceSetting(page: Page, key: string): Promise<unknown> {
+  return page.evaluate(
+    (settingKey) =>
+      new Promise<unknown>((resolve, reject) => {
+        const request = indexedDB.open('rusty-view-chat', 2);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const transaction = db.transaction('settings', 'readonly');
+          const get = transaction.objectStore('settings').get('appearance');
+          get.onerror = () => reject(get.error);
+          get.onsuccess = () => {
+            const settings = get.result as Record<string, unknown> | undefined;
+            resolve(settings?.[settingKey]);
+            db.close();
+          };
+        };
+      }),
+    key,
+  );
+}
+
 async function captureBrokerScreenshot(
   page: Page,
   name: string,
@@ -123,6 +145,20 @@ test('top menu opens options, applies an appearance change, opens help', async (
     )
     .toContain('Arial');
 
+  await page.getByTestId('appearance-syntax-theme').selectOption('dracula');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          document.documentElement.getAttribute('data-rv-syntax-theme'),
+        ),
+      { timeout: 5_000 },
+    )
+    .toBe('dracula');
+  await expect
+    .poll(() => appearanceSetting(page, 'syntaxTheme'), { timeout: 5_000 })
+    .toBe('dracula');
+
   // Appearance settings live in IndexedDB and must survive an app reload.
   await page.locator('.rv-options__close').click();
   await page.reload();
@@ -132,6 +168,9 @@ test('top menu opens options, applies an appearance change, opens help', async (
   await expect
     .poll(topMenuFontFamily.bind(null, page), { timeout: 5_000 })
     .toContain('Georgia');
+  await expect
+    .poll(() => appearanceSetting(page, 'syntaxTheme'), { timeout: 5_000 })
+    .toBe('dracula');
   await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
   await expect(page.getByTestId('appearance-interface-font-serif')).toHaveClass(
     /rv-appearance__seg--active/,
@@ -139,6 +178,16 @@ test('top menu opens options, applies an appearance change, opens help', async (
   await expect(page.getByTestId('appearance-technical-font-arial')).toHaveClass(
     /rv-appearance__seg--active/,
   );
+  await expect(page.getByTestId('appearance-syntax-theme')).toHaveValue(
+    'dracula',
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.documentElement.getAttribute('data-rv-syntax-theme'),
+      ),
+    )
+    .toBe('dracula');
 
   // 4. Close Options, open Help.
   await page.locator('.rv-options__close').click();

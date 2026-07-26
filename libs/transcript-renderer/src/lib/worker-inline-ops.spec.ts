@@ -48,7 +48,11 @@ describe('processRequestInline (inline worker fallback)', () => {
       if (response.kind === 'parse-markdown') {
         expect(response.html).toContain('<pre class="rv-md-code');
         expect(response.html).toContain('lang-ts');
-        expect(response.html).toContain('const x = 1;');
+        expect(response.html).toContain('<code class="hljs">');
+        expect(response.html).toContain(
+          '<span class="hljs-keyword">const</span>',
+        );
+        expect(response.html).toContain('<span class="hljs-number">1</span>');
         expect(response.html).toContain('rv-md-code-header');
         expect(response.html).toContain('rv-md-code-copy');
         expect(response.html).toContain('ts');
@@ -83,6 +87,34 @@ describe('processRequestInline (inline worker fallback)', () => {
       if (response.kind === 'parse-markdown') {
         expect(response.html).not.toContain('<script>');
         expect(response.html).toContain('&lt;script&gt;');
+      }
+    });
+
+    it('keeps fenced highlighted code inert and preserves literal entities', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 51,
+        content:
+          '```html\n<script>alert("xss")</script>\nconst entity = "&lt;";\n```',
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).not.toContain('<script>');
+        expect(response.html).toContain('&lt;');
+        expect(response.html).toContain('&amp;lt;');
+        expect(response.html).toContain('hljs-tag');
+      }
+    });
+
+    it('renders unknown fenced languages as escaped plain code', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 52,
+        content: '```future-lang\nconst value = "<unsafe>";\n```',
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).toContain('lang-future-lang');
+        expect(response.html).toContain('&lt;unsafe&gt;');
+        expect(response.html).not.toContain('hljs-keyword');
       }
     });
 
@@ -421,9 +453,13 @@ describe('processRequestInline (inline worker fallback)', () => {
         language: 'typescript',
       });
       if (response.kind === 'highlight-code') {
-        expect(response.html).toContain('<pre class="rv-code"');
-        expect(response.html).toContain('lang-typescript');
-        expect(response.html).toContain('const x = 1;');
+        expect(response.html).toContain(
+          '<pre class="rv-code lang-typescript">',
+        );
+        expect(response.html).toContain(
+          '<span class="hljs-keyword">const</span>',
+        );
+        expect(response.html).toContain('<span class="hljs-number">1</span>');
       }
     });
 
@@ -436,7 +472,22 @@ describe('processRequestInline (inline worker fallback)', () => {
       });
       if (response.kind === 'highlight-code') {
         expect(response.html).not.toContain('<div>');
-        expect(response.html).toContain('&lt;div&gt;');
+        expect(response.html).toContain('&lt;');
+        expect(response.html).toContain('&gt;');
+        expect(response.html).toContain('hljs-tag');
+      }
+    });
+
+    it('uses a safe plain fallback for unknown languages', () => {
+      const response = processRequestInline({
+        kind: 'highlight-code',
+        id: 22,
+        content: 'const value = "<unsafe>";',
+        language: 'future-lang',
+      });
+      if (response.kind === 'highlight-code') {
+        expect(response.html).toContain('&lt;unsafe&gt;');
+        expect(response.html).not.toContain('hljs-keyword');
       }
     });
   });

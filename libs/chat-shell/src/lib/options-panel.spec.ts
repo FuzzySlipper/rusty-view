@@ -54,6 +54,10 @@ describe('OptionsPanelComponent', () => {
     expect(host.textContent).toContain('Message IDs');
     expect(host.textContent).toContain('Message action buttons');
     expect(host.textContent).toContain('Auto-expand reasoning blocks');
+    expect(host.textContent).toContain('Syntax colors');
+    expect(host.textContent).toContain(
+      'Colors fenced code and typed transcript emphasis',
+    );
 
     const messageIds = Array.from(host.querySelectorAll('label')).find(
       (label) => label.textContent?.includes('Message IDs') ?? false,
@@ -78,6 +82,30 @@ describe('OptionsPanelComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(theme.settings().autoExpandReasoning).toBe(true);
+  });
+
+  it('selects an IDE-style syntax palette without changing the base UI theme', async () => {
+    const fixture = await createOptions();
+    const host: HTMLElement = fixture.nativeElement;
+    const theme = TestBed.inject(ChatTheme);
+    const syntaxTheme = host.querySelector<HTMLSelectElement>(
+      '[data-testid="appearance-syntax-theme"]',
+    );
+
+    expect(syntaxTheme).not.toBeNull();
+    expect(syntaxTheme?.value).toBe('off');
+    if (syntaxTheme === null) return;
+
+    syntaxTheme.value = 'dracula';
+    syntaxTheme.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(theme.settings().syntaxTheme).toBe('dracula');
+    expect(theme.settings().themeId).toBe('auto');
+    expect(document.documentElement.getAttribute('data-rv-syntax-theme')).toBe(
+      'dracula',
+    );
   });
 
   it('configures interface and technical font roles independently', async () => {

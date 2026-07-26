@@ -6,7 +6,8 @@
     "@angular/cdk": "^21.2.0",
     "@angular/cdk-experimental": "^21.2.0",
     "@angular/core": "^21.2.0",
-    "@rusty-view/chat-domain": "workspace:*"
+    "@rusty-view/chat-domain": "workspace:*",
+    "highlight.js": "^11.11.1"
   },
   "sideEffects": false
 }

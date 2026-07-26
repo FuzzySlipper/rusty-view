@@ -48,8 +48,7 @@ describe('WorkerManager', () => {
 
   it('highlightCode returns wrapped code HTML', async () => {
     const html = await manager.highlightCode('const x = 1;', 'ts');
-    expect(html).toContain('<pre class="rv-code"');
-    expect(html).toContain('lang-ts');
+    expect(html).toContain('<pre class="rv-code lang-ts">');
   });
 
   it('handles large content (100k chars) without error', async () => {

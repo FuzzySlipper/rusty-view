@@ -168,6 +168,26 @@ export const APPEARANCE_BACKGROUND_PRESETS: ReadonlyArray<{
  */
 export type TextRenderMode = 'auto' | 'raw' | 'markdown' | 'sanitized-html';
 
+/** Semantic syntax palette applied to structured transcript content. */
+export type AppearanceSyntaxTheme =
+  | 'off'
+  | 'dracula'
+  | 'solarized-dark'
+  | 'solarized-light'
+  | 'monokai';
+
+/** Ordered syntax palettes shown in Options → Appearance. */
+export const APPEARANCE_SYNTAX_THEMES: ReadonlyArray<{
+  readonly id: AppearanceSyntaxTheme;
+  readonly label: string;
+}> = [
+  { id: 'off', label: 'Off (plain)' },
+  { id: 'dracula', label: 'Dracula' },
+  { id: 'solarized-dark', label: 'Solarized Dark' },
+  { id: 'solarized-light', label: 'Solarized Light' },
+  { id: 'monokai', label: 'Monokai' },
+];
+
 /**
  * Complete appearance preferences. Stored verbatim via the settings storage
  * adapter; never includes secrets or auth material.
@@ -208,6 +228,11 @@ export interface AppearanceSettings {
   /** Whether the reusable debug shell's inspector pane is visible. */
   readonly showInspector: boolean;
   readonly backgroundPreset: AppearanceBackgroundPreset;
+  /**
+   * IDE-style semantic palette for fenced code and typed transcript spans.
+   * Ordinary prose remains on the base theme's primary text color.
+   */
+  readonly syntaxTheme: AppearanceSyntaxTheme;
   readonly colors: AppearanceColors;
   /**
    * How chat message text is rendered: `auto` (detect Markdown/HTML per block),
@@ -291,6 +316,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   showProfiles: true,
   showInspector: true,
   backgroundPreset: 'none',
+  syntaxTheme: 'off',
   colors: {},
   textRenderMode: 'auto',
 };
@@ -326,6 +352,17 @@ export function normalizeThemeId(value: unknown): AppearanceThemeId {
     value === 'auto'
     ? value
     : 'auto';
+}
+
+/** Coerce an arbitrary value into a supported transcript syntax palette. */
+export function normalizeSyntaxTheme(value: unknown): AppearanceSyntaxTheme {
+  return value === 'dracula' ||
+    value === 'solarized-dark' ||
+    value === 'solarized-light' ||
+    value === 'monokai' ||
+    value === 'off'
+    ? value
+    : 'off';
 }
 
 /** Coerce an arbitrary value into a valid background preset. */

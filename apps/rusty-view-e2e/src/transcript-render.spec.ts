@@ -48,7 +48,9 @@ const ASSISTANT_LEAD =
   'A figure steps through the doorway, into the amber light.';
 const ASSISTANT_LINK_LABEL = 'Open the encounter report';
 const ASSISTANT_LINK_URL = 'https://example.com/encounter-report';
-const ASSISTANT_BODY = `${ASSISTANT_LEAD}\n\n[${ASSISTANT_LINK_LABEL}](${ASSISTANT_LINK_URL})\n\n${REPRESENTATIVE_TABLE}`;
+const REPRESENTATIVE_CODE =
+  '```ts\nconst lanterns: number = 3;\nconsole.log("amber", lanterns);\n```';
+const ASSISTANT_BODY = `${ASSISTANT_LEAD}\n\n[${ASSISTANT_LINK_LABEL}](${ASSISTANT_LINK_URL})\n\n${REPRESENTATIVE_TABLE}\n\n${REPRESENTATIVE_CODE}`;
 const TOOL_DEBUG_DETAIL_ID = 'debug_tc1';
 const LIVE_SCROLL_SESSION_ID = 'render-live-scroll-session';
 const LIVE_SCROLL_ASSISTANT_ID = 'msg_live_scroll_asst';
@@ -291,6 +293,20 @@ test('selecting a session renders message rows in the transcript', async ({
     'background-color',
     /rgba?\(/,
   );
+
+  // Fenced code is tokenized in the transcript worker, while the palette
+  // remains a separately persisted Appearance choice.
+  const codeBlock = page.locator('.rv-message--assistant .rv-md-code');
+  const keyword = codeBlock.locator('.hljs-keyword');
+  const codeString = codeBlock.locator('.hljs-string');
+  await expect(codeBlock).toBeVisible();
+  await expect(keyword).toHaveText('const');
+  await expect(codeString).toHaveText('"amber"');
+  await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  await page.getByTestId('appearance-syntax-theme').selectOption('dracula');
+  await page.locator('.rv-options__close').click();
+  await expect(keyword).toHaveCSS('color', 'rgb(255, 121, 198)');
+  await expect(codeString).toHaveCSS('color', 'rgb(241, 250, 140)');
 
   // At a portrait viewport, the wide table scrolls inside its own container
   // while the transcript remains contained by the browser viewport.

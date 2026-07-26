@@ -24,12 +24,14 @@ export {
   type AppearanceFontFamily,
   type AppearanceDensity,
   type AppearanceMessageSpacing,
+  type AppearanceSyntaxTheme,
   type AppearanceThemeId,
   type TextRenderMode,
   APPEARANCE_BACKGROUND_PRESETS,
   APPEARANCE_COLOR_FIELDS,
   APPEARANCE_FONT_FAMILIES,
   APPEARANCE_MESSAGE_SPACING,
+  APPEARANCE_SYNTAX_THEMES,
   APPEARANCE_THEMES,
   DEFAULT_APPEARANCE,
   BASE_FONT_SIZES,
@@ -51,6 +53,7 @@ export {
   normalizeFontFamily,
   normalizeBackgroundPreset,
   normalizeMessageSpacing,
+  normalizeSyntaxTheme,
   normalizeThemeId,
 } from './lib/appearance-settings';
 

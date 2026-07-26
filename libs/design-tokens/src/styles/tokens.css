@@ -46,6 +46,19 @@
   --rv-text-scope-warning: var(--rv-color-warning);
   --rv-text-scope-danger: var(--rv-color-danger);
 
+  /* ---- transcript syntax colors (plain/off baseline) ---- */
+  --rv-syntax-bg: var(--rv-color-surface);
+  --rv-syntax-fg: var(--rv-color-text-primary);
+  --rv-syntax-comment: var(--rv-color-text-primary);
+  --rv-syntax-keyword: var(--rv-color-text-primary);
+  --rv-syntax-string: var(--rv-color-text-primary);
+  --rv-syntax-number: var(--rv-color-text-primary);
+  --rv-syntax-title: var(--rv-color-text-primary);
+  --rv-syntax-variable: var(--rv-color-text-primary);
+  --rv-syntax-meta: var(--rv-color-text-primary);
+  --rv-syntax-addition: var(--rv-color-text-primary);
+  --rv-syntax-deletion: var(--rv-color-text-primary);
+
   /* ---- elevation (shadows) ---- */
   --rv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --rv-shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -94,6 +107,83 @@
   /* ---- motion ---- */
   --rv-motion-fast: 80ms;
   --rv-motion-base: 160ms;
+}
+
+/* IDE-style palettes affect only semantically classified transcript content. */
+:root[data-rv-syntax-theme='dracula'] {
+  --rv-syntax-bg: #282a36;
+  --rv-syntax-fg: #f8f8f2;
+  --rv-syntax-comment: #6272a4;
+  --rv-syntax-keyword: #ff79c6;
+  --rv-syntax-string: #f1fa8c;
+  --rv-syntax-number: #bd93f9;
+  --rv-syntax-title: #50fa7b;
+  --rv-syntax-variable: #8be9fd;
+  --rv-syntax-meta: #ffb86c;
+  --rv-syntax-addition: #50fa7b;
+  --rv-syntax-deletion: #ff5555;
+  --rv-text-scope-accent: var(--rv-syntax-variable);
+  --rv-text-scope-muted: var(--rv-syntax-comment);
+  --rv-text-scope-quote: var(--rv-syntax-string);
+  --rv-text-scope-emphasis: var(--rv-syntax-keyword);
+  --rv-text-scope-code: var(--rv-syntax-title);
+}
+
+:root[data-rv-syntax-theme='solarized-dark'] {
+  --rv-syntax-bg: #002b36;
+  --rv-syntax-fg: #839496;
+  --rv-syntax-comment: #586e75;
+  --rv-syntax-keyword: #859900;
+  --rv-syntax-string: #2aa198;
+  --rv-syntax-number: #d33682;
+  --rv-syntax-title: #268bd2;
+  --rv-syntax-variable: #b58900;
+  --rv-syntax-meta: #6c71c4;
+  --rv-syntax-addition: #859900;
+  --rv-syntax-deletion: #dc322f;
+  --rv-text-scope-accent: var(--rv-syntax-title);
+  --rv-text-scope-muted: var(--rv-syntax-comment);
+  --rv-text-scope-quote: var(--rv-syntax-string);
+  --rv-text-scope-emphasis: var(--rv-syntax-variable);
+  --rv-text-scope-code: var(--rv-syntax-title);
+}
+
+:root[data-rv-syntax-theme='solarized-light'] {
+  --rv-syntax-bg: #fdf6e3;
+  --rv-syntax-fg: #657b83;
+  --rv-syntax-comment: #93a1a1;
+  --rv-syntax-keyword: #859900;
+  --rv-syntax-string: #2aa198;
+  --rv-syntax-number: #d33682;
+  --rv-syntax-title: #268bd2;
+  --rv-syntax-variable: #b58900;
+  --rv-syntax-meta: #6c71c4;
+  --rv-syntax-addition: #859900;
+  --rv-syntax-deletion: #dc322f;
+  --rv-text-scope-accent: var(--rv-syntax-title);
+  --rv-text-scope-muted: var(--rv-syntax-comment);
+  --rv-text-scope-quote: var(--rv-syntax-string);
+  --rv-text-scope-emphasis: var(--rv-syntax-variable);
+  --rv-text-scope-code: var(--rv-syntax-title);
+}
+
+:root[data-rv-syntax-theme='monokai'] {
+  --rv-syntax-bg: #272822;
+  --rv-syntax-fg: #f8f8f2;
+  --rv-syntax-comment: #75715e;
+  --rv-syntax-keyword: #f92672;
+  --rv-syntax-string: #e6db74;
+  --rv-syntax-number: #ae81ff;
+  --rv-syntax-title: #a6e22e;
+  --rv-syntax-variable: #66d9ef;
+  --rv-syntax-meta: #fd971f;
+  --rv-syntax-addition: #a6e22e;
+  --rv-syntax-deletion: #f92672;
+  --rv-text-scope-accent: var(--rv-syntax-variable);
+  --rv-text-scope-muted: var(--rv-syntax-comment);
+  --rv-text-scope-quote: var(--rv-syntax-string);
+  --rv-text-scope-emphasis: var(--rv-syntax-keyword);
+  --rv-text-scope-code: var(--rv-syntax-title);
 }
 
 /*

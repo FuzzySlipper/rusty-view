@@ -121,7 +121,7 @@ rv-message-block {
   padding: 0 var(--rv-space-xs);
   border-radius: var(--rv-radius);
   background: var(--rv-color-surface-raised);
-  color: var(--rv-color-text-primary);
+  color: var(--rv-text-scope-code);
 }
 
 /* Fenced code blocks (parser emits `pre.rv-md-code`). Mono, scrollable. */
@@ -130,12 +130,12 @@ rv-message-block {
   padding: var(--rv-space-sm) var(--rv-space-md);
   border: 1px solid var(--rv-color-border);
   border-radius: var(--rv-radius);
-  background: var(--rv-color-surface);
+  background: var(--rv-syntax-bg);
   overflow-x: auto;
   font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-sm);
   line-height: var(--rv-line-height-normal);
-  color: var(--rv-color-text-primary);
+  color: var(--rv-syntax-fg);
 }
 
 .rv-block__markdown .rv-md-code-block {
@@ -184,7 +184,75 @@ rv-message-block {
   border: none;
   border-radius: 0;
   background: transparent;
+  color: inherit;
   font-size: inherit;
+}
+
+/* highlight.js emits only semantic span classes; palette values remain CSS. */
+.rv-block__markdown .hljs-comment,
+.rv-block__markdown .hljs-quote {
+  color: var(--rv-syntax-comment);
+}
+
+.rv-block__markdown .hljs-keyword,
+.rv-block__markdown .hljs-selector-tag,
+.rv-block__markdown .hljs-literal,
+.rv-block__markdown .hljs-doctag {
+  color: var(--rv-syntax-keyword);
+}
+
+.rv-block__markdown .hljs-string,
+.rv-block__markdown .hljs-regexp,
+.rv-block__markdown .hljs-attribute {
+  color: var(--rv-syntax-string);
+}
+
+.rv-block__markdown .hljs-number,
+.rv-block__markdown .hljs-symbol,
+.rv-block__markdown .hljs-bullet {
+  color: var(--rv-syntax-number);
+}
+
+.rv-block__markdown .hljs-title,
+.rv-block__markdown .hljs-section,
+.rv-block__markdown .hljs-name,
+.rv-block__markdown .hljs-type {
+  color: var(--rv-syntax-title);
+}
+
+.rv-block__markdown .hljs-variable,
+.rv-block__markdown .hljs-template-variable,
+.rv-block__markdown .hljs-selector-class,
+.rv-block__markdown .hljs-selector-id {
+  color: var(--rv-syntax-variable);
+}
+
+.rv-block__markdown .hljs-meta,
+.rv-block__markdown .hljs-built_in,
+.rv-block__markdown .hljs-params {
+  color: var(--rv-syntax-meta);
+}
+
+.rv-block__markdown .hljs-addition {
+  color: var(--rv-syntax-addition);
+}
+
+.rv-block__markdown .hljs-deletion {
+  color: var(--rv-syntax-deletion);
+}
+
+.rv-block__markdown .rv-json-key {
+  color: var(--rv-syntax-title);
+}
+
+.rv-block__markdown .rv-json-string {
+  color: var(--rv-syntax-string);
+}
+
+.rv-block__markdown .rv-json-bool,
+.rv-block__markdown .rv-json-null,
+.rv-block__markdown .rv-json-number {
+  color: var(--rv-syntax-number);
 }
 
 /* Links: accent, readable underline. */
