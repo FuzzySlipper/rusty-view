@@ -20,9 +20,15 @@ import { WorkerManager } from '@rusty-view/transcript-renderer';
   selector: 'rv-json-inspector',
   template: `
     @if (highlightedHtml()) {
-      <pre class="rv-json" [innerHTML]="highlightedHtml()"></pre>
+      <pre
+        class="rv-json"
+        data-testid="json-inspector"
+        [innerHTML]="highlightedHtml()"
+      ></pre>
     } @else {
-      <pre class="rv-json">{{ formattedInline() }}</pre>
+      <pre class="rv-json" data-testid="json-inspector">{{
+        formattedInline()
+      }}</pre>
     }
   `,
   styles: [
@@ -35,7 +41,7 @@ import { WorkerManager } from '@rusty-view/transcript-renderer';
       .rv-json {
         margin: 0;
         padding: var(--rv-space-sm);
-        font-family: var(--rv-font-mono);
+        font-family: var(--rv-font-technical);
         font-size: var(--rv-font-size-xs);
         line-height: var(--rv-line-height-normal);
         color: var(--rv-color-text-secondary);
