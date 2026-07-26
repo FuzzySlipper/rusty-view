@@ -91,6 +91,7 @@ describe('searchConversationMessages', () => {
               renderPolicy: 'full',
               attachment: {
                 id: 'a1',
+                status: 'active',
                 kind: 'file',
                 name: 'notes.md',
                 mimeType: 'text/markdown',

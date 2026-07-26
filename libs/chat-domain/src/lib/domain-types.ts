@@ -88,6 +88,7 @@ export interface TranscriptTextSpan {
 // ---- attachments ----
 
 export type AttachmentMediaKind = 'image' | 'audio' | 'video' | 'file';
+export type AttachmentLifecycleStatus = 'active' | 'removed';
 
 export interface AttachmentTextPreview {
   readonly text: string;
@@ -97,6 +98,7 @@ export interface AttachmentTextPreview {
 
 export interface ChatAttachment {
   readonly id: string;
+  readonly status?: AttachmentLifecycleStatus;
   readonly kind: AttachmentMediaKind;
   readonly name: string;
   readonly mimeType: string | undefined;
@@ -106,6 +108,27 @@ export interface ChatAttachment {
   readonly textPreview: AttachmentTextPreview | undefined;
   readonly scopeId: string | undefined;
   readonly metadata?: MessageMetadata;
+}
+
+export interface ChatAttachmentLink {
+  readonly id: string;
+  readonly attachmentId: string;
+  readonly messageId: string | undefined;
+  readonly blockId: string | undefined;
+  readonly scopeId: string | undefined;
+  readonly createdAt: string;
+  readonly metadata?: MessageMetadata;
+}
+
+/**
+ * Durable attachment state retained by the event projection. Keeping links
+ * outside rendered messages lets link events arrive before their target
+ * message, then materialize the same stable block once that message appears.
+ */
+export interface ChatAttachmentProjection {
+  readonly attachment: ChatAttachment;
+  readonly links: readonly ChatAttachmentLink[];
+  readonly updatedAt: string;
 }
 
 export interface ChatAttachmentScope {
@@ -346,6 +369,7 @@ export interface StreamErrorState {
  */
 export interface ConversationProjection {
   readonly messages: readonly ChatMessage[];
+  readonly attachments: readonly ChatAttachmentProjection[];
   readonly toolCalls: readonly ToolCallProjection[];
   readonly commands: readonly CommandProjection[];
   readonly branches: readonly ConversationBranch[];
@@ -370,6 +394,7 @@ export interface ConversationProjection {
 export function emptyProjection(): ConversationProjection {
   return {
     messages: [],
+    attachments: [],
     toolCalls: [],
     commands: [],
     branches: [],

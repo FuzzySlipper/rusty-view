@@ -431,6 +431,7 @@ export class MessageInputComponent {
       source,
       attachment: {
         id: attachmentId(file),
+        status: 'active',
         kind: attachmentKindForMimeType(mimeType),
         name: file.name || 'untitled',
         mimeType,

@@ -1,9 +1,13 @@
 import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 
+import { attachmentKindForMimeType } from './attachments';
 import {
   emptyProjection,
   type ActiveAssistantTurn,
   type ChatMessage,
+  type ChatAttachment,
+  type ChatAttachmentLink,
+  type ChatAttachmentProjection,
   type CommandProjection,
   type ContextEstimateQuality,
   type ContextTimelineEntry,
@@ -11,6 +15,7 @@ import {
   type ConversationProjection,
   type MessageAuthor,
   type MessageBlock,
+  type MessageMetadata,
   type MessageRole,
   type StreamErrorState,
   type ToolBlockMeta,
@@ -109,10 +114,12 @@ function applyEvent(
     case 'conversation_active_branch_selected':
     case 'conversation_branch_head_updated':
     case 'conversation_snapshot_created':
+      return withCursor;
     case 'attachment_uploaded':
     case 'attachment_linked':
     case 'attachment_removed':
     case 'attachment_updated':
+      return applyAttachmentLifecycle(withCursor, event);
     case 'data_bank_scope_created':
     case 'data_bank_scope_removed':
       return withCursor;
@@ -168,7 +175,240 @@ function applyMessageCreated(
     [{ kind: 'text', content: body }],
   );
 
-  return { ...projection, messages: [...projection.messages, message] };
+  return {
+    ...projection,
+    messages: reconcileAttachmentBlocks(
+      [...projection.messages, message],
+      projection.attachments,
+    ),
+  };
+}
+
+// ---- attachments ----
+
+function applyAttachmentLifecycle(
+  projection: ConversationProjection,
+  event: ChatEvent,
+): ConversationProjection {
+  const payload = payloadRecord(event.payload);
+  const incomingRecord = readAttachment(payload['attachment']);
+  const incomingLink = readAttachmentLink(payload['link']);
+  const attachmentId =
+    readOptionalString(payload, 'attachment_id') ??
+    incomingRecord?.attachment.id ??
+    incomingLink?.attachmentId;
+  if (attachmentId === undefined) {
+    return projection;
+  }
+
+  const existing = projection.attachments.find(
+    (entry) => entry.attachment.id === attachmentId,
+  );
+  const incomingUpdatedAt =
+    readAttachmentUpdatedAt(payload['attachment']) ?? event.created_at;
+  const incomingIsCurrent =
+    existing === undefined ||
+    compareEventTimes(incomingUpdatedAt, existing.updatedAt) >= 0;
+  const fallback = existing?.attachment;
+  const attachment: ChatAttachment = incomingIsCurrent
+    ? {
+        ...(incomingRecord?.attachment ??
+          fallback ??
+          unavailableAttachment(attachmentId)),
+        status:
+          event.kind === 'attachment_removed'
+            ? 'removed'
+            : (incomingRecord?.attachment.status ??
+              fallback?.status ??
+              'active'),
+      }
+    : (fallback ?? unavailableAttachment(attachmentId));
+
+  const recordLinks = incomingRecord?.links ?? [];
+  const links = mergeAttachmentLinks(existing?.links ?? [], [
+    ...recordLinks,
+    ...(incomingLink === undefined ? [] : [incomingLink]),
+  ]);
+  const entry: ChatAttachmentProjection = {
+    attachment,
+    links,
+    updatedAt: incomingIsCurrent
+      ? incomingUpdatedAt
+      : (existing?.updatedAt ?? incomingUpdatedAt),
+  };
+  const attachments =
+    existing === undefined
+      ? [...projection.attachments, entry]
+      : projection.attachments.map((candidate) =>
+          candidate.attachment.id === attachmentId ? entry : candidate,
+        );
+
+  return {
+    ...projection,
+    attachments,
+    messages: reconcileAttachmentBlocks(projection.messages, attachments),
+  };
+}
+
+function readAttachment(value: unknown):
+  | {
+      readonly attachment: ChatAttachment;
+      readonly links: readonly ChatAttachmentLink[];
+    }
+  | undefined {
+  if (!isPayloadObject(value)) return undefined;
+  const id = readOptionalString(value, 'attachment_id');
+  const filename = readOptionalString(value, 'filename');
+  const mimeType = readOptionalString(value, 'mime_type');
+  if (id === undefined || filename === undefined || mimeType === undefined) {
+    return undefined;
+  }
+  const metadata = readMetadata(value['metadata_json']);
+  const extractedText = readOptionalString(value, 'extracted_text');
+  const status =
+    readOptionalString(value, 'status') === 'removed' ? 'removed' : 'active';
+  const linksValue = value['links'];
+  const links = Array.isArray(linksValue)
+    ? linksValue
+        .map(readAttachmentLink)
+        .filter((link): link is ChatAttachmentLink => link !== undefined)
+    : [];
+  return {
+    attachment: {
+      id,
+      status,
+      kind: attachmentKindForMimeType(mimeType),
+      name: filename,
+      mimeType,
+      sizeBytes: readOptionalInteger(value, 'byte_size'),
+      // download_url is the browser-safe presentation URL. storage_url may be
+      // an internal filesystem/object-store address and is deliberately not
+      // exposed to the renderer.
+      url: readNullableString(value, 'download_url'),
+      thumbnailUrl: readNullableString(value, 'thumbnail_url'),
+      textPreview:
+        extractedText === undefined
+          ? undefined
+          : {
+              text: extractedText,
+              truncated: readPayloadBoolean(value, 'extracted_text_truncated'),
+              ...(typeof metadata?.['language'] === 'string'
+                ? { language: metadata['language'] }
+                : {}),
+            },
+      scopeId: undefined,
+      ...(metadata === undefined ? {} : { metadata }),
+    },
+    links,
+  };
+}
+
+function readAttachmentUpdatedAt(value: unknown): string | undefined {
+  return isPayloadObject(value)
+    ? readOptionalString(value, 'updated_at')
+    : undefined;
+}
+
+function readAttachmentLink(value: unknown): ChatAttachmentLink | undefined {
+  if (!isPayloadObject(value)) return undefined;
+  const id = readOptionalString(value, 'link_id');
+  const attachmentId = readOptionalString(value, 'attachment_id');
+  const createdAt = readOptionalString(value, 'created_at');
+  if (
+    id === undefined ||
+    attachmentId === undefined ||
+    createdAt === undefined
+  ) {
+    return undefined;
+  }
+  const metadata = readMetadata(value['metadata_json']);
+  return {
+    id,
+    attachmentId,
+    messageId: readNullableString(value, 'message_id'),
+    blockId: readNullableString(value, 'block_id'),
+    scopeId: readNullableString(value, 'scope_id'),
+    createdAt,
+    ...(metadata === undefined ? {} : { metadata }),
+  };
+}
+
+function unavailableAttachment(id: string): ChatAttachment {
+  return {
+    id,
+    status: 'active',
+    kind: 'file',
+    name: 'Attachment',
+    mimeType: undefined,
+    sizeBytes: undefined,
+    url: undefined,
+    thumbnailUrl: undefined,
+    textPreview: undefined,
+    scopeId: undefined,
+  };
+}
+
+function mergeAttachmentLinks(
+  existing: readonly ChatAttachmentLink[],
+  incoming: readonly ChatAttachmentLink[],
+): readonly ChatAttachmentLink[] {
+  const byId = new Map(existing.map((link) => [link.id, link]));
+  for (const link of incoming) {
+    byId.set(link.id, link);
+  }
+  return [...byId.values()];
+}
+
+function reconcileAttachmentBlocks(
+  messages: readonly ChatMessage[],
+  attachments: readonly ChatAttachmentProjection[],
+): readonly ChatMessage[] {
+  let reconciled = messages;
+  for (const entry of attachments) {
+    for (const link of entry.links) {
+      if (link.messageId === undefined) continue;
+      const messageIndex = reconciled.findIndex(
+        (message) => message.id === link.messageId,
+      );
+      if (messageIndex < 0) continue;
+      const message = reconciled[messageIndex];
+      if (message === undefined) continue;
+      const block: MessageBlock = {
+        id: link.blockId ?? `attachment-link-${link.id}`,
+        messageId: message.id,
+        kind: 'attachment',
+        content: '',
+        estimatedHeight: undefined,
+        renderPolicy: 'full',
+        attachment: {
+          ...entry.attachment,
+          scopeId: link.scopeId ?? entry.attachment.scopeId,
+        },
+        metadata: {
+          attachmentId: entry.attachment.id,
+          attachmentLinkId: link.id,
+          ...(link.metadata ?? {}),
+        },
+      };
+      const updatedMessage = {
+        ...message,
+        blocks: replaceBlock(message.blocks, block),
+      };
+      reconciled = reconciled.map((candidate, index) =>
+        index === messageIndex ? updatedMessage : candidate,
+      );
+    }
+  }
+  return reconciled;
+}
+
+function compareEventTimes(left: string, right: string): number {
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    return leftTime - rightTime;
+  }
+  return left.localeCompare(right);
 }
 
 // ---- assistant turn lifecycle ----
@@ -539,6 +779,25 @@ function readOptionalString(
 ): string | undefined {
   const value = payload[field];
   return typeof value === 'string' ? value : undefined;
+}
+
+function readNullableString(
+  payload: Record<string, unknown>,
+  field: string,
+): string | undefined {
+  const value = payload[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readMetadata(value: unknown): MessageMetadata | undefined {
+  if (isPayloadObject(value)) return value;
+  if (typeof value !== 'string') return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isPayloadObject(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readOptionalInteger(

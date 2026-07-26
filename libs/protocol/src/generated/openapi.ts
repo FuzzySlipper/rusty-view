@@ -398,6 +398,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/attachments/{attachment_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read authenticated Crew-owned attachment bytes */
+        get: operations["readAttachmentContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/data-bank/scopes": {
         parameters: {
             query?: never;
@@ -1453,7 +1470,7 @@ export interface components {
             mutation: "read" | "write" | "control";
             /** @enum {string} */
             stability: "stable" | "experimental";
-            tags: ("attachment" | "chat" | "config" | "conversation" | "curator" | "delegation" | "diagnostics" | "governance" | "maintenance" | "mcp" | "memory" | "profile" | "prompt" | "scheduler" | "search" | "service" | "session" | "storage" | "tool")[];
+            tags: ("attachment" | "chat" | "config" | "conversation" | "curator" | "delegation" | "diagnostics" | "governance" | "maintenance" | "mcp" | "media" | "memory" | "profile" | "prompt" | "scheduler" | "search" | "service" | "session" | "storage" | "tool")[];
             public: boolean;
             command_name?: string;
             rust_plan_operation?: string;
@@ -2247,6 +2264,32 @@ export interface operations {
                     "application/json": components["schemas"]["ApiEnvelope"] & {
                         data?: components["schemas"]["AttachmentMutationResult"];
                     };
+                };
+            };
+        };
+    };
+    readAttachmentContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment binary content */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
                 };
             };
         };

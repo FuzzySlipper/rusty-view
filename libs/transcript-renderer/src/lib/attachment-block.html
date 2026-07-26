@@ -1,14 +1,41 @@
-<figure class="rv-attachment" [attr.data-kind]="attachment().kind">
+<figure
+  class="rv-attachment"
+  [attr.data-kind]="attachment().kind"
+  [attr.data-status]="attachment().status ?? 'active'"
+>
   <div class="rv-attachment__preview">
-    @switch (attachment().kind) { @case ('image') { @if
-    (attachment().thumbnailUrl || attachment().url) {
-    <img
-      class="rv-attachment__image"
-      [src]="attachment().thumbnailUrl ?? attachment().url"
-      [alt]="attachment().name"
-    />
-    } @else {
-    <span class="rv-attachment__placeholder">image</span>
+    @if (attachment().status === 'removed') {
+    <span class="rv-attachment__state" role="status">Attachment removed</span>
+    } @else { @switch (attachment().kind) { @case ('image') { @if
+    (imageSource(); as source) {
+    <a
+      class="rv-attachment__image-link"
+      [href]="imageOpenUrl()"
+      target="_blank"
+      rel="noopener noreferrer"
+      [attr.aria-label]="'Open full-size image: ' + attachment().name"
+    >
+      <img
+        class="rv-attachment__image"
+        [class.rv-attachment__image--failed]="imageState() === 'failed'"
+        [src]="source"
+        [alt]="attachment().name"
+        (load)="markImageAvailable()"
+        (error)="markImageFailed()"
+      />
+    </a>
+    @if (imageState() === 'loading') {
+    <span
+      class="rv-attachment__state rv-attachment__state--loading"
+      role="status"
+      >Loading image…</span
+    >
+    } @else if (imageState() === 'failed') {
+    <span class="rv-attachment__state rv-attachment__state--error" role="alert"
+      >Image failed to load</span
+    >
+    } } @else {
+    <span class="rv-attachment__state" role="status">Image unavailable</span>
     } } @case ('audio') { @if (attachment().url) {
     <audio
       class="rv-attachment__audio"
@@ -36,8 +63,8 @@
       Open file
     </a>
     } @else {
-    <span class="rv-attachment__placeholder">file</span>
-    } } }
+    <span class="rv-attachment__state" role="status">File unavailable</span>
+    } } } }
   </div>
 
   <figcaption class="rv-attachment__meta">

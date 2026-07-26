@@ -25,6 +25,46 @@ function makeEvent(
   };
 }
 
+function attachmentRecord(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    attachment_id: 'att_1',
+    session_id: 'sess_1',
+    status: 'active',
+    filename: 'generated.png',
+    mime_type: 'image/png',
+    byte_size: 4096,
+    storage_url: 'file:///private/generated.png',
+    download_url: '/v1/chat/sessions/sess_1/attachments/att_1/content',
+    thumbnail_url: '/v1/chat/sessions/sess_1/attachments/att_1/thumbnail',
+    extracted_text: null,
+    extracted_text_truncated: false,
+    metadata_json: { source: 'tool_media' },
+    created_at: '2026-06-22T10:00:01Z',
+    updated_at: '2026-06-22T10:00:01Z',
+    expires_at: null,
+    links: [],
+    ...overrides,
+  };
+}
+
+function attachmentLink(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    link_id: 'link_1',
+    attachment_id: 'att_1',
+    session_id: 'sess_1',
+    message_id: 'assistant_1',
+    block_id: 'assistant_1-attachment-att_1',
+    scope_id: null,
+    metadata_json: { source: 'tool_media' },
+    created_at: '2026-06-22T10:00:02Z',
+    ...overrides,
+  };
+}
+
 describe('projectConversation', () => {
   it('returns an empty projection for no events', () => {
     const projection = projectConversation([]);
@@ -486,6 +526,173 @@ describe('projectConversation', () => {
     const projection = projectConversation([unknownEvent]);
     expect(projection.unknownEvents).toHaveLength(1);
     expect(projection.unknownEvents[0]?.event_id).toBe('e1');
+  });
+});
+
+describe('attachment lifecycle projection', () => {
+  it('links a generated image into its target message with browser-safe URLs', () => {
+    const record = attachmentRecord();
+    const link = attachmentLink();
+    const projection = projectConversation([
+      makeEvent('message_created', {
+        message_id: 'assistant_1',
+        role: 'assistant',
+        body: 'Here is the generated image.',
+      }),
+      makeEvent('attachment_uploaded', { attachment: record }),
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: { ...record, links: [link] },
+        link,
+      }),
+    ]);
+
+    expect(projection.attachments).toHaveLength(1);
+    const block = projection.messages[0]?.blocks.find(
+      (candidate) => candidate.kind === 'attachment',
+    );
+    expect(block?.id).toBe('assistant_1-attachment-att_1');
+    expect(block?.attachment).toMatchObject({
+      id: 'att_1',
+      status: 'active',
+      kind: 'image',
+      name: 'generated.png',
+      url: '/v1/chat/sessions/sess_1/attachments/att_1/content',
+      thumbnailUrl: '/v1/chat/sessions/sess_1/attachments/att_1/thumbnail',
+    });
+    expect(block?.attachment?.url).not.toContain('file:');
+  });
+
+  it('retains a link that arrives before its target message', () => {
+    const record = attachmentRecord();
+    const link = attachmentLink();
+    const projection = projectConversation([
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: { ...record, links: [link] },
+        link,
+      }),
+      makeEvent('message_created', {
+        message_id: 'assistant_1',
+        role: 'assistant',
+        body: 'Late message.',
+      }),
+    ]);
+
+    expect(
+      projection.messages[0]?.blocks.filter(
+        (candidate) => candidate.kind === 'attachment',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('updates and removes one stable block across replayed duplicate events', () => {
+    const link = attachmentLink();
+    const initial = attachmentRecord({ links: [link] });
+    const updated = attachmentRecord({
+      download_url: '/content/revised',
+      thumbnail_url: '/thumbnail/revised',
+      updated_at: '2026-06-22T10:00:03Z',
+      links: [link],
+    });
+    const removed = attachmentRecord({
+      status: 'removed',
+      updated_at: '2026-06-22T10:00:04Z',
+      links: [link],
+    });
+    const projection = projectConversation([
+      makeEvent('message_created', {
+        message_id: 'assistant_1',
+        role: 'assistant',
+        body: 'Image lifecycle.',
+      }),
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: initial,
+        link,
+      }),
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: initial,
+        link,
+      }),
+      makeEvent('attachment_updated', {
+        attachment_id: 'att_1',
+        attachment: updated,
+      }),
+      makeEvent('attachment_removed', {
+        attachment_id: 'att_1',
+        attachment: removed,
+      }),
+      // A stale replay after reconnect must not resurrect the removed image.
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: initial,
+        link,
+      }),
+    ]);
+
+    const blocks =
+      projection.messages[0]?.blocks.filter(
+        (candidate) => candidate.kind === 'attachment',
+      ) ?? [];
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.id).toBe('assistant_1-attachment-att_1');
+    expect(blocks[0]?.attachment?.status).toBe('removed');
+    expect(projection.attachments[0]?.updatedAt).toBe('2026-06-22T10:00:04Z');
+  });
+
+  it('preserves pending attachment state across incremental replay', () => {
+    const link = attachmentLink();
+    const base = projectConversation([
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: attachmentRecord({ links: [link] }),
+        link,
+      }),
+    ]);
+    const projection = projectConversation(
+      [
+        makeEvent('message_created', {
+          message_id: 'assistant_1',
+          role: 'assistant',
+          body: 'Loaded after reconnect.',
+        }),
+      ],
+      base,
+    );
+
+    expect(
+      projection.messages[0]?.blocks.some(
+        (candidate) => candidate.kind === 'attachment',
+      ),
+    ).toBe(true);
+  });
+
+  it('projects missing download URLs as an unavailable attachment', () => {
+    const link = attachmentLink();
+    const projection = projectConversation([
+      makeEvent('message_created', {
+        message_id: 'assistant_1',
+        role: 'assistant',
+        body: 'No media URL.',
+      }),
+      makeEvent('attachment_linked', {
+        attachment_id: 'att_1',
+        attachment: attachmentRecord({
+          download_url: null,
+          thumbnail_url: null,
+          links: [link],
+        }),
+        link,
+      }),
+    ]);
+
+    const attachment = projection.messages[0]?.blocks.find(
+      (candidate) => candidate.kind === 'attachment',
+    )?.attachment;
+    expect(attachment?.url).toBeUndefined();
+    expect(attachment?.thumbnailUrl).toBeUndefined();
   });
 });
 

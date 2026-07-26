@@ -43,6 +43,7 @@ function makeAttachment(
 ): ChatAttachment {
   return {
     id: 'a1',
+    status: 'active',
     kind: 'file',
     name: 'notes.txt',
     mimeType: 'text/plain',
@@ -645,6 +646,70 @@ describe('MessageBlockComponent', () => {
     expect(image).not.toBeNull();
     expect(image.getAttribute('src')).toBe('/thumbs/frame.png');
     expect(image.getAttribute('alt')).toBe('frame.png');
+    const fullSizeLink = host.querySelector(
+      '.rv-attachment__image-link',
+    ) as HTMLAnchorElement;
+    expect(fullSizeLink.getAttribute('href')).toBe('/files/frame.png');
+    expect(fullSizeLink.getAttribute('target')).toBe('_blank');
+    expect(fullSizeLink.getAttribute('rel')).toContain('noopener');
+    expect(host.textContent).toContain('Loading image');
+
+    image.dispatchEvent(new Event('load'));
+    fixture.detectChanges();
+    expect(host.textContent).not.toContain('Loading image');
+  });
+
+  it('shows failed, unavailable, and removed image states', async () => {
+    const failedFixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          kind: 'image',
+          name: 'broken.png',
+          url: '/files/broken.png',
+        }),
+      }),
+    );
+    const failedHost: HTMLElement = failedFixture.nativeElement;
+    failedHost
+      .querySelector('.rv-attachment__image')
+      ?.dispatchEvent(new Event('error'));
+    failedFixture.detectChanges();
+    expect(failedHost.textContent).toContain('Image failed to load');
+
+    failedFixture.componentRef.setInput(
+      'block',
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          kind: 'image',
+          name: 'pending.png',
+          url: undefined,
+          thumbnailUrl: undefined,
+        }),
+      }),
+    );
+    failedFixture.detectChanges();
+    expect(failedHost.textContent).toContain('Image unavailable');
+
+    failedFixture.componentRef.setInput(
+      'block',
+      makeBlock({
+        kind: 'attachment',
+        content: '',
+        attachment: makeAttachment({
+          status: 'removed',
+          kind: 'image',
+          name: 'removed.png',
+          url: '/files/removed.png',
+        }),
+      }),
+    );
+    failedFixture.detectChanges();
+    expect(failedHost.textContent).toContain('Attachment removed');
+    expect(failedHost.querySelector('img')).toBeNull();
   });
 
   it('renders audio attachments with native controls', async () => {
@@ -1036,6 +1101,7 @@ describe('MessageItemComponent', () => {
         'debug',
         'command',
         'service_notice',
+        'attachment',
       ].map((kind, index) =>
         makeBlock({ id: `block-${index}`, kind, content: kind }),
       ),
@@ -1045,7 +1111,7 @@ describe('MessageItemComponent', () => {
       visibleTranscriptBlocks(message, { reasoning: true, tools: false }).map(
         (block) => block.kind,
       ),
-    ).toEqual(['service_notice']);
+    ).toEqual(['service_notice', 'attachment']);
   });
 });
 
