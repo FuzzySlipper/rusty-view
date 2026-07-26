@@ -437,10 +437,28 @@ export class ChatStore implements OnDestroy {
       const result = await opened;
       if (!this.isCurrentSelection(revision, sessionId)) return;
       this._activeSessionStatus.set(result.session.status);
-      this.ingestEvents(result.events);
-      void this.storage
-        .putEvents(sessionId, result.events)
-        .catch(() => undefined);
+
+      // Crew's open-session response is deliberately a bounded tail page. A
+      // long native Profile turn therefore reports `has_more_before` and may
+      // contain only the final few deltas. Rebuild from the synthetic origin
+      // cursor before projecting that tail as a complete transcript.
+      //
+      // Keep the open tail in the batch as a race-safe fallback: if new events
+      // landed between openSession and replay, they still enter the projection.
+      // ingestEvents deduplicates the overlap by event_id.
+      let initialEvents = result.events;
+      if (result.has_more_before) {
+        const originCursor =
+          result.events.find((event) => event.sequence_id === 0)?.event_id ??
+          `${sessionId}:0`;
+        const replayedEvents = await this.transport.replayAllEvents(sessionId, {
+          cursor: originCursor,
+          limit: 500,
+        });
+        if (!this.isCurrentSelection(revision, sessionId)) return;
+        initialEvents = [...result.events, ...replayedEvents];
+      }
+      this.ingestEvents(initialEvents);
 
       // Reconcile a stale active turn. Replayed events are historical; if a turn
       // record is incomplete (deltas/tools with no terminal `assistant_turn_finished`),
@@ -747,7 +765,17 @@ export class ChatStore implements OnDestroy {
    * call this.
    */
   ingestEvents(events: readonly ChatEvent[]): void {
-    const newEvents = events.filter((e) => !this.seenEventIds.has(e.event_id));
+    const batchEventIds = new Set<string>();
+    const newEvents = events.filter((event) => {
+      if (
+        this.seenEventIds.has(event.event_id) ||
+        batchEventIds.has(event.event_id)
+      ) {
+        return false;
+      }
+      batchEventIds.add(event.event_id);
+      return true;
+    });
     if (newEvents.length === 0) return;
 
     const orderedNewEvents = [...newEvents].sort(compareChatEventSequence);

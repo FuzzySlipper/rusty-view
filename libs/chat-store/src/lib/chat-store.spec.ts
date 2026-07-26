@@ -316,6 +316,94 @@ describe('ChatStore', () => {
     expect(store.projection().messages[0]?.blocks[0]?.content).toBe('hello');
   });
 
+  it('hydrates the complete transcript when the open result is only a tail page', async () => {
+    const snapshot: ChatEvent = {
+      event_id: 'sess_test:0',
+      session_id: 'sess_test',
+      sequence_id: 0,
+      created_at: '2026-06-22T10:00:00Z',
+      kind: 'session_snapshot',
+      payload: { session: emptyOpenResult().session },
+    };
+    const userMessage: ChatEvent = {
+      event_id: 'sess_test:1',
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-06-22T10:00:01Z',
+      kind: 'message_created',
+      payload: {
+        message_id: 'user-1',
+        role: 'user',
+        body: 'compare both repositories',
+      },
+    };
+    const turnStarted: ChatEvent = {
+      event_id: 'sess_test:2',
+      session_id: 'sess_test',
+      sequence_id: 2,
+      created_at: '2026-06-22T10:00:02Z',
+      kind: 'assistant_turn_started',
+      payload: { wake_id: 'wake-1' },
+    };
+    const textDelta: ChatEvent = {
+      event_id: 'sess_test:3',
+      session_id: 'sess_test',
+      sequence_id: 3,
+      created_at: '2026-06-22T10:00:03Z',
+      kind: 'assistant_text_delta',
+      payload: { wake_id: 'wake-1', text: 'Complete comparison' },
+    };
+    const completed: ChatEvent = {
+      event_id: 'sess_test:4',
+      session_id: 'sess_test',
+      sequence_id: 4,
+      created_at: '2026-06-22T10:00:04Z',
+      kind: 'assistant_message_completed',
+      payload: {
+        wake_id: 'wake-1',
+        status: 'completed',
+        summary: 'Complete comparison',
+      },
+    };
+    const finished: ChatEvent = {
+      event_id: 'sess_test:5',
+      session_id: 'sess_test',
+      sequence_id: 5,
+      created_at: '2026-06-22T10:00:05Z',
+      kind: 'assistant_turn_finished',
+      payload: { wake_id: 'wake-1' },
+    };
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        session: { ...emptyOpenResult().session, status: 'idle' },
+        events: [snapshot, completed, finished],
+        has_more_before: true,
+      },
+      // The replay overlaps the bounded open tail, as the live Crew API does.
+      replayEvents: [userMessage, turnStarted, textDelta, completed, finished],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+
+    expect(transport.replayAllEvents).toHaveBeenCalledWith('sess_test', {
+      cursor: 'sess_test:0',
+      limit: 500,
+    });
+    expect(store.rawEvents().map((event) => event.sequence_id)).toEqual([
+      0, 1, 2, 3, 4, 5,
+    ]);
+    expect(store.messages().map((message) => message.id)).toEqual([
+      'user-1',
+      'asst:wake-1',
+    ]);
+    expect(store.messages().at(-1)?.blocks[0]?.content).toBe(
+      'Complete comparison',
+    );
+    expect(store.isStreaming()).toBe(false);
+  });
+
   it('atomically restores a hot transcript without rescanning storage', async () => {
     const storage = new InMemoryChatStorage();
     const transport = createMockTransport({});
@@ -461,7 +549,7 @@ describe('ChatStore', () => {
       kind: 'message_created',
       payload: { message_id: 'm1', role: 'user', body: 'hi' },
     };
-    store.ingestEvents([event]);
+    store.ingestEvents([event, event]); // duplicate in the same replay batch
     store.ingestEvents([event]); // same event_id
     expect(store.rawEvents()).toHaveLength(1);
   });
