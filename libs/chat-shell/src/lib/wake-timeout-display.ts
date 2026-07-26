@@ -97,14 +97,14 @@ export function profileWakeTimeoutLabel(
   runtimeSessionFor: (
     sessionId: string,
   ) => RuntimeSessionDiagnostics | undefined,
-): string {
+): string | undefined {
   const values = sessions
     .map((session) =>
       effectiveWakeTimeoutMs(session, runtimeSessionFor(session.session_id)),
     )
     .filter((value): value is number => value !== undefined);
 
-  if (values.length === 0) return 'turn cap disabled / no service cap';
+  if (values.length === 0) return undefined;
   const unique = [...new Set(values)].sort((a, b) => a - b);
   if (unique.length === 1)
     return `turn cap ${formatDurationMs(unique[0] ?? 0)}`;

@@ -142,7 +142,9 @@
   color: var(--rv-color-text-secondary);
   font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
-  text-transform: uppercase;
+}
+.rv-agent__session-status {
+  font-weight: var(--rv-font-weight-bold);
 }
 .rv-agent__attention {
   color: var(--rv-color-warning);

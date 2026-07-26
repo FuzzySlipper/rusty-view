@@ -8,6 +8,7 @@ import {
 import type { BrainProfile } from '@rusty-view/chat-domain';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 
+import { sessionStatusLabel } from './session-status-label';
 import { profileWakeTimeoutLabel } from './wake-timeout-display';
 
 /**
@@ -39,12 +40,6 @@ export class ProfilePanelComponent {
     this.store.selectedProfileId(),
   );
   protected readonly hasProfiles = computed(() => this.profiles().length > 0);
-  protected readonly statusLabel = computed(() => {
-    if (this.profiles().length === 0 && this.store.sessions().length === 0) {
-      return 'empty';
-    }
-    return 'ready';
-  });
 
   constructor() {
     void this.admin.refresh();
@@ -59,9 +54,13 @@ export class ProfilePanelComponent {
     void this.store.refreshSessions();
   }
 
-  protected wakeTimeoutLabel(profile: BrainProfile): string {
+  protected wakeTimeoutLabel(profile: BrainProfile): string | undefined {
     return profileWakeTimeoutLabel(profile.sessions, (sessionId) =>
       this.admin.runtimeSession(sessionId),
     );
+  }
+
+  protected profileStatusLabel(status: string): string {
+    return sessionStatusLabel(status);
   }
 }

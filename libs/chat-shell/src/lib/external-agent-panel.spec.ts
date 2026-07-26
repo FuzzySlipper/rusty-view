@@ -20,6 +20,8 @@ interface PanelApi {
   readonly metadataTaskId: WritableSignal<string>;
   taskRefLabel(session: ExternalAgentSession): string;
   sessionTitle(session: ExternalAgentSession): string;
+  sessionStateLabel(session: ExternalAgentSession): string;
+  bindingStateLabel(session: ExternalAgentSession): string | undefined;
   openCreator(): void;
   openOptions(session: ExternalAgentSession): void;
   closeCreator(): void;
@@ -218,6 +220,55 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     expect(cwd.textContent).toContain('/home/dev/rusty-view');
     expect(cwd.title).toBe('/home/dev/rusty-view');
     expect(row.textContent).not.toContain('runtime-1');
+  });
+
+  it('keeps meaningful status while hiding the baseline active Crew binding', async () => {
+    const activeBinding = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    const nativeOnly = inventorySession(2, {
+      bound: false,
+      attention: false,
+      active: true,
+    });
+    const { fixture, panel } = await createPanel(
+      async () => undefined,
+      [activeBinding, nativeOnly],
+    );
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll(
+      '[data-testid="external-agent-row"]',
+    );
+    expect(panel.sessionStateLabel(activeBinding)).toBe('Idle');
+    expect(panel.bindingStateLabel(activeBinding)).toBeUndefined();
+    expect(rows[0]?.textContent).toContain('Idle');
+    expect(rows[0]?.textContent?.toLowerCase()).not.toContain('crew active');
+    expect(rows[1]?.textContent).toContain('Active');
+    expect(rows[1]?.textContent).toContain('Native only');
+  });
+
+  it('retains exceptional Crew binding status in normal title case', async () => {
+    const base = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    if (base.binding === undefined) throw new Error('expected bound session');
+    const paused: ExternalAgentSession = {
+      ...base,
+      binding: { ...base.binding, status: 'paused' },
+    };
+    const { fixture, panel } = await createPanel(
+      async () => undefined,
+      [paused],
+    );
+    fixture.detectChanges();
+
+    expect(panel.bindingStateLabel(paused)).toBe('Crew Paused');
+    expect(fixture.nativeElement.textContent).toContain('Crew Paused');
   });
 
   it('places Options below Archive and saves explicit nullable metadata', async () => {

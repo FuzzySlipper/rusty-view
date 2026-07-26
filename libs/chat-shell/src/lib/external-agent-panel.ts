@@ -16,6 +16,8 @@ import {
 } from '@rusty-view/chat-store';
 import type { ExternalAgentSessionCreateWrite } from '@rusty-view/protocol';
 
+import { sessionStatusLabel } from './session-status-label';
+
 const CREATION_ATTEMPTS_STORAGE_KEY =
   'rusty-view:external-agent-creation-attempts:v1';
 const MAX_PERSISTED_CREATION_ATTEMPTS = 20;
@@ -119,6 +121,18 @@ export class ExternalAgentPanelComponent {
     return (
       session.binding?.label ?? session.thread.name ?? session.thread.preview
     );
+  }
+
+  protected sessionStateLabel(session: ExternalAgentSession): string {
+    return sessionStatusLabel(session.phase ?? session.thread.status);
+  }
+
+  protected bindingStateLabel(
+    session: ExternalAgentSession,
+  ): string | undefined {
+    if (session.binding === undefined) return 'Native only';
+    if (session.binding.status === 'active') return undefined;
+    return `Crew ${sessionStatusLabel(session.binding.status)}`;
   }
 
   protected updateQuery(event: Event): void {

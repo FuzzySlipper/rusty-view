@@ -71,7 +71,6 @@
 }
 
 .rv-profile__status {
-  text-transform: uppercase;
   font-weight: var(--rv-font-weight-bold);
 }
 

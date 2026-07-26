@@ -26,15 +26,16 @@
             [class.rv-profile__status--active]="profile.status === 'active'"
             [class.rv-profile__status--idle]="profile.status === 'idle'"
             [class.rv-profile__status--archived]="profile.status === 'archived'"
-            >{{ profile.status }}</span
+            >{{ profileStatusLabel(profile.status) }}</span
           >
           · {{ profile.sessionCount }} session(s)
         </span>
         @if (profile.activeSessionId) {
         <span class="rv-profile__live">▸ {{ profile.activeSessionId }}</span>
-        }
-        <span class="rv-profile__timeout">{{ wakeTimeoutLabel(profile) }}</span>
-        @if (admin.profilePauseCount(profile.profileId, profile.sessions) > 0) {
+        } @if (wakeTimeoutLabel(profile); as timeoutLabel) {
+        <span class="rv-profile__timeout">{{ timeoutLabel }}</span>
+        } @if (admin.profilePauseCount(profile.profileId, profile.sessions) > 0)
+        {
         <span class="rv-profile__paused">runtime paused</span>
         }
       </button>

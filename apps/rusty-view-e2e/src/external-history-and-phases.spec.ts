@@ -11,8 +11,12 @@ test('focuses a large native inventory and archives then restores through Crew',
   await expect(page.getByTestId('external-agent-counts')).toContainText(
     'Loaded: 2 managed · 98 native-only · 1 attention',
   );
-  await expect(page.locator('[data-thread-id="thread-0"]')).toContainText(
-    'Crew active',
+  const managedRow = page.locator('[data-thread-id="thread-0"]');
+  await expect(managedRow.getByText('Idle', { exact: true })).toBeVisible();
+  await expect(managedRow).not.toContainText(/Crew active/i);
+  await expect(managedRow.locator('.rv-agent__session-status')).toHaveCSS(
+    'font-weight',
+    '600',
   );
   const attentionArchive = page
     .locator('[data-thread-id="thread-99"]')

@@ -193,7 +193,26 @@ describe('ProfilePanelComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
 
     expect(text).toContain('turn cap 1 min (60,000 ms)');
-    expect(text).toContain('turn cap disabled / no service cap');
+    expect(text).not.toContain('turn cap disabled');
+    expect(
+      fixture.nativeElement.querySelectorAll('.rv-profile__timeout'),
+    ).toHaveLength(1);
+  });
+
+  it('renders emphasized profile status in normal title case', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'active',
+        profile_id: 'p1',
+        status: 'active',
+      }),
+    ]);
+    const status = (fixture.nativeElement as HTMLElement).querySelector(
+      '.rv-profile__status',
+    );
+
+    expect(status?.textContent?.trim()).toBe('Active');
+    expect(status?.classList.contains('rv-profile__status--active')).toBe(true);
   });
 
   it('marks the selected profile', async () => {
