@@ -1,0 +1,34 @@
+[Unit]
+Description=Rusty Crew m5 native instance %i
+Documentation=file:/data/services/rusty-stack/repos/rusty-view/docs/m5-dual-stack-deployment.md
+After=network-online.target den-go@mcp.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=jb
+Group=jb
+SupplementaryGroups=docker
+UMask=0002
+SyslogIdentifier=rusty-crew-m5-%i
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=10000
+WorkingDirectory=/data/services/rusty-stack/current/crew
+Environment=HOME=/home/jb
+Environment=NODE_ENV=production
+Environment=PATH=/data/services/rusty-stack/current/bin:/home/jb/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=/data/services/rusty-stack/instances/%i/native-config/service.env
+EnvironmentFile=-/data/services/rusty-stack/instances/%i/config/adapter-secrets.env
+ExecStartPre=/data/services/rusty-stack/current/bin/tsx ts/packages/service-host/src/preflight.ts
+ExecStart=/data/services/rusty-stack/current/bin/tsx ts/packages/service-host/src/start.ts
+Restart=on-failure
+RestartSec=5s
+WatchdogSec=45s
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target

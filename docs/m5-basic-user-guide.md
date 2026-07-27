@@ -12,11 +12,11 @@ with the person maintaining the machine.
 
 Open these addresses from a computer on the same LAN:
 
-| Service | Address | Purpose |
-| --- | --- | --- |
-| Den Web | `http://192.168.1.10:18080` | Shared projects, tasks, documents, messages, and reference material |
-| Rusty View A | `http://192.168.1.10:9347` | First independent Rusty Crew workspace |
-| Rusty View B | `http://192.168.1.10:9348` | Second independent Rusty Crew workspace |
+| Service      | Address                     | Purpose                                                             |
+| ------------ | --------------------------- | ------------------------------------------------------------------- |
+| Den Web      | `http://192.168.1.10:18080` | Shared projects, tasks, documents, messages, and reference material |
+| Rusty View A | `http://192.168.1.10:9347`  | First independent Rusty Crew workspace                              |
+| Rusty View B | `http://192.168.1.10:9348`  | Second independent Rusty Crew workspace                             |
 
 Choose one Rusty View address for each person and keep using that address. The
 two Crew workspaces have separate configuration, conversations, artifacts, and
@@ -43,7 +43,7 @@ It helps to think of the system as three pieces:
   you configure profiles, start conversations, send prompts, and inspect what
   an agent did.
 
-Rusty View and Rusty Crew are packaged together at each of the two Rusty View
+Rusty View and Rusty Crew are deployed together at each of the two Rusty View
 addresses. You do not normally open Rusty Crew separately.
 
 ```text
@@ -70,15 +70,15 @@ still open the other address if they know it.
 
 ## What Is Shared And What Is Separate?
 
-| Information | Shared? | Where it lives |
-| --- | --- | --- |
-| Den projects and tasks | Yes | Den Services |
-| Den documents and project messages | Yes | Den Services |
-| Agent profiles and model settings | No | The selected Crew instance |
-| Conversation history | No | The selected Crew instance |
-| Crew artifacts and tool history | No | The selected Crew instance |
-| Crew SQLite database | No | The selected Crew instance |
-| Browser appearance preferences | Usually no | That browser's local storage |
+| Information                        | Shared?    | Where it lives               |
+| ---------------------------------- | ---------- | ---------------------------- |
+| Den projects and tasks             | Yes        | Den Services                 |
+| Den documents and project messages | Yes        | Den Services                 |
+| Agent profiles and model settings  | No         | The selected Crew instance   |
+| Conversation history               | No         | The selected Crew instance   |
+| Crew artifacts and tool history    | No         | The selected Crew instance   |
+| Crew SQLite database               | No         | The selected Crew instance   |
+| Browser appearance preferences     | Usually no | That browser's local storage |
 
 If both people work in the same Den project, both can see its tasks and
 documents. Their Rusty Crew conversations remain separate as long as each
@@ -109,11 +109,11 @@ Use this general order:
 The machine-level Den connection is already configured at:
 
 ```text
-http://host.docker.internal:5199/mcp
+http://127.0.0.1:5199/mcp
 ```
 
-That address is correct from inside the Crew container. Do not replace it with
-`127.0.0.1`: inside a container, `127.0.0.1` means the container itself.
+That address is correct because both Crew services now run directly on the
+host.
 
 The installed connection only proves Crew can reach Den Services. It does not
 automatically add every Den tool to every profile. Provider credentials,
@@ -274,8 +274,13 @@ sudo update-rusty-stack
 ```
 
 The updater fetches current Rusty Crew and Rusty View revisions, builds one
-paired image, updates both instances, verifies them, and records the exact
-deployed revisions. It preserves the two instance data directories.
+paired release, updates both native systemd services, verifies them, and records
+the exact deployed revisions. It preserves the two instance data directories.
+
+The agent processes run as the host user `jb`. Their default workspaces are
+separate, but they can deliberately access the broader host filesystem and
+tools when their profile exposes the corresponding capabilities. This is
+intentional for the agent experiment machine and is not a security sandbox.
 
 Do not manually point both Crew services at the same directory or SQLite
 database. Backups and deeper recovery should follow the separate
