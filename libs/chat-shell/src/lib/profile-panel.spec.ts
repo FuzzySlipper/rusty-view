@@ -168,10 +168,10 @@ async function createPanel(sessions: ChatSessionSummary[]) {
 }
 
 describe('ProfilePanelComponent', () => {
-  it('shows an empty state when there are no profiles', async () => {
+  it('shows an empty state when there are no agents', async () => {
     const { fixture } = await createPanel([]);
     const host: HTMLElement = fixture.nativeElement;
-    expect(host.textContent).toContain('No profiles found');
+    expect(host.textContent).toContain('No agents found');
   });
 
   it('renders one row per profile', async () => {

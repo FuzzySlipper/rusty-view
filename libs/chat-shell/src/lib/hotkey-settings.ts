@@ -27,12 +27,12 @@ export const HOTKEY_ACTIONS: readonly {
   {
     id: 'nextSession',
     label: 'Next session',
-    description: 'Cycle forward through the active Profiles or Agents list.',
+    description: 'Cycle forward through the active Agents or Codex list.',
   },
   {
     id: 'previousSession',
     label: 'Previous session',
-    description: 'Cycle backward through the active Profiles or Agents list.',
+    description: 'Cycle backward through the active Agents or Codex list.',
   },
   {
     id: 'erasePreviousWord',

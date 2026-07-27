@@ -33,7 +33,7 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
     .poll(() => readAppearanceSetting(page, 'showInspector'))
     .toBe(false);
   await page.reload();
-  await expect(page.getByTestId('profiles-toggle')).toHaveText('Show Profiles');
+  await expect(page.getByTestId('profiles-toggle')).toHaveText('Show Agents');
   await expect(page.getByTestId('inspector-toggle')).toHaveText(
     'Show Inspector',
   );

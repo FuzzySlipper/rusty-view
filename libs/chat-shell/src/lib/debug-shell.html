@@ -25,12 +25,12 @@
       type="button"
       class="rv-debug__toggle rv-debug__desktop-profiles-toggle"
       data-testid="profiles-toggle"
-      rvTooltip="Show or hide the profiles sidebar"
+      rvTooltip="Show or hide the agents sidebar"
       rvTooltipPlacement="bottom"
       [attr.aria-pressed]="showProfiles()"
       (click)="toggleProfiles()"
     >
-      {{ showProfiles() ? 'Hide Profiles' : 'Show Profiles' }}
+      {{ showProfiles() ? 'Hide Agents' : 'Show Agents' }}
     </button>
     <button
       type="button"
@@ -50,7 +50,7 @@
       [attr.aria-expanded]="mobileSessionsOpen()"
       (click)="toggleMobileSessions()"
     >
-      Sessions
+      Agents
     </button>
   </header>
 
@@ -76,10 +76,11 @@
       <nav class="rv-debug__sidebar-tabs" aria-label="Conversation sources">
         <button
           type="button"
+          data-testid="crew-agents-tab"
           [class.active]="sidebarMode() === 'profiles'"
           (click)="showSidebar('profiles')"
         >
-          Profiles
+          Agents
         </button>
         <button
           type="button"
@@ -87,7 +88,7 @@
           [class.active]="sidebarMode() === 'agents'"
           (click)="showSidebar('agents')"
         >
-          Agents @if (externalAttention()) {
+          Codex @if (externalAttention()) {
           <span class="rv-debug__attention-dot"></span> }
         </button>
         <button

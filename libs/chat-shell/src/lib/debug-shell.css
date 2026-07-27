@@ -404,11 +404,19 @@
   .rv-debug__sidebar-tabs {
     grid-template-columns: 1fr 1fr auto;
     flex: 0 0 auto;
+    padding-top: calc(var(--rv-space-lg) + env(safe-area-inset-top, 0px));
+    background: var(--rv-color-surface);
+  }
+
+  .rv-debug__sidebar-tabs button {
+    min-height: 48px;
+    padding-inline: var(--rv-space-md);
+    font-size: var(--rv-font-size-sm);
+    touch-action: manipulation;
   }
 
   .rv-debug__sidebar-tabs .rv-debug__sidebar-close {
     display: block;
-    padding-inline: var(--rv-space-sm);
     color: var(--rv-color-accent);
   }
 
