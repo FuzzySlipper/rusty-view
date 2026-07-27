@@ -1906,6 +1906,7 @@ function reconciledExternalTurnPhase(
   const eventState = latestExternalTurnState(events);
   if (eventState === undefined) return latestSnapshotTurnPhase(thread);
   if (isTerminalPhase(eventState.phase)) return eventState.phase;
+  if (eventState.retrying) return eventState.phase;
   const matchingSnapshot = thread?.turns.find(
     (turn) => turn.turnId === eventState.turnId,
   );
@@ -1923,6 +1924,7 @@ function latestExternalTurnState(
       readonly turnId: string | undefined;
       readonly sequenceId: number;
       readonly phase: ExternalTurnPhase;
+      readonly retrying: boolean;
     }
   | undefined {
   let latest:
@@ -1930,6 +1932,7 @@ function latestExternalTurnState(
         readonly turnId: string | undefined;
         readonly sequenceId: number;
         readonly phase: ExternalTurnPhase;
+        readonly retrying: boolean;
       }
     | undefined;
   for (const event of events) {
@@ -1943,6 +1946,7 @@ function latestExternalTurnState(
         turnId: event.nativeTurnId ?? undefined,
         sequenceId: event.sequenceId,
         phase,
+        retrying: isRetryingEvent(event),
       };
     }
   }
@@ -1953,13 +1957,14 @@ function reconciledActiveExternalTurnId(
   events: readonly NormalizedExternalRuntimeEvent[],
   thread: ExternalThreadProjection | undefined,
 ): string | undefined {
-  const eventTurnId = activeExternalTurnId(events);
-  if (eventTurnId !== undefined) {
+  const eventState = latestActiveExternalTurnState(events);
+  if (eventState !== undefined) {
+    if (eventState.retrying) return eventState.turnId;
     const snapshotPhase = snapshotTurnPhase(
-      thread?.turns.find((turn) => turn.turnId === eventTurnId),
+      thread?.turns.find((turn) => turn.turnId === eventState.turnId),
     );
     if (snapshotPhase === undefined || !isTerminalPhase(snapshotPhase)) {
-      return eventTurnId;
+      return eventState.turnId;
     }
   }
   return activeSnapshotTurnId(thread);
@@ -1968,9 +1973,27 @@ function reconciledActiveExternalTurnId(
 export function activeExternalTurnId(
   events: readonly NormalizedExternalRuntimeEvent[],
 ): string | undefined {
+  return latestActiveExternalTurnState(events)?.turnId;
+}
+
+function latestActiveExternalTurnState(
+  events: readonly NormalizedExternalRuntimeEvent[],
+):
+  | {
+      readonly turnId: string;
+      readonly sequenceId: number;
+      readonly phase: ExternalTurnPhase;
+      readonly retrying: boolean;
+    }
+  | undefined {
   const latestByTurn = new Map<
     string,
-    { readonly sequenceId: number; readonly phase: ExternalTurnPhase }
+    {
+      readonly turnId: string;
+      readonly sequenceId: number;
+      readonly phase: ExternalTurnPhase;
+      readonly retrying: boolean;
+    }
   >();
   for (const event of events) {
     if (event.kind !== 'turn_lifecycle' || event.nativeTurnId == null) continue;
@@ -1979,14 +2002,16 @@ export function activeExternalTurnId(
     const previous = latestByTurn.get(event.nativeTurnId);
     if (previous === undefined || event.sequenceId > previous.sequenceId) {
       latestByTurn.set(event.nativeTurnId, {
+        turnId: event.nativeTurnId,
         sequenceId: event.sequenceId,
         phase,
+        retrying: isRetryingEvent(event),
       });
     }
   }
-  return [...latestByTurn.entries()]
-    .filter(([, value]) => !isTerminalPhase(value.phase))
-    .sort((left, right) => right[1].sequenceId - left[1].sequenceId)[0]?.[0];
+  return [...latestByTurn.values()]
+    .filter((value) => !isTerminalPhase(value.phase))
+    .sort((left, right) => right.sequenceId - left.sequenceId)[0];
 }
 
 function latestSnapshotTurnPhase(
@@ -2011,11 +2036,13 @@ function eventPhase(
   event: NormalizedExternalRuntimeEvent,
 ): ExternalTurnPhase | undefined {
   const phase = phaseValue(event.payload.status);
-  return phase !== undefined &&
-    isTerminalPhase(phase) &&
-    event.payload.error?.willRetry === true
+  return phase !== undefined && isTerminalPhase(phase) && isRetryingEvent(event)
     ? 'active'
     : phase;
+}
+
+function isRetryingEvent(event: NormalizedExternalRuntimeEvent): boolean {
+  return event.payload.error?.willRetry === true;
 }
 
 function snapshotTurnPhase(

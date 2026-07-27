@@ -63,6 +63,40 @@ describe('external agent lifecycle reduction', () => {
     expect(store.turnPhase()).toBe('completed');
     expect(store.activeTurnId()).toBeUndefined();
   });
+
+  it('keeps a retrying event active over a stale terminal snapshot', () => {
+    const store = setupStore({
+      runtimes: [],
+      listThreads: vi.fn(),
+    });
+    const staleTerminalSnapshot = threadWithUserPrompts('retrying prompt');
+    const staleTurn = staleTerminalSnapshot.turns[0];
+    if (staleTurn === undefined) throw new Error('expected stale turn');
+    store.selectedThread.set({
+      ...staleTerminalSnapshot,
+      turns: [
+        {
+          ...staleTurn,
+          status: 'failed',
+          terminalReasonCode: 'response_stream_connection_failed',
+        },
+      ],
+    });
+    store.events.set([event(30, 'turn-1', 'failed', true)]);
+
+    expect(store.turnPhase()).toBe('active');
+    expect(store.activeTurnId()).toBe('turn-1');
+    expect(store.isTurnActive()).toBe(true);
+
+    store.events.set([
+      event(30, 'turn-1', 'failed', true),
+      event(31, 'turn-1', 'failed', false),
+    ]);
+
+    expect(store.turnPhase()).toBe('failed');
+    expect(store.activeTurnId()).toBeUndefined();
+    expect(store.isTurnActive()).toBe(false);
+  });
 });
 
 describe('external agent metadata editing', () => {
