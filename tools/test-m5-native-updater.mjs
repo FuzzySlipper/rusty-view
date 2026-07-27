@@ -83,8 +83,10 @@ try {
   ]);
   await installFakeCommands();
 
-  await writeFile(join(stateRoot, 'fail-restart-once'), 'yes\n');
-  const initialFailure = runUpdater([], { expectSuccess: false });
+  const initialFailure = runUpdater([], {
+    expectSuccess: false,
+    extraEnv: { RUSTY_STACK_FAIL_CONFIG_INSTANCE: 'b' },
+  });
   assert.match(
     `${initialFailure.stdout}\n${initialFailure.stderr}`,
     /restoring the previous runtime/,
@@ -99,6 +101,8 @@ try {
   );
   await assertLegacyConfig('a');
   await assertLegacyConfig('b');
+  await assertMissing(join(stackRoot, 'instances/a/native-config'));
+  await assertMissing(join(stackRoot, 'instances/b/native-config'));
   await assertMissing(join(stackRoot, 'current'));
 
   const first = runUpdater([], { expectSuccess: true });
@@ -141,6 +145,46 @@ try {
   await rm(dirtyFile);
 
   await pushRemoteChange(viewRemote, 'README.md', 'fixture view v2\n');
+  const nativeConfigA = await readFile(
+    join(stackRoot, 'instances/a/native-config/service.env'),
+    'utf8',
+  );
+  const nativeConfigB = await readFile(
+    join(stackRoot, 'instances/b/native-config/service.env'),
+    'utf8',
+  );
+  const configFailed = runUpdater([], {
+    expectSuccess: false,
+    extraEnv: { RUSTY_STACK_FAIL_CONFIG_INSTANCE: 'b' },
+  });
+  assert.match(
+    `${configFailed.stdout}\n${configFailed.stderr}`,
+    /restoring the previous runtime/,
+  );
+  assert.equal(await readlink(join(stackRoot, 'current')), firstRelease);
+  assert.equal(
+    await readFile(
+      join(stackRoot, 'instances/a/native-config/service.env'),
+      'utf8',
+    ),
+    nativeConfigA,
+  );
+  assert.equal(
+    await readFile(
+      join(stackRoot, 'instances/b/native-config/service.env'),
+      'utf8',
+    ),
+    nativeConfigB,
+  );
+  assert.equal(
+    await readFile(join(stateRoot, 'systemctl-active-a'), 'utf8'),
+    'active\n',
+  );
+  assert.equal(
+    await readFile(join(stateRoot, 'systemctl-active-b'), 'utf8'),
+    'active\n',
+  );
+
   await writeFile(join(stateRoot, 'fail-restart-once'), 'yes\n');
   const failed = runUpdater([], { expectSuccess: false });
   const failedOutput = `${failed.stdout}\n${failed.stderr}`;
@@ -212,7 +256,7 @@ async function pushRemoteChange(remote, relativePath, content) {
   run('git', ['-C', seed, 'push', 'origin', 'main']);
 }
 
-function runUpdater(args, { expectSuccess }) {
+function runUpdater(args, { expectSuccess, extraEnv = {} }) {
   const bashArgs =
     process.env.RUSTY_STACK_TEST_TRACE === '1'
       ? ['-x', updaterSource, ...args]
@@ -230,6 +274,7 @@ function runUpdater(args, { expectSuccess }) {
       RUSTY_CREW_GIT_URL: join(remotesRoot, 'rusty-crew.git'),
       RUSTY_VIEW_GIT_URL: join(remotesRoot, 'rusty-view.git'),
       RUSTY_STACK_TEST_STATE: stateRoot,
+      ...extraEnv,
     },
   });
   if (expectSuccess) {

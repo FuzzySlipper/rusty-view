@@ -27,7 +27,7 @@ log() {
 
 fail() {
   printf '[rusty-stack] ERROR: %s\n' "$*" >&2
-  exit 1
+  return 1
 }
 
 require_command() {
@@ -144,6 +144,11 @@ write_instance_config() {
     "${root}/artifacts" \
     "${root}/backups" \
     "${root}/workspace"
+
+  if [[ "${test_mode}" == "1" ]] &&
+    [[ "${RUSTY_STACK_FAIL_CONFIG_INSTANCE:-}" == "${instance}" ]]; then
+    fail "injected native config failure for instance ${instance}"
+  fi
 
   if [[ ! -f "${env_file}" ]]; then
     if [[ -f "${legacy_config}/service.env" ]]; then
@@ -525,6 +530,9 @@ main() {
   local had_container_b=false
   local identity_a
   local identity_b
+  local native_config_backup=""
+  local native_config_snapshot_ready=false
+  declare -A native_config_existed=([a]=false [b]=false)
 
   crew_revision="$(run_as_stack_user git -C "${crew_repo}" rev-parse HEAD)"
   view_revision="$(run_as_stack_user git -C "${view_repo}" rev-parse HEAD)"
@@ -558,20 +566,38 @@ main() {
   build_release "${crew_revision}" "${view_revision}" "${release_name}"
   release="${built_release}"
 
-  stop_legacy_containers
-  if systemctl_stack is-active --quiet rusty-crew-m5@a.service ||
-    systemctl_stack is-active --quiet rusty-crew-m5@b.service; then
-    systemctl_stack stop rusty-crew-m5@a.service rusty-crew-m5@b.service
-  fi
+  snapshot_native_config() {
+    local instance
+    native_config_backup="$(mktemp -d "${stack_root}/native-config-backup.XXXXXX")"
+    for instance in a b; do
+      if [[ -d "${stack_root}/instances/${instance}/native-config" ]]; then
+        cp -a \
+          "${stack_root}/instances/${instance}/native-config" \
+          "${native_config_backup}/${instance}"
+        native_config_existed["${instance}"]=true
+      fi
+    done
+    native_config_snapshot_ready=true
+  }
 
-  chown -R "${stack_user}:${stack_group}" "${stack_root}/instances"
-  write_instance_config a 9347
-  write_instance_config b 9348
-  chown -R "${stack_user}:${stack_group}" "${stack_root}/instances"
-  identity_a="$(sqlite_identity a)"
-  identity_b="$(sqlite_identity b)"
-  [[ "${identity_a}" != "${identity_b}" ]] ||
-    fail "SQLite isolation failed: both instances resolve to ${identity_a}"
+  restore_native_config() {
+    local instance
+    local target
+    for instance in a b; do
+      target="${stack_root}/instances/${instance}/native-config"
+      rm -rf -- "${target}"
+      if [[ "${native_config_existed[${instance}]}" == "true" ]]; then
+        cp -a "${native_config_backup}/${instance}" "${target}"
+      fi
+    done
+  }
+
+  cleanup_native_config_backup() {
+    if [[ -n "${native_config_backup}" ]]; then
+      rm -rf -- "${native_config_backup}"
+      native_config_backup=""
+    fi
+  }
 
   rollback() {
     local exit_code=$?
@@ -579,6 +605,12 @@ main() {
     log "Native activation failed; restoring the previous runtime."
     systemctl_stack stop \
       rusty-crew-m5@a.service rusty-crew-m5@b.service >/dev/null 2>&1 || true
+    if [[ "${native_config_snapshot_ready}" == "true" ]]; then
+      restore_native_config
+    fi
+    if [[ -n "${native_config_backup}" ]]; then
+      cleanup_native_config_backup
+    fi
     if [[ -n "${previous_release}" ]]; then
       switch_current_release "${previous_release}"
     elif [[ -L "${current_link}" ]]; then
@@ -597,6 +629,22 @@ main() {
   }
   trap rollback ERR
 
+  stop_legacy_containers
+  if systemctl_stack is-active --quiet rusty-crew-m5@a.service ||
+    systemctl_stack is-active --quiet rusty-crew-m5@b.service; then
+    systemctl_stack stop rusty-crew-m5@a.service rusty-crew-m5@b.service
+  fi
+
+  snapshot_native_config
+  chown -R "${stack_user}:${stack_group}" "${stack_root}/instances"
+  write_instance_config a 9347
+  write_instance_config b 9348
+  chown -R "${stack_user}:${stack_group}" "${stack_root}/instances"
+  identity_a="$(sqlite_identity a)"
+  identity_b="$(sqlite_identity b)"
+  [[ "${identity_a}" != "${identity_b}" ]] ||
+    fail "SQLite isolation failed: both instances resolve to ${identity_a}"
+
   install_unit
   switch_current_release "${release}"
   systemctl_stack restart rusty-crew-m5@a.service rusty-crew-m5@b.service
@@ -605,6 +653,7 @@ main() {
   write_manifest \
     "${release_name}" "${crew_revision}" "${view_revision}" \
     "${identity_a}" "${identity_b}"
+  cleanup_native_config_backup
   trap - ERR
 
   log "Updated native A: http://$(hostname -I | awk '{print $1}'):9347/"
