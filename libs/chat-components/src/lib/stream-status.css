@@ -36,3 +36,12 @@
 .rv-status--error .rv-status__dot {
   background: var(--rv-color-danger);
 }
+
+@media (max-width: 720px) {
+  .rv-status {
+    min-height: 44px;
+    padding-inline: var(--rv-space-md);
+    font-size: var(--rv-font-size-sm);
+    touch-action: manipulation;
+  }
+}

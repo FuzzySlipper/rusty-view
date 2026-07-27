@@ -336,8 +336,17 @@
 @media (max-width: 720px) {
   .rv-debug__header {
     flex-wrap: wrap;
-    gap: var(--rv-space-xs);
-    padding: var(--rv-space-xs) var(--rv-space-sm);
+    row-gap: var(--rv-space-md);
+    column-gap: var(--rv-space-sm);
+    padding: calc(var(--rv-space-lg) + env(safe-area-inset-top, 0px))
+      var(--rv-space-md) var(--rv-space-md);
+  }
+
+  .rv-debug__header .rv-debug__toggle {
+    min-height: 44px;
+    padding-inline: var(--rv-space-lg);
+    font-size: var(--rv-font-size-sm);
+    touch-action: manipulation;
   }
 
   .rv-debug__title,
@@ -347,10 +356,15 @@
     display: none;
   }
 
-  .rv-debug__mobile-sessions-toggle {
+  .rv-debug__header .rv-debug__mobile-sessions-toggle {
     display: inline-flex;
     align-items: center;
     order: -1;
+    min-width: 6rem;
+    min-height: 48px;
+    border-color: var(--rv-color-accent);
+    color: var(--rv-color-text-primary);
+    font-weight: var(--rv-font-weight-bold);
   }
 
   .rv-debug__header > rv-top-menu {

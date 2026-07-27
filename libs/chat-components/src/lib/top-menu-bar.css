@@ -36,3 +36,16 @@
   outline: 2px solid var(--rv-color-accent);
   outline-offset: -2px;
 }
+
+@media (max-width: 720px) {
+  .rv-top-menu {
+    min-height: 44px;
+  }
+
+  .rv-top-menu__item {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding-inline: var(--rv-space-lg);
+    touch-action: manipulation;
+  }
+}
