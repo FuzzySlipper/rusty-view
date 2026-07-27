@@ -1,5 +1,7 @@
 import type {
   ExternalThreadProjection,
+  ExternalThreadTurnErrorProjection,
+  ExternalThreadTurnProjection,
   NormalizedExternalRuntimeEvent,
 } from '@rusty-view/protocol';
 import type {
@@ -20,7 +22,9 @@ export function projectExternalAgentTranscript(
   if (thread !== undefined) {
     for (const turn of thread.turns) {
       const coverage: SnapshotTurnCoverage = {
-        terminal: isTerminalStatus(turn.status),
+        terminal:
+          isTerminalStatus(turn.status) && turn.error?.willRetry !== true,
+        error: turn.error ?? null,
         items: [],
       };
       snapshotCoverageByTurn.set(turn.turnId, coverage);
@@ -57,6 +61,8 @@ export function projectExternalAgentTranscript(
           ),
         );
       }
+      const errorMessage = buildSnapshotTurnErrorMessage(thread, turn);
+      if (errorMessage !== undefined) messages.push(errorMessage);
     }
   }
   const grouped = new Map<string, NormalizedExternalRuntimeEvent[]>();
@@ -104,7 +110,16 @@ export function projectExternalAgentTranscript(
     // group can put old reasoning/tool rows after the snapshot's final_answer.
     // The raw events remain available in the inspector; event augmentation is
     // still used for in-progress turns where the snapshot may be incomplete.
-    if (snapshotCoverageByTurn.get(first.nativeTurnId ?? '')?.terminal) {
+    const snapshotCoverage = snapshotCoverageByTurn.get(
+      first.nativeTurnId ?? '',
+    );
+    if (
+      snapshotCoverage?.terminal &&
+      !(
+        snapshotCoverage.error === null &&
+        group.some((event) => event.payload.error !== undefined)
+      )
+    ) {
       continue;
     }
     const blocks = blocksForGroup(group, status);
@@ -144,6 +159,7 @@ interface SnapshotItemCoverage {
 
 interface SnapshotTurnCoverage {
   readonly terminal: boolean;
+  readonly error: ExternalThreadTurnErrorProjection | null;
   readonly items: SnapshotItemCoverage[];
 }
 
@@ -159,6 +175,15 @@ function reconcileSnapshotEventGroup(
   events: readonly NormalizedExternalRuntimeEvent[],
 ): SnapshotEventReconciliation {
   if (snapshot === undefined) return { covered: false };
+  const eventError = events.find((event) => event.payload.error !== undefined)
+    ?.payload.error;
+  if (
+    eventError !== undefined &&
+    snapshot.error !== null &&
+    sameTurnError(eventError, snapshot.error)
+  ) {
+    return { covered: true };
+  }
   const projected = snapshotProjectionForEvents(events);
   if (projected === undefined) return { covered: false };
   const itemId = events.find((event) => event.itemId != null)?.itemId;
@@ -332,7 +357,9 @@ function applyMessagePhase(
 }
 
 function isTerminalStatus(status: string): boolean {
-  return ['completed', 'failed', 'interrupted'].includes(status);
+  return ['completed', 'failed', 'interrupted', 'outcome_unknown'].includes(
+    status,
+  );
 }
 
 function blocksForGroup(
@@ -341,6 +368,9 @@ function blocksForGroup(
 ): MessageBlock[] {
   const first = events[0];
   if (first === undefined) return [];
+  const latestErrorEvent = events
+    .filter((event) => event.payload.error !== undefined)
+    .at(-1);
   const textEvents = events.filter(
     (event) => event.kind === 'assistant_text_delta',
   );
@@ -436,9 +466,17 @@ function blocksForGroup(
       latestDiff === undefined
         ? undefined
         : eventBlock(latestDiff, messageStatus);
-    return block === undefined
-      ? []
-      : [withExternalDetailHistory(block, diffEvents)];
+    return [
+      ...(block === undefined
+        ? []
+        : [withExternalDetailHistory(block, diffEvents)]),
+      ...(latestErrorEvent === undefined
+        ? []
+        : [blockForTurnErrorEvent(latestErrorEvent)]),
+    ];
+  }
+  if (latestErrorEvent !== undefined) {
+    return [blockForTurnErrorEvent(latestErrorEvent)];
   }
   if (isExternalCommandEvent(first.kind)) {
     const latest = events.at(-1);
@@ -563,6 +601,134 @@ function eventBlock(
     default:
       return undefined;
   }
+}
+
+function buildSnapshotTurnErrorMessage(
+  thread: ExternalThreadProjection,
+  turn: ExternalThreadTurnProjection,
+): ChatMessage | undefined {
+  if (turn.error == null && !isFailureStatus(turn.status)) return undefined;
+  const retrying = turn.error?.willRetry === true;
+  const id = `external:${thread.threadId}:${turn.turnId}:turn-error`;
+  return buildMessage(
+    id,
+    thread.sessionId,
+    'assistant',
+    unixDate(turn.completedAt ?? turn.startedAt ?? thread.updatedAt),
+    [
+      blockForTurnError(
+        id,
+        turn.error ?? null,
+        {
+          status: turn.status,
+          statusSource: turn.statusSource ?? 'native',
+          terminalReasonCode: turn.terminalReasonCode ?? null,
+        },
+        retrying,
+      ),
+    ],
+    retrying ? 'streaming' : 'error',
+    {
+      nativeThreadId: thread.threadId,
+      nativeTurnId: turn.turnId,
+      statusSource: turn.statusSource ?? 'native',
+      terminalReasonCode: turn.terminalReasonCode ?? null,
+      externalTurnError: turn.error ?? null,
+      retrying,
+    },
+  );
+}
+
+function blockForTurnErrorEvent(
+  event: NormalizedExternalRuntimeEvent,
+): MessageBlock {
+  const error = event.payload.error;
+  if (error === undefined) {
+    return simpleBlock(event.eventId, 'debug', event.payload.nativeMethod);
+  }
+  return blockForTurnError(
+    event.eventId,
+    error,
+    {
+      status:
+        event.payload.status ??
+        (error.willRetry === true ? 'active' : 'failed'),
+      statusSource: 'native',
+      terminalReasonCode: event.payload.reasonCode ?? null,
+    },
+    error.willRetry === true,
+  );
+}
+
+function blockForTurnError(
+  id: string,
+  error: ExternalThreadTurnErrorProjection | null,
+  diagnostic: Pick<
+    ExternalThreadTurnProjection,
+    'status' | 'statusSource' | 'terminalReasonCode'
+  >,
+  retrying: boolean,
+): MessageBlock {
+  const summary =
+    error?.message ??
+    `Turn ended with status ${diagnostic.status.replaceAll('_', ' ')}.`;
+  const details = [
+    `Message: ${summary}`,
+    ...(error?.code == null ? [] : [`Code: ${error.code}`]),
+    ...(error?.additionalDetails == null
+      ? []
+      : [`Additional details: ${error.additionalDetails}`]),
+    `Status: ${diagnostic.status}`,
+    `Status source: ${diagnostic.statusSource}`,
+    ...(diagnostic.terminalReasonCode === null
+      ? []
+      : [`Terminal reason: ${diagnostic.terminalReasonCode}`]),
+    `Will retry: ${retrying ? 'yes' : 'no'}`,
+  ].join('\n');
+  const block = toolBlockValues(
+    id,
+    'external_turn_error',
+    retrying ? 'Codex retrying' : failureLabel(diagnostic.status),
+    details,
+    retrying ? 'running' : 'failed',
+  );
+  const tool = block.tool;
+  if (tool === undefined) return block;
+  return {
+    ...block,
+    metadata: {
+      statusSource: diagnostic.statusSource,
+      terminalReasonCode: diagnostic.terminalReasonCode,
+      retrying,
+    },
+    tool: {
+      ...tool,
+      summary,
+      reasonCode: diagnostic.terminalReasonCode ?? undefined,
+    },
+  };
+}
+
+function failureLabel(status: string): string {
+  if (status === 'interrupted') return 'Codex turn interrupted';
+  if (status === 'outcome_unknown') return 'Codex turn outcome unknown';
+  return 'Codex turn failed';
+}
+
+function isFailureStatus(status: string): boolean {
+  return ['failed', 'interrupted', 'outcome_unknown'].includes(status);
+}
+
+function sameTurnError(
+  left: ExternalThreadTurnErrorProjection,
+  right: ExternalThreadTurnErrorProjection,
+): boolean {
+  return (
+    left.message === right.message &&
+    left.code === right.code &&
+    left.additionalDetails === right.additionalDetails &&
+    left.willRetry === right.willRetry
+  );
 }
 
 function blockForItem(
@@ -715,7 +881,7 @@ function terminalStatus(
 ): ChatMessage['status'] {
   let latest: { sequenceId: number; status: ChatMessage['status'] } | undefined;
   for (const event of events) {
-    const status = messageStatus(event.payload.status);
+    const status = eventMessageStatus(event);
     if (
       status !== 'streaming' &&
       (latest === undefined || event.sequenceId > latest.sequenceId)
@@ -735,7 +901,7 @@ function terminalStatusesByTurn(
   >();
   for (const event of events) {
     if (event.kind !== 'turn_lifecycle' || event.nativeTurnId == null) continue;
-    const status = messageStatus(event.payload.status);
+    const status = eventMessageStatus(event);
     if (status === 'streaming') continue;
     const previous = latest.get(event.nativeTurnId);
     if (previous === undefined || event.sequenceId > previous.sequenceId) {
@@ -765,6 +931,14 @@ function messageStatus(status: string | undefined): ChatMessage['status'] {
     return 'completed';
   }
   return 'streaming';
+}
+
+function eventMessageStatus(
+  event: NormalizedExternalRuntimeEvent,
+): ChatMessage['status'] {
+  if (event.payload.error?.willRetry === true) return 'streaming';
+  if (event.payload.error !== undefined) return 'error';
+  return messageStatus(event.payload.status);
 }
 
 function eventGroupKey(event: NormalizedExternalRuntimeEvent): string {

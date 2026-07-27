@@ -291,6 +291,9 @@
       }
       <rv-event-inspector
         [events]="externalSelected() ? external.events() : store.rawEvents()"
+        [externalThread]="
+          externalSelected() ? external.selectedThread() : undefined
+        "
         [selectedEventId]="selectedEventId()"
         (selectEvent)="selectEvent($event)"
         (inspectRawDetail)="external.loadRawDetail($event)"
@@ -302,6 +305,14 @@
       >
 {{ detail.json }}</pre
       >
+      } @if (externalSelected() && external.rawDetailError(); as error) {
+      <div
+        class="rv-debug__command-error"
+        data-testid="external-raw-detail-error"
+        role="status"
+      >
+        {{ error }}
+      </div>
       } } @else {
       <rv-context-diagnostics
         [usage]="store.contextUsage()"

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import type {
   ChatEvent,
+  ExternalThreadProjection,
   NormalizedExternalRuntimeEvent,
 } from '@rusty-view/protocol';
 import { JsonInspectorComponent } from '@rusty-view/chat-components';
@@ -26,6 +27,9 @@ import { JsonInspectorComponent } from '@rusty-view/chat-components';
 })
 export class EventInspectorComponent {
   readonly events = input<readonly InspectorEvent[]>([]);
+  readonly externalThread = input<ExternalThreadProjection | undefined>(
+    undefined,
+  );
   readonly selectedEventId = input<string | undefined>(undefined);
   /** Emits the clicked event's id so the shell can drive the JSON detail. */
   readonly selectEvent = output<string>();
@@ -69,6 +73,12 @@ export class EventInspectorComponent {
     const id = this.selectedEventId();
     if (id === undefined) return undefined;
     return events.find((event) => this.eventId(event) === id);
+  }
+  protected selectedExternalTurn(event: InspectorEvent) {
+    if (!this.isExternal(event) || event.nativeTurnId == null) return undefined;
+    return this.externalThread()?.turns.find(
+      (turn) => turn.turnId === event.nativeTurnId,
+    );
   }
 
   protected eventId(event: InspectorEvent): string {

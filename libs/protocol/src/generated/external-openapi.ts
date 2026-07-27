@@ -1403,6 +1403,8 @@ export interface components {
             revision: number;
             runtimeId: string;
             taskRef?: components["schemas"]["DenRuntimeReference"] | null;
+            /** @default null */
+            terminalError: components["schemas"]["ExternalTurnTerminalError"] | null;
             terminalReasonCode?: string | null;
             updatedAt: string;
         };
@@ -1427,6 +1429,12 @@ export interface components {
         };
         /** @enum {string} */
         ExternalTurnPhase: "accepted" | "starting" | "active" | "waiting_interaction" | "completed" | "failed" | "interrupted" | "outcome_unknown";
+        ExternalTurnTerminalError: {
+            additionalDetails?: string | null;
+            code?: string | null;
+            message: string;
+            willRetry?: boolean | null;
+        };
         /** @enum {string} */
         FanOutFailurePolicy: "fail_fast" | "fail_soft";
         /** @enum {string} */
@@ -2169,6 +2177,7 @@ export interface components {
             status?: string;
             text?: string;
             message?: string;
+            error?: components["schemas"]["ExternalThreadTurnErrorProjection"];
             command?: string;
             argument?: string | null;
             controlId?: string;
@@ -2227,10 +2236,20 @@ export interface components {
         ExternalThreadTurnProjection: {
             turnId: string;
             status: string;
+            /** @enum {string} */
+            statusSource: "native" | "crew_terminal";
+            terminalReasonCode: string | null;
+            error: components["schemas"]["ExternalThreadTurnErrorProjection"] | null;
             startedAt: number | null;
             completedAt: number | null;
             durationMs: number | null;
             items: components["schemas"]["ExternalThreadItemProjection"][];
+        };
+        ExternalThreadTurnErrorProjection: {
+            message: string;
+            code: string | null;
+            additionalDetails: string | null;
+            willRetry: boolean | null;
         };
         ExternalThreadProjection: {
             threadId: string;

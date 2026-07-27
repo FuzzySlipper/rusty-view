@@ -174,6 +174,7 @@ export class ExternalAgentStore {
   readonly metadataError = signal<string | undefined>(undefined);
   readonly metadataNotice = signal<string | undefined>(undefined);
   readonly rawDetail = signal<ExternalRuntimeRawDetail | undefined>(undefined);
+  readonly rawDetailError = signal<string | undefined>(undefined);
   readonly composerMode = signal<ExternalComposerMode>('auto');
   readonly commandCatalog = signal<ExternalRuntimeCommandCatalog | undefined>(
     undefined,
@@ -589,6 +590,8 @@ export class ExternalAgentStore {
     const threadId = result.thread.threadId;
     this.selectedRuntimeEventCursor = this.fleetCursors.get(runtimeId);
     this.events.set([]);
+    this.rawDetail.set(undefined);
+    this.rawDetailError.set(undefined);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(false);
     this.selectedRuntimeId.set(runtimeId);
@@ -610,6 +613,8 @@ export class ExternalAgentStore {
     const cached = this.transcriptCache.get(session.key);
     this.selectedRuntimeEventCursor = cached?.cursor;
     this.events.set(cached?.events ?? []);
+    this.rawDetail.set(undefined);
+    this.rawDetailError.set(undefined);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(cached?.eventHistoryLoaded ?? false);
     const active = isActiveExternalSession(session);
@@ -735,6 +740,8 @@ export class ExternalAgentStore {
     this.selectedThreadId.set(undefined);
     this.selectedThread.set(undefined);
     this.events.set([]);
+    this.rawDetail.set(undefined);
+    this.rawDetailError.set(undefined);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(false);
     this.selectedRuntimeEventCursor = undefined;
@@ -1115,9 +1122,17 @@ export class ExternalAgentStore {
 
   async loadRawDetail(event: NormalizedExternalRuntimeEvent): Promise<void> {
     if (event.rawDetailRef == null) return;
-    this.rawDetail.set(
-      await this.readRawDetail(event.runtimeId, event.rawDetailRef),
-    );
+    this.rawDetail.set(undefined);
+    this.rawDetailError.set(undefined);
+    try {
+      this.rawDetail.set(
+        await this.readRawDetail(event.runtimeId, event.rawDetailRef),
+      );
+    } catch (error) {
+      this.rawDetailError.set(
+        `Supplemental raw detail is unavailable. ${errorMessage(error)}`,
+      );
+    }
   }
 
   async readRawDetail(
@@ -1873,7 +1888,7 @@ export function latestExternalTurnPhase(
     ) {
       continue;
     }
-    const phase = phaseValue(event.payload.status);
+    const phase = eventPhase(event);
     if (
       phase !== undefined &&
       (latest === undefined || event.sequenceId > latest.sequenceId)
@@ -1894,7 +1909,7 @@ function reconciledExternalTurnPhase(
   const matchingSnapshot = thread?.turns.find(
     (turn) => turn.turnId === eventState.turnId,
   );
-  const snapshotPhase = phaseValue(matchingSnapshot?.status);
+  const snapshotPhase = snapshotTurnPhase(matchingSnapshot);
   if (snapshotPhase !== undefined && isTerminalPhase(snapshotPhase)) {
     return latestSnapshotTurnPhase(thread) ?? snapshotPhase;
   }
@@ -1919,7 +1934,7 @@ function latestExternalTurnState(
     | undefined;
   for (const event of events) {
     if (event.kind !== 'turn_lifecycle') continue;
-    const phase = phaseValue(event.payload.status);
+    const phase = eventPhase(event);
     if (
       phase !== undefined &&
       (latest === undefined || event.sequenceId > latest.sequenceId)
@@ -1940,8 +1955,8 @@ function reconciledActiveExternalTurnId(
 ): string | undefined {
   const eventTurnId = activeExternalTurnId(events);
   if (eventTurnId !== undefined) {
-    const snapshotPhase = phaseValue(
-      thread?.turns.find((turn) => turn.turnId === eventTurnId)?.status,
+    const snapshotPhase = snapshotTurnPhase(
+      thread?.turns.find((turn) => turn.turnId === eventTurnId),
     );
     if (snapshotPhase === undefined || !isTerminalPhase(snapshotPhase)) {
       return eventTurnId;
@@ -1959,7 +1974,7 @@ export function activeExternalTurnId(
   >();
   for (const event of events) {
     if (event.kind !== 'turn_lifecycle' || event.nativeTurnId == null) continue;
-    const phase = phaseValue(event.payload.status);
+    const phase = eventPhase(event);
     if (phase === undefined) continue;
     const previous = latestByTurn.get(event.nativeTurnId);
     if (previous === undefined || event.sequenceId > previous.sequenceId) {
@@ -1978,7 +1993,7 @@ function latestSnapshotTurnPhase(
   thread: ExternalThreadProjection | undefined,
 ): ExternalTurnPhase | undefined {
   const latest = thread?.turns.at(-1);
-  return latest === undefined ? undefined : phaseValue(latest.status);
+  return snapshotTurnPhase(latest);
 }
 
 function activeSnapshotTurnId(
@@ -1986,10 +2001,32 @@ function activeSnapshotTurnId(
 ): string | undefined {
   const latest = thread?.turns.at(-1);
   if (latest === undefined) return undefined;
-  const phase = phaseValue(latest.status);
+  const phase = snapshotTurnPhase(latest);
   return phase !== undefined && !isTerminalPhase(phase)
     ? latest.turnId
     : undefined;
+}
+
+function eventPhase(
+  event: NormalizedExternalRuntimeEvent,
+): ExternalTurnPhase | undefined {
+  const phase = phaseValue(event.payload.status);
+  return phase !== undefined &&
+    isTerminalPhase(phase) &&
+    event.payload.error?.willRetry === true
+    ? 'active'
+    : phase;
+}
+
+function snapshotTurnPhase(
+  turn: ExternalThreadProjection['turns'][number] | undefined,
+): ExternalTurnPhase | undefined {
+  const phase = phaseValue(turn?.status);
+  return phase !== undefined &&
+    isTerminalPhase(phase) &&
+    turn?.error?.willRetry === true
+    ? 'active'
+    : phase;
 }
 
 function isTerminalPhase(phase: ExternalTurnPhase): boolean {

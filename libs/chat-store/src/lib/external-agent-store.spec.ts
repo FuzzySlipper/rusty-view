@@ -45,6 +45,13 @@ describe('external agent lifecycle reduction', () => {
     expect(activeExternalTurnId(events)).toBeUndefined();
   });
 
+  it('does not terminalize a turn while an error says Codex will retry', () => {
+    const retrying = event(30, 'turn-new', 'failed', true);
+
+    expect(latestExternalTurnPhase([retrying])).toBe('active');
+    expect(activeExternalTurnId([retrying])).toBe('turn-new');
+  });
+
   it('lets a terminal thread snapshot override a stale active event', () => {
     const store = setupStore({
       runtimes: [],
@@ -99,6 +106,24 @@ describe('external agent metadata editing', () => {
 });
 
 describe('ExternalAgentStore', () => {
+  it('keeps a missing supplemental raw detail as a non-fatal notice', async () => {
+    const store = setupStore({
+      runtimes: [],
+      listThreads: vi.fn(),
+      rawDetail: vi.fn().mockRejectedValue(new Error('detail was evicted')),
+    });
+
+    await expect(
+      store.loadRawDetail({
+        ...event(1, 'turn-1', 'failed'),
+        rawDetailRef: 'evicted-detail',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(store.rawDetail()).toBeUndefined();
+    expect(store.rawDetailError()).toContain('detail was evicted');
+  });
+
   it('projects a pending interaction as a waiting turn', () => {
     const store = setupStore({
       runtimes: [],
@@ -1277,12 +1302,15 @@ describe('ExternalAgentStore', () => {
 
   it('hydrates an active turn from its snapshot and catches up from the fleet cursor', async () => {
     const runtime = registration('runtime-1');
-    const snapshot = {
+    const snapshot: ExternalThreadProjection = {
       ...thread('thread-1', 10),
       turns: [
         {
           turnId: 'turn-live',
           status: 'inProgress',
+          statusSource: 'native',
+          terminalReasonCode: null,
+          error: null,
           startedAt: 10,
           completedAt: null,
           durationMs: null,
@@ -1451,6 +1479,9 @@ describe('ExternalAgentStore', () => {
         {
           turnId: 'turn-live',
           status: 'inProgress',
+          statusSource: 'native',
+          terminalReasonCode: null,
+          error: null,
           startedAt: 10,
           completedAt: null,
           durationMs: null,
@@ -1597,6 +1628,7 @@ function setupStore(options: {
   listCommands?: ReturnType<typeof vi.fn>;
   executeCommand?: ReturnType<typeof vi.fn>;
   updateBindingMetadata?: ReturnType<typeof vi.fn>;
+  rawDetail?: ReturnType<typeof vi.fn>;
   streamExternalRuntimeEvents?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
   const external = {
@@ -1623,6 +1655,7 @@ function setupStore(options: {
       options.listCommands ?? vi.fn(async () => externalCommandCatalog()),
     executeCommand: options.executeCommand ?? vi.fn(),
     updateBindingMetadata: options.updateBindingMetadata ?? vi.fn(),
+    rawDetail: options.rawDetail ?? vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -1719,6 +1752,9 @@ function threadWithUserPrompts(
     turns: prompts.map((text, index) => ({
       turnId: `turn-${index + 1}`,
       status: 'completed',
+      statusSource: 'native',
+      terminalReasonCode: null,
+      error: null,
       startedAt: index + 1,
       completedAt: index + 1,
       durationMs: 0,
@@ -1888,6 +1924,7 @@ function event(
   sequenceId: number,
   nativeTurnId: string,
   status?: string,
+  willRetry?: boolean,
 ): NormalizedExternalRuntimeEvent {
   return {
     eventId: `event-${sequenceId}`,
@@ -1901,6 +1938,16 @@ function event(
       nativeMethod:
         status === undefined ? 'turn/diff/updated' : 'turn/completed',
       ...(status === undefined ? {} : { status }),
+      ...(willRetry === undefined
+        ? {}
+        : {
+            error: {
+              message: 'temporary stream interruption',
+              code: 'responseStreamConnectionFailed',
+              additionalDetails: null,
+              willRetry,
+            },
+          }),
     },
   };
 }

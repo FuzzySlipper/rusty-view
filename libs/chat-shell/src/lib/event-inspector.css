@@ -120,3 +120,24 @@
   overflow-y: auto;
   background: var(--rv-color-surface);
 }
+
+.rv-event-inspector__turn-diagnostic {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--rv-space-xs) var(--rv-space-sm);
+  margin: 0;
+  padding: var(--rv-space-sm);
+  border-bottom: 1px solid var(--rv-color-border);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-event-inspector__turn-diagnostic dt {
+  color: var(--rv-color-text-muted);
+}
+
+.rv-event-inspector__turn-diagnostic dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--rv-color-text-primary);
+}

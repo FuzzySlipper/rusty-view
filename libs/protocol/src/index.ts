@@ -93,6 +93,10 @@ export type ExternalAgentSessionCreateResult =
 export type ExternalThreadPage = ExternalSchemas['ExternalThreadPage'];
 export type ExternalThreadProjection =
   ExternalSchemas['ExternalThreadProjection'];
+export type ExternalThreadTurnProjection =
+  ExternalSchemas['ExternalThreadTurnProjection'];
+export type ExternalThreadTurnErrorProjection =
+  ExternalSchemas['ExternalThreadTurnErrorProjection'];
 export type ExternalThreadReadRequest =
   ExternalSchemas['ExternalThreadReadRequest'];
 export type ExternalThreadReadResult =

@@ -606,6 +606,135 @@ describe('projectExternalAgentTranscript', () => {
       true,
     );
   });
+
+  it('renders durable failed-thread diagnostics without raw detail', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'failed prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'failed',
+            statusSource: 'crew_terminal',
+            terminalReasonCode: 'codex_failed',
+            error: {
+              message: 'response stream disconnected',
+              code: 'responseStreamDisconnected',
+              additionalDetails: 'upstream closed before final answer',
+              willRetry: false,
+            },
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'generic-error',
+                kind: 'error',
+                text: 'SystemError',
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(messages.map((message) => message.blocks[0]?.content)).toEqual([
+      'SystemError',
+      expect.stringContaining('Message: response stream disconnected'),
+    ]);
+    expect(messages.at(-1)).toMatchObject({
+      status: 'error',
+      metadata: {
+        statusSource: 'crew_terminal',
+        terminalReasonCode: 'codex_failed',
+        retrying: false,
+      },
+      blocks: [
+        {
+          kind: 'external_turn_error',
+          tool: {
+            name: 'Codex turn failed',
+            status: 'failed',
+            summary: 'response stream disconnected',
+            reasonCode: 'codex_failed',
+          },
+        },
+      ],
+    });
+    expect(messages.at(-1)?.blocks[0]?.content).toContain(
+      'Additional details: upstream closed before final answer',
+    );
+  });
+
+  it('keeps retrying errors visible and non-terminal until a final failure', () => {
+    const retrying = event('10', 'runtime_warning', {
+      nativeMethod: 'error',
+      error: {
+        message: 'temporary stream interruption',
+        code: 'responseStreamConnectionFailed',
+        additionalDetails: null,
+        willRetry: true,
+      },
+    });
+    const retryingMessages = projectExternalAgentTranscript(undefined, [
+      retrying,
+    ]);
+
+    expect(retryingMessages[0]).toMatchObject({
+      status: 'streaming',
+      blocks: [
+        {
+          kind: 'external_turn_error',
+          tool: {
+            name: 'Codex retrying',
+            status: 'running',
+            summary: 'temporary stream interruption',
+          },
+        },
+      ],
+    });
+
+    const failedMessages = projectExternalAgentTranscript(undefined, [
+      retrying,
+      event('11', 'runtime_warning', {
+        nativeMethod: 'error',
+        error: {
+          message: 'response stream disconnected',
+          code: 'responseStreamDisconnected',
+          additionalDetails: 'upstream closed',
+          willRetry: false,
+        },
+      }),
+    ]);
+    expect(failedMessages).toHaveLength(1);
+    expect(failedMessages[0]).toMatchObject({
+      status: 'error',
+      blocks: [
+        {
+          tool: {
+            name: 'Codex turn failed',
+            status: 'failed',
+            summary: 'response stream disconnected',
+          },
+        },
+      ],
+    });
+  });
 });
 
 function event(

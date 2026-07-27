@@ -47,6 +47,19 @@
   </div>
   @if (selectedEvent(filteredEvents()); as selected) {
   <div class="rv-event-inspector__detail" data-testid="event-inspector-detail">
+    @if (selectedExternalTurn(selected); as turn) {
+    <dl
+      class="rv-event-inspector__turn-diagnostic"
+      data-testid="external-turn-diagnostic"
+    >
+      <dt>Effective status</dt>
+      <dd>{{ turn.status }}</dd>
+      <dt>Status source</dt>
+      <dd>{{ turn.statusSource }}</dd>
+      <dt>Terminal reason</dt>
+      <dd>{{ turn.terminalReasonCode ?? '—' }}</dd>
+    </dl>
+    }
     <rv-json-inspector [data]="selected" />
     @if (isExternal(selected) && selected.rawDetailRef) {
     <button

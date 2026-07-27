@@ -818,6 +818,163 @@ test('renders a delayed live event from a runtime beyond 100k events without use
   );
 });
 
+test('reloads durable Codex failure diagnostics after raw detail eviction', async ({
+  page,
+}) => {
+  const failedThread = {
+    ...thread,
+    status: 'idle',
+    turns: [
+      {
+        turnId: 'turn-failed',
+        status: 'failed',
+        statusSource: 'crew_terminal',
+        terminalReasonCode: 'codex_failed',
+        error: {
+          message: 'response stream disconnected',
+          code: 'responseStreamDisconnected',
+          additionalDetails: 'upstream closed before final answer',
+          willRetry: false,
+        },
+        startedAt: 1783756801,
+        completedAt: 1783756802,
+        durationMs: 1,
+        items: [
+          {
+            itemId: 'generic-error',
+            kind: 'error',
+            status: 'failed',
+            text: 'SystemError',
+          },
+        ],
+      },
+    ],
+  };
+  const failureEvent = {
+    ...externalEvent('50', 'runtime_warning', {
+      nativeMethod: 'error',
+      message: 'response stream disconnected',
+      error: failedThread.turns[0]?.error,
+    }),
+    nativeTurnId: 'turn-failed',
+    rawDetailRef: 'evicted-detail',
+  };
+
+  await page.route('http://failed-runtime.test/v1/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const ok = (data: unknown) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          data,
+          meta: { request_id: 'req-failed-runtime', schema_version: 1 },
+        }),
+      });
+    if (url.pathname === '/v1/admin/profiles/registry') {
+      return ok({ items: [], total: 0, limit: 100, offset: 0 });
+    }
+    if (url.pathname === '/v1/external-runtimes') {
+      return ok({ runtimes: [runtime], controllers: [controller] });
+    }
+    if (url.pathname === '/v1/external-bindings') {
+      return ok({ bindings: [binding] });
+    }
+    if (url.pathname === '/v1/external-interactions') {
+      return ok({ interactions: [] });
+    }
+    if (url.pathname.endsWith('/threads/read')) {
+      return ok({ thread: failedThread });
+    }
+    if (url.pathname.endsWith('/threads')) {
+      return ok({
+        items: [failedThread],
+        nextCursor: null,
+        backwardsCursor: null,
+      });
+    }
+    if (url.pathname.endsWith('/events')) {
+      return ok({ events: [failureEvent] });
+    }
+    if (
+      /\/v1\/external-bindings\/[^/]+\/commands$/.test(url.pathname) &&
+      request.method() === 'GET'
+    ) {
+      return ok(commandCatalog('binding-1'));
+    }
+    if (url.pathname.endsWith('/stream')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: ': connected\n\n',
+      });
+    }
+    if (url.pathname.endsWith('/raw-details/evicted-detail')) {
+      return route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: 'not_found',
+            reason_code: 'external_raw_detail_not_found',
+            message: 'Bounded raw detail was evicted.',
+            retryable: false,
+          },
+          meta: { request_id: 'req-evicted', schema_version: 1 },
+        }),
+      });
+    }
+    return route.fulfill({ status: 404, body: 'not mocked' });
+  });
+
+  const openFailedThread = async () => {
+    await page.getByTestId('external-agents-tab').click();
+    await page.locator('[data-thread-id="thread-1"]').click();
+    const failureBlock = page.locator(
+      '[data-block-kind="external_turn_error"]',
+    );
+    await expect(failureBlock).toContainText('Codex turn failed');
+    await expect(failureBlock).toContainText('response stream disconnected');
+    return failureBlock;
+  };
+
+  await page.goto('/?api=http://failed-runtime.test');
+  let failureBlock = await openFailedThread();
+  await failureBlock.getByTestId('tool-call-toggle').click();
+  await expect(failureBlock.getByTestId('tool-call-detail')).toContainText(
+    'Code: responseStreamDisconnected',
+  );
+  await expect(failureBlock.getByTestId('tool-call-detail')).toContainText(
+    'Additional details: upstream closed before final answer',
+  );
+
+  if (!(await page.locator('.rv-debug__inspector').isVisible())) {
+    await page.getByTestId('inspector-toggle').click();
+  }
+  await page
+    .getByTestId('event-row')
+    .filter({ hasText: 'runtime_warning' })
+    .click();
+  await expect(page.getByTestId('external-turn-diagnostic')).toContainText(
+    'crew_terminal',
+  );
+  await expect(page.getByTestId('external-turn-diagnostic')).toContainText(
+    'codex_failed',
+  );
+  await page.getByTestId('external-raw-detail').click();
+  await expect(page.getByTestId('external-raw-detail-error')).toContainText(
+    'Bounded raw detail was evicted',
+  );
+  await expect(failureBlock).toContainText('response stream disconnected');
+
+  await page.reload();
+  failureBlock = await openFailedThread();
+  await expect(failureBlock).toContainText('response stream disconnected');
+});
+
 const runtime = {
   runtimeId: 'runtime-1',
   kind: 'codex_app_server',
