@@ -3,6 +3,9 @@
 This deployment runs two isolated Rusty Crew fleets on the nephew-agentbox
 machine while reusing one den-services installation.
 
+For the beginner-oriented shareable explanation and normal usage guide, see
+[m5-basic-user-guide.md](m5-basic-user-guide.md).
+
 Each Crew process serves the Rusty View build embedded in the same exact-version
 container image. The browser and its Crew API therefore share an origin:
 

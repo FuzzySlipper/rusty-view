@@ -24,6 +24,8 @@ development.
   certification path for streaming and user-visible work.
 - [Installable web app](docs/installable-web-app.md) explains same-origin PWA
   installation and its intentionally online-only behavior.
+- [m5 basic user guide](docs/m5-basic-user-guide.md) is the shareable
+  introduction for the dual Crew/View and shared Den installation.
 - [Plugin API](docs/plugin-api.md) documents typed menu, panel, renderer,
   command, and data-action contributions.
 - [Theming](docs/theming.md) documents design tokens and appearance settings.
