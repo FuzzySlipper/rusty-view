@@ -24,6 +24,7 @@
     "protocol:check": "nx run protocol:check",
     "package:fix-esm": "node tools/fix-package-esm-specifiers.mjs --write",
     "package:check-esm": "node tools/fix-package-esm-specifiers.mjs --check",
+    "check:m5-dual-stack": "node tools/check-m5-dual-stack.mjs",
     "publish:libs": "node tools/publish-libs.mjs",
     "ci": "prettier --check . && npm run lint:tokens && nx run-many -t lint typecheck test --all && nx run protocol:check && nx run-many -t build --all && nx run design-tokens:package-smoke"
   },

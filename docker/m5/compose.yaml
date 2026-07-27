@@ -1,0 +1,54 @@
+name: rusty-dual
+
+x-rusty-crew-common: &rusty-crew-common
+  image: ${RUSTY_STACK_IMAGE:?RUSTY_STACK_IMAGE is required}
+  init: true
+  restart: unless-stopped
+  extra_hosts:
+    - 'host.docker.internal:host-gateway'
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:9347/v1/admin/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+    interval: 5s
+    timeout: 3s
+    retries: 24
+    start_period: 15s
+  labels:
+    io.rusty-stack.crew-revision: ${RUSTY_CREW_REVISION:?RUSTY_CREW_REVISION is required}
+    io.rusty-stack.view-revision: ${RUSTY_VIEW_REVISION:?RUSTY_VIEW_REVISION is required}
+
+services:
+  crew-a:
+    <<: *rusty-crew-common
+    container_name: rusty-crew-a
+    env_file:
+      - ${RUSTY_STACK_ROOT:?RUSTY_STACK_ROOT is required}/instances/a/config/service.env
+    ports:
+      - '0.0.0.0:9347:9347'
+    volumes:
+      - ${RUSTY_STACK_ROOT}/instances/a/config:/srv/rusty-crew/config
+      - ${RUSTY_STACK_ROOT}/instances/a/data:/srv/rusty-crew/data
+      - ${RUSTY_STACK_ROOT}/instances/a/run:/srv/rusty-crew/run
+      - ${RUSTY_STACK_ROOT}/instances/a/logs:/srv/rusty-crew/logs
+      - ${RUSTY_STACK_ROOT}/instances/a/artifacts:/srv/rusty-crew/artifacts
+      - ${RUSTY_STACK_ROOT}/instances/a/backups:/srv/rusty-crew/backups
+      - ${RUSTY_STACK_ROOT}/instances/a/workspace:/workspace
+
+  crew-b:
+    <<: *rusty-crew-common
+    container_name: rusty-crew-b
+    env_file:
+      - ${RUSTY_STACK_ROOT}/instances/b/config/service.env
+    ports:
+      - '0.0.0.0:9348:9347'
+    volumes:
+      - ${RUSTY_STACK_ROOT}/instances/b/config:/srv/rusty-crew/config
+      - ${RUSTY_STACK_ROOT}/instances/b/data:/srv/rusty-crew/data
+      - ${RUSTY_STACK_ROOT}/instances/b/run:/srv/rusty-crew/run
+      - ${RUSTY_STACK_ROOT}/instances/b/logs:/srv/rusty-crew/logs
+      - ${RUSTY_STACK_ROOT}/instances/b/artifacts:/srv/rusty-crew/artifacts
+      - ${RUSTY_STACK_ROOT}/instances/b/backups:/srv/rusty-crew/backups
+      - ${RUSTY_STACK_ROOT}/instances/b/workspace:/workspace
