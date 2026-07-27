@@ -173,6 +173,150 @@ describe('projectExternalAgentTranscript', () => {
     });
   });
 
+  it('coalesces command execution output deltas into one stable block', () => {
+    const started = {
+      ...event('1', 'command_activity', {
+        nativeMethod: 'item/started',
+        status: 'inProgress',
+        command: 'cargo test --locked',
+        cwd: '/workspace',
+      }),
+      itemId: 'command-1',
+      rawDetailRef: 'command-started',
+    };
+    const firstDelta = {
+      ...event('2', 'command_activity', {
+        nativeMethod: 'item/commandExecution/outputDelta',
+        text: 'Compiling crate-a\n',
+      }),
+      itemId: 'command-1',
+      rawDetailRef: 'command-delta-1',
+    };
+    const secondDelta = {
+      ...event('3', 'command_activity', {
+        nativeMethod: 'item/commandExecution/outputDelta',
+        text: 'Compiling crate-b\n',
+      }),
+      itemId: 'command-1',
+      rawDetailRef: 'command-delta-2',
+    };
+
+    const running = projectExternalAgentTranscript(undefined, [
+      started,
+      firstDelta,
+      secondDelta,
+    ]);
+    const completed = projectExternalAgentTranscript(undefined, [
+      started,
+      firstDelta,
+      secondDelta,
+      {
+        ...event('4', 'command_activity', {
+          nativeMethod: 'item/completed',
+          status: 'completed',
+          command: 'cargo test --locked',
+          cwd: '/workspace',
+          output: 'Compiling crate-a\nCompiling crate-b\n2 passed\n',
+        }),
+        itemId: 'command-1',
+        rawDetailRef: 'command-completed',
+      },
+    ]);
+
+    expect(running).toHaveLength(1);
+    expect(running[0]?.blocks).toHaveLength(1);
+    expect(running[0]?.blocks[0]).toMatchObject({
+      id: 'block:command-1',
+      kind: 'command',
+      content: 'Compiling crate-a\nCompiling crate-b\n',
+      tool: {
+        name: 'cargo test --locked',
+        status: 'running',
+      },
+      metadata: {
+        boundedDetailRefs: [
+          'command-started',
+          'command-delta-1',
+          'command-delta-2',
+        ],
+      },
+    });
+    expect(completed[0]?.blocks).toHaveLength(1);
+    expect(completed[0]?.blocks[0]).toMatchObject({
+      id: 'block:command-1',
+      content: 'Compiling crate-a\nCompiling crate-b\n2 passed\n',
+      tool: {
+        name: 'cargo test --locked',
+        status: 'completed',
+      },
+    });
+  });
+
+  it('preserves command identity and failure across output-only updates', () => {
+    const messages = projectExternalAgentTranscript(undefined, [
+      {
+        ...event('1', 'command_activity', {
+          nativeMethod: 'item/started',
+          status: 'inProgress',
+          command: 'cargo check --locked',
+          cwd: '/workspace',
+        }),
+        itemId: 'command-failed',
+      },
+      {
+        ...event('2', 'command_activity', {
+          nativeMethod: 'item/commandExecution/outputDelta',
+          text: 'error: could not compile\n',
+        }),
+        itemId: 'command-failed',
+      },
+      {
+        ...event('3', 'command_activity', {
+          nativeMethod: 'item/completed',
+          status: 'failed',
+          command: 'cargo check --locked',
+          cwd: '/workspace',
+          output: 'error: could not compile\n',
+          exitCode: 101,
+        }),
+        itemId: 'command-failed',
+      },
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.status).toBe('error');
+    expect(messages[0]?.blocks).toHaveLength(1);
+    expect(messages[0]?.blocks[0]).toMatchObject({
+      id: 'block:command-failed',
+      content: 'error: could not compile\n',
+      tool: {
+        name: 'cargo check --locked',
+        status: 'failed',
+      },
+    });
+  });
+
+  it('bounds a long command output while retaining its newest tail', () => {
+    const output = `${'old output\n'.repeat(7_000)}LATEST_COMMAND_MARKER`;
+    const messages = projectExternalAgentTranscript(undefined, [
+      {
+        ...event('1', 'command_activity', {
+          nativeMethod: 'item/completed',
+          status: 'completed',
+          command: 'cargo test',
+          output,
+        }),
+        itemId: 'long-command',
+      },
+    ]);
+    const content = messages[0]?.blocks[0]?.content ?? '';
+
+    expect(messages[0]?.blocks).toHaveLength(1);
+    expect(content).toContain('[... earlier command output omitted ...]');
+    expect(content).toContain('LATEST_COMMAND_MARKER');
+    expect(content.length).toBeLessThanOrEqual(64_050);
+  });
+
   it('keeps native compaction completion visible in the transcript', () => {
     const messages = projectExternalAgentTranscript(undefined, [
       event('1', 'compaction', {

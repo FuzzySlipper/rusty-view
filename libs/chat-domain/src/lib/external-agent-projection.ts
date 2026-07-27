@@ -11,6 +11,8 @@ import type {
   ToolBlockStatus,
 } from './domain-types';
 
+const MAX_PROJECTED_COMMAND_OUTPUT_CHARACTERS = 64_000;
+
 /** Convert runtime-neutral external thread history and live events into transcript view models. */
 export function projectExternalAgentTranscript(
   thread: ExternalThreadProjection | undefined,
@@ -282,10 +284,11 @@ function snapshotProjectionForEvents(
   }
   const command = events.filter((event) => event.kind === 'command_activity');
   if (command.length > 0) {
-    const latest = command.at(-1);
+    const activity = projectCommandActivity(command);
+    if (activity === undefined) return undefined;
     return {
       kind: 'commandExecution',
-      content: [latest?.payload.command, latest?.payload.output]
+      content: [activity.command, activity.output]
         .filter((value): value is string => value !== undefined)
         .join('\n'),
     };
@@ -478,6 +481,23 @@ function blocksForGroup(
   if (latestErrorEvent !== undefined) {
     return [blockForTurnErrorEvent(latestErrorEvent)];
   }
+  const commandActivity = projectCommandActivity(events);
+  if (commandActivity !== undefined) {
+    const content =
+      boundedCommandOutput(commandActivity.output) ?? commandActivity.cwd ?? '';
+    return [
+      withExternalDetailHistory(
+        toolBlockValues(
+          commandActivity.itemId ?? commandActivity.first.eventId,
+          'command',
+          commandActivity.command ?? 'Command',
+          content,
+          toolStatus(commandActivity.status, messageStatus),
+        ),
+        events,
+      ),
+    ];
+  }
   if (isExternalCommandEvent(first.kind)) {
     const latest = events.at(-1);
     if (latest === undefined) return [];
@@ -500,6 +520,79 @@ function blocksForGroup(
   return events
     .map((event) => eventBlock(event, messageStatus))
     .filter((block): block is MessageBlock => block !== undefined);
+}
+
+interface ProjectedCommandActivity {
+  readonly first: NormalizedExternalRuntimeEvent;
+  readonly itemId: string | undefined;
+  readonly command: string | undefined;
+  readonly cwd: string | undefined;
+  readonly output: string | undefined;
+  readonly status: string | undefined;
+}
+
+function projectCommandActivity(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): ProjectedCommandActivity | undefined {
+  const commandEvents = events.filter(
+    (event) => event.kind === 'command_activity',
+  );
+  const first = commandEvents[0];
+  if (first === undefined) return undefined;
+
+  const command = latestDefined(
+    commandEvents,
+    (event) => event.payload.command,
+  );
+  const cwd = latestDefined(commandEvents, (event) => event.payload.cwd);
+  const status = latestDefined(commandEvents, (event) => event.payload.status);
+  const aggregatedOutput = latestDefined(
+    commandEvents,
+    (event) => event.payload.output,
+  );
+  const deltaOutput = commandEvents
+    .filter(
+      (event) =>
+        event.payload.nativeMethod === 'item/commandExecution/outputDelta',
+    )
+    .map((event) => event.payload.text ?? '')
+    .join('');
+
+  return {
+    first,
+    itemId:
+      latestDefined(commandEvents, (event) => event.itemId ?? undefined) ??
+      undefined,
+    command,
+    cwd,
+    output: aggregatedOutput ?? (deltaOutput === '' ? undefined : deltaOutput),
+    status,
+  };
+}
+
+function latestDefined<T>(
+  events: readonly NormalizedExternalRuntimeEvent[],
+  select: (event: NormalizedExternalRuntimeEvent) => T | null | undefined,
+): T | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event === undefined) continue;
+    const value = select(event);
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function boundedCommandOutput(output: string | undefined): string | undefined {
+  if (
+    output === undefined ||
+    output.length <= MAX_PROJECTED_COMMAND_OUTPUT_CHARACTERS
+  ) {
+    return output;
+  }
+  return `[... earlier command output omitted ...]\n${output.slice(
+    -MAX_PROJECTED_COMMAND_OUTPUT_CHARACTERS,
+  )}`;
 }
 
 function eventBlock(

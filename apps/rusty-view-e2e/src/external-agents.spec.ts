@@ -518,11 +518,14 @@ test('external agent fleet, transcript activity, interactions, and controls are 
       result: { answers: { color: { answers: ['Blue'] } } },
     });
   await expect(page.locator('[data-block-kind="plan"]')).toBeVisible();
-  await expect(
-    page
-      .locator('[data-block-kind="command"]')
-      .filter({ hasText: 'pnpm test' }),
-  ).toBeVisible();
+  const projectedCommand = page
+    .locator('[data-block-kind="command"]')
+    .filter({ hasText: 'pnpm test' });
+  await expect(projectedCommand).toHaveCount(1);
+  await projectedCommand.getByTestId('tool-call-toggle').click();
+  await expect(projectedCommand.getByTestId('tool-call-detail')).toContainText(
+    '42 passed',
+  );
   await expect(
     page.locator('[data-block-kind="file_change"]').filter({
       hasText: 'File changes',
@@ -1190,25 +1193,52 @@ const events = [
     nativeMethod: 'turn/plan/updated',
     text: 'Inspect, implement, verify',
   }),
-  externalEvent('3', 'command_activity', {
-    nativeMethod: 'item/commandExecution/completed',
-    command: 'pnpm test',
-    output: '42 passed',
-    status: 'completed',
-  }),
-  externalEvent('4', 'file_activity', {
+  {
+    ...externalEvent('3', 'command_activity', {
+      nativeMethod: 'item/started',
+      command: 'pnpm test',
+      cwd: '/home/dev/rusty-view',
+      status: 'inProgress',
+    }),
+    itemId: 'command-item-1',
+  },
+  {
+    ...externalEvent('4', 'command_activity', {
+      nativeMethod: 'item/commandExecution/outputDelta',
+      text: 'Running tests\n',
+    }),
+    itemId: 'command-item-1',
+  },
+  {
+    ...externalEvent('5', 'command_activity', {
+      nativeMethod: 'item/commandExecution/outputDelta',
+      text: '42 passed\n',
+    }),
+    itemId: 'command-item-1',
+  },
+  {
+    ...externalEvent('6', 'command_activity', {
+      nativeMethod: 'item/completed',
+      command: 'pnpm test',
+      cwd: '/home/dev/rusty-view',
+      output: 'Running tests\n42 passed\n',
+      status: 'completed',
+    }),
+    itemId: 'command-item-1',
+  },
+  externalEvent('7', 'file_activity', {
     nativeMethod: 'item/fileChange/completed',
     status: 'completed',
     fileChanges: [{ path: 'src/app.ts', kind: 'update' }],
   }),
   {
-    ...externalEvent('5', 'unknown_native_notification', {
+    ...externalEvent('8', 'unknown_native_notification', {
       nativeMethod: 'future/event',
     }),
     rawDetailRef: 'detail-4',
   },
   {
-    ...externalEvent('6', 'turn_lifecycle', {
+    ...externalEvent('9', 'turn_lifecycle', {
       nativeMethod: 'turn/diff/updated',
     }),
     rawDetailRef: 'detail-diff',
