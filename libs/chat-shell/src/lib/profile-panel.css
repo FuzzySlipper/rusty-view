@@ -40,7 +40,8 @@
   flex-direction: column;
   gap: var(--rv-space-xs);
   width: 100%;
-  padding: var(--rv-space-sm) var(--rv-space-md);
+  padding: var(--rv-space-sm) calc(var(--rv-space-xl) + var(--rv-space-lg))
+    var(--rv-space-sm) var(--rv-space-md);
   border: none;
   border-bottom: 1px solid var(--rv-color-border);
   background: transparent;
@@ -49,7 +50,38 @@
 }
 
 .rv-profile-group {
+  position: relative;
   border-bottom: 1px solid var(--rv-color-border);
+}
+
+.rv-profile__pin {
+  position: absolute;
+  top: var(--rv-space-xs);
+  right: var(--rv-space-xs);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--rv-radius);
+  background: transparent;
+  opacity: 0.38;
+  cursor: pointer;
+  filter: grayscale(1);
+}
+
+.rv-profile__pin:hover,
+.rv-profile__pin:focus-visible {
+  border-color: var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+  opacity: 0.8;
+}
+
+.rv-profile__pin[aria-pressed='true'] {
+  border-color: var(--rv-color-accent);
+  opacity: 1;
+  filter: none;
 }
 
 .rv-profile:hover {
@@ -188,4 +220,18 @@
 
 .rv-profiles__refresh:hover {
   background: var(--rv-color-surface);
+}
+
+@media (max-width: 720px) {
+  .rv-profile__pin {
+    width: 44px;
+    height: 44px;
+    touch-action: manipulation;
+  }
+
+  .rv-profile {
+    min-height: 48px;
+    padding-right: calc(var(--rv-space-xl) + var(--rv-space-xl));
+    touch-action: manipulation;
+  }
 }

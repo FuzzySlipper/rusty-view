@@ -1,5 +1,5 @@
-import { TestBed } from '@angular/core/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChatSessionSummary } from '@rusty-view/protocol';
 import {
@@ -36,6 +36,34 @@ class InMemStorage implements ChatStorageAdapter {
   }
   async setUiState(): Promise<void> {
     /* noop */
+  }
+}
+
+class BrowserStorageStub implements Storage {
+  private readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
   }
 }
 
@@ -172,6 +200,13 @@ async function createPanel(sessions: ChatSessionSummary[]) {
 }
 
 describe('ProfilePanelComponent', () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: new BrowserStorageStub(),
+    });
+  });
+
   it('shows an empty state when there are no agents', async () => {
     const { fixture } = await createPanel([]);
     const host: HTMLElement = fixture.nativeElement;
@@ -378,4 +413,67 @@ describe('ProfilePanelComponent', () => {
       managed?.querySelector('.rv-profile-session__status')?.textContent,
     ).toBe('Completed');
   });
+
+  it('pins profiles first, persists the choice, and does not select them', async () => {
+    const sessions = [
+      makeSession({
+        session_id: 'newer-session',
+        profile_id: 'newer-profile',
+        updated_at: '2026-07-28T01:00:00Z',
+      }),
+      makeSession({
+        session_id: 'older-session',
+        profile_id: 'older-profile',
+        updated_at: '2026-07-28T00:00:00Z',
+      }),
+    ];
+    const { fixture } = await createPanel(sessions);
+    const selected = vi.fn();
+    fixture.componentInstance.profileSelected.subscribe(selected);
+    const olderGroup = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLElement>(
+      '.rv-profile-group:has([data-profile-id="older-profile"])',
+    );
+
+    olderGroup
+      ?.querySelector<HTMLButtonElement>('[data-testid="profile-pin"]')
+      ?.click();
+    fixture.detectChanges();
+
+    expect(selected).not.toHaveBeenCalled();
+    expect(profileIds(fixture)).toEqual(['older-profile', 'newer-profile']);
+    expect(
+      olderGroup
+        ?.querySelector('[data-testid="profile-pin"]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      JSON.parse(localStorage.getItem('rusty-view:pinned-profiles:v1') ?? '[]'),
+    ).toEqual(['older-profile']);
+
+    fixture.destroy();
+    TestBed.resetTestingModule();
+    const { fixture: reloaded } = await createPanel(sessions);
+
+    expect(profileIds(reloaded)).toEqual(['older-profile', 'newer-profile']);
+    expect(
+      (reloaded.nativeElement as HTMLElement)
+        .querySelector(
+          '.rv-profile-group:has([data-profile-id="older-profile"]) [data-testid="profile-pin"]',
+        )
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
 });
+
+function profileIds(
+  fixture: ComponentFixture<ProfilePanelComponent>,
+): string[] {
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+      '[data-testid="profile-row"]',
+    ),
+    (row) => row.dataset['profileId'] ?? '',
+  );
+}

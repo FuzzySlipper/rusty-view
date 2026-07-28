@@ -5,6 +5,7 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import type { BrainProfile } from '@rusty-view/chat-domain';
 import {
@@ -16,6 +17,8 @@ import type { ChatSessionSummary } from '@rusty-view/protocol';
 
 import { sessionStatusLabel } from './session-status-label';
 import { profileWakeTimeoutLabel } from './wake-timeout-display';
+
+const PINNED_PROFILES_STORAGE_KEY = 'rusty-view:pinned-profiles:v1';
 
 /**
  * Brain profile sidebar panel — the primary navigation surface for
@@ -43,8 +46,16 @@ export class ProfilePanelComponent {
   readonly profileSelected = output<string>();
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
+  private readonly pinnedProfileIds = signal(loadPinnedProfileIds());
 
-  protected readonly profiles = computed(() => this.store.profiles());
+  protected readonly profiles = computed(() => {
+    const profiles = this.store.profiles();
+    const pinned = this.pinnedProfileIds();
+    return [
+      ...profiles.filter((profile) => pinned.has(profile.profileId)),
+      ...profiles.filter((profile) => !pinned.has(profile.profileId)),
+    ];
+  });
   protected readonly selectedProfileId = computed(() => {
     const selectedSessionId = this.selectedSessionId();
     return (
@@ -80,6 +91,21 @@ export class ProfilePanelComponent {
 
   protected onSelectSession(sessionId: string): void {
     this.profileSelected.emit(sessionId);
+  }
+
+  protected isProfilePinned(profileId: string): boolean {
+    return this.pinnedProfileIds().has(profileId);
+  }
+
+  protected toggleProfilePin(profileId: string): void {
+    const next = new Set(this.pinnedProfileIds());
+    if (next.has(profileId)) {
+      next.delete(profileId);
+    } else {
+      next.add(profileId);
+    }
+    this.pinnedProfileIds.set(next);
+    persistPinnedProfileIds(next);
   }
 
   protected onRefresh(): void {
@@ -159,5 +185,33 @@ export class ProfilePanelComponent {
         (candidate) => candidate.binding?.sessionId === session.session_id,
       )
     );
+  }
+}
+
+function loadPinnedProfileIds(): ReadonlySet<string> {
+  try {
+    const serialized = localStorage.getItem(PINNED_PROFILES_STORAGE_KEY);
+    if (serialized === null) return new Set();
+    const parsed: unknown = JSON.parse(serialized);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed.filter(
+        (profileId): profileId is string =>
+          typeof profileId === 'string' && profileId.trim() !== '',
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function persistPinnedProfileIds(profileIds: ReadonlySet<string>): void {
+  try {
+    localStorage.setItem(
+      PINNED_PROFILES_STORAGE_KEY,
+      JSON.stringify([...profileIds]),
+    );
+  } catch {
+    // Persistence is best-effort in embedded or privacy-restricted browsers.
   }
 }

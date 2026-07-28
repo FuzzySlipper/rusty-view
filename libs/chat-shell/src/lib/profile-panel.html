@@ -8,7 +8,10 @@
   } @else {
   <ul class="rv-profiles__list">
     @for (profile of profiles(); track profile.profileId) {
-    <li class="rv-profile-group">
+    <li
+      class="rv-profile-group"
+      [class.rv-profile-group--pinned]="isProfilePinned(profile.profileId)"
+    >
       <button
         type="button"
         class="rv-profile"
@@ -40,6 +43,24 @@
         {
         <span class="rv-profile__paused">runtime paused</span>
         }
+      </button>
+      <button
+        type="button"
+        class="rv-profile__pin"
+        data-testid="profile-pin"
+        [attr.aria-label]="
+          (isProfilePinned(profile.profileId) ? 'Unpin ' : 'Pin ') +
+          profile.label
+        "
+        [attr.aria-pressed]="isProfilePinned(profile.profileId)"
+        [title]="
+          isProfilePinned(profile.profileId)
+            ? 'Unpin profile'
+            : 'Pin profile to top'
+        "
+        (click)="toggleProfilePin(profile.profileId)"
+      >
+        <span aria-hidden="true">📌</span>
       </button>
       @if (profile.liveSessions.length > 0) {
       <ul class="rv-profile-sessions">
