@@ -2,7 +2,7 @@ import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 
 const DB_NAME = 'rusty-view-chat';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const SESSIONS_STORE = 'sessions';
 const EVENTS_STORE = 'events';
 const SETTINGS_STORE = 'settings';

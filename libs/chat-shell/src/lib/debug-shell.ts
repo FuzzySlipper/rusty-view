@@ -3,9 +3,11 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   HostListener,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { ChatStore, ExternalAgentStore } from '@rusty-view/chat-store';
@@ -143,7 +145,9 @@ export class DebugShellComponent {
   protected readonly pluginCommandPending = signal(false);
   protected readonly pluginCommandError = signal<string | undefined>(undefined);
   protected readonly navigationError = signal<string | undefined>(undefined);
+  private readonly runtimeSelectionPending = signal(false);
   private navigationRevision = 0;
+  private automaticallyRoutedSessionId: string | undefined;
 
   protected readonly connectionStatus = computed<StreamStatusKind>(() => {
     const state = this.store.connectionState();
@@ -155,9 +159,21 @@ export class DebugShellComponent {
     return cursor ?? '—';
   });
 
-  /** Disable the message input when streaming OR a submission is in flight. */
+  protected readonly externalSelected = computed(
+    () => this.external.selectedThreadId() !== undefined,
+  );
+  private readonly runtimeRoutingUnresolved = computed(() => {
+    if (this.externalSelected()) return false;
+    const sessionId = this.store.activeSessionId();
+    if (sessionId === null) return false;
+    if (this.store.sessionDirectoryLoading()) return true;
+    return this.requiresExternalBindingResolution(sessionId);
+  });
+  /** Disable the message input when routing, streaming, or submitting. */
   protected readonly inputDisabled = computed(
     () =>
+      this.runtimeSelectionPending() ||
+      this.runtimeRoutingUnresolved() ||
       (this.external.selectedThreadId() === undefined &&
         (this.store.sessionLoading() ||
           this.store.isGenerating() ||
@@ -166,10 +182,6 @@ export class DebugShellComponent {
         this.external.loading()) ||
       this.external.pending() ||
       this.pluginCommandPending(),
-  );
-
-  protected readonly externalSelected = computed(
-    () => this.external.selectedThreadId() !== undefined,
   );
   protected readonly unifiedSelectedSessionId = computed(() =>
     this.externalSelected()
@@ -292,6 +304,37 @@ export class DebugShellComponent {
 
   constructor() {
     this.installTestSnapshotApi();
+    effect(() => {
+      const sessionId = this.store.activeSessionId();
+      const runtimeKind =
+        sessionId === null
+          ? undefined
+          : this.store.sessionDirectoryEntry(sessionId)?.runtimeKind;
+      const directoryLoading = this.store.sessionDirectoryLoading();
+      const selectedExternalSessionId =
+        this.external.selectedBinding()?.sessionId;
+
+      if (typeof selectedExternalSessionId === 'string') {
+        untracked(() => {
+          this.store.rememberProfileSessionSelection(selectedExternalSessionId);
+        });
+      }
+
+      if (
+        sessionId === null ||
+        directoryLoading ||
+        !this.requiresExternalBindingResolution(sessionId, runtimeKind) ||
+        selectedExternalSessionId === sessionId ||
+        this.automaticallyRoutedSessionId === sessionId
+      ) {
+        return;
+      }
+
+      this.automaticallyRoutedSessionId = sessionId;
+      untracked(() => {
+        void this.selectUnifiedSession(sessionId);
+      });
+    });
   }
 
   @HostListener('document:keydown', ['$event'])
@@ -319,6 +362,7 @@ export class DebugShellComponent {
 
   protected onExternalSessionSelected(): void {
     this.navigationRevision += 1;
+    this.runtimeSelectionPending.set(false);
     this.navigationError.set(undefined);
     this.closeMobileSessions();
   }
@@ -352,31 +396,76 @@ export class DebugShellComponent {
 
   private async selectUnifiedSession(sessionId: string): Promise<void> {
     const revision = ++this.navigationRevision;
+    this.runtimeSelectionPending.set(true);
     this.navigationError.set(undefined);
-    const directory = this.store.sessionDirectoryEntry(sessionId);
-    if (directory?.runtimeKind === 'codex_app_server') {
-      const selected = await this.external.selectCoordinationSession(
-        sessionId,
-        directory.bindingId ?? undefined,
-      );
-      if (revision !== this.navigationRevision) return;
-      if (!selected) {
-        this.navigationError.set(
-          this.external.error() ??
-            `Codex session ${sessionId} could not be opened.`,
-        );
+    try {
+      if (this.store.sessionDirectoryLoading()) {
+        await this.store.waitForSessionDirectory();
       }
-      return;
-    }
+      if (revision !== this.navigationRevision) return;
 
-    this.external.clearSelection();
-    await this.store.selectProfileSession(sessionId);
-    if (revision === this.navigationRevision) {
-      this.navigationError.set(undefined);
+      const directory = this.store.sessionDirectoryEntry(sessionId);
+      if (
+        this.requiresExternalBindingResolution(
+          sessionId,
+          directory?.runtimeKind,
+        )
+      ) {
+        const selected = await this.external.selectCoordinationSession(
+          sessionId,
+          directory?.bindingId ?? undefined,
+        );
+        if (revision !== this.navigationRevision) return;
+        if (!selected) {
+          this.navigationError.set(
+            this.external.error() ??
+              `Codex session ${sessionId} could not be opened.`,
+          );
+          return;
+        }
+        this.store.rememberProfileSessionSelection(sessionId);
+        return;
+      }
+
+      this.automaticallyRoutedSessionId = undefined;
+      this.external.clearSelection();
+      await this.store.selectProfileSession(sessionId);
+      if (revision === this.navigationRevision) {
+        this.navigationError.set(undefined);
+      }
+    } finally {
+      if (revision === this.navigationRevision) {
+        this.runtimeSelectionPending.set(false);
+      }
     }
   }
 
+  /**
+   * Runtime directory data is authoritative. The stable external-agent id
+   * prefix is only a fail-closed hint while that optional directory is absent;
+   * ExternalAgentStore still requires a real binding before it can select.
+   */
+  private requiresExternalBindingResolution(
+    sessionId: string,
+    runtimeKind = this.store.sessionDirectoryEntry(sessionId)?.runtimeKind,
+  ): boolean {
+    if (runtimeKind === 'codex_app_server') return true;
+    if (runtimeKind !== undefined) return false;
+    return (
+      this.store
+        .sessions()
+        .find((session) => session.session_id === sessionId)
+        ?.agent_id.startsWith('external-agent-') === true
+    );
+  }
+
   protected onSendMessage(text: string): void {
+    if (this.runtimeSelectionPending() || this.runtimeRoutingUnresolved()) {
+      this.navigationError.set(
+        'Session routing is still resolving. Send again when the session is ready.',
+      );
+      return;
+    }
     if (this.externalSelected()) {
       if (text.trimStart().startsWith('/')) {
         void this.external.executeCommand(text);

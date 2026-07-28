@@ -108,6 +108,8 @@ export class ChatStore implements OnDestroy {
   private readonly _sessionDirectory = signal<readonly AgentDirectoryEntry[]>(
     [],
   );
+  /** True while runtime identity for chat sessions is being resolved. */
+  private readonly _sessionDirectoryLoading = signal(false);
   /** Submitted slash commands for Up/Down history navigation. Persisted. */
   private readonly _commandHistory = signal<readonly string[]>([]);
   /** Exact live session to restore after temporarily viewing an archive. */
@@ -117,6 +119,9 @@ export class ChatStore implements OnDestroy {
   private activeStream: ChatEventStream | null = null;
   private readonly seenEventIds = new Set<string>();
   private selectionRevision = 0;
+  private sessionDirectoryRefresh: Promise<void> | undefined;
+  /** Exact live profile member selected across native and external runtimes. */
+  private rememberedLiveSessionId: string | null = null;
   /**
    * Distinguishes operations created in the same millisecond. This sequence is
    * shared by sends and commands so every pending operation in this store has
@@ -131,6 +136,7 @@ export class ChatStore implements OnDestroy {
   // ---- public readonly signals ----
   readonly sessions = this._sessions.asReadonly();
   readonly sessionDirectory = this._sessionDirectory.asReadonly();
+  readonly sessionDirectoryLoading = this._sessionDirectoryLoading.asReadonly();
   readonly activeSessionId = this._activeSessionId.asReadonly();
   readonly projection = this._projection.asReadonly();
   readonly rawEvents = this._rawEvents.asReadonly();
@@ -325,7 +331,10 @@ export class ChatStore implements OnDestroy {
   }
 
   private liveSessionIdForPersistence(): string | null {
-    const candidate = this._returnToSessionId() ?? this._activeSessionId();
+    const candidate =
+      this._returnToSessionId() ??
+      this.rememberedLiveSessionId ??
+      this._activeSessionId();
     if (candidate === null) return null;
     const selectedProfileId = this._selectedProfileId();
     const session = this._sessions().find(
@@ -343,6 +352,32 @@ export class ChatStore implements OnDestroy {
    * Chat remains usable when coordination is unavailable.
    */
   async refreshSessionDirectory(): Promise<void> {
+    if (this.sessionDirectoryRefresh !== undefined) {
+      await this.sessionDirectoryRefresh;
+      return;
+    }
+
+    this._sessionDirectoryLoading.set(true);
+    const refresh = this.loadSessionDirectory();
+    this.sessionDirectoryRefresh = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (this.sessionDirectoryRefresh === refresh) {
+        this.sessionDirectoryRefresh = undefined;
+        this._sessionDirectoryLoading.set(false);
+      }
+    }
+  }
+
+  /** Wait for an in-flight runtime-directory read before choosing a send path. */
+  async waitForSessionDirectory(): Promise<void> {
+    if (this.sessionDirectoryRefresh !== undefined) {
+      await this.sessionDirectoryRefresh;
+    }
+  }
+
+  private async loadSessionDirectory(): Promise<void> {
     try {
       const directory = await this.transport.coordinationAgentDirectory();
       this._sessionDirectory.set(directory.agents);
@@ -355,6 +390,23 @@ export class ChatStore implements OnDestroy {
     return this._sessionDirectory().find(
       (entry) => entry.sessionId === sessionId,
     );
+  }
+
+  /**
+   * Persist an exact live profile member without opening it through ChatStore.
+   * External runtimes use this after their own store has selected the binding.
+   */
+  rememberProfileSessionSelection(sessionId: string): boolean {
+    const session = this._sessions().find(
+      (candidate) => candidate.session_id === sessionId,
+    );
+    if (session === undefined || session.status === 'archived') return false;
+
+    this._selectedProfileId.set(session.profile_id);
+    this._returnToSessionId.set(null);
+    this.rememberedLiveSessionId = sessionId;
+    this.persistUiState();
+    return true;
   }
 
   /** Maximum number of slash commands retained in history. */
@@ -394,7 +446,10 @@ export class ChatStore implements OnDestroy {
     const targetSessionId =
       preservedSessionId ?? this.defaultSessionIdForSelectedProfile();
     if (targetSessionId !== null) {
+      this.rememberProfileSessionSelection(targetSessionId);
       await this.selectSession(targetSessionId);
+    } else {
+      this.rememberedLiveSessionId = null;
     }
     this.persistUiState();
   }
@@ -416,8 +471,7 @@ export class ChatStore implements OnDestroy {
       return;
     }
 
-    this._selectedProfileId.set(session.profile_id);
-    this._returnToSessionId.set(null);
+    this.rememberProfileSessionSelection(sessionId);
     await this.selectSession(sessionId);
     this.persistUiState();
   }
@@ -456,6 +510,7 @@ export class ChatStore implements OnDestroy {
     const targetSessionId =
       returnSession?.session_id ?? this.defaultSessionIdForSelectedProfile();
     if (targetSessionId !== null) {
+      this.rememberProfileSessionSelection(targetSessionId);
       await this.selectSession(targetSessionId);
     }
     this.persistUiState();
@@ -479,6 +534,7 @@ export class ChatStore implements OnDestroy {
     this.seenEventIds.clear();
     this._selectedProfileId.set(null);
     this._returnToSessionId.set(null);
+    this.rememberedLiveSessionId = null;
     this._activeSessionId.set(null);
     this._projection.set(emptyProjection());
     this._rawEvents.set([]);

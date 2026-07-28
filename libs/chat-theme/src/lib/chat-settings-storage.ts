@@ -42,9 +42,10 @@ export class InMemoryChatSettingsStorage implements ChatSettingsStorage {
 }
 
 const DB_NAME = 'rusty-view-chat';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const SETTINGS_STORE = 'settings';
 const SETTINGS_KEY = 'appearance';
+const UI_STATE_STORE = 'ui_state';
 
 /**
  * Ensure the full shared schema exists. The `rusty-view-chat` database is also
@@ -64,6 +65,9 @@ function ensureSchema(db: IDBDatabase): void {
   }
   if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
     db.createObjectStore(SETTINGS_STORE);
+  }
+  if (!db.objectStoreNames.contains(UI_STATE_STORE)) {
+    db.createObjectStore(UI_STATE_STORE);
   }
 }
 

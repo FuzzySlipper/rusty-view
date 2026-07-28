@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test('Agents navigates Crew and Codex sessions while Codex retains management', async ({
   page,
@@ -66,6 +66,12 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     createdAt: '2026-07-28T00:00:00Z',
     updatedAt: '2026-07-28T00:00:00Z',
   };
+  const externalMessageRequests: unknown[] = [];
+  const chatMessageRequests: Array<{
+    readonly pathname: string;
+    readonly body: unknown;
+  }> = [];
+  let coordinationGate: Deferred<void> | undefined;
 
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
@@ -90,6 +96,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
       });
     }
     if (pathname === '/v1/coordination/agents') {
+      if (coordinationGate !== undefined) await coordinationGate.promise;
       return ok({
         deploymentRole: 'production',
         agents: [
@@ -124,9 +131,31 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     if (pathname === '/v1/chat/commands') {
       return ok({ commands: [] });
     }
+    if (/^\/v1\/chat\/sessions\/[^/]+\/messages$/.test(pathname)) {
+      chatMessageRequests.push({
+        pathname,
+        body: request.postDataJSON(),
+      });
+      if (pathname.includes('/codex-session/')) {
+        return route.fulfill({ status: 409, body: 'wrong runtime route' });
+      }
+      return ok({
+        status: 'accepted',
+        message_id: 'direct-message-1',
+        latest_cursor: 'direct-cursor-1',
+      });
+    }
     if (pathname === '/v1/chat/sessions/direct-session') {
       return ok({
         session: directSession,
+        events: [],
+        latest_cursor: '',
+        has_more_before: false,
+      });
+    }
+    if (pathname === '/v1/chat/sessions/codex-session') {
+      return ok({
+        session: codexSession,
         events: [],
         latest_cursor: '',
         has_more_before: false,
@@ -227,6 +256,10 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
         models: [],
       });
     }
+    if (pathname === '/v1/external-bindings/binding-1/messages') {
+      externalMessageRequests.push(request.postDataJSON());
+      return ok({ deliveryId: 'delivery-1', status: 'accepted' });
+    }
 
     return route.fulfill({ status: 404, body: 'not mocked' });
   });
@@ -245,6 +278,16 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     'data-surface',
     'profile',
   );
+  await page.getByTestId('message-input-field').fill('DIRECT_SEND_PROOF');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => chatMessageRequests).toHaveLength(1);
+  expect(chatMessageRequests[0]).toMatchObject({
+    pathname: '/v1/chat/sessions/direct-session/messages',
+    body: {
+      actor: { id: 'debug-user', kind: 'human' },
+      body: 'DIRECT_SEND_PROOF',
+    },
+  });
 
   await codexRow.click();
   await expect(codexRow).toHaveAttribute('data-session-status', 'active');
@@ -257,6 +300,55 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
   );
   await expect(page.getByText('CODEX_NATIVE_TRANSCRIPT_VISIBLE')).toBeVisible();
   await expect(codexRow).toHaveClass(/rv-profile-session--selected/);
+  await page.getByTestId('message-input-field').fill('CODEX_SEND_PROOF');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => externalMessageRequests).toHaveLength(1);
+  expect(externalMessageRequests[0]).toEqual({
+    body: 'CODEX_SEND_PROOF',
+    ttlMs: 60_000,
+  });
+  await expect
+    .poll(() => persistedSelectedSessionId(page))
+    .toBe('codex-session');
+
+  coordinationGate = deferred<void>();
+  await page.reload();
+  await expect(codexRow).toBeVisible();
+  await expect(codexRow).toHaveAttribute('data-runtime-kind', 'chat_session');
+  await expect(page.getByTestId('message-input-field')).toBeDisabled();
+
+  // A click in the initial classification window must wait for runtime
+  // authority instead of selecting the external session through ChatStore.
+  await codexRow.click();
+  await page.waitForTimeout(100);
+  expect(externalMessageRequests).toHaveLength(1);
+  expect(chatMessageRequests).toHaveLength(1);
+
+  coordinationGate.resolve();
+  coordinationGate = undefined;
+  await expect(codexRow).toHaveAttribute(
+    'data-runtime-kind',
+    'codex_app_server',
+  );
+  await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
+    'data-surface',
+    'agent',
+  );
+  await expect(page.getByTestId('message-input-field')).toBeEnabled();
+  await page
+    .getByTestId('message-input-field')
+    .fill('CODEX_RESTORED_SEND_PROOF');
+  await page.getByTestId('send-message').click();
+  await expect.poll(() => externalMessageRequests).toHaveLength(2);
+  expect(externalMessageRequests[1]).toEqual({
+    body: 'CODEX_RESTORED_SEND_PROOF',
+    ttlMs: 60_000,
+  });
+  expect(
+    chatMessageRequests.some(({ pathname }) =>
+      pathname.includes('/codex-session/'),
+    ),
+  ).toBe(false);
 
   await page.getByTestId('external-agents-tab').click();
   await expect(page.getByTestId('external-agent-create')).toBeVisible();
@@ -298,4 +390,40 @@ function chatSession(overrides: Record<string, unknown>) {
     updated_at: '2026-07-28T00:00:00Z',
     ...overrides,
   };
+}
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+async function persistedSelectedSessionId(page: Page): Promise<string | null> {
+  return page.evaluate(
+    () =>
+      new Promise<string | null>((resolve, reject) => {
+        const open = indexedDB.open('rusty-view-chat', 3);
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const database = open.result;
+          const transaction = database.transaction('ui_state', 'readonly');
+          const request = transaction.objectStore('ui_state').get('default');
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const state = request.result as
+              | { selectedSessionId?: string }
+              | undefined;
+            resolve(state?.selectedSessionId ?? null);
+            database.close();
+          };
+        };
+      }),
+  );
 }

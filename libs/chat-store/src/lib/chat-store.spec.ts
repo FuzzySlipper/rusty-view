@@ -1516,6 +1516,37 @@ describe('ChatStore profiles', () => {
     expect(store2.activeSessionId()).toBe('older-live');
   });
 
+  it('persists an external profile member without opening it as native chat', async () => {
+    const storage = new InMemoryChatStorage();
+    const externalSession = makeSession({
+      session_id: 'managed-live',
+      agent_id: 'external-agent-1',
+      profile_id: 'p1',
+      status: 'idle',
+      updated_at: '2026-07-28T00:00:00Z',
+    });
+    const transport = createMockTransport({
+      sessions: {
+        items: [externalSession],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store1 = setupStore(transport, storage);
+    await store1.refreshSessions();
+
+    expect(store1.rememberProfileSessionSelection('managed-live')).toBe(true);
+    expect(store1.selectedProfileId()).toBe('p1');
+    expect(store1.activeSessionId()).toBeNull();
+    expect(transport.openSession).not.toHaveBeenCalled();
+
+    TestBed.resetTestingModule();
+    const store2 = setupStore(transport, storage);
+    await store2.refreshSessions();
+    expect(store2.activeSessionId()).toBe('managed-live');
+  });
+
   it('does not restore a profile id that no longer exists', async () => {
     const storage = new InMemoryChatStorage();
     await storage.setUiState({ selectedProfileId: 'gone' });
