@@ -308,6 +308,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/external-bindings/{binding_id}/profile-refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refreshExternalBindingProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-bindings/{binding_id}/controls": {
         parameters: {
             query?: never;
@@ -1138,6 +1154,8 @@ export interface components {
             profileId: string | null;
             /** @default null */
             profilePromptHash: string | null;
+            /** @default null */
+            profilePromptSnapshot: string | null;
             /**
              * Format: uint64
              * @default null
@@ -2084,6 +2102,7 @@ export interface components {
         };
         ExternalBindingFleet: {
             bindings: components["schemas"]["ExternalAgentBinding"][];
+            profileStates: components["schemas"]["ExternalBindingProfileState"][];
         };
         ExternalBindingWrite: {
             binding: components["schemas"]["ExternalAgentBinding"];
@@ -2100,6 +2119,32 @@ export interface components {
             expectedAgentId: string;
             expectedProfileId: string;
             expectedNativeThreadId: string;
+        };
+        ExternalBindingProfileState: {
+            bindingId: string;
+            profileId: string | null;
+            /** @enum {string} */
+            state: "unbound" | "current" | "stale" | "profile_unavailable";
+            refreshRequired: boolean;
+            appliedProfileRevision: number | null;
+            appliedPromptHash: string | null;
+            currentProfileRevision: number | null;
+            currentPromptHash: string | null;
+        };
+        ExternalBindingProfileRefreshWrite: {
+            expectedBindingRevision: number;
+            expectedNativeThreadId: string;
+            expectedProfileRevision: number;
+            expectedProfilePromptHash: string;
+        };
+        ExternalBindingProfileRefreshReceipt: {
+            /** @enum {string} */
+            outcome: "already_current" | "metadata_reconciled" | "thread_replaced";
+            binding: components["schemas"]["ExternalAgentBinding"];
+            previousNativeThreadId: string;
+            nativeThreadId: string;
+            previousNativeThreadArchived: boolean;
+            profileState: components["schemas"]["ExternalBindingProfileState"];
         };
         ExternalControlWrite: {
             controlId?: string;
@@ -3173,6 +3218,46 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalAgentBindingRestoreReceipt"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    refreshExternalBindingProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalBindingProfileRefreshWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalBindingProfileRefreshReceipt"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };

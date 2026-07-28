@@ -201,6 +201,7 @@ function managedBinding(
     profileId: 'reviewer-profile',
     profileRevision: 1,
     profilePromptHash: 'hash',
+    profilePromptSnapshot: null,
     purpose: 'crew_agent',
     status: 'active',
     messageDeliveryPolicy: policy,

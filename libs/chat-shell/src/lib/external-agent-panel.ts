@@ -3,13 +3,16 @@ import {
   Component,
   type WritableSignal,
   computed,
+  effect,
   inject,
+  input,
   output,
   signal,
 } from '@angular/core';
 import {
   createExternalAgentRequestKey,
   ExternalAgentStore,
+  ChatStore,
   isActiveExternalSession,
   type ExternalAgentInventoryMode,
   type ExternalAgentSession,
@@ -29,6 +32,7 @@ type ExternalAgentSessionCreateIntent = Omit<
   ExternalAgentSessionCreateWrite,
   'idempotencyKey'
 >;
+type SessionCreatorMode = 'crew' | 'codex';
 
 @Component({
   selector: 'rv-external-agent-panel',
@@ -37,9 +41,12 @@ type ExternalAgentSessionCreateIntent = Omit<
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExternalAgentPanelComponent {
+  readonly creatorRequest = input(0);
   readonly sessionSelected = output<void>();
   readonly crewSessionRestored = output<string>();
+  readonly crewSessionCreated = output<string>();
   protected readonly store = inject(ExternalAgentStore);
+  protected readonly chat = inject(ChatStore);
   protected readonly inventoryModes: readonly ExternalAgentInventoryMode[] = [
     'managed',
     'attention',
@@ -48,6 +55,7 @@ export class ExternalAgentPanelComponent {
   ];
   protected readonly query = signal('');
   protected readonly creating = signal(false);
+  protected readonly creatorMode = signal<SessionCreatorMode>('crew');
   protected readonly runtimeId = signal('');
   protected readonly profileId = signal('');
   protected readonly cwd = signal('');
@@ -60,6 +68,7 @@ export class ExternalAgentPanelComponent {
   protected readonly metadataTaskId = signal('');
   protected readonly attempted = signal(false);
   private readonly creationAttemptKeys = loadCreationAttemptKeys();
+  private lastCreatorRequest = 0;
 
   protected readonly cwdValidationError = computed(() => {
     const cwd = this.cwd().trim();
@@ -69,15 +78,27 @@ export class ExternalAgentPanelComponent {
   });
 
   protected readonly canOpenCreator = computed(
-    () =>
-      this.store.readyRuntimes().length > 0 &&
-      this.store.creationProfiles().length > 0,
+    () => this.store.creationProfiles().length > 0,
   );
-  protected readonly canSubmit = computed(
-    () =>
-      this.runtimeId() !== '' &&
-      this.profileId() !== '' &&
-      !this.store.creatingSession(),
+  protected readonly canSubmit = computed(() => {
+    if (this.profileId() === '') return false;
+    if (this.creatorMode() === 'crew') {
+      return (
+        this.selectedCreationProfile()?.revision !== undefined &&
+        !this.chat.crewSessionCreating()
+      );
+    }
+    return this.runtimeId() !== '' && !this.store.creatingSession();
+  });
+  protected readonly creationPending = computed(() =>
+    this.creatorMode() === 'crew'
+      ? this.chat.crewSessionCreating()
+      : this.store.creatingSession(),
+  );
+  protected readonly selectedCreationProfile = computed(() =>
+    this.store
+      .creationProfiles()
+      .find((profile) => profile.profileId === this.profileId()),
   );
   protected readonly sessions = computed(() => {
     const query = this.query().trim().toLowerCase();
@@ -104,6 +125,13 @@ export class ExternalAgentPanelComponent {
   constructor() {
     void this.store.refresh();
     void this.store.refreshCreationProfiles();
+    effect(() => {
+      const request = this.creatorRequest();
+      if (request <= this.lastCreatorRequest) return;
+      if (this.store.creationProfiles().length === 0) return;
+      this.lastCreatorRequest = request;
+      this.openCreator();
+    });
   }
 
   protected select(session: ExternalAgentSession): void {
@@ -289,20 +317,32 @@ export class ExternalAgentPanelComponent {
   protected openCreator(): void {
     const runtime = this.store.readyRuntimes()[0];
     const profile = this.store.creationProfiles()[0];
-    if (runtime === undefined || profile === undefined) return;
-    this.runtimeId.set(runtime.runtimeId);
+    if (profile === undefined) return;
+    this.creatorMode.set('crew');
+    this.runtimeId.set(runtime?.runtimeId ?? '');
     this.profileId.set(profile.profileId);
     this.cwd.set(this.store.selectedThread()?.cwd ?? '');
     this.label.set('');
     this.taskProjectId.set('');
     this.taskId.set('');
     this.clearAttemptFeedback();
+    this.chat.clearCrewSessionCreationFeedback();
     this.creating.set(true);
   }
 
   protected closeCreator(): void {
-    if (this.store.creatingSession()) return;
+    if (this.creationPending()) return;
     this.creating.set(false);
+  }
+
+  protected setCreatorMode(mode: SessionCreatorMode): void {
+    if (mode === this.creatorMode()) return;
+    this.creatorMode.set(mode);
+    this.clearAttemptFeedback();
+    this.chat.clearCrewSessionCreationFeedback();
+    if (mode === 'codex' && this.runtimeId() === '') {
+      this.runtimeId.set(this.store.readyRuntimes()[0]?.runtimeId ?? '');
+    }
   }
 
   protected updateDraft(target: WritableSignal<string>, event: Event): void {
@@ -317,6 +357,30 @@ export class ExternalAgentPanelComponent {
     event.preventDefault();
     if (!this.canSubmit()) return;
     this.attempted.set(true);
+    if (this.creatorMode() === 'crew') {
+      const profile = this.selectedCreationProfile();
+      if (profile?.revision === undefined) return;
+      const intentKey = JSON.stringify({
+        mode: 'crew',
+        profileId: profile.profileId,
+        profileRevision: profile.revision,
+      });
+      const result = await this.chat.createCrewSession(
+        profile.profileId,
+        profile.revision,
+        this.idempotencyKeyFor(intentKey),
+      );
+      if (result === undefined) {
+        await this.store.refreshCreationProfiles();
+        return;
+      }
+      this.forgetAttempt(intentKey);
+      const sessionId = crewCreationSessionId(result.creation.session);
+      if (sessionId !== undefined) this.crewSessionCreated.emit(sessionId);
+      this.creating.set(false);
+      this.clearAttemptFeedback();
+      return;
+    }
     if (this.cwdValidationError() !== undefined) return;
     const intent = this.creationIntent();
     const intentKey = JSON.stringify(intent);
@@ -369,6 +433,13 @@ export class ExternalAgentPanelComponent {
     this.attempted.set(false);
     this.store.creationError.set(undefined);
   }
+}
+
+function crewCreationSessionId(
+  session: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const value = session['session_id'] ?? session['sessionId'];
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
 export function summarizeExternalAgentSessions(

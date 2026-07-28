@@ -1,6 +1,6 @@
 <div class="rv-agents" data-testid="external-agent-panel">
   <div class="rv-agents__header">
-    <span>Codex sessions</span>
+    <span>Session management</span>
     <div class="rv-agents__header-actions">
       @if (!creating()) {
       <button
@@ -23,9 +23,9 @@
   </div>
   @if (store.readyRuntimes().length === 0) {
   <div class="rv-agents__prerequisite" data-testid="external-agent-no-runtime">
-    No ready Codex runtime is connected to this service.
+    No ready Codex runtime is connected. Crew brain sessions remain available.
   </div>
-  } @else if (store.creationProfiles().length === 0) {
+  } @if (store.creationProfiles().length === 0) {
   <div class="rv-agents__prerequisite" data-testid="external-agent-no-profile">
     No active full-session profile is available.
   </div>
@@ -38,18 +38,79 @@
   >
     <div class="rv-agents__create-heading">
       <div>
-        <strong>New Codex session</strong>
-        <span>Start a persistent external agent</span>
+        <strong>New agent session</strong>
+        <span>Choose a Crew brain or persistent Codex agent</span>
       </div>
       <button
         type="button"
-        [disabled]="store.creatingSession()"
+        [disabled]="creationPending()"
         (click)="closeCreator()"
       >
         Cancel
       </button>
     </div>
 
+    <div
+      class="rv-agents__create-modes"
+      role="group"
+      aria-label="Agent session type"
+    >
+      <button
+        type="button"
+        data-testid="agent-create-mode-crew"
+        [class.rv-agents__create-mode--active]="creatorMode() === 'crew'"
+        [attr.aria-pressed]="creatorMode() === 'crew'"
+        (click)="setCreatorMode('crew')"
+      >
+        Crew brain
+      </button>
+      <button
+        type="button"
+        data-testid="agent-create-mode-codex"
+        [class.rv-agents__create-mode--active]="creatorMode() === 'codex'"
+        [attr.aria-pressed]="creatorMode() === 'codex'"
+        [disabled]="store.readyRuntimes().length === 0"
+        (click)="setCreatorMode('codex')"
+      >
+        Codex
+      </button>
+    </div>
+
+    <label>
+      Profile
+      <select
+        aria-label="Agent session profile"
+        [value]="profileId()"
+        (change)="updateDraft(profileId, $event)"
+      >
+        @for (profile of store.creationProfiles(); track profile.profileId) {
+        <option [value]="profile.profileId">
+          {{ profile.displayName ?? profile.profileId }}
+        </option>
+        }
+      </select>
+    </label>
+
+    @if (creatorMode() === 'crew') {
+    <div class="rv-agents__create-summary">
+      Starts a fresh Crew brain session from the active profile. View sends only
+      the profile identity and current revision; profile configuration remains
+      authoritative.
+    </div>
+    @if (selectedCreationProfile()?.revision === undefined) {
+    <div class="rv-agents__error" role="alert">
+      This service did not expose the profile revision required for safe
+      creation. Refresh and try again.
+    </div>
+    } @if (chat.crewSessionCreationError()) {
+    <div class="rv-agents__error" role="alert">
+      {{ chat.crewSessionCreationError() }}
+    </div>
+    } @if (chat.crewSessionCreationNotice()) {
+    <div class="rv-agents__notice" role="status">
+      {{ chat.crewSessionCreationNotice() }}
+    </div>
+    } } @else {
     <label>
       Runtime
       <select
@@ -59,21 +120,6 @@
       >
         @for (runtime of store.readyRuntimes(); track runtime.runtimeId) {
         <option [value]="runtime.runtimeId">{{ runtime.runtimeId }}</option>
-        }
-      </select>
-    </label>
-
-    <label>
-      Profile
-      <select
-        aria-label="Codex session profile"
-        [value]="profileId()"
-        (change)="updateDraft(profileId, $event)"
-      >
-        @for (profile of store.creationProfiles(); track profile.profileId) {
-        <option [value]="profile.profileId">
-          {{ profile.displayName ?? profile.profileId }}
-        </option>
         }
       </select>
     </label>
@@ -138,14 +184,14 @@
     <div class="rv-agents__retry" role="status">
       Retry will resume this same creation request.
     </div>
-    }
+    } }
     <button
       class="rv-agents__create-submit"
       type="submit"
       data-testid="external-agent-create-submit"
       [disabled]="!canSubmit()"
     >
-      {{ store.creatingSession() ? 'Starting…' : 'Start session' }}
+      {{ creationPending() ? 'Starting…' : 'Start session' }}
     </button>
   </form>
   } @else {

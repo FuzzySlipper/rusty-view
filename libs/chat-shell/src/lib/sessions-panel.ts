@@ -43,13 +43,19 @@ export class SessionsPanelComponent {
   readonly dismissed = output<void>();
 
   protected readonly filterProfileId = signal<string | null>(null);
+  protected readonly archivedHistory = signal(false);
   protected readonly localControlError = signal<string | null>(null);
 
   protected readonly sessions = computed(() => {
     const all = this.store.allSessions();
     const filter = this.filterProfileId();
+    const lifecycleFiltered = all.filter(
+      (session) => (session.status === 'archived') === this.archivedHistory(),
+    );
     const filtered =
-      filter === null ? [...all] : all.filter((s) => s.profile_id === filter);
+      filter === null
+        ? lifecycleFiltered
+        : lifecycleFiltered.filter((s) => s.profile_id === filter);
     const target = this.targetSessionId();
     if (target === null) return filtered;
     return filtered.sort(
@@ -93,6 +99,10 @@ export class SessionsPanelComponent {
 
   protected setFilter(profileId: string | null): void {
     this.filterProfileId.set(profileId);
+  }
+
+  protected setArchivedHistory(archived: boolean): void {
+    this.archivedHistory.set(archived);
   }
 
   protected onSelectSession(sessionId: string): void {

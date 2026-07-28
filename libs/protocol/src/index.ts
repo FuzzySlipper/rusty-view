@@ -237,6 +237,12 @@ export type ChatSessionSummary = Schemas['ChatSessionSummary'];
 export type ChatSessionPage = Schemas['ChatSessionPage'];
 export type ChatSessionOpenResult = Schemas['ChatSessionOpenResult'];
 export type ChatEventPage = Schemas['ChatEventPage'];
+export type CreateCrewChatSessionRequest =
+  Schemas['CreateCrewChatSessionRequest'];
+export type CrewAgentSessionCreationRecord =
+  Schemas['CrewAgentSessionCreationRecord'];
+export type CreateCrewChatSessionResult =
+  Schemas['CreateCrewChatSessionResult'];
 
 /**
  * Opaque downstream-owned session metadata. The current Rusty Crew chat
@@ -337,6 +343,8 @@ export type ExecuteChatCommandResult = Schemas['ExecuteChatCommandResult'];
 // Route path STRINGS are owned by transport, not here — protocol is type-only.
 export type ListChatSessionsResponse =
   operations['listChatSessions']['responses'][200]['content']['application/json'];
+export type CreateCrewChatSessionResponse =
+  operations['createCrewChatSession']['responses'][200]['content']['application/json'];
 export type OpenChatSessionResponse =
   operations['openChatSession']['responses'][200]['content']['application/json'];
 export type ReplayChatSessionEventsResponse =

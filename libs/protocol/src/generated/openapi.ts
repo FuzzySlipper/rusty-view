@@ -14,7 +14,8 @@ export interface paths {
         /** List chat-capable Rusty Crew sessions */
         get: operations["listChatSessions"];
         put?: never;
-        post?: never;
+        /** Create or recover a fresh Crew brain session from an active profile */
+        post: operations["createCrewChatSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -595,6 +596,26 @@ export interface components {
             /** Format: date-time */
             generatedAt: string;
             items: components["schemas"]["MemorySurfaceCatalogItem"][];
+        };
+        CreateCrewChatSessionRequest: {
+            profile_id: string;
+            expected_profile_revision: number;
+        };
+        CrewAgentSessionCreationRecord: {
+            requestFingerprint: string;
+            profileRevision: number;
+            templateSessionId?: string;
+            /** @enum {string} */
+            outcome: "created" | "replayed" | "recovered";
+            session: {
+                [key: string]: unknown;
+            };
+        };
+        CreateCrewChatSessionResult: {
+            creation: components["schemas"]["CrewAgentSessionCreationRecord"];
+            applyResult: {
+                [key: string]: unknown;
+            };
         };
         /** @enum {string} */
         ChatSessionStatus: "active" | "idle" | "archived" | "blocked";
@@ -1500,6 +1521,7 @@ export interface operations {
                 limit?: components["parameters"]["Limit"];
                 offset?: components["parameters"]["Offset"];
                 profile_id?: string;
+                /** @description Explicit status filter. Archived sessions are excluded when omitted; use archived for history. */
                 status?: components["schemas"]["ChatSessionStatus"];
             };
             header?: never;
@@ -1518,6 +1540,55 @@ export interface operations {
                         data?: components["schemas"]["ChatSessionPage"];
                     };
                 };
+            };
+        };
+    };
+    createCrewChatSession: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCrewChatSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created, replayed, or recovered Crew session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["CreateCrewChatSessionResult"];
+                    };
+                };
+            };
+            /** @description Invalid request or inactive profile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Profile not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Revision, idempotency, or active-session conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

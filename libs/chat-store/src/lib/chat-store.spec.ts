@@ -4,6 +4,7 @@ import type {
   ChatSessionOpenResult,
   ChatSessionPage,
   ChatSessionSummary,
+  CreateCrewChatSessionResult,
   ExecuteChatCommandResult,
   SendChatMessageResult,
   SessionContextUsageResult,
@@ -67,6 +68,8 @@ function createMockTransport(opts: {
   sendError?: unknown;
   commandResult?: ExecuteChatCommandResult;
   commandError?: unknown;
+  crewCreationResult?: CreateCrewChatSessionResult;
+  crewCreationError?: unknown;
   contextUsage?: SessionContextUsageResult;
   contextUsageError?: boolean;
   toolCallDebugDetail?: unknown;
@@ -75,6 +78,22 @@ function createMockTransport(opts: {
   const mock = {
     getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
     listSessions: vi.fn(async () => opts.sessions ?? emptySessionPage()),
+    createCrewSession: vi.fn(async () => {
+      if (opts.crewCreationError !== undefined) {
+        throw opts.crewCreationError;
+      }
+      return (
+        opts.crewCreationResult ?? {
+          creation: {
+            requestFingerprint: 'sha256:test',
+            profileRevision: 8,
+            outcome: 'created',
+            session: { sessionId: 'crew-session-1' },
+          },
+          applyResult: {},
+        }
+      );
+    }),
     coordinationAgentDirectory: vi.fn(async () => ({
       deploymentRole: 'production' as const,
       agents: [],
@@ -1158,6 +1177,106 @@ describe('ChatStore', () => {
     await store.runCommand('/new');
 
     expect(store.activeSessionId()).toBe('sess_new');
+  });
+
+  it('creates and selects an exact Crew session with a revision guard', async () => {
+    const created = makeSession({
+      session_id: 'crew-session-1',
+      profile_id: 'software-engineer',
+      status: 'idle',
+    });
+    const transport = createMockTransport({
+      crewCreationResult: {
+        creation: {
+          requestFingerprint: 'sha256:crew',
+          profileRevision: 8,
+          outcome: 'created',
+          session: { sessionId: 'crew-session-1' },
+        },
+        applyResult: {},
+      },
+      sessions: {
+        items: [created],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await expect(
+      store.createCrewSession('software-engineer', 7, 'create-key'),
+    ).resolves.toMatchObject({ creation: { outcome: 'created' } });
+
+    expect(transport.createCrewSession).toHaveBeenCalledWith(
+      {
+        profile_id: 'software-engineer',
+        expected_profile_revision: 7,
+      },
+      'create-key',
+    );
+    expect(store.activeSessionId()).toBe('crew-session-1');
+    expect(store.crewSessionCreationNotice()).toContain('crew-session-1');
+  });
+
+  it('reloads state and explains a Crew profile revision conflict', async () => {
+    const transport = createMockTransport({
+      crewCreationError: new ChatTransportError({
+        code: 'http_error',
+        message: 'profile revision changed',
+        endpoint: 'http://test/v1/chat/sessions',
+        statusCode: 409,
+        apiError: {
+          code: 'conflict',
+          reason_code: 'profile_revision_conflict',
+          message: 'profile revision changed',
+          retryable: false,
+        },
+      }),
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await expect(
+      store.createCrewSession('software-engineer', 7, 'create-key'),
+    ).resolves.toBeUndefined();
+
+    expect(transport.listSessions).toHaveBeenCalled();
+    expect(store.crewSessionCreationError()).toContain(
+      'profile changed before creation',
+    );
+  });
+
+  it('refreshes active and historical membership after /archive', async () => {
+    const page = {
+      items: [
+        makeSession({
+          session_id: 'sess_test',
+          profile_id: 'p1',
+          status: 'archived',
+        }),
+      ],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    };
+    const transport = createMockTransport({
+      commandResult: {
+        status: 'completed',
+        command_name: '/archive',
+        summary: 'Archived session',
+        latest_cursor: 'cur_1',
+      },
+      sessions: page,
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.selectSession('sess_test');
+
+    await store.runCommand('/archive');
+
+    expect(transport.listSessions).toHaveBeenCalled();
+    expect(store.activeSession()?.status).toBe('archived');
+    expect(store.profiles()[0]?.liveSessions).toHaveLength(0);
+    expect(store.allSessions()[0]?.status).toBe('archived');
   });
 
   it('runCommand preserves network error details on failure', async () => {

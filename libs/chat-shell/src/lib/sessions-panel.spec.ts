@@ -279,6 +279,27 @@ describe('SessionsPanelComponent', () => {
     expect(text.indexOf('new')).toBeLessThan(text.indexOf('old'));
   });
 
+  it('keeps archived sessions in an explicit history filter', async () => {
+    const { fixture } = await createPanel([
+      makeSession({ session_id: 'live', status: 'idle' }),
+      makeSession({ session_id: 'old', status: 'archived' }),
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-session-id="live"]')).not.toBeNull();
+    expect(host.querySelector('[data-session-id="old"]')).toBeNull();
+
+    (
+      host.querySelector(
+        '[data-testid="sessions-filter-archived"]',
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(host.querySelector('[data-session-id="live"]')).toBeNull();
+    expect(host.querySelector('[data-session-id="old"]')).not.toBeNull();
+  });
+
   it('selects an idle same-profile session without entering historical mode', async () => {
     const { fixture, store } = await createPanel([
       makeSession({ session_id: 'direct', profile_id: 'p1', status: 'idle' }),

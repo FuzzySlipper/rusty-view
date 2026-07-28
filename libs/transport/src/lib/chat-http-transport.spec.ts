@@ -175,6 +175,38 @@ describe('ChatHttpTransport', () => {
     });
   });
 
+  describe('createCrewSession', () => {
+    it('posts only profile identity and revision with an idempotency key', async () => {
+      const result = {
+        creation: {
+          requestFingerprint: 'sha256:test',
+          profileRevision: 8,
+          outcome: 'created' as const,
+          session: { sessionId: 'crew-session-1' },
+        },
+        applyResult: {},
+      };
+      const { fetch, lastRequest } = capturingFetch(jsonOk(result));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      await expect(
+        transport.createCrewSession(
+          { profile_id: 'software-engineer', expected_profile_revision: 7 },
+          'crew-create-key',
+        ),
+      ).resolves.toEqual(result);
+
+      const request = lastRequest();
+      expect(request.url).toBe('http://localhost:9347/v1/chat/sessions');
+      expect(request.method).toBe('POST');
+      expect(request.headers.get('Idempotency-Key')).toBe('crew-create-key');
+      expect(JSON.parse(request.body ?? '')).toEqual({
+        profile_id: 'software-engineer',
+        expected_profile_revision: 7,
+      });
+    });
+  });
+
   describe('auth modes', () => {
     it('does not send Authorization in no-auth mode', async () => {
       const { fetch, lastRequest } = capturingFetch(

@@ -55,6 +55,7 @@ test('profile sidebar, active session, and sessions menu historical flow', async
 
   // 4. Only an exact archived backend session enters historical mode. Another
   // idle/active same-profile session remains writable.
+  await page.getByTestId('sessions-filter-archived').click();
   const archivedRows = page.locator(
     '.rv-sessions-panel__row[data-session-status="archived"]',
   );

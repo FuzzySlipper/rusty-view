@@ -63,6 +63,7 @@ export interface ExternalAgentSession {
 export interface ExternalAgentProfileOption {
   readonly profileId: string;
   readonly displayName?: string;
+  readonly revision?: number;
 }
 
 interface RuntimeThread {
@@ -535,6 +536,9 @@ export class ExternalAgentStore {
             ...(record.displayName === undefined
               ? {}
               : { displayName: record.displayName }),
+            ...(record.revision === undefined
+              ? {}
+              : { revision: record.revision }),
           })),
       );
     } catch (error) {

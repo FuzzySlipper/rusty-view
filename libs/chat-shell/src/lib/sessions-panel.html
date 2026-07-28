@@ -1,6 +1,6 @@
 <div class="rv-sessions-panel" data-testid="sessions-panel">
   <header class="rv-sessions-panel__header">
-    <span class="rv-sessions-panel__title">Sessions</span>
+    <span class="rv-sessions-panel__title">Session history</span>
     <button
       type="button"
       class="rv-sessions-panel__close"
@@ -11,6 +11,27 @@
       ✕
     </button>
   </header>
+
+  <div class="rv-sessions-panel__filters">
+    <button
+      type="button"
+      class="rv-sessions-panel__chip"
+      data-testid="sessions-filter-active"
+      [class.rv-sessions-panel__chip--active]="!archivedHistory()"
+      (click)="setArchivedHistory(false)"
+    >
+      Active
+    </button>
+    <button
+      type="button"
+      class="rv-sessions-panel__chip"
+      data-testid="sessions-filter-archived"
+      [class.rv-sessions-panel__chip--active]="archivedHistory()"
+      (click)="setArchivedHistory(true)"
+    >
+      Archived history
+    </button>
+  </div>
 
   <div class="rv-sessions-panel__filters">
     <button

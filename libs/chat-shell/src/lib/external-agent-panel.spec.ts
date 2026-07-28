@@ -1,6 +1,7 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  ChatStore,
   ExternalAgentStore,
   filterExternalAgentSessions,
   type ExternalAgentSession,
@@ -18,6 +19,7 @@ interface PanelApi {
   readonly metadataLabel: WritableSignal<string>;
   readonly metadataProjectId: WritableSignal<string>;
   readonly metadataTaskId: WritableSignal<string>;
+  readonly creatorMode: WritableSignal<'crew' | 'codex'>;
   taskRefLabel(session: ExternalAgentSession): string;
   sessionTitle(session: ExternalAgentSession): string;
   sessionStateLabel(session: ExternalAgentSession): string;
@@ -26,6 +28,7 @@ interface PanelApi {
   openCreator(): void;
   openOptions(session: ExternalAgentSession): void;
   closeCreator(): void;
+  setCreatorMode(mode: 'crew' | 'codex'): void;
   updateDraft(target: WritableSignal<string>, event: Event): void;
   create(event: Event): Promise<void>;
   saveOptions(session: ExternalAgentSession, event: Event): Promise<void>;
@@ -38,10 +41,15 @@ function input(value: string): Event {
 async function createPanel(
   createSession: (request: ExternalAgentSessionCreateWrite) => Promise<unknown>,
   sessions: readonly ExternalAgentSession[] = [],
+  createCrewSession: (
+    profileId: string,
+    revision: number,
+    idempotencyKey: string,
+  ) => Promise<unknown> = async () => undefined,
 ) {
   const store = {
     readyRuntimes: signal([{ runtimeId: 'runtime-1' }]),
-    creationProfiles: signal([{ profileId: 'tester' }]),
+    creationProfiles: signal([{ profileId: 'tester', revision: 7 }]),
     selectedThread: signal(undefined),
     creatingSession: signal(false),
     creationError: signal<string | undefined>(undefined),
@@ -72,14 +80,25 @@ async function createPanel(
     refreshCreationProfiles: vi.fn(),
     createSession: vi.fn(createSession),
   };
+  const chat = {
+    crewSessionCreating: signal(false),
+    crewSessionCreationError: signal<string | null>(null),
+    crewSessionCreationNotice: signal<string | null>(null),
+    createCrewSession: vi.fn(createCrewSession),
+    clearCrewSessionCreationFeedback: vi.fn(),
+  };
   await TestBed.configureTestingModule({
     imports: [ExternalAgentPanelComponent],
-    providers: [{ provide: ExternalAgentStore, useValue: store }],
+    providers: [
+      { provide: ExternalAgentStore, useValue: store },
+      { provide: ChatStore, useValue: chat },
+    ],
   }).compileComponents();
   const fixture = TestBed.createComponent(ExternalAgentPanelComponent);
   return {
     fixture,
     store,
+    chat,
     panel: fixture.componentInstance as unknown as PanelApi,
   };
 }
@@ -95,6 +114,7 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     const created = vi.fn();
     const { fixture, panel } = await createPanel(created);
     panel.openCreator();
+    panel.setCreatorMode('codex');
     fixture.detectChanges();
 
     const submit = fixture.nativeElement.querySelector(
@@ -118,6 +138,7 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     const created = vi.fn(async () => ({}));
     const { panel } = await createPanel(created);
     panel.openCreator();
+    panel.setCreatorMode('codex');
     panel.updateDraft(panel.cwd, input('/home/dev/rusty-view'));
 
     await panel.create({ preventDefault: vi.fn() } as unknown as Event);
@@ -139,6 +160,7 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     };
     const first = await createPanel(createSession);
     first.panel.openCreator();
+    first.panel.setCreatorMode('codex');
     first.panel.updateDraft(first.panel.cwd, input('/home/dev/rusty-view'));
     await first.panel.create({ preventDefault: vi.fn() } as unknown as Event);
 
@@ -148,6 +170,7 @@ describe('ExternalAgentPanelComponent creation retries', () => {
 
     first.panel.closeCreator();
     first.panel.openCreator();
+    first.panel.setCreatorMode('codex');
     first.panel.updateDraft(first.panel.cwd, input('/home/dev/rusty-view'));
     await first.panel.create({ preventDefault: vi.fn() } as unknown as Event);
 
@@ -155,6 +178,7 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     TestBed.resetTestingModule();
     const reloaded = await createPanel(createSession);
     reloaded.panel.openCreator();
+    reloaded.panel.setCreatorMode('codex');
     reloaded.panel.updateDraft(
       reloaded.panel.cwd,
       input('/home/dev/rusty-view'),
@@ -172,6 +196,64 @@ describe('ExternalAgentPanelComponent creation retries', () => {
       profileId: 'tester',
       cwd: '/home/dev/rusty-view',
     });
+  });
+
+  it('creates a Crew brain with only the active profile revision', async () => {
+    const createCrew = vi.fn(async () => ({
+      creation: {
+        outcome: 'created',
+        session: { sessionId: 'crew-session-1' },
+      },
+      applyResult: {},
+    }));
+    const { fixture, panel, chat } = await createPanel(
+      async () => undefined,
+      [],
+      createCrew,
+    );
+    const created = vi.fn();
+    fixture.componentInstance.crewSessionCreated.subscribe(created);
+
+    panel.openCreator();
+    fixture.detectChanges();
+    expect(panel.creatorMode()).toBe('crew');
+    expect(
+      fixture.nativeElement.querySelector('[aria-label="Codex runtime"]'),
+    ).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'Working directory',
+    );
+
+    await panel.create({ preventDefault: vi.fn() } as unknown as Event);
+
+    expect(chat.createCrewSession).toHaveBeenCalledWith(
+      'tester',
+      7,
+      expect.any(String),
+    );
+    expect(created).toHaveBeenCalledWith('crew-session-1');
+  });
+
+  it('honors a queued creator request after profile metadata loads', async () => {
+    const { fixture, store } = await createPanel(async () => undefined);
+    store.creationProfiles.set([]);
+    fixture.componentRef.setInput('creatorRequest', 1);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="external-agent-create-submit"]',
+      ),
+    ).toBeNull();
+
+    store.creationProfiles.set([{ profileId: 'tester', revision: 7 }]);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="external-agent-create-submit"]',
+      ),
+    ).not.toBeNull();
   });
 });
 
@@ -500,6 +582,7 @@ function inventorySession(
             messageDeliveryPolicy: 'immediate_steer',
             profileId: null,
             profilePromptHash: null,
+            profilePromptSnapshot: null,
             profileRevision: null,
             revision: 1,
             createdAt: '',

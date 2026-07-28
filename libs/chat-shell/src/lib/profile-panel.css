@@ -11,6 +11,9 @@
 }
 
 .rv-profiles__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--rv-space-sm) var(--rv-space-md);
   font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
@@ -18,6 +21,13 @@
   text-transform: uppercase;
   color: var(--rv-color-text-muted);
   border-bottom: 1px solid var(--rv-color-border);
+}
+
+.rv-profiles__header button {
+  border: 0;
+  background: transparent;
+  color: var(--rv-color-accent);
+  cursor: pointer;
 }
 
 .rv-profiles__list {

@@ -11,6 +11,9 @@ import type {
   ExecuteChatCommandResult,
   ExecuteChatCommandResponse,
   ConversationTreeProjection,
+  CreateCrewChatSessionRequest,
+  CreateCrewChatSessionResponse,
+  CreateCrewChatSessionResult,
   GetConversationTreeResponse,
   GetChatSessionContextUsageResponse,
   GetChatProviderRequestDebugDetailResponse,
@@ -133,6 +136,23 @@ export class ChatHttpTransport {
       'GET',
       SESSIONS_PATH,
       { ...(query !== undefined ? { query } : {}) },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  /** Create, replay, or recover one Crew-brain session for an active profile. */
+  async createCrewSession(
+    request: CreateCrewChatSessionRequest,
+    idempotencyKey: string,
+  ): Promise<CreateCrewChatSessionResult> {
+    const body = await this.requestJson<CreateCrewChatSessionResponse>(
+      'POST',
+      SESSIONS_PATH,
+      {
+        body: request,
+        extraHeaders: { [HEADER_NAMES.idempotencyKey]: idempotencyKey },
+        timeoutMs: this.config.writeTimeoutMs,
+      },
     );
     return unwrapEnvelope(body);
   }

@@ -37,6 +37,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
             displayName: 'Tester',
             lifecycleStatus: 'active',
             defaultSessionKind: 'full',
+            revision: 7,
           },
         ],
         total: 1,
@@ -372,6 +373,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await page.goto('/?api=http://crew.test');
   await page.getByTestId('external-agents-tab').click();
   await page.getByTestId('external-agent-create').click();
+  await page.getByTestId('agent-create-mode-codex').click();
   await page.getByPlaceholder('/home/dev/project').fill('/home/dev/rusty-view');
   await page
     .getByPlaceholder('Optional session name')

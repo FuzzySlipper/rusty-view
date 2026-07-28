@@ -48,6 +48,7 @@ export class ProfilePanelComponent {
   readonly externalSessions = input<readonly ExternalAgentSession[]>([]);
   readonly selectedSessionId = input<string | null>(null);
   readonly profileSelected = output<string>();
+  readonly newSessionRequested = output<void>();
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
   private readonly pinnedProfileIds = signal(loadPinnedProfileIds());

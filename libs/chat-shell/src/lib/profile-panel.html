@@ -1,5 +1,14 @@
 <div class="rv-profiles" data-testid="profile-panel">
-  <div class="rv-profiles__header">Agents</div>
+  <div class="rv-profiles__header">
+    <span>Agents</span>
+    <button
+      type="button"
+      data-testid="profile-new-session"
+      (click)="newSessionRequested.emit()"
+    >
+      New
+    </button>
+  </div>
 
   @if (!hasProfiles()) {
   <div class="rv-profiles__empty">

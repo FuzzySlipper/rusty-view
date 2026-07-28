@@ -24,6 +24,7 @@ import type {
   ChatEvent,
   ChatSessionStatus,
   ChatSessionSummary,
+  CreateCrewChatSessionResult,
   SessionContextUsageResult,
   ToolCallDebugDetail,
   ProviderRequestDebugDetail,
@@ -114,6 +115,9 @@ export class ChatStore implements OnDestroy {
   private readonly _commandHistory = signal<readonly string[]>([]);
   /** Exact live session to restore after temporarily viewing an archive. */
   private readonly _returnToSessionId = signal<string | null>(null);
+  private readonly _crewSessionCreating = signal(false);
+  private readonly _crewSessionCreationError = signal<string | null>(null);
+  private readonly _crewSessionCreationNotice = signal<string | null>(null);
 
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
@@ -148,6 +152,11 @@ export class ChatStore implements OnDestroy {
   readonly pendingCommands = this._pendingCommands.asReadonly();
   /** True only while an uncached selected session has no materialized state. */
   readonly sessionLoading = this._sessionLoading.asReadonly();
+  readonly crewSessionCreating = this._crewSessionCreating.asReadonly();
+  readonly crewSessionCreationError =
+    this._crewSessionCreationError.asReadonly();
+  readonly crewSessionCreationNotice =
+    this._crewSessionCreationNotice.asReadonly();
   /** True when a message or command is currently in flight. */
   readonly isSubmitting = computed(() => {
     const sessionId = this._activeSessionId();
@@ -272,10 +281,18 @@ export class ChatStore implements OnDestroy {
 
   /** Fetch the session list from the backend and update state + cache. */
   async refreshSessions(): Promise<void> {
-    const page = await this.transport.listSessions();
-    this._sessions.set(page.items);
+    const [currentPage, archivedPage] = await Promise.all([
+      this.transport.listSessions(),
+      this.transport.listSessions({ status: 'archived' }),
+    ]);
+    const sessionsById = new Map<string, ChatSessionSummary>();
+    for (const session of [...currentPage.items, ...archivedPage.items]) {
+      sessionsById.set(session.session_id, session);
+    }
+    const sessions = [...sessionsById.values()];
+    this._sessions.set(sessions);
     void this.refreshSessionDirectory();
-    for (const session of page.items) {
+    for (const session of sessions) {
       void this.storage.putSession(session).catch(() => undefined);
     }
 
@@ -283,6 +300,56 @@ export class ChatStore implements OnDestroy {
     if (this._selectedProfileId() === null) {
       await this.restoreUiState();
     }
+  }
+
+  async createCrewSession(
+    profileId: string,
+    expectedProfileRevision: number,
+    idempotencyKey: string,
+  ): Promise<CreateCrewChatSessionResult | undefined> {
+    if (this._crewSessionCreating()) return undefined;
+    this._crewSessionCreating.set(true);
+    this._crewSessionCreationError.set(null);
+    this._crewSessionCreationNotice.set(null);
+    try {
+      const result = await this.transport.createCrewSession(
+        {
+          profile_id: profileId,
+          expected_profile_revision: expectedProfileRevision,
+        },
+        idempotencyKey,
+      );
+      await this.refreshSessions();
+      const sessionId = crewCreationSessionId(result);
+      if (sessionId === undefined) {
+        this._crewSessionCreationError.set(
+          'Crew created the session but did not return its exact session identity. Refresh Agents to locate it.',
+        );
+        return undefined;
+      }
+      await this.selectProfileSession(sessionId);
+      this._crewSessionCreationNotice.set(
+        `Crew brain session ${sessionId} is ready (${result.creation.outcome}).`,
+      );
+      return result;
+    } catch (error) {
+      const detail = storeErrorDetail(error);
+      const reason = detail.apiError?.reasonCode;
+      this._crewSessionCreationError.set(
+        reason === 'profile_revision_conflict'
+          ? 'The profile changed before creation. Current profile data was reloaded; review it and start again.'
+          : `Crew session creation failed: ${detail.message}`,
+      );
+      await this.refreshSessions().catch(() => undefined);
+      return undefined;
+    } finally {
+      this._crewSessionCreating.set(false);
+    }
+  }
+
+  clearCrewSessionCreationFeedback(): void {
+    this._crewSessionCreationError.set(null);
+    this._crewSessionCreationNotice.set(null);
   }
 
   /** Load persisted UI state (selected profile) and apply it if still valid. */
@@ -881,6 +948,10 @@ export class ChatStore implements OnDestroy {
       if (result.new_session_id !== undefined) {
         await this.refreshSessions();
         await this.selectSession(result.new_session_id);
+      } else {
+        // Lifecycle commands such as /archive mutate list membership. Refresh
+        // after every durable command so Agents and History agree immediately.
+        await this.refreshSessions();
       }
     } catch (error) {
       this._pendingCommands.update((cmds) =>
@@ -1057,6 +1128,19 @@ export class ChatStore implements OnDestroy {
   ngOnDestroy(): void {
     this.closeStream();
   }
+}
+
+function crewCreationSessionId(
+  result: CreateCrewChatSessionResult,
+): string | undefined {
+  const session = result.creation.session;
+  const snakeCase = session['session_id'];
+  if (typeof snakeCase === 'string' && snakeCase.trim() !== '')
+    return snakeCase;
+  const camelCase = session['sessionId'];
+  return typeof camelCase === 'string' && camelCase.trim() !== ''
+    ? camelCase
+    : undefined;
 }
 
 function compareChatEventSequence(left: ChatEvent, right: ChatEvent): number {

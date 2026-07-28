@@ -5,6 +5,8 @@ import type {
   ChatSessionOpenResult,
   ChatSessionPage,
   ConversationTreeProjection,
+  CreateCrewChatSessionRequest,
+  CreateCrewChatSessionResult,
   ExecuteChatCommandRequest,
   ExecuteChatCommandResult,
   MessageSlotMutationResult,
@@ -177,6 +179,13 @@ export class ChatTransport {
 
   listSessions(query?: ListSessionsQuery): Promise<ChatSessionPage> {
     return this.http.listSessions(query);
+  }
+
+  createCrewSession(
+    request: CreateCrewChatSessionRequest,
+    idempotencyKey: string,
+  ): Promise<CreateCrewChatSessionResult> {
+    return this.http.createCrewSession(request, idempotencyKey);
   }
 
   openSession(

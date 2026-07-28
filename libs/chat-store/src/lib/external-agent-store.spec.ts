@@ -1969,6 +1969,7 @@ function externalBinding(): ExternalAgentBinding {
     messageDeliveryPolicy: 'immediate_steer',
     profileId: null,
     profilePromptHash: null,
+    profilePromptSnapshot: null,
     profileRevision: null,
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',

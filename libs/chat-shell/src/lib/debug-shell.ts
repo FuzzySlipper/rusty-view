@@ -146,6 +146,7 @@ export class DebugShellComponent {
   protected readonly pluginCommandError = signal<string | undefined>(undefined);
   protected readonly navigationError = signal<string | undefined>(undefined);
   private readonly runtimeSelectionPending = signal(false);
+  protected readonly creatorRequestRevision = signal(0);
   private navigationRevision = 0;
   private automaticallyRoutedSessionId: string | undefined;
 
@@ -360,9 +361,29 @@ export class DebugShellComponent {
     void this.selectUnifiedSession(sessionId);
   }
 
+  protected onNewSessionRequested(): void {
+    this.sidebarMode.set('agents');
+    // The Codex-management panel is created by this mode change. Deliver the
+    // open request in the next microtask so its signal input observes a real
+    // transition even when this is the first visit to that panel.
+    queueMicrotask(() => {
+      this.creatorRequestRevision.update((revision) => revision + 1);
+    });
+  }
+
   protected onExternalSessionSelected(): void {
     this.navigationRevision += 1;
     this.runtimeSelectionPending.set(false);
+    this.navigationError.set(undefined);
+    this.closeMobileSessions();
+  }
+
+  protected onCrewSessionCreated(sessionId: string): void {
+    this.navigationRevision += 1;
+    this.runtimeSelectionPending.set(false);
+    this.external.clearSelection();
+    this.store.rememberProfileSessionSelection(sessionId);
+    this.sidebarMode.set('profiles');
     this.navigationError.set(undefined);
     this.closeMobileSessions();
   }

@@ -22,7 +22,8 @@ test.describe('external agent creation @live-agent', () => {
     });
 
     await page.getByTestId('external-agent-create').click();
-    await page.getByLabel('Codex session profile').selectOption(profile);
+    await page.getByTestId('agent-create-mode-codex').click();
+    await page.getByLabel('Agent session profile').selectOption(profile);
     await page
       .getByPlaceholder('/home/dev/project')
       .fill('/home/dev/rusty-view');

@@ -106,10 +106,13 @@
         [externalSessions]="external.sessions()"
         [selectedSessionId]="unifiedSelectedSessionId()"
         (profileSelected)="onUnifiedSessionSelected($event)"
+        (newSessionRequested)="onNewSessionRequested()"
       />
       } @else {
       <rv-external-agent-panel
+        [creatorRequest]="creatorRequestRevision()"
         (sessionSelected)="onExternalSessionSelected()"
+        (crewSessionCreated)="onCrewSessionCreated($event)"
         (crewSessionRestored)="onExternalCrewSessionRestored($event)"
       />
       }

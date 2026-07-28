@@ -67,6 +67,14 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     updatedAt: '2026-07-28T00:00:00Z',
   };
   const externalMessageRequests: unknown[] = [];
+  let crewCreationRequest: unknown;
+  let crewCreationKey: string | undefined;
+  let crewCreated = false;
+  const createdCrewSession = chatSession({
+    session_id: 'crew-created-session',
+    agent_id: 'software-engineer',
+    updated_at: '2026-07-28T00:03:00Z',
+  });
   const chatMessageRequests: Array<{
     readonly pathname: string;
     readonly body: unknown;
@@ -88,9 +96,27 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
       });
 
     if (pathname === '/v1/chat/sessions') {
+      if (request.method() === 'POST') {
+        crewCreationRequest = request.postDataJSON();
+        crewCreationKey = request.headers()['idempotency-key'];
+        crewCreated = true;
+        return ok({
+          creation: {
+            requestFingerprint: 'sha256:crew-create',
+            profileRevision: 8,
+            outcome: 'created',
+            session: { sessionId: 'crew-created-session' },
+          },
+          applyResult: {},
+        });
+      }
       return ok({
-        items: [directSession, codexSession],
-        total: 2,
+        items: [
+          ...(crewCreated ? [createdCrewSession] : []),
+          directSession,
+          codexSession,
+        ],
+        total: crewCreated ? 3 : 2,
         limit: 100,
         offset: 0,
       });
@@ -100,6 +126,21 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
       return ok({
         deploymentRole: 'production',
         agents: [
+          ...(crewCreated
+            ? [
+                {
+                  agentId: 'software-engineer',
+                  displayLabel: 'software-engineer',
+                  profileId: 'software-engineer',
+                  routable: true,
+                  runtimeKind: 'direct_brain',
+                  sessionId: 'crew-created-session',
+                  sessionKind: 'full',
+                  sessionStatus: 'idle',
+                  workdir: '/home/dev/direct-project',
+                },
+              ]
+            : []),
           {
             agentId: 'software-engineer',
             displayLabel: 'software-engineer',
@@ -153,6 +194,14 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
         has_more_before: false,
       });
     }
+    if (pathname === '/v1/chat/sessions/crew-created-session') {
+      return ok({
+        session: createdCrewSession,
+        events: [],
+        latest_cursor: '',
+        has_more_before: false,
+      });
+    }
     if (pathname === '/v1/chat/sessions/codex-session') {
       return ok({
         session: codexSession,
@@ -168,6 +217,13 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
         body: ': connected\n\n',
       });
     }
+    if (pathname.startsWith('/v1/chat/sessions/crew-created-session/stream')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: ': connected\n\n',
+      });
+    }
     if (pathname === '/v1/admin/profiles/registry') {
       return ok({
         items: [
@@ -176,6 +232,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
             displayName: 'Software Engineer',
             lifecycleStatus: 'active',
             defaultSessionKind: 'full',
+            revision: 7,
           },
         ],
         total: 1,
@@ -373,6 +430,31 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     'agent',
   );
   await page.keyboard.press('Control+Shift+Tab');
+  await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
+    'data-surface',
+    'profile',
+  );
+
+  await page.getByTestId('profile-new-session').click();
+  await expect(page.getByTestId('agent-create-mode-crew')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByPlaceholder('/home/dev/project')).toHaveCount(0);
+  await expect(page.getByPlaceholder('Optional session name')).toHaveCount(0);
+  await page.getByTestId('external-agent-create-submit').click();
+  await expect
+    .poll(() => crewCreationRequest)
+    .toEqual({
+      profile_id: 'software-engineer',
+      expected_profile_revision: 7,
+    });
+  expect(crewCreationKey).toBeTruthy();
+  await expect(
+    page.locator(
+      '[data-testid="profile-session-row"][data-session-id="crew-created-session"]',
+    ),
+  ).toHaveClass(/rv-profile-session--selected/);
   await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
     'data-surface',
     'profile',
