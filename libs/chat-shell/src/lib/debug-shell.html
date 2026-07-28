@@ -103,6 +103,7 @@
       </nav>
       @if (sidebarMode() === 'profiles') {
       <rv-profile-panel
+        [externalSessions]="external.sessions()"
         [selectedSessionId]="unifiedSelectedSessionId()"
         (profileSelected)="onUnifiedSessionSelected($event)"
       />

@@ -135,6 +135,10 @@
   gap: var(--rv-space-sm);
 }
 
+.rv-profile-session__status {
+  font-weight: var(--rv-font-weight-bold);
+}
+
 .rv-profile-session__workdir,
 .rv-profile-session__id {
   overflow: hidden;

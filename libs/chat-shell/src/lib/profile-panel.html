@@ -50,7 +50,7 @@
             class="rv-profile-session"
             data-testid="profile-session-row"
             [attr.data-session-id]="session.session_id"
-            [attr.data-session-status]="session.status"
+            [attr.data-session-status]="sessionState(session)"
             [attr.data-runtime-kind]="sessionRuntimeKind(session)"
             [attr.data-workdir]="sessionWorkdir(session)"
             [class.rv-profile-session--selected]="
@@ -60,7 +60,9 @@
           >
             <span class="rv-profile-session__heading">
               <strong>{{ sessionRuntimeLabel(session) }}</strong>
-              <span>{{ profileStatusLabel(session.status) }}</span>
+              <span class="rv-profile-session__status"
+                >{{ sessionStateLabel(session) }}</span
+              >
             </span>
             @if (sessionWorkdir(session); as workdir) {
             <span class="rv-profile-session__workdir">{{ workdir }}</span>

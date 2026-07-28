@@ -23,7 +23,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     effectiveModel: 'gpt-5.6-sol',
     createdAt: 1,
     updatedAt: 2,
-    status: 'idle',
+    status: 'active',
     cwd: '/home/dev/rusty-view',
     cliVersion: '0.144.1',
     name: 'Native Codex session',
@@ -247,6 +247,10 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
   );
 
   await codexRow.click();
+  await expect(codexRow).toHaveAttribute('data-session-status', 'active');
+  await expect(codexRow.locator('.rv-profile-session__status')).toHaveText(
+    'Active',
+  );
   await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
     'data-surface',
     'agent',

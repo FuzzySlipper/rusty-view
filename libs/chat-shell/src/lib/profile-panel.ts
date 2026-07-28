@@ -7,7 +7,11 @@ import {
   output,
 } from '@angular/core';
 import type { BrainProfile } from '@rusty-view/chat-domain';
-import { AdminStore, ChatStore } from '@rusty-view/chat-store';
+import {
+  AdminStore,
+  ChatStore,
+  type ExternalAgentSession,
+} from '@rusty-view/chat-store';
 import type { ChatSessionSummary } from '@rusty-view/protocol';
 
 import { sessionStatusLabel } from './session-status-label';
@@ -34,6 +38,7 @@ import { profileWakeTimeoutLabel } from './wake-timeout-display';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfilePanelComponent {
+  readonly externalSessions = input<readonly ExternalAgentSession[]>([]);
   readonly selectedSessionId = input<string | null>(null);
   readonly profileSelected = output<string>();
   protected readonly store = inject(ChatStore);
@@ -91,6 +96,15 @@ export class ProfilePanelComponent {
     return sessionStatusLabel(status);
   }
 
+  protected sessionState(session: ChatSessionSummary): string {
+    const external = this.externalSession(session);
+    return external?.phase ?? external?.thread.status ?? session.status;
+  }
+
+  protected sessionStateLabel(session: ChatSessionSummary): string {
+    return sessionStatusLabel(this.sessionState(session));
+  }
+
   protected sessionRuntimeKind(session: ChatSessionSummary): string {
     return (
       this.store.sessionDirectoryEntry(session.session_id)?.runtimeKind ??
@@ -126,5 +140,24 @@ export class ProfilePanelComponent {
       return resourceLimits.workdir;
     }
     return null;
+  }
+
+  private externalSession(
+    session: ChatSessionSummary,
+  ): ExternalAgentSession | undefined {
+    const directory = this.store.sessionDirectoryEntry(session.session_id);
+    if (directory?.runtimeKind !== 'codex_app_server') return undefined;
+    const exact =
+      directory.bindingId === undefined || directory.bindingId === null
+        ? undefined
+        : this.externalSessions().find(
+            (candidate) => candidate.binding?.bindingId === directory.bindingId,
+          );
+    return (
+      exact ??
+      this.externalSessions().find(
+        (candidate) => candidate.binding?.sessionId === session.session_id,
+      )
+    );
   }
 }

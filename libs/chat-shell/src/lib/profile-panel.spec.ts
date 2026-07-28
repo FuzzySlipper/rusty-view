@@ -6,6 +6,7 @@ import {
   AdminStore,
   ChatStore,
   CHAT_STORAGE_ADAPTER,
+  type ExternalAgentSession,
 } from '@rusty-view/chat-store';
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 import { ChatTransport } from '@rusty-view/transport';
@@ -71,6 +72,9 @@ function makeTransport(sessions: ChatSessionSummary[]): ChatTransport {
         runtimeKind: session.agent_id.startsWith('external-agent-')
           ? ('codex_app_server' as const)
           : ('direct_brain' as const),
+        bindingId: session.agent_id.startsWith('external-agent-')
+          ? `binding-${session.session_id}`
+          : undefined,
         sessionId: session.session_id,
         sessionKind: session.kind,
         sessionStatus: session.status,
@@ -330,5 +334,48 @@ describe('ProfilePanelComponent', () => {
     managed?.click();
 
     expect(selected).toHaveBeenCalledWith('managed-session');
+  });
+
+  it('shows the native Codex phase instead of the coordination status', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'direct-session',
+        agent_id: 'software-engineer',
+        profile_id: 'p1',
+        status: 'idle',
+      }),
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'p1',
+        status: 'idle',
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        phase: 'completed',
+        binding: {
+          bindingId: 'binding-managed-session',
+          sessionId: 'managed-session',
+        },
+        thread: { status: 'active' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+    const direct = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLElement>('[data-session-id="direct-session"]');
+    const managed = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLElement>('[data-session-id="managed-session"]');
+
+    expect(direct?.dataset['sessionStatus']).toBe('idle');
+    expect(
+      direct?.querySelector('.rv-profile-session__status')?.textContent,
+    ).toBe('Idle');
+    expect(managed?.dataset['sessionStatus']).toBe('completed');
+    expect(
+      managed?.querySelector('.rv-profile-session__status')?.textContent,
+    ).toBe('Completed');
   });
 });
