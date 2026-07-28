@@ -595,9 +595,21 @@ export class ChatStore implements OnDestroy {
     ) {
       return;
     }
+    this.resetProfileNavigation(false);
+  }
+
+  /**
+   * Reset the active/profile navigation state without deleting durable session
+   * history. Archive completion preserves the just-viewed transcript cache so
+   * History can reopen it without manufacturing a selected zombie row.
+   */
+  private resetProfileNavigation(preserveTranscriptCache: boolean): void {
     this.selectionRevision += 1;
+    if (preserveTranscriptCache) {
+      this.cacheActiveTranscript();
+    }
     this.closeStream();
-    this.transcriptCache.clear();
+    if (!preserveTranscriptCache) this.transcriptCache.clear();
     this.seenEventIds.clear();
     this._selectedProfileId.set(null);
     this._returnToSessionId.set(null);
@@ -952,6 +964,9 @@ export class ChatStore implements OnDestroy {
         // Lifecycle commands such as /archive mutate list membership. Refresh
         // after every durable command so Agents and History agree immediately.
         await this.refreshSessions();
+        if (isArchiveCommandName(result.command_name)) {
+          await this.reconcileSelectionAfterArchive(sessionId);
+        }
       }
     } catch (error) {
       this._pendingCommands.update((cmds) =>
@@ -967,6 +982,38 @@ export class ChatStore implements OnDestroy {
         ),
       );
     }
+  }
+
+  /**
+   * Move normal navigation away from a durably archived Crew session.
+   *
+   * Prefer a live member of the same profile, then the first deterministic
+   * profile fallback from the already ordered profile projection. If no live
+   * session remains, clear navigation intentionally while keeping the archived
+   * transcript available through History.
+   */
+  private async reconcileSelectionAfterArchive(
+    archivedSessionId: string,
+  ): Promise<void> {
+    const archivedSession = this._sessions().find(
+      (session) => session.session_id === archivedSessionId,
+    );
+    const sameProfileFallback =
+      archivedSession === undefined
+        ? null
+        : (this.profiles().find(
+            (profile) => profile.profileId === archivedSession.profile_id,
+          )?.defaultSessionId ?? null);
+    const anyLiveFallback =
+      this.profiles().find((profile) => profile.defaultSessionId !== null)
+        ?.defaultSessionId ?? null;
+    const targetSessionId = sameProfileFallback ?? anyLiveFallback;
+
+    if (targetSessionId !== null) {
+      await this.selectProfileSession(targetSessionId);
+      return;
+    }
+    this.resetProfileNavigation(true);
   }
 
   private nextPendingOperationId(kind: 'pending' | 'cmd'): string {
@@ -1141,6 +1188,10 @@ function crewCreationSessionId(
   return typeof camelCase === 'string' && camelCase.trim() !== ''
     ? camelCase
     : undefined;
+}
+
+function isArchiveCommandName(commandName: string): boolean {
+  return commandName.replace(/^\/+/, '') === 'archive';
 }
 
 function compareChatEventSequence(left: ChatEvent, right: ChatEvent): number {

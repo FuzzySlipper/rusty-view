@@ -1246,7 +1246,235 @@ describe('ChatStore', () => {
     );
   });
 
-  it('refreshes active and historical membership after /archive', async () => {
+  it('prefers another live member of the archived profile after /archive', async () => {
+    const archived = makeSession({
+      session_id: 'archived-target',
+      profile_id: 'p1',
+      status: 'archived',
+      updated_at: '2026-07-28T00:03:00Z',
+    });
+    const sameProfileFallback = makeSession({
+      session_id: 'same-profile-live',
+      profile_id: 'p1',
+      status: 'idle',
+      updated_at: '2026-07-28T00:01:00Z',
+    });
+    const otherProfile = makeSession({
+      session_id: 'other-profile-active',
+      profile_id: 'p2',
+      status: 'active',
+      updated_at: '2026-07-28T00:02:00Z',
+    });
+    let archiveCompleted = false;
+    const transport = createMockTransport({});
+    vi.mocked(transport.listSessions).mockImplementation(async (query) => {
+      if (query?.status === 'archived') {
+        return archiveCompleted
+          ? {
+              items: [archived],
+              total: 1,
+              limit: 100,
+              offset: 0,
+            }
+          : emptySessionPage();
+      }
+      const items = archiveCompleted
+        ? [sameProfileFallback, otherProfile]
+        : [
+            makeSession({
+              ...archived,
+              status: 'active',
+            }),
+            sameProfileFallback,
+            otherProfile,
+          ];
+      return {
+        items,
+        total: items.length,
+        limit: 100,
+        offset: 0,
+      };
+    });
+    vi.mocked(transport.sendCommand).mockImplementation(async () => {
+      archiveCompleted = true;
+      return {
+        status: 'completed',
+        command_name: 'archive',
+        summary: 'Archived session',
+        latest_cursor: 'cur_1',
+      };
+    });
+    const storage = new InMemoryChatStorage();
+    const store = setupStore(transport, storage);
+    await store.refreshSessions();
+    await store.selectProfileSession('archived-target');
+
+    await store.runCommand('/archive');
+
+    expect(store.activeSessionId()).toBe('same-profile-live');
+    expect(store.selectedProfileId()).toBe('p1');
+    expect(store.isViewingHistorical()).toBe(false);
+    expect(store.profiles()[0]?.liveSessions).toHaveLength(1);
+    expect(
+      store
+        .allSessions()
+        .filter((session) => session.session_id === 'archived-target'),
+    ).toHaveLength(1);
+    expect(
+      store.allSessions().find((session) => session.status === 'archived'),
+    ).toMatchObject({ session_id: 'archived-target' });
+
+    TestBed.resetTestingModule();
+    const reloaded = setupStore(transport, storage);
+    await reloaded.refreshSessions();
+    expect(reloaded.activeSessionId()).toBe('same-profile-live');
+    expect(reloaded.isViewingHistorical()).toBe(false);
+    expect(
+      reloaded
+        .allSessions()
+        .filter((session) => session.session_id === 'archived-target'),
+    ).toHaveLength(1);
+  });
+
+  it('chooses a deterministic live session from another profile after /archive', async () => {
+    const archived = makeSession({
+      session_id: 'archived-target',
+      profile_id: 'p1',
+      status: 'archived',
+      updated_at: '2026-07-28T00:03:00Z',
+    });
+    const olderFallback = makeSession({
+      session_id: 'older-profile-live',
+      profile_id: 'p2',
+      status: 'idle',
+      updated_at: '2026-07-28T00:01:00Z',
+    });
+    const newerFallback = makeSession({
+      session_id: 'newer-profile-live',
+      profile_id: 'p3',
+      status: 'idle',
+      updated_at: '2026-07-28T00:02:00Z',
+    });
+    let archiveCompleted = false;
+    const transport = createMockTransport({});
+    vi.mocked(transport.listSessions).mockImplementation(async (query) => {
+      if (query?.status === 'archived') {
+        return archiveCompleted
+          ? {
+              items: [archived],
+              total: 1,
+              limit: 100,
+              offset: 0,
+            }
+          : emptySessionPage();
+      }
+      const items = archiveCompleted
+        ? [olderFallback, newerFallback]
+        : [
+            makeSession({
+              ...archived,
+              status: 'active',
+            }),
+            olderFallback,
+            newerFallback,
+          ];
+      return {
+        items,
+        total: items.length,
+        limit: 100,
+        offset: 0,
+      };
+    });
+    vi.mocked(transport.sendCommand).mockImplementation(async () => {
+      archiveCompleted = true;
+      return {
+        status: 'completed',
+        command_name: 'archive',
+        summary: 'Archived session',
+        latest_cursor: 'cur_1',
+      };
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectProfileSession('archived-target');
+
+    await store.runCommand('/archive');
+
+    expect(store.activeSessionId()).toBe('newer-profile-live');
+    expect(store.selectedProfileId()).toBe('p3');
+    expect(store.isViewingHistorical()).toBe(false);
+  });
+
+  it('uses an intentional empty state when /archive removes the last live session', async () => {
+    const storage = new InMemoryChatStorage();
+    const archived = makeSession({
+      session_id: 'last-live',
+      profile_id: 'p1',
+      status: 'archived',
+      updated_at: '2026-07-28T00:01:00Z',
+    });
+    let archiveCompleted = false;
+    const transport = createMockTransport({});
+    vi.mocked(transport.listSessions).mockImplementation(async (query) => {
+      if (query?.status === 'archived') {
+        return archiveCompleted
+          ? {
+              items: [archived],
+              total: 1,
+              limit: 100,
+              offset: 0,
+            }
+          : emptySessionPage();
+      }
+      return archiveCompleted
+        ? emptySessionPage()
+        : {
+            items: [
+              makeSession({
+                ...archived,
+                status: 'active',
+              }),
+            ],
+            total: 1,
+            limit: 100,
+            offset: 0,
+          };
+    });
+    vi.mocked(transport.sendCommand).mockImplementation(async () => {
+      archiveCompleted = true;
+      return {
+        status: 'completed',
+        command_name: 'archive',
+        summary: 'Archived session',
+        latest_cursor: 'cur_1',
+      };
+    });
+    const store = setupStore(transport, storage);
+    await store.refreshSessions();
+    await store.selectProfileSession('last-live');
+
+    await store.runCommand('/archive');
+
+    expect(store.activeSessionId()).toBeNull();
+    expect(store.activeSession()).toBeNull();
+    expect(store.selectedProfileId()).toBeNull();
+    expect(store.isViewingHistorical()).toBe(false);
+    expect(store.profiles()[0]?.liveSessions).toHaveLength(0);
+    expect(store.allSessions()).toEqual([archived]);
+
+    TestBed.resetTestingModule();
+    const reloaded = setupStore(transport, storage);
+    await reloaded.refreshSessions();
+    expect(reloaded.activeSessionId()).toBeNull();
+    expect(reloaded.selectedProfileId()).toBeNull();
+    expect(reloaded.allSessions()).toEqual([archived]);
+
+    await reloaded.viewHistoricalSession('last-live');
+    expect(reloaded.activeSessionId()).toBe('last-live');
+    expect(reloaded.viewingHistoricalSessionId()).toBe('last-live');
+  });
+
+  it('refreshes historical membership after non-navigation commands', async () => {
     const page = {
       items: [
         makeSession({
@@ -1262,8 +1490,8 @@ describe('ChatStore', () => {
     const transport = createMockTransport({
       commandResult: {
         status: 'completed',
-        command_name: '/archive',
-        summary: 'Archived session',
+        command_name: '/status',
+        summary: 'Session status',
         latest_cursor: 'cur_1',
       },
       sessions: page,
@@ -1271,7 +1499,7 @@ describe('ChatStore', () => {
     const store = setupStore(transport, new InMemoryChatStorage());
     await store.selectSession('sess_test');
 
-    await store.runCommand('/archive');
+    await store.runCommand('/status');
 
     expect(transport.listSessions).toHaveBeenCalled();
     expect(store.activeSession()?.status).toBe('archived');
