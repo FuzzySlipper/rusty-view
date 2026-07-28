@@ -409,7 +409,7 @@ async function persistedSelectedSessionId(page: Page): Promise<string | null> {
   return page.evaluate(
     () =>
       new Promise<string | null>((resolve, reject) => {
-        const open = indexedDB.open('rusty-view-chat', 3);
+        const open = indexedDB.open('rusty-view-chat');
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
           const database = open.result;

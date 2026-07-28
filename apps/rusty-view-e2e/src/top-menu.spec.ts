@@ -36,7 +36,7 @@ async function appearanceSetting(page: Page, key: string): Promise<unknown> {
   return page.evaluate(
     (settingKey) =>
       new Promise<unknown>((resolve, reject) => {
-        const request = indexedDB.open('rusty-view-chat', 2);
+        const request = indexedDB.open('rusty-view-chat');
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const db = request.result;

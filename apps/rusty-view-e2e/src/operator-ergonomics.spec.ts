@@ -60,7 +60,7 @@ async function readAppearanceSetting(
   return page.evaluate(
     (settingKey) =>
       new Promise<unknown>((resolve, reject) => {
-        const request = indexedDB.open('rusty-view-chat', 2);
+        const request = indexedDB.open('rusty-view-chat');
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const db = request.result;
