@@ -4,6 +4,12 @@ test('focuses a large native inventory and archives then restores through Crew',
   page,
 }) => {
   await installHistoryFixture(page);
+  const crewRestoreRequests: string[] = [];
+  page.on('request', (request) => {
+    if (/\/v1\/external-bindings\/[^/]+\/restore$/.test(request.url())) {
+      crewRestoreRequests.push(request.url());
+    }
+  });
   await page.goto('/?api=http://crew.test');
   await page.getByTestId('external-agents-tab').click();
 
@@ -56,7 +62,25 @@ test('focuses a large native inventory and archives then restores through Crew',
   await page.getByTestId('external-agent-mode-archived').click();
   const archivedManaged = page.locator('[data-thread-id="thread-0"]');
   await expect(archivedManaged).toContainText('Crew session restore available');
-  const crewRestore = archivedManaged.getByTestId(
+  const nativeHistoryRestore = archivedManaged.getByTestId(
+    'external-agent-restore',
+  );
+  await expect(nativeHistoryRestore).toHaveText('Restore native history');
+  await nativeHistoryRestore.click();
+  await expect(archivedManaged).toHaveCount(0);
+  expect(crewRestoreRequests).toHaveLength(0);
+
+  await page.getByTestId('external-agent-mode-all').click();
+  await page.getByTestId('external-agent-load-more').click();
+  const nativeRestoredManaged = page.locator('[data-thread-id="thread-0"]');
+  await expect(nativeRestoredManaged).toBeVisible();
+  await expect(nativeRestoredManaged).toContainText('Crew Archived');
+  page.once('dialog', (dialog) => dialog.accept());
+  await nativeRestoredManaged.getByTestId('external-agent-archive').click();
+  await page.getByTestId('external-agent-mode-archived').click();
+
+  const archivedManagedAgain = page.locator('[data-thread-id="thread-0"]');
+  const crewRestore = archivedManagedAgain.getByTestId(
     'external-agent-restore-crew-session',
   );
   await expect(crewRestore).toHaveText('Restore Crew session');
@@ -67,6 +91,7 @@ test('focuses a large native inventory and archives then restores through Crew',
     await dialog.accept();
   });
   await crewRestore.click();
+  expect(crewRestoreRequests).toHaveLength(1);
   await expect(page.locator('[data-thread-id="thread-0"]')).toBeVisible();
   await expect(page.locator('.rv-agents__notice')).toContainText(
     'Restored Crew session session-0',

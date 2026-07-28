@@ -411,6 +411,57 @@ describe('ExternalAgentStore', () => {
     expect(store.lifecycleNotice()).toContain('Archived native Codex thread');
   });
 
+  it('restores native history without reactivating its archived Crew binding', async () => {
+    let nativeArchived = true;
+    const archivedBinding = {
+      ...externalBinding(),
+      profileId: 'profile-1',
+      status: 'archived' as const,
+      revision: 4,
+    };
+    const unarchiveThread = vi.fn(async () => {
+      nativeArchived = false;
+      return {
+        runtimeId: 'runtime-1',
+        threadId: 'thread-1',
+        action: 'unarchive' as const,
+        outcome: 'applied' as const,
+        nativeArchived: false,
+        bindings: [],
+      };
+    });
+    const restoreBinding = vi.fn();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [archivedBinding],
+      listThreads: vi.fn(async (_runtimeId, query) =>
+        page(
+          query?.archived === nativeArchived ? [thread('thread-1', 10)] : [],
+          null,
+        ),
+      ),
+      unarchiveThread,
+      restoreBinding,
+    });
+    await store.setInventoryMode('archived');
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected archived session');
+
+    await expect(store.unarchiveThread(session)).resolves.toBe(true);
+
+    expect(unarchiveThread).toHaveBeenCalledWith('runtime-1', 'thread-1');
+    expect(restoreBinding).not.toHaveBeenCalled();
+    expect(store.bindings()[0]).toMatchObject({
+      bindingId: 'binding-1',
+      status: 'archived',
+      revision: 4,
+    });
+    expect(store.sessions()).toEqual([]);
+    expect(store.lifecycleNotice()).toContain(
+      'Restored native Codex thread thread-1',
+    );
+  });
+
   it('restores the exact archived Crew session and returns to managed inventory', async () => {
     let restored = false;
     const archivedBinding = {

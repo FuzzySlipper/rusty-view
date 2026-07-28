@@ -447,6 +447,16 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     expect(fixture.nativeElement.textContent).toContain(
       'Crew session restore available',
     );
+    const nativeHistoryButton = fixture.nativeElement.querySelector(
+      '[data-testid="external-agent-restore"]',
+    ) as HTMLButtonElement;
+    expect(nativeHistoryButton.textContent).toContain('Restore native history');
+    nativeHistoryButton.click();
+    await fixture.whenStable();
+
+    expect(store.unarchiveThread).toHaveBeenCalledWith(archived);
+    expect(store.restoreBindingSession).not.toHaveBeenCalled();
+
     button.click();
     await fixture.whenStable();
 
@@ -455,11 +465,7 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     );
     expect(store.restoreBindingSession).toHaveBeenCalledWith(archived);
     expect(restored).toHaveBeenCalledWith('session-1');
-    expect(
-      fixture.nativeElement.querySelector(
-        '[data-testid="external-agent-restore"]',
-      ),
-    ).toBeNull();
+    expect(store.unarchiveThread).toHaveBeenCalledTimes(1);
     confirm.mockRestore();
   });
 
