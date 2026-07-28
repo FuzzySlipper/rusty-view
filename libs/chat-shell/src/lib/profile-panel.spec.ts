@@ -291,7 +291,7 @@ describe('ProfilePanelComponent', () => {
     expect(selected?.textContent).toContain('p1');
   });
 
-  it('notifies the shell after a profile is selected', async () => {
+  it('emits the profile default session for runtime-aware shell routing', async () => {
     const { fixture } = await createPanel([
       makeSession({ session_id: 'live', profile_id: 'p1' }),
     ]);
@@ -302,6 +302,33 @@ describe('ProfilePanelComponent', () => {
       .querySelector<HTMLButtonElement>('.rv-profile')
       ?.click();
 
-    expect(selected).toHaveBeenCalledOnce();
+    expect(selected).toHaveBeenCalledWith('live');
+  });
+
+  it('emits an exact Codex session and reflects shell-owned selection', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'direct-session',
+        agent_id: 'software-engineer',
+        profile_id: 'p1',
+      }),
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'p1',
+      }),
+    ]);
+    fixture.componentRef.setInput('selectedSessionId', 'managed-session');
+    fixture.detectChanges();
+    const selected = vi.fn();
+    fixture.componentInstance.profileSelected.subscribe(selected);
+    const managed = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLButtonElement>('[data-session-id="managed-session"]');
+
+    expect(managed?.classList).toContain('rv-profile-session--selected');
+    managed?.click();
+
+    expect(selected).toHaveBeenCalledWith('managed-session');
   });
 });

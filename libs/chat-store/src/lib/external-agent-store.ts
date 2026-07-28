@@ -687,6 +687,45 @@ export class ExternalAgentStore {
     }
   }
 
+  /**
+   * Resolve a Crew coordination session to its bound native external thread.
+   *
+   * The coordination directory can briefly lag a binding replacement, so an
+   * exact binding-id match is preferred but the stable Crew session id remains
+   * a recovery key after one fleet refresh.
+   */
+  async selectCoordinationSession(
+    sessionId: string,
+    bindingId?: string,
+  ): Promise<boolean> {
+    const findSession = (): ExternalAgentSession | undefined => {
+      const sessions = this.sessions();
+      const exact =
+        bindingId === undefined
+          ? undefined
+          : sessions.find(
+              (session) => session.binding?.bindingId === bindingId,
+            );
+      return (
+        exact ??
+        sessions.find((session) => session.binding?.sessionId === sessionId)
+      );
+    };
+
+    let session = findSession();
+    if (session === undefined) {
+      await this.refresh();
+      session = findSession();
+    }
+    if (session === undefined) {
+      this.error.set(
+        `Codex session ${sessionId} has no readable external binding. Refresh Agents or open Codex management to inspect its runtime state.`,
+      );
+      return false;
+    }
+    return this.selectSession(session);
+  }
+
   async loadSelectedEventHistory(): Promise<boolean> {
     const runtimeId = this.selectedRuntimeId();
     const threadId = this.selectedThreadId();

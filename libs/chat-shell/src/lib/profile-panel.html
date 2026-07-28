@@ -54,7 +54,7 @@
             [attr.data-runtime-kind]="sessionRuntimeKind(session)"
             [attr.data-workdir]="sessionWorkdir(session)"
             [class.rv-profile-session--selected]="
-              store.activeSessionId() === session.session_id
+              selectedSessionId() === session.session_id
             "
             (click)="onSelectSession(session.session_id)"
           >

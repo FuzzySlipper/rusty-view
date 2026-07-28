@@ -140,6 +140,45 @@ describe('external agent metadata editing', () => {
 });
 
 describe('ExternalAgentStore', () => {
+  it('resolves a coordination session through a refreshed replacement binding', async () => {
+    const runtime = registration('runtime-1');
+    const selectedThread = thread('thread-1', 10);
+    const readThread = vi.fn(async () => ({ thread: selectedThread }));
+    const store = setupStore({
+      runtimes: [runtime],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([selectedThread], null)),
+      readThread,
+    });
+
+    await expect(
+      store.selectCoordinationSession('session-1', 'stale-binding-id'),
+    ).resolves.toBe(true);
+
+    expect(store.selectedSessionKey()).toBe('runtime-1:thread-1');
+    expect(store.selectedBinding()?.bindingId).toBe('binding-1');
+    expect(readThread).toHaveBeenCalledWith('runtime-1', {
+      threadId: 'thread-1',
+      includeTurns: true,
+    });
+  });
+
+  it('keeps a missing coordination binding non-destructive and visible', async () => {
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads: vi.fn(async () => page([], null)),
+    });
+
+    await expect(
+      store.selectCoordinationSession('missing-session', 'missing-binding'),
+    ).resolves.toBe(false);
+
+    expect(store.selectedSessionKey()).toBeUndefined();
+    expect(store.error()).toContain(
+      'Codex session missing-session has no readable external binding',
+    );
+  });
+
   it('keeps a missing supplemental raw detail as a non-fatal notice', async () => {
     const store = setupStore({
       runtimes: [],

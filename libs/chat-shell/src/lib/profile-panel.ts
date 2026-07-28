@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  input,
   output,
 } from '@angular/core';
 import type { BrainProfile } from '@rusty-view/chat-domain';
@@ -17,9 +18,10 @@ import { profileWakeTimeoutLabel } from './wake-timeout-display';
  * rusty-view.
  *
  * Container component — injects {@link ChatStore} to read the derived
- * {@code BrainProfile[]} list and trigger profile selection. Each profile
- * exposes every non-archived session with runtime kind, workdir, and exact
- * session identity so reused profiles remain unambiguous.
+ * {@code BrainProfile[]} list and emits an exact session identity for the shell
+ * to route through the appropriate Crew-brain or external-agent store. Each
+ * profile exposes every non-archived session with runtime kind, workdir, and
+ * exact session identity so reused profiles remain unambiguous.
  *
  * Empty, loading, and error states are surfaced so the shell can render
  * informative placeholders when there are no profiles yet or the session list
@@ -32,14 +34,22 @@ import { profileWakeTimeoutLabel } from './wake-timeout-display';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProfilePanelComponent {
-  readonly profileSelected = output<void>();
+  readonly selectedSessionId = input<string | null>(null);
+  readonly profileSelected = output<string>();
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
 
   protected readonly profiles = computed(() => this.store.profiles());
-  protected readonly selectedProfileId = computed(() =>
-    this.store.selectedProfileId(),
-  );
+  protected readonly selectedProfileId = computed(() => {
+    const selectedSessionId = this.selectedSessionId();
+    return (
+      this.profiles().find((profile) =>
+        profile.liveSessions.some(
+          (session) => session.session_id === selectedSessionId,
+        ),
+      )?.profileId ?? this.store.selectedProfileId()
+    );
+  });
   protected readonly hasProfiles = computed(() => this.profiles().length > 0);
 
   constructor() {
@@ -47,13 +57,24 @@ export class ProfilePanelComponent {
   }
 
   protected onSelectProfile(profileId: string): void {
-    void this.store.selectProfile(profileId);
-    this.profileSelected.emit();
+    const profile = this.profiles().find(
+      (candidate) => candidate.profileId === profileId,
+    );
+    if (profile === undefined) return;
+    const selectedSessionId = this.selectedSessionId();
+    const target =
+      profile.liveSessions.find(
+        (session) => session.session_id === selectedSessionId,
+      ) ??
+      profile.liveSessions.find(
+        (session) => session.session_id === profile.defaultSessionId,
+      ) ??
+      profile.liveSessions[0];
+    if (target !== undefined) this.profileSelected.emit(target.session_id);
   }
 
   protected onSelectSession(sessionId: string): void {
-    void this.store.selectProfileSession(sessionId);
-    this.profileSelected.emit();
+    this.profileSelected.emit(sessionId);
   }
 
   protected onRefresh(): void {

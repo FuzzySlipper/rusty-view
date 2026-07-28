@@ -142,6 +142,8 @@ export class DebugShellComponent {
   protected readonly contextLoading = signal(false);
   protected readonly pluginCommandPending = signal(false);
   protected readonly pluginCommandError = signal<string | undefined>(undefined);
+  protected readonly navigationError = signal<string | undefined>(undefined);
+  private navigationRevision = 0;
 
   protected readonly connectionStatus = computed<StreamStatusKind>(() => {
     const state = this.store.connectionState();
@@ -168,6 +170,11 @@ export class DebugShellComponent {
 
   protected readonly externalSelected = computed(
     () => this.external.selectedThreadId() !== undefined,
+  );
+  protected readonly unifiedSelectedSessionId = computed(() =>
+    this.externalSelected()
+      ? (this.external.selectedBinding()?.sessionId ?? null)
+      : this.store.activeSessionId(),
   );
   protected readonly displayedMessages = computed(() =>
     this.externalSelected() ? this.external.messages() : this.store.messages(),
@@ -305,8 +312,15 @@ export class DebugShellComponent {
     }
   }
 
-  protected onSelectSession(sessionId: string): void {
-    void this.store.selectProfileSession(sessionId);
+  protected onUnifiedSessionSelected(sessionId: string): void {
+    this.closeMobileSessions();
+    void this.selectUnifiedSession(sessionId);
+  }
+
+  protected onExternalSessionSelected(): void {
+    this.navigationRevision += 1;
+    this.navigationError.set(undefined);
+    this.closeMobileSessions();
   }
 
   private cycleSession(direction: 1 | -1): void {
@@ -324,13 +338,42 @@ export class DebugShellComponent {
       return;
     }
 
+    const sessions = this.store
+      .profiles()
+      .flatMap((profile) => profile.liveSessions);
     const target = cyclicTarget(
-      this.store.profiles(),
-      this.store.selectedProfileId(),
-      (profile) => profile.profileId,
+      sessions,
+      this.unifiedSelectedSessionId(),
+      (session) => session.session_id,
       direction,
     );
-    if (target !== undefined) void this.store.selectProfile(target.profileId);
+    if (target !== undefined) void this.selectUnifiedSession(target.session_id);
+  }
+
+  private async selectUnifiedSession(sessionId: string): Promise<void> {
+    const revision = ++this.navigationRevision;
+    this.navigationError.set(undefined);
+    const directory = this.store.sessionDirectoryEntry(sessionId);
+    if (directory?.runtimeKind === 'codex_app_server') {
+      const selected = await this.external.selectCoordinationSession(
+        sessionId,
+        directory.bindingId ?? undefined,
+      );
+      if (revision !== this.navigationRevision) return;
+      if (!selected) {
+        this.navigationError.set(
+          this.external.error() ??
+            `Codex session ${sessionId} could not be opened.`,
+        );
+      }
+      return;
+    }
+
+    this.external.clearSelection();
+    await this.store.selectProfileSession(sessionId);
+    if (revision === this.navigationRevision) {
+      this.navigationError.set(undefined);
+    }
   }
 
   protected onSendMessage(text: string): void {
@@ -372,7 +415,6 @@ export class DebugShellComponent {
 
   protected showSidebar(mode: 'profiles' | 'agents'): void {
     this.sidebarMode.set(mode);
-    if (mode === 'profiles') this.external.clearSelection();
   }
 
   protected setExternalComposerMode(event: Event): void {

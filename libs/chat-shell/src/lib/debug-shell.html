@@ -102,9 +102,14 @@
         </button>
       </nav>
       @if (sidebarMode() === 'profiles') {
-      <rv-profile-panel (profileSelected)="closeMobileSessions()" />
+      <rv-profile-panel
+        [selectedSessionId]="unifiedSelectedSessionId()"
+        (profileSelected)="onUnifiedSessionSelected($event)"
+      />
       } @else {
-      <rv-external-agent-panel (sessionSelected)="closeMobileSessions()" />
+      <rv-external-agent-panel
+        (sessionSelected)="onExternalSessionSelected()"
+      />
       }
     </aside>
     }
@@ -129,6 +134,14 @@
         >
           Return to active
         </button>
+      </div>
+      } @if (navigationError()) {
+      <div
+        class="rv-debug__command-error"
+        role="alert"
+        data-testid="session-navigation-error"
+      >
+        {{ navigationError() }}
       </div>
       } @if (hasConversation()) { @if (externalSelected()) { @for (interaction
       of external.selectedInteractions(); track interaction.interactionId) { @if
