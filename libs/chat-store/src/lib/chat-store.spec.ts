@@ -1336,6 +1336,90 @@ describe('ChatStore', () => {
     ).toHaveLength(1);
   });
 
+  it('preserves same-profile archive fallback when bounded History omits the target', async () => {
+    const archivedTarget = makeSession({
+      session_id: 'archived-outside-history-page',
+      profile_id: 'p1',
+      status: 'archived',
+      updated_at: '2026-07-28T00:03:00Z',
+    });
+    const sameProfileFallback = makeSession({
+      session_id: 'same-profile-live',
+      profile_id: 'p1',
+      status: 'idle',
+      updated_at: '2026-07-28T00:01:00Z',
+    });
+    const otherProfile = makeSession({
+      session_id: 'other-profile-active',
+      profile_id: 'p2',
+      status: 'active',
+      updated_at: '2026-07-28T00:02:00Z',
+    });
+    const boundedHistoryPage = Array.from({ length: 100 }, (_, index) =>
+      makeSession({
+        session_id: `archived-history-${index}`,
+        profile_id: 'history-profile',
+        status: 'archived',
+        updated_at: `2026-07-27T${String(index % 24).padStart(2, '0')}:00:00Z`,
+      }),
+    );
+    let archiveCompleted = false;
+    const transport = createMockTransport({});
+    vi.mocked(transport.listSessions).mockImplementation(async (query) => {
+      if (query?.status === 'archived') {
+        return archiveCompleted
+          ? {
+              items: boundedHistoryPage,
+              total: boundedHistoryPage.length + 1,
+              limit: 100,
+              offset: 0,
+            }
+          : emptySessionPage();
+      }
+      const items = archiveCompleted
+        ? [sameProfileFallback, otherProfile]
+        : [
+            makeSession({
+              ...archivedTarget,
+              status: 'active',
+            }),
+            sameProfileFallback,
+            otherProfile,
+          ];
+      return {
+        items,
+        total: items.length,
+        limit: 100,
+        offset: 0,
+      };
+    });
+    vi.mocked(transport.sendCommand).mockImplementation(async () => {
+      archiveCompleted = true;
+      return {
+        status: 'completed',
+        command_name: 'archive',
+        summary: 'Archived session',
+        latest_cursor: 'cur_1',
+      };
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectProfileSession('archived-outside-history-page');
+
+    await store.runCommand('/archive');
+
+    expect(
+      store
+        .allSessions()
+        .some(
+          (session) => session.session_id === 'archived-outside-history-page',
+        ),
+    ).toBe(false);
+    expect(store.activeSessionId()).toBe('same-profile-live');
+    expect(store.selectedProfileId()).toBe('p1');
+    expect(store.isViewingHistorical()).toBe(false);
+  });
+
   it('chooses a deterministic live session from another profile after /archive', async () => {
     const archived = makeSession({
       session_id: 'archived-target',

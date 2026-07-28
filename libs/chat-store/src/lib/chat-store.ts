@@ -932,6 +932,12 @@ export class ChatStore implements OnDestroy {
     if (sessionId === null) {
       throw new Error('No active session — call selectSession first.');
     }
+    // Preserve lifecycle identity before the command mutates backend
+    // projections. The first bounded History page is not guaranteed to contain
+    // the just-archived session after refresh.
+    const commandSessionProfileId =
+      this._sessions().find((session) => session.session_id === sessionId)
+        ?.profile_id ?? null;
 
     const pendingId = this.nextPendingOperationId('cmd');
     const pending: PendingSend = {
@@ -965,7 +971,10 @@ export class ChatStore implements OnDestroy {
         // after every durable command so Agents and History agree immediately.
         await this.refreshSessions();
         if (isArchiveCommandName(result.command_name)) {
-          await this.reconcileSelectionAfterArchive(sessionId);
+          await this.reconcileSelectionAfterArchive(
+            sessionId,
+            commandSessionProfileId,
+          );
         }
       }
     } catch (error) {
@@ -994,15 +1003,18 @@ export class ChatStore implements OnDestroy {
    */
   private async reconcileSelectionAfterArchive(
     archivedSessionId: string,
+    commandSessionProfileId: string | null,
   ): Promise<void> {
     const archivedSession = this._sessions().find(
       (session) => session.session_id === archivedSessionId,
     );
+    const archivedProfileId =
+      commandSessionProfileId ?? archivedSession?.profile_id ?? null;
     const sameProfileFallback =
-      archivedSession === undefined
+      archivedProfileId === null
         ? null
         : (this.profiles().find(
-            (profile) => profile.profileId === archivedSession.profile_id,
+            (profile) => profile.profileId === archivedProfileId,
           )?.defaultSessionId ?? null);
     const anyLiveFallback =
       this.profiles().find((profile) => profile.defaultSessionId !== null)
