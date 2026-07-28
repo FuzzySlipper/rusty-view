@@ -205,7 +205,13 @@ try {
 
   const recovered = runUpdater([], { expectSuccess: true });
   assert.match(recovered.stdout, /Updated native A/);
-  assert.notEqual(await readlink(join(stackRoot, 'current')), firstRelease);
+  const recoveredRelease = await readlink(join(stackRoot, 'current'));
+  assert.notEqual(recoveredRelease, firstRelease);
+  assert.match(
+    recoveredRelease,
+    /-retry-2$/,
+    'fixed-time immediate retries must allocate collision-free release names',
+  );
 
   runUpdater(['--retire-docker'], { expectSuccess: true });
   await assertMissing(join(stateRoot, 'container-rusty-crew-a'));
@@ -274,6 +280,7 @@ function runUpdater(args, { expectSuccess, extraEnv = {} }) {
       RUSTY_CREW_GIT_URL: join(remotesRoot, 'rusty-crew.git'),
       RUSTY_VIEW_GIT_URL: join(remotesRoot, 'rusty-view.git'),
       RUSTY_STACK_TEST_STATE: stateRoot,
+      RUSTY_STACK_RELEASE_TIMESTAMP: '20260727T000000Z',
       ...extraEnv,
     },
   });

@@ -522,7 +522,9 @@ main() {
 
   local crew_revision
   local view_revision
+  local release_stem
   local release_name
+  local release_suffix=0
   local release
   local previous_release=""
   local had_native_units=false
@@ -536,7 +538,18 @@ main() {
 
   crew_revision="$(run_as_stack_user git -C "${crew_repo}" rev-parse HEAD)"
   view_revision="$(run_as_stack_user git -C "${view_repo}" rev-parse HEAD)"
-  release_name="$(date -u +%Y%m%dT%H%M%SZ)-${crew_revision:0:12}-${view_revision:0:12}"
+  release_stem="$(
+    printf '%s-%s-%s' \
+      "${RUSTY_STACK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}" \
+      "${crew_revision:0:12}" \
+      "${view_revision:0:12}"
+  )"
+  release_name="${release_stem}"
+  while [[ -e "${releases_root}/${release_name}" ]] ||
+    [[ -e "${releases_root}/${release_name}.staging" ]]; do
+    release_suffix=$((release_suffix + 1))
+    release_name="${release_stem}-retry-${release_suffix}"
+  done
 
   if [[ -L "${current_link}" ]]; then
     previous_release="$(readlink -f "${current_link}")"
