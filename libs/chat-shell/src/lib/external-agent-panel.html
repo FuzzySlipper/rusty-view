@@ -200,7 +200,9 @@
       <button type="button" class="rv-agent__select" (click)="select(session)">
         <span class="rv-agent__title">{{ sessionTitle(session) }}</span>
         <span class="rv-agent__state">
-          <span class="rv-agent__session-status"
+          <span
+            class="rv-agent__session-status"
+            [attr.data-status-tone]="sessionStateTone(session)"
             >{{ sessionStateLabel(session) }}</span
           >
           @if (bindingStateLabel(session); as bindingLabel) {

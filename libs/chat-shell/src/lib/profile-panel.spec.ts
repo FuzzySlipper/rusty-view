@@ -310,7 +310,7 @@ describe('ProfilePanelComponent', () => {
     );
 
     expect(status?.textContent?.trim()).toBe('Active');
-    expect(status?.classList.contains('rv-profile__status--active')).toBe(true);
+    expect(status?.getAttribute('data-status-tone')).toBe('active');
   });
 
   it('marks the selected profile', async () => {
@@ -408,10 +408,20 @@ describe('ProfilePanelComponent', () => {
     expect(
       direct?.querySelector('.rv-profile-session__status')?.textContent,
     ).toBe('Idle');
+    expect(
+      direct
+        ?.querySelector('.rv-profile-session__status')
+        ?.getAttribute('data-status-tone'),
+    ).toBe('idle');
     expect(managed?.dataset['sessionStatus']).toBe('completed');
     expect(
       managed?.querySelector('.rv-profile-session__status')?.textContent,
     ).toBe('Completed');
+    expect(
+      managed
+        ?.querySelector('.rv-profile-session__status')
+        ?.getAttribute('data-status-tone'),
+    ).toBe('completed');
   });
 
   it('pins profiles first, persists the choice, and does not select them', async () => {

@@ -146,6 +146,24 @@
 .rv-agent__session-status {
   font-weight: var(--rv-font-weight-bold);
 }
+.rv-agent__session-status[data-status-tone='idle'] {
+  color: var(--rv-color-text-primary);
+}
+.rv-agent__session-status[data-status-tone='active'] {
+  color: var(--rv-color-success);
+}
+.rv-agent__session-status[data-status-tone='completed'] {
+  color: var(--rv-color-accent);
+}
+.rv-agent__session-status[data-status-tone='error'] {
+  color: var(--rv-color-danger);
+}
+.rv-agent__session-status[data-status-tone='warning'] {
+  color: var(--rv-color-warning);
+}
+.rv-agent__session-status[data-status-tone='muted'] {
+  color: var(--rv-color-text-muted);
+}
 .rv-agent__attention {
   color: var(--rv-color-warning);
 }

@@ -15,7 +15,11 @@ import {
 } from '@rusty-view/chat-store';
 import type { ChatSessionSummary } from '@rusty-view/protocol';
 
-import { sessionStatusLabel } from './session-status-label';
+import {
+  sessionStatusLabel,
+  sessionStatusTone,
+  type SessionStatusTone,
+} from './session-status-label';
 import { profileWakeTimeoutLabel } from './wake-timeout-display';
 
 const PINNED_PROFILES_STORAGE_KEY = 'rusty-view:pinned-profiles:v1';
@@ -122,6 +126,10 @@ export class ProfilePanelComponent {
     return sessionStatusLabel(status);
   }
 
+  protected profileStatusTone(status: string): SessionStatusTone {
+    return sessionStatusTone(status);
+  }
+
   protected sessionState(session: ChatSessionSummary): string {
     const external = this.externalSession(session);
     return external?.phase ?? external?.thread.status ?? session.status;
@@ -129,6 +137,10 @@ export class ProfilePanelComponent {
 
   protected sessionStateLabel(session: ChatSessionSummary): string {
     return sessionStatusLabel(this.sessionState(session));
+  }
+
+  protected sessionStateTone(session: ChatSessionSummary): SessionStatusTone {
+    return sessionStatusTone(this.sessionState(session));
   }
 
   protected sessionRuntimeKind(session: ChatSessionSummary): string {

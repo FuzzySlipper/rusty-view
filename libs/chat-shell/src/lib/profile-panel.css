@@ -110,15 +110,33 @@
   font-weight: var(--rv-font-weight-bold);
 }
 
-.rv-profile__status--active {
+.rv-profile [data-status-tone='active'],
+.rv-profile-session [data-status-tone='active'] {
   color: var(--rv-color-success);
 }
 
-.rv-profile__status--idle {
-  color: var(--rv-color-text-secondary);
+.rv-profile [data-status-tone='idle'],
+.rv-profile-session [data-status-tone='idle'] {
+  color: var(--rv-color-text-primary);
 }
 
-.rv-profile__status--archived {
+.rv-profile [data-status-tone='completed'],
+.rv-profile-session [data-status-tone='completed'] {
+  color: var(--rv-color-accent);
+}
+
+.rv-profile [data-status-tone='error'],
+.rv-profile-session [data-status-tone='error'] {
+  color: var(--rv-color-danger);
+}
+
+.rv-profile [data-status-tone='warning'],
+.rv-profile-session [data-status-tone='warning'] {
+  color: var(--rv-color-warning);
+}
+
+.rv-profile [data-status-tone='muted'],
+.rv-profile-session [data-status-tone='muted'] {
   color: var(--rv-color-text-muted);
 }
 

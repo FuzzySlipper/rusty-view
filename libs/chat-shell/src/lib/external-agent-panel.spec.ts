@@ -21,6 +21,7 @@ interface PanelApi {
   taskRefLabel(session: ExternalAgentSession): string;
   sessionTitle(session: ExternalAgentSession): string;
   sessionStateLabel(session: ExternalAgentSession): string;
+  sessionStateTone(session: ExternalAgentSession): string;
   bindingStateLabel(session: ExternalAgentSession): string | undefined;
   openCreator(): void;
   openOptions(session: ExternalAgentSession): void;
@@ -248,6 +249,52 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     expect(rows[0]?.textContent?.toLowerCase()).not.toContain('crew active');
     expect(rows[1]?.textContent).toContain('Active');
     expect(rows[1]?.textContent).toContain('Native only');
+  });
+
+  it('renders distinct semantic tones for idle, active, completed, and failed sessions', async () => {
+    const sessions: ExternalAgentSession[] = [
+      inventorySession(1, { bound: true, attention: false, active: false }),
+      inventorySession(2, { bound: true, attention: false, active: true }),
+      {
+        ...inventorySession(3, {
+          bound: true,
+          attention: false,
+          active: false,
+        }),
+        phase: 'completed',
+      },
+      {
+        ...inventorySession(4, {
+          bound: true,
+          attention: true,
+          active: false,
+        }),
+        phase: 'failed',
+      },
+    ];
+    const { fixture, panel } = await createPanel(
+      async () => undefined,
+      sessions,
+    );
+    fixture.detectChanges();
+
+    const statuses = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.rv-agent__session-status',
+      ),
+    );
+    expect(statuses.map((status) => status.dataset['statusTone'])).toEqual([
+      'idle',
+      'active',
+      'completed',
+      'error',
+    ]);
+    expect(sessions.map((session) => panel.sessionStateTone(session))).toEqual([
+      'idle',
+      'active',
+      'completed',
+      'error',
+    ]);
   });
 
   it('retains exceptional Crew binding status in normal title case', async () => {

@@ -16,7 +16,11 @@ import {
 } from '@rusty-view/chat-store';
 import type { ExternalAgentSessionCreateWrite } from '@rusty-view/protocol';
 
-import { sessionStatusLabel } from './session-status-label';
+import {
+  sessionStatusLabel,
+  sessionStatusTone,
+  type SessionStatusTone,
+} from './session-status-label';
 
 const CREATION_ATTEMPTS_STORAGE_KEY =
   'rusty-view:external-agent-creation-attempts:v1';
@@ -125,6 +129,10 @@ export class ExternalAgentPanelComponent {
 
   protected sessionStateLabel(session: ExternalAgentSession): string {
     return sessionStatusLabel(session.phase ?? session.thread.status);
+  }
+
+  protected sessionStateTone(session: ExternalAgentSession): SessionStatusTone {
+    return sessionStatusTone(session.phase ?? session.thread.status);
   }
 
   protected bindingStateLabel(

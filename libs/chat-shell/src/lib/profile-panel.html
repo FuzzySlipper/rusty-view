@@ -26,9 +26,7 @@
         <span class="rv-profile__meta">
           <span
             class="rv-profile__status"
-            [class.rv-profile__status--active]="profile.status === 'active'"
-            [class.rv-profile__status--idle]="profile.status === 'idle'"
-            [class.rv-profile__status--archived]="profile.status === 'archived'"
+            [attr.data-status-tone]="profileStatusTone(profile.status)"
             >{{ profileStatusLabel(profile.status) }}</span
           >
           · {{ profile.sessionCount }} session(s)
@@ -81,7 +79,9 @@
           >
             <span class="rv-profile-session__heading">
               <strong>{{ sessionRuntimeLabel(session) }}</strong>
-              <span class="rv-profile-session__status"
+              <span
+                class="rv-profile-session__status"
+                [attr.data-status-tone]="sessionStateTone(session)"
                 >{{ sessionStateLabel(session) }}</span
               >
             </span>
