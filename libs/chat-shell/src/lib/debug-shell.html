@@ -110,6 +110,7 @@
       } @else {
       <rv-external-agent-panel
         (sessionSelected)="onExternalSessionSelected()"
+        (crewSessionRestored)="onExternalCrewSessionRestored($event)"
       />
       }
     </aside>

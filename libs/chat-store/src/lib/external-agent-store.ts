@@ -13,6 +13,7 @@ import type {
   ExternalAgentSessionCreateWrite,
   ExternalBindingMetadataWrite,
   ExternalBindingMessageWrite,
+  ExternalBindingRestoreWrite,
   ExternalControlReceipt,
   ExternalControlWrite,
   ExternalInteractionRecord,
@@ -169,6 +170,7 @@ export class ExternalAgentStore {
   readonly archivedInventory = signal(false);
   readonly inventoryMode = signal<ExternalAgentInventoryMode>('managed');
   readonly lifecyclePendingThreadIds = signal<ReadonlySet<string>>(new Set());
+  readonly bindingRestorePendingIds = signal<ReadonlySet<string>>(new Set());
   readonly lifecycleNotice = signal<string | undefined>(undefined);
   readonly metadataPendingBindingIds = signal<ReadonlySet<string>>(new Set());
   readonly metadataError = signal<string | undefined>(undefined);
@@ -1250,6 +1252,98 @@ export class ExternalAgentStore {
     return this.mutateThreadLifecycle(session, 'delete');
   }
 
+  bindingRestoreUnavailableReason(
+    session: ExternalAgentSession,
+  ): string | undefined {
+    const binding = session.binding;
+    if (binding === undefined) {
+      return 'This native Codex thread has no Crew binding to restore.';
+    }
+    if (binding.status !== 'archived') {
+      return 'The Crew binding is not archived.';
+    }
+    if (this.bindingRestorePendingIds().has(binding.bindingId)) {
+      return 'This Crew session restore is already running.';
+    }
+    if (binding.sessionId == null) {
+      return 'The archived binding has no exact Crew session identity.';
+    }
+    if (binding.agentId == null) {
+      return 'The archived binding has no exact Crew agent identity.';
+    }
+    if (binding.profileId == null) {
+      return 'The archived binding has no exact profile identity.';
+    }
+    if (binding.nativeThreadId == null) {
+      return 'The archived binding has no exact native Codex thread identity.';
+    }
+    if (binding.nativeThreadId !== session.thread.threadId) {
+      return 'The archived binding no longer matches this native Codex thread.';
+    }
+    return undefined;
+  }
+
+  async restoreBindingSession(session: ExternalAgentSession): Promise<boolean> {
+    const binding = session.binding;
+    const unavailable = this.bindingRestoreUnavailableReason(session);
+    if (binding === undefined || unavailable !== undefined) {
+      this.error.set(
+        unavailable ?? 'The archived Crew binding is unavailable.',
+      );
+      return false;
+    }
+    const request = exactBindingRestoreWrite(binding);
+    if (request === undefined) {
+      this.error.set('The archived Crew binding identities are incomplete.');
+      return false;
+    }
+    this.bindingRestorePendingIds.update(
+      (current) => new Set([...current, binding.bindingId]),
+    );
+    this.error.set(undefined);
+    this.lifecycleNotice.set(undefined);
+    try {
+      const receipt = await this.transport.external.restoreBinding(
+        binding.bindingId,
+        request,
+      );
+      this.bindingMutationRevision += 1;
+      this.bindings.update((bindings) => [
+        ...bindings.filter(
+          (candidate) => candidate.bindingId !== receipt.binding.bindingId,
+        ),
+        receipt.binding,
+      ]);
+      this.transcriptCache.delete(session.key);
+      this.lifecycleNotice.set(
+        `Restored Crew session ${request.expectedSessionId} with its existing native Codex thread (${receipt.outcome}).`,
+      );
+      if (this.inventoryMode() === 'archived') {
+        await this.setInventoryMode('managed');
+      } else {
+        await this.refresh();
+      }
+      const restored = this.sessions().find(
+        (candidate) =>
+          candidate.binding?.bindingId === receipt.binding.bindingId,
+      );
+      if (restored !== undefined) await this.selectSession(restored);
+      return true;
+    } catch (error) {
+      if (error instanceof ChatTransportError && error.statusCode === 409) {
+        await this.refresh();
+      }
+      this.error.set(bindingRestoreFailureMessage(error));
+      return false;
+    } finally {
+      this.bindingRestorePendingIds.update((current) => {
+        const next = new Set(current);
+        next.delete(binding.bindingId);
+        return next;
+      });
+    }
+  }
+
   async updateSessionMetadata(
     session: ExternalAgentSession,
     metadata: Pick<ExternalBindingMetadataWrite, 'label' | 'taskRef'>,
@@ -1805,6 +1899,41 @@ function mergeBindings(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function exactBindingRestoreWrite(
+  binding: ExternalAgentBinding,
+): ExternalBindingRestoreWrite | undefined {
+  if (
+    binding.sessionId == null ||
+    binding.agentId == null ||
+    binding.profileId == null ||
+    binding.nativeThreadId == null
+  ) {
+    return undefined;
+  }
+  return {
+    expectedBindingRevision: binding.revision,
+    expectedSessionId: binding.sessionId,
+    expectedAgentId: binding.agentId,
+    expectedProfileId: binding.profileId,
+    expectedNativeThreadId: binding.nativeThreadId,
+  };
+}
+
+function bindingRestoreFailureMessage(error: unknown): string {
+  if (!(error instanceof ChatTransportError)) {
+    return `Crew session restore failed: ${errorMessage(error)}`;
+  }
+  const reason = error.apiError?.reason_code;
+  if (reason === 'external_binding_restore_prompt_conflict') {
+    return 'Crew session restore is blocked because the profile prompt changed. Keep this preserved history and use the existing refresh/fork workflow.';
+  }
+  if (error.statusCode === 409) {
+    return `Crew session restore conflicted with newer state${reason === undefined ? '' : ` (${reason})`}. The latest binding data was loaded; review the exact identities and confirm Restore Crew session again.`;
+  }
+  const retryable = error.apiError?.retryable === true;
+  return `Crew session restore failed${reason === undefined ? '' : ` (${reason})`}: ${error.message}${retryable ? ' The backend marked this failure retryable.' : ''}`;
 }
 
 class ExternalPromptSubmissionError extends Error {

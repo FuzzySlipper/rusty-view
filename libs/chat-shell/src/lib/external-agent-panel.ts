@@ -38,6 +38,7 @@ type ExternalAgentSessionCreateIntent = Omit<
 })
 export class ExternalAgentPanelComponent {
   readonly sessionSelected = output<void>();
+  readonly crewSessionRestored = output<string>();
   protected readonly store = inject(ExternalAgentStore);
   protected readonly inventoryModes: readonly ExternalAgentInventoryMode[] = [
     'managed',
@@ -178,6 +179,15 @@ export class ExternalAgentPanelComponent {
       : undefined;
   }
 
+  protected crewRestoreDisabledReason(
+    session: ExternalAgentSession,
+  ): string | undefined {
+    return (
+      this.store.bindingRestoreUnavailableReason(session) ??
+      this.lifecycleDisabledReason(session)
+    );
+  }
+
   protected async archive(session: ExternalAgentSession): Promise<void> {
     const warning = session.binding
       ? 'This also archives the associated Crew binding.'
@@ -192,8 +202,33 @@ export class ExternalAgentPanelComponent {
     await this.store.archiveThread(session);
   }
 
-  protected async restore(session: ExternalAgentSession): Promise<void> {
+  protected async restoreNativeHistory(
+    session: ExternalAgentSession,
+  ): Promise<void> {
     await this.store.unarchiveThread(session);
+  }
+
+  protected async restoreCrewSession(
+    session: ExternalAgentSession,
+  ): Promise<void> {
+    const binding = session.binding;
+    if (
+      binding === undefined ||
+      binding.sessionId == null ||
+      binding.profileId == null
+    ) {
+      return;
+    }
+    if (
+      !globalThis.confirm(
+        `Restore this exact archived Crew session and binding?\n\nBinding: ${binding.bindingId}\nCrew session: ${binding.sessionId}\nProfile: ${binding.profileId}\nNative Codex thread: ${session.thread.threadId}\nWorking directory: ${session.thread.cwd}\n\nThis preserves the existing transcript and native thread. If identities drifted, Crew will reject the restore and reload current state.`,
+      )
+    ) {
+      return;
+    }
+    if (await this.store.restoreBindingSession(session)) {
+      this.crewSessionRestored.emit(binding.sessionId);
+    }
   }
 
   protected async deletePermanently(

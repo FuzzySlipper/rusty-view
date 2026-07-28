@@ -188,6 +188,11 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.rv-agent__recovery {
+  color: var(--rv-color-warning);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
 .rv-agents__error,
 .rv-agents__notice,
 .rv-agents__empty,

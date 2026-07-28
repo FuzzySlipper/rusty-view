@@ -65,6 +65,8 @@ async function createPanel(
     archiveThread: vi.fn(),
     unarchiveThread: vi.fn(),
     deleteThread: vi.fn(),
+    bindingRestoreUnavailableReason: vi.fn(() => undefined),
+    restoreBindingSession: vi.fn(async () => true),
     updateSessionMetadata: vi.fn(async () => true),
     refresh: vi.fn(),
     refreshCreationProfiles: vi.fn(),
@@ -316,6 +318,67 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
 
     expect(panel.bindingStateLabel(paused)).toBe('Crew Paused');
     expect(fixture.nativeElement.textContent).toContain('Crew Paused');
+  });
+
+  it('offers exact Crew-session restore separately from native history', async () => {
+    const base = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    if (base.binding === undefined) throw new Error('expected bound session');
+    const archived: ExternalAgentSession = {
+      ...base,
+      controller: {
+        runtimeId: 'runtime-1',
+        driverState: 'ready',
+        controllerInstanceId: 'controller-1',
+        controllerGeneration: 1,
+        leaseExpiresAt: '2026-07-28T03:00:00Z',
+        observedCliVersion: '0.144.1',
+        consumedContractRevision: 'external-runtime-api-v0',
+        compatibilityState: 'certified',
+        compatibilityDiagnostic: 'certified',
+        lastCompatibilityProbe: null,
+        bindingResumeFailures: [],
+      },
+      binding: {
+        ...base.binding,
+        status: 'archived',
+        profileId: 'profile-1',
+      },
+    };
+    const { fixture, store } = await createPanel(
+      async () => undefined,
+      [archived],
+    );
+    store.inventoryMode.set('archived');
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const restored = vi.fn();
+    fixture.componentInstance.crewSessionRestored.subscribe(restored);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(
+      '[data-testid="external-agent-restore-crew-session"]',
+    ) as HTMLButtonElement;
+    expect(button.textContent).toContain('Restore Crew session');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Crew session restore available',
+    );
+    button.click();
+    await fixture.whenStable();
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('Binding: binding-1'),
+    );
+    expect(store.restoreBindingSession).toHaveBeenCalledWith(archived);
+    expect(restored).toHaveBeenCalledWith('session-1');
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="external-agent-restore"]',
+      ),
+    ).toBeNull();
+    confirm.mockRestore();
   });
 
   it('places Options below Archive and saves explicit nullable metadata', async () => {

@@ -111,6 +111,60 @@ describe('ExternalRuntimeHttpTransport', () => {
     ).resolves.toMatchObject({ revision: 5, label: null });
   });
 
+  it('restores one exact archived binding through the revision-guarded route', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-bindings/binding%2Farchived/restore',
+        );
+        expect(JSON.parse(String(init?.body))).toEqual({
+          expectedBindingRevision: 4,
+          expectedSessionId: 'session-1',
+          expectedAgentId: 'agent-1',
+          expectedProfileId: 'profile-1',
+          expectedNativeThreadId: 'thread-1',
+        });
+        return json({
+          ok: true,
+          data: {
+            outcome: 'restored',
+            profileRevisionUpdated: true,
+            binding: {
+              bindingId: 'binding/archived',
+              runtimeId: 'runtime-1',
+              nativeThreadId: 'thread-1',
+              sessionId: 'session-1',
+              agentId: 'agent-1',
+              profileId: 'profile-1',
+              purpose: 'crew_agent',
+              status: 'active',
+              effectiveConfigFingerprint: 'config',
+              revision: 5,
+              createdAt: '',
+              updatedAt: '',
+            },
+            session: { session_id: 'session-1', status: 'idle' },
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(
+      transport.restoreBinding('binding/archived', {
+        expectedBindingRevision: 4,
+        expectedSessionId: 'session-1',
+        expectedAgentId: 'agent-1',
+        expectedProfileId: 'profile-1',
+        expectedNativeThreadId: 'thread-1',
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'restored',
+      binding: { revision: 5, status: 'active' },
+    });
+  });
+
   it('uses generated endpoint shapes for fleets, pagination, and controls', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

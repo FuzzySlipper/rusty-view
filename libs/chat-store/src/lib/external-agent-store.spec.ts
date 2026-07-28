@@ -411,6 +411,116 @@ describe('ExternalAgentStore', () => {
     expect(store.lifecycleNotice()).toContain('Archived native Codex thread');
   });
 
+  it('restores the exact archived Crew session and returns to managed inventory', async () => {
+    let restored = false;
+    const archivedBinding = {
+      ...externalBinding(),
+      profileId: 'profile-1',
+      status: 'archived' as const,
+      revision: 4,
+    };
+    const restoredBinding = {
+      ...archivedBinding,
+      status: 'active' as const,
+      revision: 5,
+    };
+    const restoreBinding = vi.fn(async () => {
+      restored = true;
+      return {
+        outcome: 'restored' as const,
+        profileRevisionUpdated: false,
+        binding: restoredBinding,
+        session: { session_id: 'session-1', status: 'idle' },
+      };
+    });
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listBindings: vi.fn(async () => ({
+        bindings: [restored ? restoredBinding : archivedBinding],
+      })),
+      listThreads: vi.fn(
+        async (
+          _runtimeId: string,
+          query?: {
+            archived?: boolean;
+          },
+        ) => {
+          const wantsArchived = query?.archived === true;
+          return page(
+            wantsArchived === !restored ? [thread('thread-1', 10)] : [],
+            null,
+          );
+        },
+      ),
+      restoreBinding,
+    });
+    await store.setInventoryMode('archived');
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected archived session');
+
+    await expect(store.restoreBindingSession(session)).resolves.toBe(true);
+
+    expect(restoreBinding).toHaveBeenCalledWith('binding-1', {
+      expectedBindingRevision: 4,
+      expectedSessionId: 'session-1',
+      expectedAgentId: 'agent-1',
+      expectedProfileId: 'profile-1',
+      expectedNativeThreadId: 'thread-1',
+    });
+    expect(store.inventoryMode()).toBe('managed');
+    expect(store.selectedSessionKey()).toBe('runtime-1:thread-1');
+    expect(store.selectedBinding()).toMatchObject({
+      status: 'active',
+      revision: 5,
+    });
+    expect(store.lifecycleNotice()).toContain(
+      'Restored Crew session session-1',
+    );
+  });
+
+  it('reloads drifted binding state and requires a fresh restore confirmation', async () => {
+    const archivedBinding = {
+      ...externalBinding(),
+      profileId: 'profile-1',
+      status: 'archived' as const,
+      revision: 4,
+    };
+    const restoreBinding = vi.fn().mockRejectedValue(
+      new ChatTransportError({
+        code: 'http_error',
+        statusCode: 409,
+        message: 'binding revision changed',
+        apiError: {
+          code: 'conflict',
+          reason_code: 'external_binding_restore_revision_conflict',
+          message: 'binding revision changed',
+          retryable: false,
+        },
+      }),
+    );
+    const listBindings = vi.fn(async () => ({
+      bindings: [{ ...archivedBinding, revision: 5 }],
+    }));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listBindings,
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      restoreBinding,
+    });
+    await store.setInventoryMode('archived');
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected archived session');
+
+    await expect(store.restoreBindingSession(session)).resolves.toBe(false);
+
+    expect(listBindings).toHaveBeenCalled();
+    expect(store.bindings()[0]?.revision).toBe(5);
+    expect(store.error()).toContain('review the exact identities');
+    expect(store.error()).toContain(
+      'external_binding_restore_revision_conflict',
+    );
+  });
+
   it('keeps healthy sessions when a stale binding thread cannot be recovered', async () => {
     const staleBinding = {
       ...externalBinding(),
@@ -1701,6 +1811,7 @@ function setupStore(options: {
   listCommands?: ReturnType<typeof vi.fn>;
   executeCommand?: ReturnType<typeof vi.fn>;
   updateBindingMetadata?: ReturnType<typeof vi.fn>;
+  restoreBinding?: ReturnType<typeof vi.fn>;
   rawDetail?: ReturnType<typeof vi.fn>;
   streamExternalRuntimeEvents?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
@@ -1728,6 +1839,7 @@ function setupStore(options: {
       options.listCommands ?? vi.fn(async () => externalCommandCatalog()),
     executeCommand: options.executeCommand ?? vi.fn(),
     updateBindingMetadata: options.updateBindingMetadata ?? vi.fn(),
+    restoreBinding: options.restoreBinding ?? vi.fn(),
     rawDetail: options.rawDetail ?? vi.fn(),
   };
   TestBed.configureTestingModule({

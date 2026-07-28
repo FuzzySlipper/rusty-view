@@ -367,6 +367,18 @@ export class DebugShellComponent {
     this.closeMobileSessions();
   }
 
+  protected async onExternalCrewSessionRestored(
+    sessionId: string,
+  ): Promise<void> {
+    this.navigationRevision += 1;
+    this.runtimeSelectionPending.set(false);
+    this.navigationError.set(undefined);
+    await this.store.refreshSessions();
+    await this.store.waitForSessionDirectory();
+    this.store.rememberProfileSessionSelection(sessionId);
+    this.closeMobileSessions();
+  }
+
   private cycleSession(direction: 1 | -1): void {
     if (this.sidebarMode() === 'agents') {
       const sessions = this.external

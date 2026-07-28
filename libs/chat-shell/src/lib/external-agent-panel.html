@@ -216,18 +216,35 @@
         <span class="rv-agent__cwd" [title]="session.thread.cwd"
           >{{ session.thread.cwd }}</span
         >
+        @if (session.binding?.status === 'archived') {
+        <span class="rv-agent__recovery">
+          Preserved Codex history · Crew session restore available
+        </span>
+        }
       </button>
       <div class="rv-agent__actions">
-        @if (store.inventoryMode() === 'archived') {
+        @if (store.inventoryMode() === 'archived') { @if
+        (session.binding?.status === 'archived') {
+        <button
+          type="button"
+          data-testid="external-agent-restore-crew-session"
+          [disabled]="crewRestoreDisabledReason(session) !== undefined"
+          [title]="crewRestoreDisabledReason(session) ?? 'Restore the exact Crew session, binding, and native Codex thread'"
+          (click)="restoreCrewSession(session)"
+        >
+          Restore Crew session
+        </button>
+        } @else {
         <button
           type="button"
           data-testid="external-agent-restore"
           [disabled]="lifecycleDisabledReason(session) !== undefined"
-          [title]="lifecycleDisabledReason(session) ?? 'Restore native Codex thread'"
-          (click)="restore(session)"
+          [title]="lifecycleDisabledReason(session) ?? 'Restore native Codex history only'"
+          (click)="restoreNativeHistory(session)"
         >
-          Restore
+          Restore native history
         </button>
+        }
         <button
           type="button"
           class="rv-agent__delete"

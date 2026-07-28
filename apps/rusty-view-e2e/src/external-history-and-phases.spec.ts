@@ -50,6 +50,32 @@ test('focuses a large native inventory and archives then restores through Crew',
   );
 
   await page.getByTestId('external-agent-mode-all').click();
+  const managedToRestore = page.locator('[data-thread-id="thread-0"]');
+  page.once('dialog', (dialog) => dialog.accept());
+  await managedToRestore.getByTestId('external-agent-archive').click();
+  await page.getByTestId('external-agent-mode-archived').click();
+  const archivedManaged = page.locator('[data-thread-id="thread-0"]');
+  await expect(archivedManaged).toContainText('Crew session restore available');
+  const crewRestore = archivedManaged.getByTestId(
+    'external-agent-restore-crew-session',
+  );
+  await expect(crewRestore).toHaveText('Restore Crew session');
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Binding: binding-0');
+    expect(dialog.message()).toContain('Crew session: session-0');
+    expect(dialog.message()).toContain('Native Codex thread: thread-0');
+    await dialog.accept();
+  });
+  await crewRestore.click();
+  await expect(page.locator('[data-thread-id="thread-0"]')).toBeVisible();
+  await expect(page.locator('.rv-agents__notice')).toContainText(
+    'Restored Crew session session-0',
+  );
+  await page.getByTestId('crew-agents-tab').click();
+  await expect(page.locator('[data-session-id="session-0"]')).toBeVisible();
+  await page.getByTestId('external-agents-tab').click();
+
+  await page.getByTestId('external-agent-mode-all').click();
   const deletable = page.locator('[data-thread-id="thread-51"]');
   page.once('dialog', (dialog) => dialog.accept());
   await deletable.getByTestId('external-agent-archive').click();
@@ -195,7 +221,8 @@ async function installHistoryFixture(page: Page): Promise<void> {
     turns: index === 0 ? phaseTurns : [],
   }));
   let archivedThreads: typeof activeThreads = [];
-  const bindings = activeThreads.slice(0, 2).map((thread, index) => ({
+  let crewRestoreCompleted = false;
+  let bindings = activeThreads.slice(0, 2).map((thread, index) => ({
     bindingId: `binding-${index}`,
     runtimeId: 'runtime-1',
     nativeThreadId: thread.threadId,
@@ -204,6 +231,9 @@ async function installHistoryFixture(page: Page): Promise<void> {
     purpose: 'crew_agent',
     status: 'active',
     cwd: thread.cwd,
+    profileId: `profile-${index}`,
+    profilePromptHash: `prompt-${index}`,
+    profileRevision: 1,
     taskRef: { project_id: 'rusty-view', task_id: '5696' },
     effectiveConfigFingerprint: 'config',
     revision: 1,
@@ -226,6 +256,44 @@ async function installHistoryFixture(page: Page): Promise<void> {
       });
     if (url.pathname === '/v1/admin/profiles/registry') {
       return ok({ items: [], total: 0, limit: 100, offset: 0 });
+    }
+    if (url.pathname === '/v1/chat/sessions') {
+      const visibleBindings = crewRestoreCompleted ? bindings.slice(0, 1) : [];
+      return ok({
+        items: visibleBindings.map((binding) => ({
+          session_id: binding.sessionId,
+          agent_id: binding.agentId,
+          profile_id: binding.profileId,
+          kind: 'full',
+          status: binding.status === 'active' ? 'idle' : 'archived',
+          latest_cursor: '',
+          updated_at: binding.updatedAt,
+        })),
+        total: visibleBindings.length,
+        limit: 100,
+        offset: 0,
+      });
+    }
+    if (url.pathname === '/v1/chat/commands') return ok({ commands: [] });
+    if (url.pathname === '/v1/coordination/agents') {
+      const visibleBindings = crewRestoreCompleted ? bindings.slice(0, 1) : [];
+      return ok({
+        deploymentRole: 'production',
+        agents: visibleBindings.map((binding) => ({
+          agentId: binding.agentId,
+          bindingId: binding.bindingId,
+          bindingStatus: binding.status,
+          displayLabel: binding.profileId,
+          profileId: binding.profileId,
+          routable: binding.status === 'active',
+          runtimeId: binding.runtimeId,
+          runtimeKind: 'codex_app_server',
+          sessionId: binding.sessionId,
+          sessionKind: 'full',
+          sessionStatus: binding.status === 'active' ? 'idle' : 'archived',
+          workdir: binding.cwd,
+        })),
+      });
     }
     if (url.pathname === '/v1/external-runtimes') {
       return ok({ runtimes: [runtime], controllers: [controller] });
@@ -269,6 +337,15 @@ async function installHistoryFixture(page: Page): Promise<void> {
         );
         if (thread !== undefined)
           archivedThreads = [...archivedThreads, thread];
+        bindings = bindings.map((binding) =>
+          binding.nativeThreadId === threadId
+            ? {
+                ...binding,
+                status: 'archived',
+                revision: binding.revision + 1,
+              }
+            : binding,
+        );
       } else if (action === 'unarchive') {
         const thread = archivedThreads.find(
           (item) => item.threadId === threadId,
@@ -291,6 +368,56 @@ async function installHistoryFixture(page: Page): Promise<void> {
           ? { nativeDeleted: true }
           : { nativeArchived: action === 'archive' }),
         bindings: [],
+      });
+    }
+    if (/\/v1\/external-bindings\/[^/]+\/restore$/.test(url.pathname)) {
+      const bindingId = decodeURIComponent(
+        url.pathname.split('/').at(-2) ?? '',
+      );
+      const body = request.postDataJSON() as {
+        expectedBindingRevision?: number;
+        expectedSessionId?: string;
+        expectedAgentId?: string;
+        expectedProfileId?: string;
+        expectedNativeThreadId?: string;
+      };
+      const binding = bindings.find((item) => item.bindingId === bindingId);
+      if (binding === undefined) {
+        throw new Error(`Missing archived binding ${bindingId}`);
+      }
+      expect(body).toEqual({
+        expectedBindingRevision: binding.revision,
+        expectedSessionId: binding.sessionId,
+        expectedAgentId: binding.agentId,
+        expectedProfileId: binding.profileId,
+        expectedNativeThreadId: binding.nativeThreadId,
+      });
+      const thread = archivedThreads.find(
+        (item) => item.threadId === binding.nativeThreadId,
+      );
+      archivedThreads = archivedThreads.filter(
+        (item) => item.threadId !== binding.nativeThreadId,
+      );
+      if (thread !== undefined) activeThreads = [...activeThreads, thread];
+      const restored = {
+        ...binding,
+        status: 'active' as const,
+        revision: binding.revision + 1,
+      };
+      bindings = bindings.map((item) =>
+        item.bindingId === bindingId ? restored : item,
+      );
+      crewRestoreCompleted = true;
+      return ok({
+        outcome: 'restored',
+        profileRevisionUpdated: false,
+        binding: restored,
+        session: {
+          session_id: restored.sessionId,
+          agent_id: restored.agentId,
+          profile_id: restored.profileId,
+          status: 'idle',
+        },
       });
     }
     if (url.pathname.endsWith('/threads')) {

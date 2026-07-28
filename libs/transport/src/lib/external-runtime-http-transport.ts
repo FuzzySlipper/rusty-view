@@ -9,6 +9,7 @@ import type {
   ExternalBindingFleet,
   ExternalBindingMessageWrite,
   ExternalBindingMetadataWrite,
+  ExternalBindingRestoreWrite,
   ExternalControlReceipt,
   ExternalControlWrite,
   ExternalInteractionAttention,
@@ -32,6 +33,7 @@ import type {
   ReadExternalRuntimeRawDetailResponse,
   ReadExternalRuntimeThreadResponse,
   ResolveExternalInteractionResponse,
+  RestoreExternalBindingResponse,
   ExecuteExternalBindingCommandResponse,
   SendExternalBindingMessageResponse,
   SubmitExternalBindingControlResponse,
@@ -89,6 +91,19 @@ export class ExternalRuntimeHttpTransport {
       await this.request<WriteExternalBindingMetadataResponse>(
         'POST',
         `/v1/external-bindings/${encodeURIComponent(bindingId)}/metadata`,
+        request,
+      ),
+    );
+  }
+
+  async restoreBinding(
+    bindingId: string,
+    request: ExternalBindingRestoreWrite,
+  ): Promise<RestoreExternalBindingResponse['data']> {
+    return unwrap(
+      await this.request<RestoreExternalBindingResponse>(
+        'POST',
+        `/v1/external-bindings/${encodeURIComponent(bindingId)}/restore`,
         request,
       ),
     );

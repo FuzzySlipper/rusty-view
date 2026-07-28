@@ -292,6 +292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/external-bindings/{binding_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restoreExternalBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-bindings/{binding_id}/controls": {
         parameters: {
             query?: never;
@@ -997,6 +1013,23 @@ export interface components {
         };
         /** @enum {string} */
         CoreEventKind: "session_created" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
+        /** @enum {string} */
+        CrewAgentSessionCreationOutcome: "created" | "replayed" | "recovered";
+        CrewAgentSessionCreationRecord: {
+            outcome: components["schemas"]["CrewAgentSessionCreationOutcome"];
+            /** Format: uint64 */
+            profileRevision: number;
+            requestFingerprint: string;
+            session: components["schemas"]["SessionState"];
+            templateSessionId?: string | null;
+        };
+        CrewAgentSessionCreationRequest: {
+            /** Format: uint64 */
+            expectedProfileRevision: number;
+            idempotencyKey: string;
+            profileId: string;
+            requestedAt: string;
+        };
         DelegatedCompletion: {
             child_session_id: string;
             correlation_id?: string | null;
@@ -1126,6 +1159,24 @@ export interface components {
             label?: string | null;
             taskRef?: components["schemas"]["DenRuntimeReference"] | null;
             updatedAt: string;
+        };
+        /** @enum {string} */
+        ExternalAgentBindingRestoreOutcome: "restored" | "already_active";
+        ExternalAgentBindingRestoreReceipt: {
+            binding: components["schemas"]["ExternalAgentBinding"];
+            outcome: components["schemas"]["ExternalAgentBindingRestoreOutcome"];
+            profileRevisionUpdated: boolean;
+            session: components["schemas"]["SessionState"];
+        };
+        ExternalAgentBindingRestoreRequest: {
+            bindingId: string;
+            expectedAgentId: string;
+            /** Format: uint64 */
+            expectedBindingRevision: number;
+            expectedNativeThreadId: string;
+            expectedProfileId: string;
+            expectedSessionId: string;
+            restoredAt: string;
         };
         /** @enum {string} */
         ExternalAgentSessionCreationPhase: "prepared" | "binding_ready" | "native_starting" | "recovery_required" | "ready";
@@ -2042,6 +2093,13 @@ export interface components {
             expectedRevision: number;
             label: string | null;
             taskRef: components["schemas"]["DenRuntimeReference"] | null;
+        };
+        ExternalBindingRestoreWrite: {
+            expectedBindingRevision: number;
+            expectedSessionId: string;
+            expectedAgentId: string;
+            expectedProfileId: string;
+            expectedNativeThreadId: string;
         };
         ExternalControlWrite: {
             controlId?: string;
@@ -3075,6 +3133,46 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalAgentBinding"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    restoreExternalBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalBindingRestoreWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalAgentBindingRestoreReceipt"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };
