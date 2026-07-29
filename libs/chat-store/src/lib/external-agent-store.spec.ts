@@ -685,6 +685,127 @@ describe('ExternalAgentStore', () => {
     ]);
   });
 
+  it('keeps durable bindings visible when native inventory is unavailable on cold load', async () => {
+    const store = setupStore({
+      runtimes: [
+        {
+          ...registration('runtime-1'),
+          observedState: 'degraded',
+        },
+      ],
+      controllers: [
+        {
+          runtimeId: 'runtime-1',
+          driverState: 'disconnected',
+          controllerInstanceId: 'controller-1',
+          controllerGeneration: 1,
+          leaseExpiresAt: '2026-07-12T10:00:00.000Z',
+          observedCliVersion: '0.144.1',
+          consumedContractRevision: 'external-runtime-api-v0',
+          compatibilityState: 'certified',
+          compatibilityDiagnostic: 'disconnected',
+          lastCompatibilityProbe: null,
+          bindingResumeFailures: [],
+        },
+      ],
+      bindings: [
+        {
+          ...externalBinding(),
+          profileId: 'reviewer',
+          label: 'Reviewer',
+        },
+      ],
+      listThreads: vi
+        .fn()
+        .mockRejectedValue(new Error('Codex app-server disconnected')),
+    });
+
+    await store.refresh();
+
+    expect(store.error()).toContain('Codex app-server disconnected');
+    expect(store.sessions()).toHaveLength(1);
+    expect(store.sessions()[0]).toMatchObject({
+      key: 'runtime-1:thread-1',
+      runtime: { runtimeId: 'runtime-1' },
+      controller: { driverState: 'disconnected' },
+      binding: {
+        bindingId: 'binding-1',
+        sessionId: 'session-1',
+        profileId: 'reviewer',
+        nativeThreadId: 'thread-1',
+      },
+      thread: {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        name: 'Reviewer',
+        status: 'transport_unavailable',
+      },
+    });
+  });
+
+  it('enriches a binding fallback in place after native inventory reconnects', async () => {
+    const nativeThread = {
+      ...thread('thread-1', 42),
+      preview: 'Native transcript preview',
+      name: 'Native thread name',
+    };
+    const listThreads = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Codex app-server disconnected'))
+      .mockResolvedValueOnce(page([nativeThread], null));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads,
+    });
+
+    await store.refresh();
+    const fallback = store.sessions()[0];
+    await store.refresh();
+    const enriched = store.sessions()[0];
+
+    expect(store.sessions()).toHaveLength(1);
+    expect(enriched?.key).toBe(fallback?.key);
+    expect(enriched?.binding?.bindingId).toBe(fallback?.binding?.bindingId);
+    expect(enriched?.thread).toMatchObject({
+      threadId: 'thread-1',
+      preview: 'Native transcript preview',
+      name: 'Native thread name',
+      updatedAt: 42,
+    });
+    expect(store.error()).toBeUndefined();
+  });
+
+  it('retains other runtime inventories when one native runtime is unavailable', async () => {
+    const runtimeTwoBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-2',
+      runtimeId: 'runtime-2',
+      nativeThreadId: 'thread-2',
+      sessionId: 'session-2',
+      agentId: 'agent-2',
+    };
+    const store = setupStore({
+      runtimes: [registration('runtime-1'), registration('runtime-2')],
+      bindings: [externalBinding(), runtimeTwoBinding],
+      listThreads: vi.fn(async (runtimeId: string) => {
+        if (runtimeId === 'runtime-1') {
+          throw new Error('runtime-1 disconnected');
+        }
+        return page([thread('thread-2', 20)], null);
+      }),
+    });
+
+    await store.refresh();
+
+    expect(
+      store.sessions().map((session) => [session.key, session.thread.status]),
+    ).toEqual([
+      ['runtime-1:thread-1', 'transport_unavailable'],
+      ['runtime-2:thread-2', 'active'],
+    ]);
+  });
+
   it('preserves a page loaded while an older refresh finishes', async () => {
     const refreshPage = deferred<ReturnType<typeof page>>();
     let firstPageReads = 0;

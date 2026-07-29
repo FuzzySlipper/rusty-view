@@ -721,6 +721,78 @@ test('external agent creation explains a missing ready runtime', async ({
   await expect(page.getByTestId('external-agent-create')).toBeDisabled();
 });
 
+test('keeps durable Codex bindings visible when native inventory is disconnected', async ({
+  page,
+}) => {
+  await page.route('http://disconnected-runtime.test/v1/**', async (route) => {
+    const url = new URL(route.request().url());
+    const ok = (data: unknown) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          data,
+          meta: { request_id: 'req-disconnected', schema_version: 1 },
+        }),
+      });
+    if (url.pathname === '/v1/admin/profiles/registry') {
+      return ok({ items: [], total: 0, limit: 100, offset: 0 });
+    }
+    if (url.pathname === '/v1/external-runtimes') {
+      return ok({
+        runtimes: [{ ...runtime, observedState: 'degraded' }],
+        controllers: [
+          {
+            ...controller,
+            driverState: 'disconnected',
+            compatibilityDiagnostic: 'disconnected',
+          },
+        ],
+      });
+    }
+    if (url.pathname === '/v1/external-bindings') {
+      return ok({ bindings: [{ ...binding, label: 'Durable reviewer' }] });
+    }
+    if (url.pathname === '/v1/external-interactions') {
+      return ok({ interactions: [] });
+    }
+    if (url.pathname.endsWith('/events')) return ok({ events: [] });
+    if (url.pathname.endsWith('/threads')) {
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: 'service_unavailable',
+            reason_code: 'external_runtime_disconnected',
+            message: 'Codex app-server disconnected',
+            retryable: true,
+          },
+          meta: { request_id: 'req-threads', schema_version: 1 },
+        }),
+      });
+    }
+    return route.fulfill({ status: 404, body: 'not mocked' });
+  });
+
+  await page.goto('/?api=http://disconnected-runtime.test');
+  await page.getByTestId('external-agents-tab').click();
+
+  const row = page.locator('[data-thread-id="thread-1"]');
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Durable reviewer');
+  await expect(row).toHaveAttribute('data-runtime-id', 'runtime-1');
+  await expect(row).toHaveAttribute('data-status', 'transport_unavailable');
+  const archive = row.getByTestId('external-agent-archive');
+  await expect(archive).toBeDisabled();
+  await expect(archive).toHaveAttribute(
+    'title',
+    'The runtime controller is not ready.',
+  );
+});
+
 test('renders a delayed live event from a runtime beyond 100k events without user input', async ({
   page,
 }) => {

@@ -367,18 +367,46 @@ export class ExternalAgentStore {
           const existing = this.runtimeThreads()
             .filter((item) => item.runtimeId === runtime.runtimeId)
             .map((item) => item.thread);
-          const [listed, eventBootstrap] = await Promise.all([
-            this.transport.external.listThreads(runtime.runtimeId, {
-              limit: 100,
-              archived: archivedInventory,
-            }),
-            this.loadFleetEventBootstrap(runtime.runtimeId),
-          ]);
+          const [listedResult, eventBootstrapResult] = await Promise.allSettled(
+            [
+              this.transport.external.listThreads(runtime.runtimeId, {
+                limit: 100,
+                archived: archivedInventory,
+              }),
+              this.loadFleetEventBootstrap(runtime.runtimeId),
+            ],
+          );
+          const errors = [listedResult, eventBootstrapResult].flatMap(
+            (result) =>
+              result.status === 'rejected' ? [errorMessage(result.reason)] : [],
+          );
+          const eventBootstrap =
+            eventBootstrapResult.status === 'fulfilled'
+              ? eventBootstrapResult.value
+              : { events: [] };
           const events = eventBootstrap.events;
           const nextFleetCursor = eventBootstrap.cursor;
           if (nextFleetCursor !== undefined) {
             nextFleetCursors.set(runtime.runtimeId, nextFleetCursor);
           }
+          if (listedResult.status === 'rejected') {
+            const fallback = bindingFallbackThreads(
+              refreshedBindings,
+              runtime,
+              archivedInventory,
+            );
+            return {
+              runtimeId: runtime.runtimeId,
+              authoritative: false,
+              errors,
+              events,
+              threads: fallback.map((thread) => ({
+                runtimeId: runtime.runtimeId,
+                thread,
+              })),
+            };
+          }
+          const listed = listedResult.value;
           const knownThreads = mergeThreads(listed.items, existing);
           nextThreadCursors[runtime.runtimeId] = Object.hasOwn(
             previousThreadCursors,
@@ -421,6 +449,8 @@ export class ExternalAgentStore {
           );
           return {
             runtimeId: runtime.runtimeId,
+            authoritative: true,
+            errors,
             events,
             threads: mergeThreads(listed.items, recovered).map((thread) => ({
               runtimeId: runtime.runtimeId,
@@ -450,9 +480,10 @@ export class ExternalAgentStore {
           const currentThreads = current
             .filter((entry) => entry.runtimeId === runtimeId)
             .map((entry) => entry.thread);
+          const refreshedThreads = item.threads.map((entry) => entry.thread);
           return mergeThreads(
-            item.threads.map((entry) => entry.thread),
-            currentThreads,
+            item.authoritative ? refreshedThreads : currentThreads,
+            item.authoritative ? currentThreads : refreshedThreads,
           ).map((thread) => ({ runtimeId, thread }));
         }),
       );
@@ -473,7 +504,10 @@ export class ExternalAgentStore {
           ),
       ]);
       await this.refreshSelectedEvents();
-      this.error.set(undefined);
+      const runtimeErrors = runtimeData.flatMap((item) => item.errors);
+      this.error.set(
+        runtimeErrors.length === 0 ? undefined : runtimeErrors.join('; '),
+      );
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1888,6 +1922,50 @@ export function mergeThreads(
     merged.push(thread);
   }
   return merged;
+}
+
+function bindingFallbackThreads(
+  bindings: readonly ExternalAgentBinding[],
+  runtime: ExternalRuntimeRegistration,
+  archived: boolean,
+): ExternalThreadProjection[] {
+  return bindings.flatMap((binding) => {
+    if (
+      binding.runtimeId !== runtime.runtimeId ||
+      binding.nativeThreadId == null ||
+      (archived ? binding.status !== 'archived' : binding.status !== 'active')
+    ) {
+      return [];
+    }
+    const createdAt = Date.parse(binding.createdAt);
+    const updatedAt = Date.parse(binding.updatedAt);
+    const label =
+      binding.label ??
+      binding.agentId ??
+      binding.profileId ??
+      binding.nativeThreadId;
+    return [
+      {
+        threadId: binding.nativeThreadId,
+        sessionId: binding.sessionId ?? `binding:${binding.bindingId}`,
+        parentThreadId: null,
+        preview: label,
+        ephemeral: false,
+        modelProvider: 'unavailable',
+        effectiveModel: null,
+        createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+        updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
+        status:
+          binding.status === 'archived' ? 'archived' : 'transport_unavailable',
+        cwd: binding.cwd ?? '',
+        cliVersion: runtime.observedCliVersion ?? '',
+        name: binding.label ?? binding.agentId ?? binding.profileId ?? null,
+        agentNickname: binding.agentId ?? null,
+        agentRole: binding.profileId ?? null,
+        turns: [],
+      },
+    ];
+  });
 }
 
 function mergeBindings(
