@@ -724,6 +724,16 @@ test('external agent creation explains a missing ready runtime', async ({
 test('keeps durable Codex bindings visible when native inventory is disconnected', async ({
   page,
 }) => {
+  let connected = false;
+  let connectedThreadReads = 0;
+  const recoveredThread = {
+    ...thread,
+    preview: 'Authoritative native transcript',
+    status: 'idle',
+    cwd: '/home/dev/recovered-codex',
+    updatedAt: thread.updatedAt + 100,
+    turns: [],
+  };
   await page.route('http://disconnected-runtime.test/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const ok = (data: unknown) =>
@@ -741,13 +751,17 @@ test('keeps durable Codex bindings visible when native inventory is disconnected
     }
     if (url.pathname === '/v1/external-runtimes') {
       return ok({
-        runtimes: [{ ...runtime, observedState: 'degraded' }],
+        runtimes: [
+          connected ? runtime : { ...runtime, observedState: 'degraded' },
+        ],
         controllers: [
-          {
-            ...controller,
-            driverState: 'disconnected',
-            compatibilityDiagnostic: 'disconnected',
-          },
+          connected
+            ? controller
+            : {
+                ...controller,
+                driverState: 'disconnected',
+                compatibilityDiagnostic: 'disconnected',
+              },
         ],
       });
     }
@@ -759,6 +773,14 @@ test('keeps durable Codex bindings visible when native inventory is disconnected
     }
     if (url.pathname.endsWith('/events')) return ok({ events: [] });
     if (url.pathname.endsWith('/threads')) {
+      if (connected) {
+        connectedThreadReads += 1;
+        return ok({
+          items: [recoveredThread],
+          nextCursor: null,
+          backwardsCursor: null,
+        });
+      }
       return route.fulfill({
         status: 503,
         contentType: 'application/json',
@@ -784,13 +806,36 @@ test('keeps durable Codex bindings visible when native inventory is disconnected
   await expect(row).toBeVisible();
   await expect(row).toContainText('Durable reviewer');
   await expect(row).toHaveAttribute('data-runtime-id', 'runtime-1');
+  await expect(row).toHaveAttribute('data-binding-id', 'binding-1');
+  await expect(row).toHaveAttribute('data-session-id', 'session-1');
   await expect(row).toHaveAttribute('data-status', 'transport_unavailable');
+  await expect(row.locator('.rv-agent__cwd')).toHaveAttribute(
+    'title',
+    '/home/dev/rusty-view',
+  );
   const archive = row.getByTestId('external-agent-archive');
   await expect(archive).toBeDisabled();
   await expect(archive).toHaveAttribute(
     'title',
     'The runtime controller is not ready.',
   );
+
+  connected = true;
+  await expect
+    .poll(() => connectedThreadReads, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(1);
+  await expect(row).toHaveCount(1);
+  await expect(row).toHaveAttribute('data-runtime-id', 'runtime-1');
+  await expect(row).toHaveAttribute('data-thread-id', 'thread-1');
+  await expect(row).toHaveAttribute('data-binding-id', 'binding-1');
+  await expect(row).toHaveAttribute('data-session-id', 'session-1');
+  await expect(row).toHaveAttribute('data-status', 'idle');
+  await expect(row).toContainText('Durable reviewer');
+  await expect(row.locator('.rv-agent__cwd')).toHaveAttribute(
+    'title',
+    '/home/dev/recovered-codex',
+  );
+  await expect(archive).toBeEnabled();
 });
 
 test('renders a delayed live event from a runtime beyond 100k events without user input', async ({

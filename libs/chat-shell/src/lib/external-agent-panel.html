@@ -241,6 +241,8 @@
       [class.rv-agent--selected]="store.selectedSessionKey() === session.key"
       [attr.data-runtime-id]="session.runtime.runtimeId"
       [attr.data-thread-id]="session.thread.threadId"
+      [attr.data-binding-id]="session.binding?.bindingId ?? null"
+      [attr.data-session-id]="session.binding?.sessionId ?? session.thread.sessionId"
       [attr.data-status]="session.phase ?? session.thread.status"
     >
       <button type="button" class="rv-agent__select" (click)="select(session)">
