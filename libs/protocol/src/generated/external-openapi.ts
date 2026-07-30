@@ -1664,6 +1664,7 @@ export interface components {
             logicalTurnId: string;
             operatorState: components["schemas"]["LogicalTurnOperatorState"];
             phase: components["schemas"]["LogicalTurnPhase"];
+            progress: components["schemas"]["LogicalTurnProgress"];
             progressClassification: components["schemas"]["LogicalTurnProgressClassification"];
             /** Format: uint64 */
             providerRequestTotal: number;

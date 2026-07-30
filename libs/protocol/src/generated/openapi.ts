@@ -1005,6 +1005,7 @@ export interface components {
             providerRequestTotal: number;
             toolRoundTotal: number;
             progressClassification: components["schemas"]["LogicalTurnProgressClassification"];
+            progress: components["schemas"]["LogicalTurnProgress"];
             /** Format: date-time */
             lastProgressAt: string;
             /** Format: date-time */

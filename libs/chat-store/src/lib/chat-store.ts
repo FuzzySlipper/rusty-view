@@ -1333,6 +1333,7 @@ function reconcileLogicalTurnDiagnostics(
       providerRequestTotal: turn.progress.committedProviderOperations,
       toolRoundTotal: turn.progress.committedToolOperations,
       progressClassification: turn.progressClassification,
+      progress: turn.progress,
       lastProgressAt: turn.progress.lastSemanticProgressAt,
       lastLivenessAt: turn.progress.lastLivenessAt,
       reasonCode: turn.reasonCode,
