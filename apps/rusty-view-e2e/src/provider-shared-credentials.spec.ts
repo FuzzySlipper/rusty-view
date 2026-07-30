@@ -20,7 +20,15 @@ test('two provider aliases reuse one credential and unlink without deleting it',
   await page.route('**/v1/**', async (route) => {
     await fulfillApi(route, providers, calls);
   });
+  const credentialRegistryLoaded = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === 'GET' &&
+      url.pathname === '/v1/admin/service-credentials'
+    );
+  });
   await page.goto('/');
+  await credentialRegistryLoaded;
   await page.locator('[data-menu-id="providers"]').click();
 
   const panel = page.getByTestId('top-menu-panel-providers');
@@ -31,6 +39,10 @@ test('two provider aliases reuse one credential and unlink without deleting it',
   await terraRow.getByRole('button', { name: 'Edit' }).click();
 
   const selector = panel.getByTestId('provider-credential-selector');
+  const sharedCredentialOption = selector.locator(
+    `option[value="reuse:${sharedCredentialId}"]`,
+  );
+  await expect(sharedCredentialOption).toHaveCount(1);
   await selector.selectOption(`reuse:${sharedCredentialId}`);
   await panel.getByRole('button', { name: 'Update Provider' }).click();
 
@@ -66,9 +78,7 @@ test('two provider aliases reuse one credential and unlink without deleting it',
     panel.getByRole('button', { name: 'Delete Shared Credential' }),
   ).toBeDisabled();
   await expect(selector).toHaveValue('unconfigured');
-  await expect(
-    selector.locator(`option[value="reuse:${sharedCredentialId}"]`),
-  ).toHaveCount(1);
+  await expect(sharedCredentialOption).toHaveCount(1);
 });
 
 async function fulfillApi(

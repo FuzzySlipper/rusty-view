@@ -196,11 +196,14 @@ test('attachment events render stable responsive image blocks and lifecycle stat
   );
 
   await page.goto('/');
-  await page.locator('.rv-profile').first().click();
+  await page
+    .locator(
+      `[data-testid="profile-session-row"][data-session-id="${SESSION_ID}"]`,
+    )
+    .click();
 
-  const activeRow = page.locator(
-    '[data-testid="message-row"][data-message-id="message_active"]',
-  );
+  const messageRows = page.locator('[data-testid="message-row"]');
+  const activeRow = messageRows.filter({ hasText: 'Generated image' });
   const activeBlock = activeRow.locator('.rv-attachment');
   await expect(activeBlock).toHaveCount(1);
   const image = activeBlock.locator('.rv-attachment__image');
@@ -212,19 +215,17 @@ test('attachment events render stable responsive image blocks and lifecycle stat
   await expect(openLink).toHaveAttribute('rel', 'noopener noreferrer');
 
   await expect(
-    page
-      .locator('[data-testid="message-row"][data-message-id="message_missing"]')
+    messageRows
+      .filter({ hasText: 'Unavailable image' })
       .locator('.rv-attachment'),
   ).toContainText('Image unavailable');
   await expect(
-    page
-      .locator('[data-testid="message-row"][data-message-id="message_removed"]')
-      .locator('.rv-attachment'),
+    messageRows.filter({ hasText: 'Removed image' }).locator('.rv-attachment'),
   ).toContainText('Attachment removed');
 
-  const afterRow = page.locator(
-    '[data-testid="message-row"][data-message-id="message_after"]',
-  );
+  const afterRow = messageRows.filter({
+    hasText: 'Message after generated media',
+  });
   await expect(afterRow).toBeVisible();
   await expect
     .poll(async () => {

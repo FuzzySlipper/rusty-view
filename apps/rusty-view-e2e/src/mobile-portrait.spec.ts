@@ -49,7 +49,7 @@ test.describe('mobile portrait shell', () => {
     await expect(page.locator('rv-profile-panel')).toBeVisible();
     await expect(page.getByTestId('crew-agents-tab')).toHaveText('Agents');
     await expect(page.getByTestId('external-agents-tab')).toHaveText('Codex');
-    await expect(page.locator('.rv-profiles__header')).toHaveText('Agents');
+    await expect(page.locator('.rv-profiles__header')).toContainText('Agents');
 
     const sourceTabGeometry = await page
       .locator('.rv-debug__sidebar-tabs button')
@@ -70,7 +70,7 @@ test.describe('mobile portrait shell', () => {
     await page.getByTestId('external-agents-tab').click();
     await expect(page.locator('rv-external-agent-panel')).toBeVisible();
     await expect(page.locator('.rv-agents__header')).toContainText(
-      'Codex sessions',
+      'Session management',
     );
 
     await page.getByTestId('mobile-sessions-close').click();

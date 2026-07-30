@@ -240,10 +240,11 @@ test('selecting a session renders message rows in the transcript', async ({
 
   await page.goto('/');
 
-  // Profile loaded from the mocked list.
-  const profile = page.locator('.rv-profile').first();
-  await expect(profile).toBeVisible({ timeout: 10_000 });
-  await profile.click();
+  const session = page.locator(
+    `[data-testid="profile-session-row"][data-session-id="${SESSION_ID}"]`,
+  );
+  await expect(session).toBeVisible({ timeout: 10_000 });
+  await session.click();
 
   const sessionStatus = page.getByTestId('session-status-bar');
   await expect(sessionStatus).toHaveAttribute('data-surface', 'profile');
@@ -485,7 +486,11 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
 
   await page.goto('/');
 
-  await page.locator('.rv-profile').first().click();
+  await page
+    .locator(
+      `[data-testid="profile-session-row"][data-session-id="${LIVE_SCROLL_SESSION_ID}"]`,
+    )
+    .click();
   await expect
     .poll(() =>
       page.evaluate((messageId) => {
@@ -567,9 +572,11 @@ test('expanding a tool block does not overlap adjacent messages', async ({
 
   await page.goto('/');
 
-  const profile = page.locator('.rv-profile').first();
-  await expect(profile).toBeVisible({ timeout: 10_000 });
-  await profile.click();
+  const session = page.locator(
+    `[data-testid="profile-session-row"][data-session-id="${SESSION_ID}"]`,
+  );
+  await expect(session).toBeVisible({ timeout: 10_000 });
+  await session.click();
 
   // Wait for the transcript to render.
   const items = page.locator('.rv-transcript__item');
