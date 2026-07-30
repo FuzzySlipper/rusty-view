@@ -508,7 +508,16 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
     .toBe(true);
 
   await page.getByTestId('transcript-viewport').evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    element.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: bounds.right - 1,
+        clientY: bounds.top + 20,
+      }),
+    );
     element.scrollTo({ top: 0 });
+    element.dispatchEvent(new Event('scroll'));
   });
   await expect(
     page.locator(

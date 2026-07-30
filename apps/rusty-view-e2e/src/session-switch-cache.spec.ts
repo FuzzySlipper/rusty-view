@@ -61,16 +61,23 @@ async function assertAtomicHotSwitch(
   target: Locator,
   expectedText: string,
 ): Promise<void> {
-  await page.evaluate(() => {
+  await target.evaluate((targetElement) => {
     const transcript = document.querySelector(
       '[data-testid="transcript-shell"]',
     );
     if (transcript === null) throw new Error('transcript shell not found');
     const probe = {
-      startedAt: performance.now(),
+      startedAt: undefined as number | undefined,
       observedZeroRows: false,
       observer: undefined as MutationObserver | undefined,
     };
+    targetElement.addEventListener(
+      'click',
+      () => {
+        probe.startedAt = performance.now();
+      },
+      { capture: true, once: true },
+    );
     probe.observer = new MutationObserver(() => {
       if (transcript.querySelectorAll('.rv-transcript__item').length === 0) {
         probe.observedZeroRows = true;
@@ -86,13 +93,16 @@ async function assertAtomicHotSwitch(
     const probe = (
       window as Window & {
         __rvSessionSwitchProbe?: {
-          startedAt: number;
+          startedAt: number | undefined;
           observedZeroRows: boolean;
           observer?: MutationObserver;
         };
       }
     ).__rvSessionSwitchProbe;
     if (probe === undefined) throw new Error('switch probe not installed');
+    if (probe.startedAt === undefined) {
+      throw new Error('switch probe did not observe the click');
+    }
     probe.observer?.disconnect();
     return {
       elapsedMs: performance.now() - probe.startedAt,
