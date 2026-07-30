@@ -11,6 +11,8 @@ interface ProviderFixture {
 test('two provider aliases reuse one credential and unlink without deleting it', async ({
   page,
 }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   const providers: ProviderFixture[] = [
     { alias: 'sol', credentialId: sharedCredentialId, revision: 2 },
     { alias: 'terra', revision: 1 },
@@ -36,7 +38,11 @@ test('two provider aliases reuse one credential and unlink without deleting it',
     .locator('.rv-admin-providers__provider')
     .filter({ hasText: 'terra' });
   await expect(terraRow).toContainText('no shared credential');
-  await terraRow.getByRole('button', { name: 'Edit' }).click();
+  await terraRow.getByRole('button', { name: 'Edit' }).press('Enter');
+  expect(pageErrors).toEqual([]);
+  await expect(
+    panel.getByRole('heading', { name: 'Edit Provider' }),
+  ).toBeVisible();
 
   const selector = panel.getByTestId('provider-credential-selector');
   const sharedCredentialOption = selector.locator(
@@ -207,6 +213,9 @@ function providerRecord(provider: ProviderFixture) {
     displayName: provider.alias.toUpperCase(),
     baseUrl: 'https://chatgpt.com/backend-api/codex',
     modelId: `gpt-5.6-${provider.alias}`,
+    chatCompletionsDialect: 'standard',
+    thinkingMode: 'provider_default',
+    reasoningHistory: 'provider_default',
     ...(linked ? { credentialId: sharedCredentialId } : {}),
     credential: linked
       ? { hasSecret: true, kind: 'openai_oauth', status: 'configured' }
