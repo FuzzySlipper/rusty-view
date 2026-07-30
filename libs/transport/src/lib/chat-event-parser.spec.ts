@@ -67,6 +67,25 @@ describe('parseChatEvent', () => {
     }
   });
 
+  it('recognizes every logical-turn lifecycle event', () => {
+    const kinds = [
+      'logical_turn_admitted',
+      'logical_turn_continuing',
+      'logical_turn_yielding',
+      'logical_turn_queued_to_continue',
+      'logical_turn_attention_required',
+      'logical_turn_cancelling',
+      'logical_turn_completed',
+      'logical_turn_cancelled',
+      'logical_turn_failed',
+    ] as const;
+    for (const kind of kinds) {
+      expect(
+        parseChatEvent(chatEventJson(kind, logicalTurnPayload())).kind,
+      ).toBe(kind);
+    }
+  });
+
   it('recognizes phase_change and provider_status events as known events', () => {
     const phase = parseChatEvent(
       chatEventJson('phase_change', {
@@ -181,3 +200,31 @@ describe('parseChatEvent', () => {
     expect(() => parseChatEvent(broken)).toThrow(/payload/);
   });
 });
+
+function logicalTurnPayload() {
+  return {
+    logical_turn_id: 'turn_1',
+    projection_id: 'projection_1',
+    continuation_id: 'continuation_1',
+    continuation_count: 2,
+    wake_id: 'wake_1',
+    phase: 'running',
+    operator_state: 'running',
+    progress_classification: 'provider_progress',
+    reason_code: 'continuing',
+    summary: 'Continuing the same logical turn.',
+    progress: {
+      semanticRevision: 3,
+      committedProviderOperations: 4,
+      committedToolOperations: 2,
+      committedProjectionCursor: 5,
+      assistantContentBytes: 100,
+      acceptedActionCount: 2,
+      delegatedCompletionCount: 0,
+      stateFingerprint: 'sha256:test',
+      lastLivenessAt: '2026-07-30T00:00:00Z',
+      lastSemanticProgressAt: '2026-07-30T00:00:00Z',
+    },
+    logical_turn_revision: 4,
+  };
+}

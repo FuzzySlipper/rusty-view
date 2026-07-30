@@ -797,6 +797,12 @@ export interface components {
             session_id: string;
             wake_id: string;
         };
+        BrainContinuationPayload: {
+            moduleId: string;
+            payload: unknown;
+            payloadFingerprint: string;
+            payloadVersion: string;
+        };
         BrainEvent: {
             /** @constant */
             type: "started";
@@ -858,7 +864,20 @@ export interface components {
         };
         BrainWakeAccepted: {
             accepted: boolean;
+            outcome: components["schemas"]["BrainWakeOutcome"];
             wake_id: string;
+        };
+        BrainWakeAttention: {
+            /** Format: uint32 */
+            consecutiveNoProgressSamples: number;
+            /** @default [] */
+            evidenceRefs: string[];
+            reason: components["schemas"]["LogicalTurnAttentionReason"];
+            reasonCode: string;
+            /** @default [] */
+            resolutionActions: components["schemas"]["LogicalTurnResolutionAction"][];
+            retryUnchangedSafe: boolean;
+            summary: string;
         };
         BrainWakeFailure: {
             kind: components["schemas"]["CoreErrorKind"];
@@ -866,6 +885,14 @@ export interface components {
             reason_code?: string | null;
             session_id: string;
             wake_id: string;
+        };
+        /** @enum {string} */
+        BrainWakeOutcome: "completed" | "continuing";
+        BrainWakeProgressSnapshot: {
+            /** Format: uint64 */
+            providerRequestCount: number;
+            /** Format: uint64 */
+            toolRoundCount: number;
         };
         BrainWakeProviderStateInput: {
             expires_at?: string | null;
@@ -903,6 +930,7 @@ export interface components {
             body_state: number;
             /** Format: uint64 */
             brain: number;
+            continuation_state?: components["schemas"]["BrainContinuationPayload"] | null;
             provider_state?: components["schemas"]["BrainWakeProviderStateInput"] | null;
             provider_state_absence?: components["schemas"]["ProviderStateAbsenceReason"] | null;
             /** Format: uint64 */
@@ -910,6 +938,17 @@ export interface components {
             session_id: string;
             /** Format: uint64 */
             system_prompt: number;
+            wake_id: string;
+        };
+        /** @enum {string} */
+        BrainWakeSettlementKind: "completed" | "yielded" | "attention_required" | "failed";
+        BrainWakeSettlementRequest: {
+            attention?: components["schemas"]["BrainWakeAttention"] | null;
+            continuation_state?: components["schemas"]["BrainContinuationPayload"] | null;
+            outcome: components["schemas"]["BrainWakeSettlementKind"];
+            progress?: components["schemas"]["BrainWakeProgressSnapshot"] | null;
+            reason_code?: string | null;
+            summary?: string | null;
             wake_id: string;
         };
         BrainWakeStreamItem: {
@@ -968,6 +1007,8 @@ export interface components {
             session_id?: string | null;
             strategy_id?: string | null;
         };
+        /** @enum {string} */
+        ContinuationYieldReason: "initial_admission" | "work_quantum_reached" | "scheduler_fairness" | "provider_retry" | "buffer_pressure" | "restart_recovery" | "operator_requested";
         CoreError: {
             kind: components["schemas"]["CoreErrorKind"];
             message: string;
@@ -1011,6 +1052,10 @@ export interface components {
             /** @constant */
             type: "brain_wake_requested";
         } | {
+            lifecycle: components["schemas"]["LogicalTurnLifecycleEvent"];
+            /** @constant */
+            type: "logical_turn_lifecycle_observed";
+        } | {
             event: components["schemas"]["BrainEvent"];
             session_id: string;
             /** @constant */
@@ -1028,7 +1073,7 @@ export interface components {
             type: "completion_packet_delivered";
         };
         /** @enum {string} */
-        CoreEventKind: "session_created" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
+        CoreEventKind: "session_created" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "logical_turn_lifecycle_observed" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
         /** @enum {string} */
         CrewAgentSessionCreationOutcome: "created" | "replayed" | "recovered";
         CrewAgentSessionCreationRecord: {
@@ -1508,6 +1553,294 @@ export interface components {
         FanOutFailurePolicy: "fail_fast" | "fail_soft";
         /** @enum {string} */
         FanOutGroupStatus: "in_progress" | "completed" | "partial_failure" | "failed_fast";
+        LogicalTurnAdmission: {
+            initialCheckpoint: components["schemas"]["LogicalTurnCheckpoint"];
+            lifecycleEvent: components["schemas"]["LogicalTurnLifecycleEvent"];
+            record: components["schemas"]["LogicalTurnRecord"];
+        };
+        LogicalTurnAttention: {
+            /** @default [] */
+            evidenceRefs: string[];
+            reason: components["schemas"]["LogicalTurnAttentionReason"];
+            reasonCode: string;
+            requiredAt: string;
+            /** @default [] */
+            resolutionActions: components["schemas"]["LogicalTurnResolutionAction"][];
+            retryUnchangedSafe: boolean;
+            summary: string;
+        };
+        /** @enum {string} */
+        LogicalTurnAttentionReason: "no_progress" | "tool_outcome_unknown" | "provider_configuration_required" | "provider_credential_required" | "provider_protocol_failure" | "checkpoint_version_unsupported" | "rebind_incompatible" | "storage_repair_required" | "invariant_repair_required";
+        LogicalTurnAttentionResolutionReceipt: {
+            action: components["schemas"]["LogicalTurnResolutionAction"];
+            checkpoint: components["schemas"]["LogicalTurnCheckpoint"];
+            record: components["schemas"]["LogicalTurnRecord"];
+            replayed: boolean;
+        };
+        LogicalTurnAttentionResolutionRequest: {
+            action: components["schemas"]["LogicalTurnResolutionAction"];
+            /** Format: uint64 */
+            expectedRevision: number;
+            lifecycleEvent: components["schemas"]["LogicalTurnLifecycleEvent"];
+            logicalTurnId: string;
+            now: string;
+        };
+        LogicalTurnBindingSnapshot: {
+            brainModuleId: string;
+            brainStrategyId: string;
+            credentialId?: string | null;
+            /** Format: uint64 */
+            credentialRevision?: number | null;
+            profileId: string;
+            /** Format: uint64 */
+            profileRevision: number;
+            promptFingerprint: string;
+            providerAlias: string;
+            providerFingerprint: string;
+            /** Format: uint64 */
+            providerRevision: number;
+            toolRegistryRevision: string;
+            toolSelectionFingerprint: string;
+        };
+        LogicalTurnCancelRequest: {
+            /** Format: uint64 */
+            expectedRevision: number;
+            idempotencyKey: string;
+            logicalTurnId: string;
+            now: string;
+            reasonCode: string;
+            summary: string;
+        };
+        LogicalTurnCancellationReceipt: {
+            alreadyTerminal: boolean;
+            record: components["schemas"]["LogicalTurnRecord"];
+            replayed: boolean;
+        };
+        LogicalTurnCheckpoint: {
+            /** Format: uint64 */
+            bindingGeneration: number;
+            completedEpochId?: string | null;
+            continuationId: string;
+            createdAt: string;
+            frozenInput: components["schemas"]["LogicalTurnFrozenInput"];
+            logicalTurnId: string;
+            moduleState: components["schemas"]["BrainContinuationPayload"];
+            /** Format: uint64 */
+            operationCursor: number;
+            parentContinuationId?: string | null;
+            progress: components["schemas"]["LogicalTurnProgress"];
+            /** Format: uint64 */
+            projectionCursor: number;
+            /** Format: uint64 */
+            sequence: number;
+            yieldReason: components["schemas"]["ContinuationYieldReason"];
+        };
+        LogicalTurnClaimRequest: {
+            claimExpiresAt: string;
+            claimHolder: string;
+            continuationId: string;
+            executionEpochId: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            logicalTurnId: string;
+            now: string;
+        };
+        LogicalTurnContinuationClaim: {
+            checkpoint: components["schemas"]["LogicalTurnCheckpoint"];
+            /** Format: uint64 */
+            claimGeneration: number;
+            record: components["schemas"]["LogicalTurnRecord"];
+            replayed: boolean;
+        };
+        LogicalTurnDiagnostic: {
+            activeExecutionEpochId?: string | null;
+            admittedAt: string;
+            attention?: components["schemas"]["LogicalTurnAttention"] | null;
+            /** Format: uint64 */
+            continuationCount: number;
+            currentContinuationId: string;
+            lastLivenessAt: string;
+            lastProgressAt: string;
+            logicalTurnId: string;
+            operatorState: components["schemas"]["LogicalTurnOperatorState"];
+            phase: components["schemas"]["LogicalTurnPhase"];
+            progressClassification: components["schemas"]["LogicalTurnProgressClassification"];
+            /** Format: uint64 */
+            providerRequestTotal: number;
+            reasonCode: string;
+            /** Format: uint64 */
+            revision: number;
+            sessionId: string;
+            sourceWakeId: string;
+            summary: string;
+            terminalAt?: string | null;
+            /** Format: uint64 */
+            toolRoundTotal: number;
+            updatedAt: string;
+        };
+        LogicalTurnDiagnosticPage: {
+            items: components["schemas"]["LogicalTurnDiagnostic"][];
+            /** Format: uint32 */
+            total: number;
+        };
+        LogicalTurnDiagnosticQuery: {
+            /** @default false */
+            includeTerminal: boolean;
+            /**
+             * Format: uint32
+             * @default 100
+             */
+            limit: number;
+            logicalTurnId?: string | null;
+            sessionId?: string | null;
+        };
+        LogicalTurnFrozenInput: {
+            /** @default [] */
+            attachmentRefs: string[];
+            bodyStateFingerprint: string;
+            bodyStateRef: string;
+            roleAssemblyFingerprint: string;
+            roleAssemblyRef: string;
+            systemPromptFingerprint: string;
+            systemPromptRef: string;
+            /** Format: uint64 */
+            transcriptCursor: number;
+        };
+        LogicalTurnHydrationReport: {
+            /** Format: uint32 */
+            alreadyRunnable: number;
+            /** Format: uint32 */
+            attentionRequired: number;
+            hydratedAt: string;
+            /** Format: uint32 */
+            inspected: number;
+            /** Format: uint32 */
+            madeRunnable: number;
+            /** Format: uint32 */
+            terminalSkipped: number;
+        };
+        LogicalTurnLifecycleEvent: {
+            /** Format: uint64 */
+            continuationCount: number;
+            continuationId: string;
+            executionEpochId?: string | null;
+            kind: components["schemas"]["LogicalTurnLifecycleEventKind"];
+            logicalTurnId: string;
+            /** Format: uint64 */
+            logicalTurnRevision: number;
+            occurredAt: string;
+            operatorState: components["schemas"]["LogicalTurnOperatorState"];
+            phase: components["schemas"]["LogicalTurnPhase"];
+            progress: components["schemas"]["LogicalTurnProgress"];
+            progressClassification: components["schemas"]["LogicalTurnProgressClassification"];
+            projectionId: string;
+            reasonCode: string;
+            sessionId: string;
+            summary: string;
+            wakeId: string;
+        };
+        /** @enum {string} */
+        LogicalTurnLifecycleEventKind: "admitted" | "continuation_claimed" | "continuation_progress" | "continuation_checkpointed" | "continuation_yielded" | "continuation_resumed" | "attention_required" | "rebind_requested" | "rebound" | "cancel_requested" | "completed" | "cancelled" | "failed";
+        /** @enum {string} */
+        LogicalTurnOperationKind: "provider_request" | "host_tool_execution";
+        /** @enum {string} */
+        LogicalTurnOperationPhase: "planned" | "leased" | "completed" | "outcome_unknown" | "superseded" | "completed_after_cancel";
+        LogicalTurnOperationRecord: {
+            continuationId: string;
+            createdAt: string;
+            executionEpochId: string;
+            idempotencyKey: string;
+            kind: components["schemas"]["LogicalTurnOperationKind"];
+            leaseExpiresAt?: string | null;
+            /** Format: uint64 */
+            leaseGeneration?: number | null;
+            leaseHolder?: string | null;
+            logicalTurnId: string;
+            operationId: string;
+            phase: components["schemas"]["LogicalTurnOperationPhase"];
+            reasonCode?: string | null;
+            requestFingerprint: string;
+            resultPayload?: unknown;
+            resultRef?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        LogicalTurnOperatorState: "queued_to_continue" | "running" | "paused_for_attention" | "cancelling" | "completed" | "cancelled" | "failed";
+        /** @enum {string} */
+        LogicalTurnPhase: "admitted" | "runnable" | "running" | "yielded" | "attention_required" | "cancel_requested" | "completed" | "cancelled" | "failed";
+        LogicalTurnProgress: {
+            /** Format: uint64 */
+            acceptedActionCount: number;
+            /** Format: uint64 */
+            assistantContentBytes: number;
+            /** Format: uint64 */
+            committedProjectionCursor: number;
+            /** Format: uint64 */
+            committedProviderOperations: number;
+            /** Format: uint64 */
+            committedToolOperations: number;
+            /**
+             * Format: uint32
+             * @default 0
+             */
+            consecutiveNoProgressSamples: number;
+            /** Format: uint64 */
+            delegatedCompletionCount: number;
+            lastLivenessAt: string;
+            lastSemanticProgressAt: string;
+            /** Format: uint64 */
+            semanticRevision: number;
+            stateFingerprint: string;
+        };
+        /** @enum {string} */
+        LogicalTurnProgressClassification: "admitted" | "provider_progress" | "tool_progress" | "semantic_progress" | "liveness_only" | "no_progress" | "attention_required" | "completed" | "cancelled" | "failed";
+        LogicalTurnRecord: {
+            activeEpochId?: string | null;
+            admittedAt: string;
+            attention?: components["schemas"]["LogicalTurnAttention"] | null;
+            binding: components["schemas"]["LogicalTurnBindingSnapshot"];
+            /** Format: uint64 */
+            bindingGeneration: number;
+            /** Format: uint64 */
+            cancellationGeneration: number;
+            claimExpiresAt?: string | null;
+            /** Format: uint64 */
+            claimGeneration?: number | null;
+            claimHolder?: string | null;
+            /** Format: uint64 */
+            continuationSequence: number;
+            currentContinuationId: string;
+            logicalTurnId: string;
+            phase: components["schemas"]["LogicalTurnPhase"];
+            /** Format: uint64 */
+            revision: number;
+            sessionId: string;
+            sourceWakeId: string;
+            terminalAt?: string | null;
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        LogicalTurnResolutionAction: "retry_unchanged" | "retry_provider_operation" | "confirm_tool_completed" | "confirm_tool_not_completed" | "rebind" | "cancel";
+        LogicalTurnYieldReceipt: {
+            checkpoint: components["schemas"]["LogicalTurnCheckpoint"];
+            record: components["schemas"]["LogicalTurnRecord"];
+            replayed: boolean;
+        };
+        LogicalTurnYieldRequest: {
+            checkpoint: components["schemas"]["LogicalTurnCheckpoint"];
+            /** Format: uint64 */
+            expectedCancellationGeneration: number;
+            /** Format: uint64 */
+            expectedClaimGeneration: number;
+            expectedEpochId: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            lifecycleEvent: components["schemas"]["LogicalTurnLifecycleEvent"];
+            logicalTurnId: string;
+            now: string;
+        };
         /** @enum {string} */
         MemoryConflictPolicy: "expected_revision" | "supersession" | "merge" | "immutable" | "domain_specific";
         MemoryDiagnosticsPolicy: {
@@ -2067,6 +2400,19 @@ export interface components {
             /** @enum {string} */
             compatibilityDiagnostic: "certified" | "compatible_uncertified" | "incompatible" | "probe_failed" | "disconnected";
             lastCompatibilityProbe: components["schemas"]["ExternalRuntimeCompatibilityProbeReport"] | null;
+            recovery: {
+                /** @enum {string} */
+                phase: "idle" | "scheduled" | "attempting" | "succeeded" | "failed";
+                totalAttempts: number;
+                consecutiveFailures: number;
+                /** Format: date-time */
+                lastAttemptAt: string | null;
+                /** Format: date-time */
+                lastRecoveredAt: string | null;
+                /** Format: date-time */
+                nextAttemptAt: string | null;
+                lastFailureReason: string | null;
+            };
             bindingResumeFailures: {
                 bindingId: string;
                 nativeThreadId: string;

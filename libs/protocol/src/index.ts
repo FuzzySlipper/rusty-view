@@ -327,6 +327,23 @@ export type SelectActiveConversationBranchResult =
 // provider secrets.
 export type ContextDebugPayload = Schemas['ContextDebugPayload'];
 
+// ---- logical-turn lifecycle / operator controls (#6370) ----
+export type LogicalTurnLifecyclePayload =
+  Schemas['LogicalTurnLifecyclePayload'];
+export type LogicalTurnPhase = Schemas['LogicalTurnPhase'];
+export type LogicalTurnOperatorState = Schemas['LogicalTurnOperatorState'];
+export type LogicalTurnProgressClassification =
+  Schemas['LogicalTurnProgressClassification'];
+export type LogicalTurnProgress = Schemas['LogicalTurnProgress'];
+export type LogicalTurnResolutionAction =
+  Schemas['LogicalTurnResolutionAction'];
+export type LogicalTurnAttention = Schemas['LogicalTurnAttention'];
+export type LogicalTurnDiagnostic = Schemas['LogicalTurnDiagnostic'];
+export type LogicalTurnDiagnosticPage = Schemas['LogicalTurnDiagnosticPage'];
+export type LogicalTurnCancelRequest = Schemas['LogicalTurnCancelRequest'];
+export type LogicalTurnResolveRequest = Schemas['LogicalTurnResolveRequest'];
+export type LogicalTurnControlReceipt = Schemas['LogicalTurnControlReceipt'];
+
 // ---- send-message ----
 export type SendChatMessageRequest = Schemas['SendChatMessageRequest'];
 export type ChatActor = Schemas['ChatActor'];
@@ -355,6 +372,12 @@ export type ListChatCommandsResponse =
   operations['listChatCommands']['responses'][200]['content']['application/json'];
 export type ExecuteChatCommandResponse =
   operations['executeChatCommand']['responses'][200]['content']['application/json'];
+export type ListChatSessionLogicalTurnsResponse =
+  operations['listChatSessionLogicalTurns']['responses'][200]['content']['application/json'];
+export type CancelChatSessionLogicalTurnResponse =
+  operations['cancelChatSessionLogicalTurn']['responses'][200]['content']['application/json'];
+export type ResolveChatSessionLogicalTurnResponse =
+  operations['resolveChatSessionLogicalTurn']['responses'][200]['content']['application/json'];
 export type GetChatToolCallDebugDetailResponse =
   operations['getChatToolCallDebugDetail']['responses'][200]['content']['application/json'];
 export type GetChatProviderRequestDebugDetailResponse =

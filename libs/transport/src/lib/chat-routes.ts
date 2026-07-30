@@ -28,6 +28,15 @@ export const SESSION_STREAM_PATH =
 export const SESSION_CONTEXT_PATH =
   '/v1/chat/sessions/{session_id}/context' as const satisfies ChatPath;
 
+export const SESSION_LOGICAL_TURNS_PATH =
+  '/v1/chat/sessions/{session_id}/logical-turns' as const satisfies ChatPath;
+
+export const SESSION_LOGICAL_TURN_CANCEL_PATH =
+  '/v1/chat/sessions/{session_id}/logical-turns/{logical_turn_id}/cancel' as const satisfies ChatPath;
+
+export const SESSION_LOGICAL_TURN_RESOLVE_PATH =
+  '/v1/chat/sessions/{session_id}/logical-turns/{logical_turn_id}/resolve' as const satisfies ChatPath;
+
 export const SESSION_TOOL_CALL_DEBUG_DETAIL_PATH =
   '/v1/chat/sessions/{session_id}/tool-calls/{debug_detail_id}' as const satisfies ChatPath;
 

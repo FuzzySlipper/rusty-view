@@ -17,6 +17,7 @@ import {
   type ConversationBranch,
   type ConversationProjection,
   type ConversationSnapshot,
+  type LogicalTurnProjection,
 } from '@rusty-view/chat-domain';
 import type {
   AgentDirectoryEntry,
@@ -28,12 +29,14 @@ import type {
   SessionContextUsageResult,
   ToolCallDebugDetail,
   ProviderRequestDebugDetail,
+  LogicalTurnDiagnostic,
+  LogicalTurnResolutionAction,
 } from '@rusty-view/protocol';
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
 
 import { DEBUG_ACTOR, type PendingSend } from './pending-operations';
-import { storeErrorDetail } from './store-error';
+import { storeErrorDetail, storeErrorMessage } from './store-error';
 import { WeightedLruCache } from './weighted-lru-cache';
 
 interface CachedNativeTranscript {
@@ -41,6 +44,7 @@ interface CachedNativeTranscript {
   readonly rawEvents: readonly ChatEvent[];
   readonly sessionStatus: ChatSessionStatus | null;
   readonly contextUsage: SessionContextUsageResult | null;
+  readonly logicalTurnDiagnostics: readonly LogicalTurnDiagnostic[];
 }
 
 const NATIVE_TRANSCRIPT_CACHE_CAPACITY = 8;
@@ -96,6 +100,11 @@ export class ChatStore implements OnDestroy {
   private readonly _contextUsage = signal<SessionContextUsageResult | null>(
     null,
   );
+  private readonly _logicalTurnDiagnostics = signal<
+    readonly LogicalTurnDiagnostic[]
+  >([]);
+  private readonly _logicalTurnControlPending = signal(false);
+  private readonly _logicalTurnControlError = signal<string | null>(null);
   private readonly _pendingSends = signal<PendingSend[]>([]);
   private readonly _pendingCommands = signal<PendingSend[]>([]);
   /** Status of the open session, from openSession (authoritative current state). */
@@ -148,6 +157,10 @@ export class ChatStore implements OnDestroy {
   readonly commands = this._commandRegistry.asReadonly();
   /** Model/provider/brain + context-usage diagnostics for the active session. */
   readonly contextUsage = this._contextUsage.asReadonly();
+  readonly logicalTurnDiagnostics = this._logicalTurnDiagnostics.asReadonly();
+  readonly logicalTurnControlPending =
+    this._logicalTurnControlPending.asReadonly();
+  readonly logicalTurnControlError = this._logicalTurnControlError.asReadonly();
   readonly pendingSends = this._pendingSends.asReadonly();
   readonly pendingCommands = this._pendingCommands.asReadonly();
   /** True only while an uncached selected session has no materialized state. */
@@ -189,9 +202,25 @@ export class ChatStore implements OnDestroy {
    * turn recorded without a terminal event, which the SSE stream re-replays);
    * gating on session status prevents that from wedging the input as disabled.
    */
-  readonly isGenerating = computed(
-    () => this.isStreaming() && this._activeSessionStatus() === 'active',
+  readonly activeLogicalTurn = computed<LogicalTurnProjection | undefined>(() =>
+    [...this._projection().logicalTurns]
+      .reverse()
+      .find((turn) => !isTerminalLogicalTurnState(turn.operatorState)),
   );
+  readonly activeLogicalTurnDiagnostic = computed<
+    LogicalTurnDiagnostic | undefined
+  >(() =>
+    [...this._logicalTurnDiagnostics()]
+      .reverse()
+      .find((turn) => !isTerminalLogicalTurnState(turn.operatorState)),
+  );
+  readonly isGenerating = computed(() => {
+    const logicalTurn = this.activeLogicalTurn();
+    return (
+      logicalTurn !== undefined ||
+      (this.isStreaming() && this._activeSessionStatus() === 'active')
+    );
+  });
   /**
    * Number of characters accumulated in the active turn's streaming text so far.
    * Useful for progress visibility and live-test stall detection. Returns 0 when
@@ -619,6 +648,7 @@ export class ChatStore implements OnDestroy {
     this._rawEvents.set([]);
     this._activeSessionStatus.set(null);
     this._contextUsage.set(null);
+    this._logicalTurnDiagnostics.set([]);
     this._sessionLoading.set(false);
     this.persistUiState();
   }
@@ -645,6 +675,7 @@ export class ChatStore implements OnDestroy {
       this._rawEvents.set([]);
       this._activeSessionStatus.set(null);
       this._contextUsage.set(null);
+      this._logicalTurnDiagnostics.set([]);
       this._sessionLoading.set(true);
     } else {
       for (const event of cached.rawEvents) {
@@ -654,6 +685,7 @@ export class ChatStore implements OnDestroy {
       this._rawEvents.set([...cached.rawEvents]);
       this._activeSessionStatus.set(cached.sessionStatus);
       this._contextUsage.set(cached.contextUsage);
+      this._logicalTurnDiagnostics.set(cached.logicalTurnDiagnostics);
       this._sessionLoading.set(false);
     }
 
@@ -710,6 +742,7 @@ export class ChatStore implements OnDestroy {
 
       // Best-effort context diagnostics must not hold the transcript paint.
       void this.loadContextUsage(revision, sessionId);
+      void this.loadLogicalTurns(revision, sessionId);
     } finally {
       if (this.isCurrentSelection(revision, sessionId)) {
         this._sessionLoading.set(false);
@@ -736,6 +769,76 @@ export class ChatStore implements OnDestroy {
       }
     } catch {
       // Diagnostics are optional; keep the current (or null) value.
+    }
+  }
+
+  async loadLogicalTurns(
+    revision = this.selectionRevision,
+    sessionId = this._activeSessionId(),
+  ): Promise<void> {
+    if (sessionId === null) return;
+    try {
+      const page = await this.transport.listLogicalTurns(sessionId);
+      if (this.isCurrentSelection(revision, sessionId)) {
+        this._logicalTurnDiagnostics.set(
+          reconcileLogicalTurnDiagnostics(
+            this._logicalTurnDiagnostics(),
+            page.items,
+            this._projection().logicalTurns,
+          ),
+        );
+        this.cacheActiveTranscript();
+      }
+    } catch {
+      // Diagnostics remain optional for older/degraded backends.
+    }
+  }
+
+  async cancelActiveLogicalTurn(): Promise<void> {
+    const sessionId = this._activeSessionId();
+    const turn = this.activeLogicalTurnDiagnostic();
+    if (sessionId === null || turn === undefined) return;
+    this._logicalTurnControlPending.set(true);
+    this._logicalTurnControlError.set(null);
+    try {
+      await this.transport.cancelLogicalTurn(
+        sessionId,
+        turn.logicalTurnId,
+        {
+          expectedRevision: turn.revision,
+          reasonCode: 'operator_cancelled',
+          summary: 'Cancelled by operator from Rusty View.',
+        },
+        `view-cancel-${turn.logicalTurnId}-${turn.revision}`,
+      );
+      await this.loadLogicalTurns(this.selectionRevision, sessionId);
+    } catch (error) {
+      this._logicalTurnControlError.set(storeErrorMessage(error));
+      await this.loadLogicalTurns(this.selectionRevision, sessionId);
+    } finally {
+      this._logicalTurnControlPending.set(false);
+    }
+  }
+
+  async resolveActiveLogicalTurn(
+    action: LogicalTurnResolutionAction,
+  ): Promise<void> {
+    const sessionId = this._activeSessionId();
+    const turn = this.activeLogicalTurnDiagnostic();
+    if (sessionId === null || turn === undefined) return;
+    this._logicalTurnControlPending.set(true);
+    this._logicalTurnControlError.set(null);
+    try {
+      await this.transport.resolveLogicalTurn(sessionId, turn.logicalTurnId, {
+        expectedRevision: turn.revision,
+        action,
+      });
+      await this.loadLogicalTurns(this.selectionRevision, sessionId);
+    } catch (error) {
+      this._logicalTurnControlError.set(storeErrorMessage(error));
+      await this.loadLogicalTurns(this.selectionRevision, sessionId);
+    } finally {
+      this._logicalTurnControlPending.set(false);
     }
   }
 
@@ -1086,7 +1189,20 @@ export class ChatStore implements OnDestroy {
     }
     this._rawEvents.set(nextRawEvents);
     this._projection.set(nextProjection);
+    this._logicalTurnDiagnostics.set(
+      reconcileLogicalTurnDiagnostics(
+        this._logicalTurnDiagnostics(),
+        [],
+        nextProjection.logicalTurns,
+      ),
+    );
     this.cacheActiveTranscript();
+
+    if (
+      orderedNewEvents.some((event) => event.kind.startsWith('logical_turn_'))
+    ) {
+      void this.loadLogicalTurns();
+    }
 
     // Persist (fire and forget — storage failures are non-fatal).
     const sessionId = this._activeSessionId();
@@ -1171,6 +1287,7 @@ export class ChatStore implements OnDestroy {
         rawEvents,
         sessionStatus: this._activeSessionStatus(),
         contextUsage: this._contextUsage(),
+        logicalTurnDiagnostics: this._logicalTurnDiagnostics(),
       },
       rawEvents.length + projection.messages.length * 8,
     );
@@ -1187,6 +1304,54 @@ export class ChatStore implements OnDestroy {
   ngOnDestroy(): void {
     this.closeStream();
   }
+}
+
+function isTerminalLogicalTurnState(state: string): boolean {
+  return state === 'completed' || state === 'cancelled' || state === 'failed';
+}
+
+function reconcileLogicalTurnDiagnostics(
+  current: readonly LogicalTurnDiagnostic[],
+  authoritativeActive: readonly LogicalTurnDiagnostic[],
+  lifecycle: readonly LogicalTurnProjection[],
+): readonly LogicalTurnDiagnostic[] {
+  const byId = new Map(current.map((turn) => [turn.logicalTurnId, turn]));
+  for (const turn of authoritativeActive) byId.set(turn.logicalTurnId, turn);
+  for (const turn of lifecycle) {
+    const existing = byId.get(turn.id);
+    byId.set(turn.id, {
+      logicalTurnId: turn.id,
+      sessionId: turn.sessionId,
+      sourceWakeId: existing?.sourceWakeId ?? turn.wakeId,
+      phase: turn.phase,
+      operatorState: turn.operatorState,
+      currentContinuationId: turn.currentContinuationId,
+      ...(turn.executionEpochId === undefined
+        ? {}
+        : { activeExecutionEpochId: turn.executionEpochId }),
+      continuationCount: turn.continuationCount,
+      providerRequestTotal: turn.progress.committedProviderOperations,
+      toolRoundTotal: turn.progress.committedToolOperations,
+      progressClassification: turn.progressClassification,
+      lastProgressAt: turn.progress.lastSemanticProgressAt,
+      lastLivenessAt: turn.progress.lastLivenessAt,
+      reasonCode: turn.reasonCode,
+      summary: turn.summary,
+      ...(turn.operatorState === 'paused_for_attention' &&
+      existing?.attention !== undefined
+        ? { attention: existing.attention }
+        : {}),
+      revision: turn.revision,
+      admittedAt: existing?.admittedAt ?? turn.updatedAt,
+      updatedAt: turn.updatedAt,
+      ...(isTerminalLogicalTurnState(turn.operatorState)
+        ? { terminalAt: turn.updatedAt }
+        : {}),
+    });
+  }
+  return [...byId.values()].sort((left, right) =>
+    left.updatedAt.localeCompare(right.updatedAt),
+  );
 }
 
 function crewCreationSessionId(

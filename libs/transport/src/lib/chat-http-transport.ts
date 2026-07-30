@@ -20,11 +20,16 @@ import type {
   GetChatToolCallDebugDetailResponse,
   ListChatCommandsResponse,
   ListChatSessionsResponse,
+  ListChatSessionLogicalTurnsResponse,
   ListMessageSlotsResponse,
   ListMessageVariantsResponse,
   MessageSlotMutationResult,
   MessageSlotPage,
   MessageVariantPage,
+  LogicalTurnCancelRequest,
+  LogicalTurnControlReceipt,
+  LogicalTurnDiagnosticPage,
+  LogicalTurnResolveRequest,
   OpenChatSessionResponse,
   ProviderRequestDebugDetail,
   ReplayChatSessionEventsResponse,
@@ -40,6 +45,8 @@ import type {
   SessionContextUsageResult,
   ToolCallDebugDetail,
   DeleteMessageVariantResponse,
+  CancelChatSessionLogicalTurnResponse,
+  ResolveChatSessionLogicalTurnResponse,
 } from '@rusty-view/protocol';
 
 import {
@@ -48,6 +55,9 @@ import {
   SESSION_PATH,
   SESSION_EVENTS_PATH,
   SESSION_CONTEXT_PATH,
+  SESSION_LOGICAL_TURNS_PATH,
+  SESSION_LOGICAL_TURN_CANCEL_PATH,
+  SESSION_LOGICAL_TURN_RESOLVE_PATH,
   SESSION_PROVIDER_REQUEST_DEBUG_DETAIL_PATH,
   SESSION_TOOL_CALL_DEBUG_DETAIL_PATH,
   SESSION_MESSAGES_PATH,
@@ -277,6 +287,60 @@ export class ChatHttpTransport {
       'GET',
       SESSION_CONTEXT_PATH,
       { pathParams: { session_id: sessionId } },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async listLogicalTurns(
+    sessionId: string,
+    limit = 100,
+  ): Promise<LogicalTurnDiagnosticPage> {
+    const body = await this.requestJson<ListChatSessionLogicalTurnsResponse>(
+      'GET',
+      SESSION_LOGICAL_TURNS_PATH,
+      { pathParams: { session_id: sessionId }, query: { limit } },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async cancelLogicalTurn(
+    sessionId: string,
+    logicalTurnId: string,
+    request: LogicalTurnCancelRequest,
+    idempotencyKey: string,
+  ): Promise<LogicalTurnControlReceipt> {
+    const body = await this.requestJson<CancelChatSessionLogicalTurnResponse>(
+      'POST',
+      SESSION_LOGICAL_TURN_CANCEL_PATH,
+      {
+        pathParams: {
+          session_id: sessionId,
+          logical_turn_id: logicalTurnId,
+        },
+        body: request,
+        extraHeaders: { [HEADER_NAMES.idempotencyKey]: idempotencyKey },
+        timeoutMs: this.config.writeTimeoutMs,
+      },
+    );
+    return unwrapEnvelope(body);
+  }
+
+  async resolveLogicalTurn(
+    sessionId: string,
+    logicalTurnId: string,
+    request: LogicalTurnResolveRequest,
+  ): Promise<LogicalTurnControlReceipt> {
+    const body = await this.requestJson<ResolveChatSessionLogicalTurnResponse>(
+      'POST',
+      SESSION_LOGICAL_TURN_RESOLVE_PATH,
+      {
+        pathParams: {
+          session_id: sessionId,
+          logical_turn_id: logicalTurnId,
+        },
+        body: request,
+        timeoutMs: this.config.writeTimeoutMs,
+      },
     );
     return unwrapEnvelope(body);
   }

@@ -68,6 +68,7 @@ export type {
   ContextEstimateQuality,
   ContextTimelineKind,
   ContextTimelineEntry,
+  LogicalTurnProjection,
   ActiveAssistantTurn,
   ConversationBranch,
   ConversationSnapshot,

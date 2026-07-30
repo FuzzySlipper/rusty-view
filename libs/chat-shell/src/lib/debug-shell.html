@@ -221,7 +221,35 @@
         <span>Session: {{ store.activeSession()?.kind ?? 'unknown' }}</span>
         @if (store.contextUsage(); as context) {
         <span>Provider: {{ context.provider.alias }}</span>
+        } @if (store.activeLogicalTurn(); as turn) {
+        <span data-testid="logical-turn-status"
+          >Turn: {{ turn.operatorState }} · continuation {{
+          turn.continuationCount }} · providers {{
+          turn.progress.committedProviderOperations }} · tools {{
+          turn.progress.committedToolOperations }}</span
+        >
         } }
+      </div>
+      } @if (!externalSelected() && store.activeLogicalTurn()) {
+      <div
+        class="rv-debug__composer-controls"
+        data-testid="logical-turn-controls"
+      >
+        <button
+          type="button"
+          data-testid="cancel-logical-turn"
+          [disabled]="store.logicalTurnControlPending()"
+          (click)="store.cancelActiveLogicalTurn()"
+        >
+          Cancel turn
+        </button>
+        @if (store.activeLogicalTurnDiagnostic()?.operatorState ===
+        'paused_for_attention') {
+        <span
+          >Paused for attention: {{
+          store.activeLogicalTurnDiagnostic()?.reasonCode }}</span
+        >
+        }
       </div>
       } @if (externalSelected()) {
       <div
@@ -335,8 +363,13 @@
       <rv-context-diagnostics
         [usage]="store.contextUsage()"
         [timeline]="store.contextTimeline()"
+        [logicalTurns]="store.logicalTurnDiagnostics()"
+        [logicalTurnControlPending]="store.logicalTurnControlPending()"
+        [logicalTurnControlError]="store.logicalTurnControlError()"
         [loading]="contextLoading()"
         (refresh)="onRefreshContext()"
+        (cancelLogicalTurn)="store.cancelActiveLogicalTurn()"
+        (resolveLogicalTurn)="store.resolveActiveLogicalTurn($event)"
       />
       }
     </aside>

@@ -661,6 +661,15 @@ describe('ExternalAgentStore', () => {
           compatibilityState: 'certified',
           compatibilityDiagnostic: 'certified',
           lastCompatibilityProbe: null,
+          recovery: {
+            phase: 'idle',
+            totalAttempts: 0,
+            consecutiveFailures: 0,
+            lastAttemptAt: null,
+            lastRecoveredAt: null,
+            nextAttemptAt: null,
+            lastFailureReason: null,
+          },
           bindingResumeFailures: [
             {
               bindingId: 'binding-stale',
@@ -705,6 +714,15 @@ describe('ExternalAgentStore', () => {
           compatibilityState: 'certified',
           compatibilityDiagnostic: 'disconnected',
           lastCompatibilityProbe: null,
+          recovery: {
+            phase: 'idle',
+            totalAttempts: 0,
+            consecutiveFailures: 0,
+            lastAttemptAt: null,
+            lastRecoveredAt: null,
+            nextAttemptAt: null,
+            lastFailureReason: null,
+          },
           bindingResumeFailures: [],
         },
       ],

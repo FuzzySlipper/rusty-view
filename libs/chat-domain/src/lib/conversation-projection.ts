@@ -13,6 +13,7 @@ import {
   type ContextTimelineEntry,
   type ContextTimelineKind,
   type ConversationProjection,
+  type LogicalTurnProjection,
   type MessageAuthor,
   type MessageBlock,
   type MessageMetadata,
@@ -36,7 +37,7 @@ export function projectConversation(
   events: readonly ChatEvent[],
   previous?: ConversationProjection,
 ): ConversationProjection {
-  let projection = previous ?? emptyProjection();
+  let projection = normalizeProjection(previous ?? emptyProjection());
   for (const event of events) {
     projection = applyEvent(projection, event);
   }
@@ -101,6 +102,16 @@ function applyEvent(
       return applyContextEvent(withCursor, event, 'compaction_completed');
     case 'context_compaction_failed':
       return applyContextEvent(withCursor, event, 'compaction_failed');
+    case 'logical_turn_admitted':
+    case 'logical_turn_continuing':
+    case 'logical_turn_yielding':
+    case 'logical_turn_queued_to_continue':
+    case 'logical_turn_attention_required':
+    case 'logical_turn_cancelling':
+    case 'logical_turn_completed':
+    case 'logical_turn_cancelled':
+    case 'logical_turn_failed':
+      return applyLogicalTurnEvent(withCursor, event);
     // Known kinds the conversation model does not yet project (message slots /
     // variants, branches, snapshots, attachments, data-bank scopes). They are
     // tracked by their own tasks; here they only advance the cursor so replay
@@ -867,22 +878,32 @@ function applyContextEvent(
   kind: ContextTimelineKind,
 ): ConversationProjection {
   const payload = payloadRecord(event.payload);
+  const metadata = parseMetadataJson(payload['metadata_json']);
+  const usage = nestedRecord(metadata, 'usage');
+  const artifact = nestedRecord(metadata, 'artifact');
 
   const entry: ContextTimelineEntry = {
     id: event.event_id,
     kind,
     sessionId: readOptionalString(payload, 'session_id') ?? event.session_id,
     wakeId: readOptionalString(payload, 'wake_id'),
-    strategyId: readOptionalString(payload, 'strategy_id') ?? '',
+    strategyId:
+      readOptionalString(payload, 'strategy_id') ??
+      readOptionalString(artifact, 'strategyId') ??
+      '',
     estimateQuality: readContextEstimateQuality(payload['estimate_quality']),
-    fillPercent: readOptionalInteger(payload, 'fill_percent'),
+    fillPercent:
+      readOptionalInteger(payload, 'fill_percent') ??
+      readOptionalInteger(usage, 'fillPercent'),
     compactAtPercent: readOptionalInteger(payload, 'compact_at_percent'),
     targetPercentAfterCompaction: readOptionalInteger(
       payload,
       'target_percent_after_compaction',
     ),
     artifactId: readOptionalString(payload, 'artifact_id'),
-    reasonCode: readOptionalString(payload, 'reason_code'),
+    reasonCode:
+      readOptionalString(payload, 'reason_code') ??
+      readOptionalString(artifact, 'reasonCode'),
     createdAt: event.created_at,
   };
 
@@ -891,6 +912,120 @@ function applyContextEvent(
     contextTimeline: [...projection.contextTimeline, entry],
     contextStatus: entry,
   };
+}
+
+function applyLogicalTurnEvent(
+  projection: ConversationProjection,
+  event: ChatEvent,
+): ConversationProjection {
+  const payload = payloadRecord(event.payload);
+  const id = readOptionalString(payload, 'logical_turn_id');
+  const projectionId = readOptionalString(payload, 'projection_id');
+  const continuationId = readOptionalString(payload, 'continuation_id');
+  const wakeId = readOptionalString(payload, 'wake_id');
+  const phase = readOptionalString(payload, 'phase');
+  const operatorState = readOptionalString(payload, 'operator_state');
+  const progressClassification = readOptionalString(
+    payload,
+    'progress_classification',
+  );
+  const reasonCode = readOptionalString(payload, 'reason_code');
+  const summary = readOptionalString(payload, 'summary');
+  const continuationCount = readOptionalInteger(payload, 'continuation_count');
+  const revision = readOptionalInteger(payload, 'logical_turn_revision');
+  const progress = payload['progress'];
+  if (
+    id === undefined ||
+    projectionId === undefined ||
+    continuationId === undefined ||
+    wakeId === undefined ||
+    phase === undefined ||
+    operatorState === undefined ||
+    progressClassification === undefined ||
+    reasonCode === undefined ||
+    summary === undefined ||
+    continuationCount === undefined ||
+    revision === undefined ||
+    !isPayloadObject(progress)
+  ) {
+    return projection;
+  }
+
+  const next: LogicalTurnProjection = {
+    id,
+    sessionId: event.session_id,
+    projectionId,
+    currentContinuationId: continuationId,
+    continuationCount,
+    executionEpochId: readOptionalString(payload, 'execution_epoch_id'),
+    wakeId,
+    phase: phase as LogicalTurnProjection['phase'],
+    operatorState: operatorState as LogicalTurnProjection['operatorState'],
+    progressClassification:
+      progressClassification as LogicalTurnProjection['progressClassification'],
+    reasonCode,
+    summary,
+    progress: progress as LogicalTurnProjection['progress'],
+    revision,
+    eventId: event.event_id,
+    updatedAt: event.created_at,
+  };
+  const index = projection.logicalTurns.findIndex((turn) => turn.id === id);
+  if (
+    index >= 0 &&
+    (projection.logicalTurns[index]?.revision ?? 0) > revision
+  ) {
+    return projection;
+  }
+  const logicalTurns = [...projection.logicalTurns];
+  if (index < 0) logicalTurns.push(next);
+  else logicalTurns[index] = next;
+  return { ...projection, logicalTurns };
+}
+
+/** Repair cached projections written by older View builds before reducing. */
+function normalizeProjection(
+  projection: ConversationProjection,
+): ConversationProjection {
+  const value = projection as ConversationProjection &
+    Partial<Record<keyof ConversationProjection, unknown>>;
+  return {
+    ...emptyProjection(),
+    ...projection,
+    messages: arrayOrEmpty(value.messages),
+    attachments: arrayOrEmpty(value.attachments),
+    toolCalls: arrayOrEmpty(value.toolCalls),
+    commands: arrayOrEmpty(value.commands),
+    branches: arrayOrEmpty(value.branches),
+    snapshots: arrayOrEmpty(value.snapshots),
+    checkpoints: arrayOrEmpty(value.checkpoints),
+    unknownEvents: arrayOrEmpty(value.unknownEvents),
+    contextTimeline: arrayOrEmpty(value.contextTimeline),
+    logicalTurns: arrayOrEmpty(value.logicalTurns),
+  } as ConversationProjection;
+}
+
+function arrayOrEmpty<T>(value: unknown): readonly T[] {
+  return Array.isArray(value) ? (value as readonly T[]) : [];
+}
+
+function parseMetadataJson(value: unknown): Record<string, unknown> {
+  if (isPayloadObject(value)) return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isPayloadObject(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function nestedRecord(
+  value: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const nested = value[key];
+  return isPayloadObject(nested) ? nested : {};
 }
 
 // ---- unknown ----

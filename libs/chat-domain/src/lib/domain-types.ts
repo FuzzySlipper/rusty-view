@@ -1,6 +1,10 @@
 import type {
   ChatEvent,
   ChatSessionSummary,
+  LogicalTurnOperatorState,
+  LogicalTurnPhase,
+  LogicalTurnProgress,
+  LogicalTurnProgressClassification,
   ToolCallDebugDetail as ProtocolToolCallDebugDetail,
   ToolCallDebugValue as ProtocolToolCallDebugValue,
 } from '@rusty-view/protocol';
@@ -352,6 +356,31 @@ export interface ContextTimelineEntry {
   readonly createdAt: string;
 }
 
+// ---- logical-turn lifecycle ----
+
+/**
+ * One Rust-owned logical assistant turn across any number of provider wake
+ * continuations. This is operator/debug state and never transcript content.
+ */
+export interface LogicalTurnProjection {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly projectionId: string;
+  readonly currentContinuationId: string;
+  readonly continuationCount: number;
+  readonly executionEpochId: string | undefined;
+  readonly wakeId: string;
+  readonly phase: LogicalTurnPhase;
+  readonly operatorState: LogicalTurnOperatorState;
+  readonly progressClassification: LogicalTurnProgressClassification;
+  readonly reasonCode: string;
+  readonly summary: string;
+  readonly progress: LogicalTurnProgress;
+  readonly revision: number;
+  readonly eventId: string;
+  readonly updatedAt: string;
+}
+
 // ---- the projection ----
 
 export interface StreamErrorState {
@@ -388,6 +417,8 @@ export interface ConversationProjection {
   readonly contextTimeline: readonly ContextTimelineEntry[];
   /** The most recent context status/compaction row, for at-a-glance display. */
   readonly contextStatus: ContextTimelineEntry | undefined;
+  /** Rust-owned lifecycle state, one row per logical turn. */
+  readonly logicalTurns: readonly LogicalTurnProjection[];
 }
 
 /** An empty projection — the starting point before any events are applied. */
@@ -407,5 +438,6 @@ export function emptyProjection(): ConversationProjection {
     streamError: undefined,
     contextTimeline: [],
     contextStatus: undefined,
+    logicalTurns: [],
   };
 }

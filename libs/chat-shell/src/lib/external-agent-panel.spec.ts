@@ -422,6 +422,15 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
         compatibilityState: 'certified',
         compatibilityDiagnostic: 'certified',
         lastCompatibilityProbe: null,
+        recovery: {
+          phase: 'idle',
+          totalAttempts: 0,
+          consecutiveFailures: 0,
+          lastAttemptAt: null,
+          lastRecoveredAt: null,
+          nextAttemptAt: null,
+          lastFailureReason: null,
+        },
         bindingResumeFailures: [],
       },
       binding: {

@@ -5,7 +5,11 @@ import {
   input,
   output,
 } from '@angular/core';
-import type { SessionContextUsageResult } from '@rusty-view/protocol';
+import type {
+  LogicalTurnDiagnostic,
+  LogicalTurnResolutionAction,
+  SessionContextUsageResult,
+} from '@rusty-view/protocol';
 import type { ContextTimelineEntry } from '@rusty-view/chat-domain';
 
 /** A single label/value row in a diagnostics section. */
@@ -52,7 +56,40 @@ export class ContextDiagnosticsComponent {
   readonly usage = input<SessionContextUsageResult | null>(null);
   readonly timeline = input<readonly ContextTimelineEntry[]>([]);
   readonly loading = input<boolean>(false);
+  readonly logicalTurns = input<readonly LogicalTurnDiagnostic[]>([]);
+  readonly logicalTurnControlPending = input<boolean>(false);
+  readonly logicalTurnControlError = input<string | null>(null);
   readonly refresh = output<void>();
+  readonly cancelLogicalTurn = output<void>();
+  readonly resolveLogicalTurn = output<LogicalTurnResolutionAction>();
+
+  protected readonly currentLogicalTurn = computed<
+    LogicalTurnDiagnostic | undefined
+  >(() => {
+    const turns = this.logicalTurns();
+    return (
+      [...turns]
+        .reverse()
+        .find(
+          (turn) =>
+            turn.operatorState !== 'completed' &&
+            turn.operatorState !== 'cancelled' &&
+            turn.operatorState !== 'failed',
+        ) ?? turns.at(-1)
+    );
+  });
+
+  protected logicalTurnActions(
+    turn: LogicalTurnDiagnostic,
+  ): readonly LogicalTurnResolutionAction[] {
+    return turn.attention?.resolutionActions ?? [];
+  }
+
+  protected resolveLogicalTurnLabel(
+    action: LogicalTurnResolutionAction,
+  ): string {
+    return action.replaceAll('_', ' ');
+  }
 
   protected readonly providerRows = computed<readonly ContextDiagnosticsRow[]>(
     () => {

@@ -115,6 +115,76 @@
   </div>
   }
 
+  <section class="rv-context__section" data-testid="logical-turn-diagnostics">
+    <h3 class="rv-context__section-title">Logical turn</h3>
+    @if (currentLogicalTurn(); as turn) {
+    <dl class="rv-context__rows">
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">State</dt>
+        <dd class="rv-context__row-value">{{ turn.operatorState }}</dd>
+      </div>
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">Phase</dt>
+        <dd class="rv-context__row-value">{{ turn.phase }}</dd>
+      </div>
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">Continuations</dt>
+        <dd class="rv-context__row-value">{{ turn.continuationCount }}</dd>
+      </div>
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">Provider operations</dt>
+        <dd class="rv-context__row-value">{{ turn.providerRequestTotal }}</dd>
+      </div>
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">Tool operations</dt>
+        <dd class="rv-context__row-value">{{ turn.toolRoundTotal }}</dd>
+      </div>
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">Reason</dt>
+        <dd class="rv-context__row-value">{{ turn.reasonCode }}</dd>
+      </div>
+      <div class="rv-context__row">
+        <dt class="rv-context__row-label">Summary</dt>
+        <dd class="rv-context__row-value">{{ turn.summary }}</dd>
+      </div>
+    </dl>
+    @if (turn.attention; as attention) {
+    <div class="rv-context__turn-attention" role="status">
+      <strong>{{ attention.reasonCode }}</strong>
+      <span>{{ attention.summary }}</span>
+    </div>
+    } @if (turn.operatorState !== 'completed' && turn.operatorState !==
+    'cancelled' && turn.operatorState !== 'failed') {
+    <div class="rv-context__turn-controls">
+      <button
+        type="button"
+        [disabled]="logicalTurnControlPending()"
+        (click)="cancelLogicalTurn.emit()"
+      >
+        Cancel turn
+      </button>
+      @for (action of logicalTurnActions(turn); track action) {
+      <button
+        type="button"
+        [disabled]="logicalTurnControlPending()"
+        (click)="resolveLogicalTurn.emit(action)"
+      >
+        {{ resolveLogicalTurnLabel(action) }}
+      </button>
+      }
+    </div>
+    } @if (logicalTurnControlError()) {
+    <div
+      class="rv-context__diagnostic rv-context__diagnostic--error"
+      role="alert"
+    >
+      {{ logicalTurnControlError() }}
+    </div>
+    } } @else {
+    <div class="rv-context__empty">No logical turns recorded.</div>
+    }
+  </section>
+
   <!-- Context status / compaction event timeline: UI/debug rows, never model-facing. -->
   <section class="rv-context__section rv-context__section--timeline">
     <h3 class="rv-context__section-title">Status events</h3>

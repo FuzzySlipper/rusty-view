@@ -1,6 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
-import type { SessionContextUsageResult } from '@rusty-view/protocol';
+import type {
+  LogicalTurnDiagnostic,
+  SessionContextUsageResult,
+} from '@rusty-view/protocol';
 import type { ContextTimelineEntry } from '@rusty-view/chat-domain';
 
 import { ContextDiagnosticsComponent } from './context-diagnostics';
@@ -218,4 +221,62 @@ describe('ContextDiagnosticsComponent', () => {
     fixture.nativeElement.querySelector('.rv-context__refresh').click();
     expect(refreshed).toBe(1);
   });
+
+  it('renders logical-turn progress and emits operator controls', async () => {
+    const fixture = await createComponent();
+    fixture.componentRef.setInput('logicalTurns', [logicalTurnFixture()]);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('paused_for_attention');
+    expect(text).toContain('Provider operations');
+    expect(text).toContain('6');
+
+    let cancelled = 0;
+    let resolution = '';
+    fixture.componentInstance.cancelLogicalTurn.subscribe(
+      () => (cancelled += 1),
+    );
+    fixture.componentInstance.resolveLogicalTurn.subscribe(
+      (action) => (resolution = action),
+    );
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll(
+        '.rv-context__turn-controls button',
+      ) as NodeListOf<HTMLButtonElement>,
+    );
+    buttons[0]?.click();
+    buttons[1]?.click();
+    expect(cancelled).toBe(1);
+    expect(resolution).toBe('retry_unchanged');
+  });
 });
+
+function logicalTurnFixture(): LogicalTurnDiagnostic {
+  return {
+    logicalTurnId: 'turn_1',
+    sessionId: 'sess_1',
+    sourceWakeId: 'wake_1',
+    phase: 'attention_required',
+    operatorState: 'paused_for_attention',
+    currentContinuationId: 'continuation_3',
+    continuationCount: 3,
+    providerRequestTotal: 6,
+    toolRoundTotal: 4,
+    progressClassification: 'attention_required',
+    lastProgressAt: '2026-07-30T00:00:00Z',
+    lastLivenessAt: '2026-07-30T00:00:00Z',
+    reasonCode: 'provider_outcome_unknown',
+    summary: 'Operator attention required.',
+    attention: {
+      reason: 'provider outcome unknown',
+      reasonCode: 'provider_outcome_unknown',
+      summary: 'Choose a recovery action.',
+      requiredAt: '2026-07-30T00:00:00Z',
+      retryUnchangedSafe: true,
+      resolutionActions: ['retry_unchanged', 'cancel'],
+    },
+    revision: 7,
+    admittedAt: '2026-07-30T00:00:00Z',
+    updatedAt: '2026-07-30T00:00:00Z',
+  };
+}

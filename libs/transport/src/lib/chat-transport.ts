@@ -12,6 +12,10 @@ import type {
   MessageSlotMutationResult,
   MessageSlotPage,
   MessageVariantPage,
+  LogicalTurnCancelRequest,
+  LogicalTurnControlReceipt,
+  LogicalTurnDiagnosticPage,
+  LogicalTurnResolveRequest,
   ProviderRequestDebugDetail,
   SendChatMessageRequest,
   SendChatMessageResult,
@@ -231,6 +235,35 @@ export class ChatTransport {
 
   sessionContext(sessionId: string): Promise<SessionContextUsageResult> {
     return this.http.sessionContext(sessionId);
+  }
+
+  listLogicalTurns(
+    sessionId: string,
+    limit?: number,
+  ): Promise<LogicalTurnDiagnosticPage> {
+    return this.http.listLogicalTurns(sessionId, limit);
+  }
+
+  cancelLogicalTurn(
+    sessionId: string,
+    logicalTurnId: string,
+    request: LogicalTurnCancelRequest,
+    idempotencyKey: string,
+  ): Promise<LogicalTurnControlReceipt> {
+    return this.http.cancelLogicalTurn(
+      sessionId,
+      logicalTurnId,
+      request,
+      idempotencyKey,
+    );
+  }
+
+  resolveLogicalTurn(
+    sessionId: string,
+    logicalTurnId: string,
+    request: LogicalTurnResolveRequest,
+  ): Promise<LogicalTurnControlReceipt> {
+    return this.http.resolveLogicalTurn(sessionId, logicalTurnId, request);
   }
 
   toolCallDebugDetail(

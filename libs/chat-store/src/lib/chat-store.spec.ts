@@ -8,6 +8,8 @@ import type {
   ExecuteChatCommandResult,
   SendChatMessageResult,
   SessionContextUsageResult,
+  LogicalTurnDiagnostic,
+  LogicalTurnDiagnosticPage,
 } from '@rusty-view/protocol';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
@@ -74,6 +76,8 @@ function createMockTransport(opts: {
   contextUsageError?: boolean;
   toolCallDebugDetail?: unknown;
   toolCallDebugDetailError?: unknown;
+  logicalTurns?: LogicalTurnDiagnosticPage;
+  logicalTurnControlError?: unknown;
 }): ChatTransport {
   const mock = {
     getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
@@ -112,6 +116,21 @@ function createMockTransport(opts: {
         throw new Error('context route unavailable');
       }
       return opts.contextUsage ?? defaultContextUsage();
+    }),
+    listLogicalTurns: vi.fn(
+      async () => opts.logicalTurns ?? { items: [], total: 0 },
+    ),
+    cancelLogicalTurn: vi.fn(async () => {
+      if (opts.logicalTurnControlError !== undefined) {
+        throw opts.logicalTurnControlError;
+      }
+      return { replayed: false, record: {} };
+    }),
+    resolveLogicalTurn: vi.fn(async () => {
+      if (opts.logicalTurnControlError !== undefined) {
+        throw opts.logicalTurnControlError;
+      }
+      return { replayed: false, record: {} };
     }),
     toolCallDebugDetail: vi.fn(async () => {
       if (opts.toolCallDebugDetailError !== undefined) {
@@ -247,6 +266,66 @@ function messageEvent(
     created_at: '2026-06-22T10:00:00Z',
     kind: 'message_created',
     payload: { message_id: `message-${eventId}`, role: 'user', body },
+  };
+}
+
+function logicalTurnEvent(
+  kind: ChatEvent['kind'],
+  operatorState: string,
+): ChatEvent {
+  return {
+    event_id: 'logical-1',
+    session_id: 'sess_test',
+    sequence_id: 10,
+    created_at: '2026-07-30T00:00:00Z',
+    kind,
+    payload: {
+      logical_turn_id: 'turn_1',
+      projection_id: 'projection_1',
+      continuation_id: 'continuation_3',
+      continuation_count: 3,
+      wake_id: 'wake_3',
+      phase: 'yielded',
+      operator_state: operatorState,
+      progress_classification: 'provider_progress',
+      reason_code: 'quantum_yield',
+      summary: 'Queued to continue.',
+      progress: {
+        semanticRevision: 7,
+        committedProviderOperations: 6,
+        committedToolOperations: 5,
+        committedProjectionCursor: 10,
+        assistantContentBytes: 200,
+        acceptedActionCount: 5,
+        delegatedCompletionCount: 0,
+        stateFingerprint: 'sha256:test',
+        lastLivenessAt: '2026-07-30T00:00:00Z',
+        lastSemanticProgressAt: '2026-07-30T00:00:00Z',
+      },
+      logical_turn_revision: 7,
+    },
+  } as ChatEvent;
+}
+
+function logicalTurnDiagnostic(): LogicalTurnDiagnostic {
+  return {
+    logicalTurnId: 'turn_1',
+    sessionId: 'sess_test',
+    sourceWakeId: 'wake_1',
+    phase: 'attention_required',
+    operatorState: 'paused_for_attention',
+    currentContinuationId: 'continuation_3',
+    continuationCount: 3,
+    providerRequestTotal: 6,
+    toolRoundTotal: 5,
+    progressClassification: 'attention_required',
+    lastProgressAt: '2026-07-30T00:00:00Z',
+    lastLivenessAt: '2026-07-30T00:00:00Z',
+    reasonCode: 'provider_outcome_unknown',
+    summary: 'Operator attention required.',
+    revision: 7,
+    admittedAt: '2026-07-30T00:00:00Z',
+    updatedAt: '2026-07-30T00:00:00Z',
   };
 }
 
@@ -2283,6 +2362,72 @@ describe('ChatStore context diagnostics', () => {
     expect(store.contextStatus()?.fillPercent).toBe(70);
     // Context events never become assistant transcript messages.
     expect(store.messages()).toHaveLength(0);
+  });
+
+  it('keeps generation active across a yielded logical-turn continuation', () => {
+    const store = setupStore(
+      createMockTransport({}),
+      new InMemoryChatStorage(),
+    );
+    store.ingestEvents([
+      logicalTurnEvent('logical_turn_yielding', 'queued_to_continue'),
+    ]);
+
+    expect(store.activeLogicalTurn()?.continuationCount).toBe(3);
+    expect(store.isGenerating()).toBe(true);
+    expect(store.messages()).toHaveLength(0);
+  });
+
+  it('retains terminal lifecycle diagnostics when the active-turn page is empty', async () => {
+    const completed = {
+      ...logicalTurnEvent('logical_turn_completed', 'completed'),
+      event_id: 'logical-completed',
+      payload: {
+        ...logicalTurnEvent('logical_turn_completed', 'completed').payload,
+        phase: 'completed',
+        progress_classification: 'completed',
+        reason_code: 'brain_completed',
+        summary: 'Logical turn completed.',
+        logical_turn_revision: 8,
+      },
+    } as ChatEvent;
+    const transport = createMockTransport({
+      openResult: { ...emptyOpenResult(), events: [completed] },
+      logicalTurns: { items: [], total: 0 },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(store.logicalTurnDiagnostics()).toEqual([
+      expect.objectContaining({
+        logicalTurnId: 'turn_1',
+        operatorState: 'completed',
+        revision: 8,
+        providerRequestTotal: 6,
+        toolRoundTotal: 5,
+      }),
+    ]);
+  });
+
+  it('cancels the active logical turn with its current revision', async () => {
+    const turn = logicalTurnDiagnostic();
+    const transport = createMockTransport({
+      logicalTurns: { items: [turn], total: 1 },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.selectSession('sess_test');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await store.cancelActiveLogicalTurn();
+
+    expect(transport.cancelLogicalTurn).toHaveBeenCalledWith(
+      'sess_test',
+      'turn_1',
+      expect.objectContaining({ expectedRevision: 7 }),
+      'view-cancel-turn_1-7',
+    );
   });
 
   it('keeps consuming the live stream after an unknown/debug event (#3848)', async () => {

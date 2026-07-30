@@ -124,6 +124,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/logical-turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rust-owned logical-turn continuation diagnostics */
+        get: operations["listChatSessionLogicalTurns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/logical-turns/{logical_turn_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an active or yielded logical turn */
+        post: operations["cancelChatSessionLogicalTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/chat/sessions/{session_id}/logical-turns/{logical_turn_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve paused logical-turn attention and continue */
+        post: operations["resolveChatSessionLogicalTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -759,8 +810,8 @@ export interface components {
             payload: components["schemas"]["ChatEventPayload"];
         };
         /** @enum {string} */
-        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
-        ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantReasoningDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
+        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "logical_turn_admitted" | "logical_turn_continuing" | "logical_turn_yielding" | "logical_turn_queued_to_continue" | "logical_turn_attention_required" | "logical_turn_cancelling" | "logical_turn_completed" | "logical_turn_cancelled" | "logical_turn_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
+        ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantReasoningDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["LogicalTurnLifecyclePayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
         SessionSnapshotPayload: {
             session: components["schemas"]["ChatSessionSummary"];
         };
@@ -893,6 +944,105 @@ export interface components {
             ui_debug: true;
             /** @constant */
             model_facing: false;
+        };
+        LogicalTurnLifecyclePayload: {
+            logical_turn_id: string;
+            projection_id: string;
+            continuation_id: string;
+            continuation_count: number;
+            execution_epoch_id?: string | null;
+            wake_id: string;
+            phase: components["schemas"]["LogicalTurnPhase"];
+            operator_state: components["schemas"]["LogicalTurnOperatorState"];
+            progress_classification: components["schemas"]["LogicalTurnProgressClassification"];
+            reason_code: string;
+            summary: string;
+            progress: components["schemas"]["LogicalTurnProgress"];
+            logical_turn_revision: number;
+        };
+        /** @enum {string} */
+        LogicalTurnPhase: "admitted" | "runnable" | "running" | "yielded" | "attention_required" | "cancel_requested" | "completed" | "cancelled" | "failed";
+        /** @enum {string} */
+        LogicalTurnOperatorState: "queued_to_continue" | "running" | "paused_for_attention" | "cancelling" | "completed" | "cancelled" | "failed";
+        /** @enum {string} */
+        LogicalTurnProgressClassification: "admitted" | "provider_progress" | "tool_progress" | "semantic_progress" | "liveness_only" | "no_progress" | "attention_required" | "completed" | "cancelled" | "failed";
+        LogicalTurnProgress: {
+            semanticRevision: number;
+            committedProviderOperations: number;
+            committedToolOperations: number;
+            committedProjectionCursor: number;
+            assistantContentBytes: number;
+            acceptedActionCount: number;
+            delegatedCompletionCount: number;
+            consecutiveNoProgressSamples?: number;
+            stateFingerprint: string;
+            /** Format: date-time */
+            lastLivenessAt: string;
+            /** Format: date-time */
+            lastSemanticProgressAt: string;
+        };
+        /** @enum {string} */
+        LogicalTurnResolutionAction: "retry_unchanged" | "retry_provider_operation" | "confirm_tool_completed" | "confirm_tool_not_completed" | "rebind" | "cancel";
+        LogicalTurnAttention: {
+            reason: string;
+            reasonCode: string;
+            summary: string;
+            /** Format: date-time */
+            requiredAt: string;
+            retryUnchangedSafe: boolean;
+            resolutionActions?: components["schemas"]["LogicalTurnResolutionAction"][];
+            evidenceRefs?: string[];
+        };
+        LogicalTurnDiagnostic: {
+            logicalTurnId: string;
+            sessionId: string;
+            sourceWakeId: string;
+            phase: components["schemas"]["LogicalTurnPhase"];
+            operatorState: components["schemas"]["LogicalTurnOperatorState"];
+            currentContinuationId: string;
+            activeExecutionEpochId?: string | null;
+            continuationCount: number;
+            providerRequestTotal: number;
+            toolRoundTotal: number;
+            progressClassification: components["schemas"]["LogicalTurnProgressClassification"];
+            /** Format: date-time */
+            lastProgressAt: string;
+            /** Format: date-time */
+            lastLivenessAt: string;
+            reasonCode: string;
+            summary: string;
+            attention?: components["schemas"]["LogicalTurnAttention"] | null;
+            revision: number;
+            /** Format: date-time */
+            admittedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            terminalAt?: string | null;
+        };
+        LogicalTurnDiagnosticPage: {
+            items: components["schemas"]["LogicalTurnDiagnostic"][];
+            total: number;
+        };
+        LogicalTurnCancelRequest: {
+            expectedRevision: number;
+            reasonCode?: string;
+            summary?: string;
+        };
+        LogicalTurnResolveRequest: {
+            expectedRevision: number;
+            action: components["schemas"]["LogicalTurnResolutionAction"];
+        };
+        LogicalTurnControlReceipt: {
+            replayed: boolean;
+            alreadyTerminal?: boolean;
+            action?: components["schemas"]["LogicalTurnResolutionAction"];
+            record: {
+                [key: string]: unknown;
+            };
+            checkpoint?: {
+                [key: string]: unknown;
+            };
         };
         StreamErrorPayload: {
             message: string;
@@ -1763,6 +1913,106 @@ export interface operations {
             };
             /** @description The session or debug detail id was not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listChatSessionLogicalTurns: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Logical-turn diagnostic page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["LogicalTurnDiagnosticPage"];
+                    };
+                };
+            };
+        };
+    };
+    cancelChatSessionLogicalTurn: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                logical_turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogicalTurnCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent logical-turn cancellation receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["LogicalTurnControlReceipt"];
+                    };
+                };
+            };
+            /** @description Logical-turn revision conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resolveChatSessionLogicalTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: components["parameters"]["SessionId"];
+                logical_turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogicalTurnResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description Logical-turn attention resolution receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["LogicalTurnControlReceipt"];
+                    };
+                };
+            };
+            /** @description Logical-turn revision conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
