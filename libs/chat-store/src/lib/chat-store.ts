@@ -9,8 +9,11 @@ import {
 
 import {
   emptyProjection,
+  legacySessionStatusForExecution,
   projectConversation,
   projectProfiles,
+  sessionExecutionDisplayStatus,
+  sessionExecutionIsWorking,
   type BrainProfile,
   type ChatStorageAdapter,
   type ContextTimelineEntry,
@@ -31,6 +34,7 @@ import type {
   ProviderRequestDebugDetail,
   LogicalTurnDiagnostic,
   LogicalTurnResolutionAction,
+  SessionExecutionState,
 } from '@rusty-view/protocol';
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
@@ -49,6 +53,9 @@ interface CachedNativeTranscript {
 
 const NATIVE_TRANSCRIPT_CACHE_CAPACITY = 8;
 const NATIVE_TRANSCRIPT_CACHE_WEIGHT = 60_000;
+const SESSION_EXECUTION_POLL_INTERVAL_MS = 3_000;
+const SESSION_PAGE_LIMIT = 500;
+const MAX_SESSION_PAGES = 100;
 
 /**
  * DI token for the {@link ChatStorageAdapter}. The shell provides a concrete
@@ -133,6 +140,8 @@ export class ChatStore implements OnDestroy {
   private readonly seenEventIds = new Set<string>();
   private selectionRevision = 0;
   private sessionDirectoryRefresh: Promise<void> | undefined;
+  private sessionExecutionRefresh: Promise<void> | undefined;
+  private readonly sessionExecutionPollTimer: ReturnType<typeof setInterval>;
   /** Exact live profile member selected across native and external runtimes. */
   private rememberedLiveSessionId: string | null = null;
   /**
@@ -192,6 +201,13 @@ export class ChatStore implements OnDestroy {
     if (id === null) return null;
     return this._sessions().find((s) => s.session_id === id) ?? null;
   });
+  readonly activeSessionExecution = computed(
+    () => this.activeSession()?.execution ?? null,
+  );
+  readonly activeSessionDisplayStatus = computed(() => {
+    const session = this.activeSession();
+    return session === null ? null : sessionExecutionDisplayStatus(session);
+  });
   readonly isStreaming = computed(
     () => this._projection().activeTurn !== undefined,
   );
@@ -216,8 +232,10 @@ export class ChatStore implements OnDestroy {
   );
   readonly isGenerating = computed(() => {
     const logicalTurn = this.activeLogicalTurn();
+    const session = this.activeSession();
     return (
       logicalTurn !== undefined ||
+      (session !== null && sessionExecutionIsWorking(session)) ||
       (this.isStreaming() && this._activeSessionStatus() === 'active')
     );
   });
@@ -306,17 +324,32 @@ export class ChatStore implements OnDestroy {
     ),
   );
 
+  constructor() {
+    this.sessionExecutionPollTimer = globalThis.setInterval(() => {
+      void this.refreshSessionExecutionSnapshots().catch(() => undefined);
+    }, SESSION_EXECUTION_POLL_INTERVAL_MS);
+  }
+
   // ---- session operations ----
 
   /** Fetch the session list from the backend and update state + cache. */
   async refreshSessions(): Promise<void> {
-    const [currentPage, archivedPage] = await Promise.all([
-      this.transport.listSessions(),
-      this.transport.listSessions({ status: 'archived' }),
+    const [currentSessions, archivedSessions] = await Promise.all([
+      this.listAllSessions(),
+      this.listAllSessions('archived'),
     ]);
+    const currentById = new Map(
+      this._sessions().map((session) => [session.session_id, session]),
+    );
     const sessionsById = new Map<string, ChatSessionSummary>();
-    for (const session of [...currentPage.items, ...archivedPage.items]) {
-      sessionsById.set(session.session_id, session);
+    for (const session of [...currentSessions, ...archivedSessions]) {
+      const current = currentById.get(session.session_id);
+      sessionsById.set(
+        session.session_id,
+        current === undefined
+          ? session
+          : mergeSessionSummary(current, session, false),
+      );
     }
     const sessions = [...sessionsById.values()];
     this._sessions.set(sessions);
@@ -329,6 +362,67 @@ export class ChatStore implements OnDestroy {
     if (this._selectedProfileId() === null) {
       await this.restoreUiState();
     }
+  }
+
+  /**
+   * Reconcile background native-session execution snapshots without disturbing
+   * transcript selection or replacing unchanged session-row identities.
+   */
+  async refreshSessionExecutionSnapshots(): Promise<void> {
+    if (this.sessionExecutionRefresh !== undefined) {
+      await this.sessionExecutionRefresh;
+      return;
+    }
+    const refresh = this.loadSessionExecutionSnapshots();
+    this.sessionExecutionRefresh = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (this.sessionExecutionRefresh === refresh) {
+        this.sessionExecutionRefresh = undefined;
+      }
+    }
+  }
+
+  private async loadSessionExecutionSnapshots(): Promise<void> {
+    const incomingSessions = await this.listAllSessions();
+    const incomingById = new Map(
+      incomingSessions.map((session) => [session.session_id, session]),
+    );
+    this._sessions.update((currentSessions) => {
+      let changed = false;
+      const nextSessions = currentSessions.map((current) => {
+        const incoming = incomingById.get(current.session_id);
+        if (incoming === undefined) return current;
+        incomingById.delete(current.session_id);
+        const merged = mergeSessionSummary(current, incoming, false);
+        if (merged !== current) changed = true;
+        return merged;
+      });
+      if (incomingById.size > 0) {
+        changed = true;
+        nextSessions.push(...incomingById.values());
+      }
+      return changed ? nextSessions : currentSessions;
+    });
+    this.reconcileActiveSessionStatus();
+  }
+
+  private async listAllSessions(
+    status?: ChatSessionStatus,
+  ): Promise<ChatSessionSummary[]> {
+    const sessions: ChatSessionSummary[] = [];
+    for (let pageIndex = 0; pageIndex < MAX_SESSION_PAGES; pageIndex += 1) {
+      const offset = sessions.length;
+      const page = await this.transport.listSessions({
+        limit: SESSION_PAGE_LIMIT,
+        offset,
+        ...(status === undefined ? {} : { status }),
+      });
+      sessions.push(...page.items);
+      if (page.items.length === 0 || sessions.length >= page.total) break;
+    }
+    return sessions;
   }
 
   async createCrewSession(
@@ -705,7 +799,8 @@ export class ChatStore implements OnDestroy {
 
       const result = await opened;
       if (!this.isCurrentSelection(revision, sessionId)) return;
-      this._activeSessionStatus.set(result.session.status);
+      const reconciledSession = this.reconcileSessionSummary(result.session);
+      this._activeSessionStatus.set(reconciledSession.status);
 
       // Crew's open-session response is deliberately a bounded tail page. A
       // long native Profile turn therefore reports `has_more_before` and may
@@ -1189,6 +1284,13 @@ export class ChatStore implements OnDestroy {
     }
     this._rawEvents.set(nextRawEvents);
     this._projection.set(nextProjection);
+    if (
+      orderedNewEvents.some(
+        (event) => event.kind === 'session_execution_changed',
+      )
+    ) {
+      this.reconcileSessionExecutionEvents(nextRawEvents);
+    }
     this._logicalTurnDiagnostics.set(
       reconcileLogicalTurnDiagnostics(
         this._logicalTurnDiagnostics(),
@@ -1275,6 +1377,54 @@ export class ChatStore implements OnDestroy {
     }
   }
 
+  private reconcileSessionSummary(
+    incoming: ChatSessionSummary,
+  ): ChatSessionSummary {
+    let reconciled = incoming;
+    this._sessions.update((sessions) => {
+      const currentIndex = sessions.findIndex(
+        (session) => session.session_id === incoming.session_id,
+      );
+      if (currentIndex < 0) {
+        return [...sessions, incoming];
+      }
+      const current = sessions[currentIndex] as ChatSessionSummary;
+      reconciled = mergeSessionSummary(current, incoming, true);
+      if (reconciled === current) return sessions;
+      const next = [...sessions];
+      next[currentIndex] = reconciled;
+      return next;
+    });
+    return reconciled;
+  }
+
+  private reconcileSessionExecutionEvents(events: readonly ChatEvent[]): void {
+    const execution = [...events]
+      .reverse()
+      .map(sessionExecutionFromEvent)
+      .find((candidate) => candidate !== undefined);
+    if (execution === undefined) return;
+    const current = this._sessions().find(
+      (session) => session.session_id === execution.sessionId,
+    );
+    if (current === undefined) return;
+    this.reconcileSessionSummary({
+      ...current,
+      status: legacySessionStatusForExecution(execution),
+      execution,
+      updated_at:
+        execution.updatedAt > current.updated_at
+          ? execution.updatedAt
+          : current.updated_at,
+    });
+    this.reconcileActiveSessionStatus();
+  }
+
+  private reconcileActiveSessionStatus(): void {
+    const session = this.activeSession();
+    this._activeSessionStatus.set(session?.status ?? null);
+  }
+
   private cacheActiveTranscript(): void {
     const sessionId = this._activeSessionId();
     if (sessionId === null) return;
@@ -1302,8 +1452,99 @@ export class ChatStore implements OnDestroy {
 
   /** Clean up resources when the store is destroyed. */
   ngOnDestroy(): void {
+    globalThis.clearInterval(this.sessionExecutionPollTimer);
     this.closeStream();
   }
+}
+
+function sessionExecutionFromEvent(
+  event: ChatEvent,
+): SessionExecutionState | undefined {
+  if (
+    event.kind !== 'session_execution_changed' ||
+    typeof event.payload !== 'object' ||
+    event.payload === null ||
+    !('execution' in event.payload)
+  ) {
+    return undefined;
+  }
+  const execution = event.payload.execution as
+    | SessionExecutionState
+    | undefined;
+  if (
+    execution === undefined ||
+    execution.sessionId !== event.session_id ||
+    typeof execution.updatedAt !== 'string'
+  ) {
+    return undefined;
+  }
+  return execution;
+}
+
+function mergeSessionSummary(
+  current: ChatSessionSummary,
+  incoming: ChatSessionSummary,
+  preferIncomingWhenExecutionTimestampsMatch: boolean,
+): ChatSessionSummary {
+  const currentExecution = current.execution;
+  const incomingExecution = incoming.execution;
+  const incomingExecutionIsStale =
+    currentExecution !== undefined &&
+    incomingExecution !== undefined &&
+    (incomingExecution.updatedAt < currentExecution.updatedAt ||
+      (incomingExecution.updatedAt === currentExecution.updatedAt &&
+        !preferIncomingWhenExecutionTimestampsMatch));
+  const candidate = incomingExecutionIsStale
+    ? {
+        ...incoming,
+        status: current.status,
+        execution: currentExecution,
+      }
+    : incoming;
+  return sessionSummariesEqual(current, candidate) ? current : candidate;
+}
+
+function sessionSummariesEqual(
+  left: ChatSessionSummary,
+  right: ChatSessionSummary,
+): boolean {
+  return (
+    left.session_id === right.session_id &&
+    left.agent_id === right.agent_id &&
+    left.profile_id === right.profile_id &&
+    left.kind === right.kind &&
+    left.status === right.status &&
+    left.title === right.title &&
+    left.latest_cursor === right.latest_cursor &&
+    left.created_at === right.created_at &&
+    left.updated_at === right.updated_at &&
+    left.message_count === right.message_count &&
+    left.tool_event_count === right.tool_event_count &&
+    sessionExecutionsEqual(left.execution, right.execution) &&
+    JSON.stringify(left.effective_defaults) ===
+      JSON.stringify(right.effective_defaults)
+  );
+}
+
+function sessionExecutionsEqual(
+  left: SessionExecutionState | undefined,
+  right: SessionExecutionState | undefined,
+): boolean {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  return (
+    left.sessionId === right.sessionId &&
+    left.lifecycleStatus === right.lifecycleStatus &&
+    left.phase === right.phase &&
+    left.source === right.source &&
+    left.wakeId === right.wakeId &&
+    left.logicalTurnId === right.logicalTurnId &&
+    left.lastOutcome === right.lastOutcome &&
+    left.reasonCode === right.reasonCode &&
+    left.summary === right.summary &&
+    left.startedAt === right.startedAt &&
+    left.updatedAt === right.updatedAt
+  );
 }
 
 function isTerminalLogicalTurnState(state: string): boolean {

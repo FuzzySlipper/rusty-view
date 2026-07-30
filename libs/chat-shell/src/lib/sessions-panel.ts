@@ -8,11 +8,17 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
+import { sessionExecutionDisplayStatus } from '@rusty-view/chat-domain';
 import type { ChatSessionSummary } from '@rusty-view/protocol';
 
 import { SESSIONS_PANEL_ID } from './shell-extension-tokens';
 import { TopMenuController } from './top-menu-controller';
 import { effectiveWakeTimeoutLabel } from './wake-timeout-display';
+import {
+  sessionStatusLabel,
+  sessionStatusTone,
+  type SessionStatusTone,
+} from './session-status-label';
 
 const SESSION_PAUSE_CAPABILITY_ID = 'admin.control.sessions.runtime.pause';
 const SESSION_RESUME_CAPABILITY_ID = 'admin.control.sessions.runtime.resume';
@@ -153,5 +159,17 @@ export class SessionsPanelComponent {
       session,
       this.admin.runtimeSession(session.session_id),
     );
+  }
+
+  protected sessionState(session: ChatSessionSummary): string {
+    return sessionExecutionDisplayStatus(session);
+  }
+
+  protected sessionStateLabel(session: ChatSessionSummary): string {
+    return sessionStatusLabel(this.sessionState(session));
+  }
+
+  protected sessionStateTone(session: ChatSessionSummary): SessionStatusTone {
+    return sessionStatusTone(this.sessionState(session));
   }
 }

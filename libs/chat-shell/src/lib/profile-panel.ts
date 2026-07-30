@@ -7,7 +7,10 @@ import {
   output,
   signal,
 } from '@angular/core';
-import type { BrainProfile } from '@rusty-view/chat-domain';
+import {
+  sessionExecutionDisplayStatus,
+  type BrainProfile,
+} from '@rusty-view/chat-domain';
 import {
   AdminStore,
   ChatStore,
@@ -133,7 +136,11 @@ export class ProfilePanelComponent {
 
   protected sessionState(session: ChatSessionSummary): string {
     const external = this.externalSession(session);
-    return external?.phase ?? external?.thread.status ?? session.status;
+    return (
+      external?.phase ??
+      external?.thread.status ??
+      sessionExecutionDisplayStatus(session)
+    );
   }
 
   protected sessionStateLabel(session: ChatSessionSummary): string {

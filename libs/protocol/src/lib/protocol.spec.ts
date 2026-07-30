@@ -33,6 +33,14 @@ const sessionSummaryJson = `{
   "profile_id": "profile_rp",
   "kind": "full",
   "status": "active",
+  "execution": {
+    "sessionId": "sess_1",
+    "lifecycleStatus": "live",
+    "phase": "active",
+    "source": "logical_turn",
+    "wakeId": "wake_1",
+    "updatedAt": "2026-06-22T10:05:00Z"
+  },
   "title": "Opening scene",
   "latest_cursor": "cur_42",
   "created_at": "2026-06-22T10:00:00Z",
@@ -95,6 +103,24 @@ const providerStatusEventJson = `{
   }
 }`;
 
+const sessionExecutionChangedEventJson = `{
+  "event_id": "evt_execution",
+  "session_id": "sess_1",
+  "sequence_id": 104,
+  "created_at": "2026-06-22T10:05:04Z",
+  "kind": "session_execution_changed",
+  "payload": {
+    "execution": {
+      "sessionId": "sess_1",
+      "lifecycleStatus": "live",
+      "phase": "waiting",
+      "source": "logical_turn",
+      "wakeId": "wake_1",
+      "updatedAt": "2026-06-22T10:05:04Z"
+    }
+  }
+}`;
+
 const unknownEventJson = `{
   "event_id": "evt_102",
   "session_id": "sess_1",
@@ -153,6 +179,7 @@ describe('@rusty-view/protocol wire types parse representative envelopes', () =>
     expect(summary.session_id).toBe('sess_1');
     expect(summary.kind).toBe('full');
     expect(summary.status).toBe('active');
+    expect(summary.execution.phase).toBe('active');
     expect(summary.latest_cursor).toBe('cur_42');
   });
 
@@ -190,6 +217,15 @@ describe('@rusty-view/protocol wire types parse representative envelopes', () =>
     if ('tool_call_id' in event.payload) {
       expect(event.payload.tool_name).toBe('search_lore');
       expect(event.payload.status).toBe('started');
+    }
+  });
+
+  it('parses the canonical session execution change event', () => {
+    const event: ChatEvent = JSON.parse(sessionExecutionChangedEventJson);
+    expect(event.kind).toBe('session_execution_changed');
+    if ('execution' in event.payload) {
+      expect(event.payload.execution.phase).toBe('waiting');
+      expect(event.payload.execution.sessionId).toBe('sess_1');
     }
   });
 

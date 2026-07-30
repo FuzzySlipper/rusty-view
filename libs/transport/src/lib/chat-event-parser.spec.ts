@@ -120,6 +120,23 @@ describe('parseChatEvent', () => {
     }
   });
 
+  it('recognizes canonical session execution change events', () => {
+    const event = parseChatEvent(
+      chatEventJson('session_execution_changed', {
+        execution: {
+          sessionId: 'sess_1',
+          lifecycleStatus: 'live',
+          phase: 'active',
+          source: 'logical_turn',
+          updatedAt: '2026-07-30T09:00:00Z',
+        },
+      }),
+    );
+
+    expect(event.kind).toBe('session_execution_changed');
+    expect('execution' in event.payload).toBe(true);
+  });
+
   it('coerces an unrecognized kind into an unknown event with raw preserved', () => {
     const raw = {
       event_id: 'evt_99',

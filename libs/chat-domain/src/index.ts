@@ -16,6 +16,11 @@ export { projectExternalAgentTranscript } from './lib/external-agent-projection'
 export { emptyProjection } from './lib/domain-types';
 export { projectProfile, projectProfiles } from './lib/brain-profile';
 export {
+  legacySessionStatusForExecution,
+  sessionExecutionDisplayStatus,
+  sessionExecutionIsWorking,
+} from './lib/session-execution-status';
+export {
   branchBreadcrumbs,
   branchJumpTarget,
   messageJumpTarget,
@@ -92,5 +97,6 @@ export type {
   ChatUiState,
 } from './lib/chat-storage-adapter';
 export type { BrainProfile, BrainProfileStatus } from './lib/brain-profile';
+export type { SessionExecutionDisplayStatus } from './lib/session-execution-status';
 
 export const CHAT_DOMAIN_VERSION = '0.0.0' as const;

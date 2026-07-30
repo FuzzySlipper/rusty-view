@@ -22,6 +22,25 @@ function makeSession(
 }
 
 describe('projectProfile', () => {
+  it('aggregates the canonical execution phase instead of a stale legacy idle', () => {
+    const p = projectProfile('p1', [
+      makeSession({
+        session_id: 'working',
+        status: 'idle',
+        execution: {
+          sessionId: 'working',
+          lifecycleStatus: 'live',
+          phase: 'waiting',
+          source: 'logical_turn',
+          updatedAt: '2026-07-30T09:00:00Z',
+        },
+      }),
+    ]);
+
+    expect(p.defaultSessionId).toBe('working');
+    expect(p.status).toBe('waiting');
+  });
+
   it('keeps every non-archived session live and picks an active default', () => {
     const p = projectProfile('p1', [
       makeSession({

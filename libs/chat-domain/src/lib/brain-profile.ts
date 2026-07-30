@@ -1,7 +1,10 @@
-import type {
-  ChatSessionStatus,
-  ChatSessionSummary,
-} from '@rusty-view/protocol';
+import type { ChatSessionSummary } from '@rusty-view/protocol';
+
+import {
+  sessionExecutionDisplayStatus,
+  sessionExecutionIsWorking,
+  type SessionExecutionDisplayStatus,
+} from './session-execution-status';
 
 /**
  * Frontend view model for a "brain profile".
@@ -41,20 +44,14 @@ export interface BrainProfile {
 }
 
 /** Aggregate status of a profile, derived from its sessions. */
-export type BrainProfileStatus = 'active' | 'idle' | 'archived';
+export type BrainProfileStatus = SessionExecutionDisplayStatus;
 
 /** Rank used to pick a default session: lower is more immediately active. */
-function statusRank(status: ChatSessionStatus): number {
-  switch (status) {
-    case 'active':
-      return 0;
-    case 'idle':
-      return 1;
-    case 'blocked':
-      return 2;
-    case 'archived':
-      return 3;
-  }
+function statusRank(session: ChatSessionSummary): number {
+  if (sessionExecutionIsWorking(session)) return 0;
+  if (session.status === 'blocked') return 2;
+  if (session.status === 'archived') return 3;
+  return 1;
 }
 
 /**
@@ -79,22 +76,20 @@ export function projectProfile(
   let defaultSession: ChatSessionSummary | null = null;
   let defaultRank = Number.POSITIVE_INFINITY;
   for (const session of liveSessions) {
-    const rank = statusRank(session.status);
+    const rank = statusRank(session);
     if (rank < defaultRank) {
       defaultSession = session;
       defaultRank = rank;
     }
   }
 
-  const hasActive = sorted.some((s) => s.status === 'active');
-  const hasIdle = sorted.some(
-    (s) => s.status === 'idle' || s.status === 'blocked',
-  );
-  const status: BrainProfileStatus = hasActive
-    ? 'active'
-    : hasIdle
-      ? 'idle'
-      : 'archived';
+  const workingSession = liveSessions.find(sessionExecutionIsWorking);
+  const status: BrainProfileStatus =
+    workingSession !== undefined
+      ? sessionExecutionDisplayStatus(workingSession)
+      : defaultSession !== null
+        ? sessionExecutionDisplayStatus(defaultSession)
+        : 'archived';
 
   const lastActivityAt =
     sorted.length === 0 ? '' : (sorted[0]?.updated_at ?? '');

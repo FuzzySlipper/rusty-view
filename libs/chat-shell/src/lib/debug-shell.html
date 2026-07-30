@@ -183,7 +183,11 @@
         data-testid="session-status-bar"
         [attr.data-activity]="sessionActivity()"
         [attr.data-surface]="externalSelected() ? 'agent' : 'profile'"
-        [attr.data-turn-phase]="externalSelected() ? external.turnPhase() : null"
+        [attr.data-turn-phase]="
+          externalSelected()
+            ? external.turnPhase()
+            : store.activeSessionExecution()?.phase
+        "
         [attr.data-active-turn-id]="externalSelected() ? external.activeTurnId() : null"
       >
         <strong class="rv-debug__session-activity">
@@ -219,6 +223,14 @@
         } } @else {
         <span>Profile: {{ store.selectedProfileId() }}</span>
         <span>Session: {{ store.activeSession()?.kind ?? 'unknown' }}</span>
+        <span
+          data-testid="native-execution-status"
+          [attr.data-execution-phase]="store.activeSessionExecution()?.phase"
+          [attr.data-execution-outcome]="
+            store.activeSessionExecution()?.lastOutcome
+          "
+          >Status: {{ store.activeSessionDisplayStatus() ?? 'idle' }}</span
+        >
         @if (store.contextUsage(); as context) {
         <span>Provider: {{ context.provider.alias }}</span>
         } @if (store.activeLogicalTurn(); as turn) {

@@ -240,6 +240,16 @@ export class DebugShellComponent {
       return 'idle';
     }
     if (this.store.sessionLoading()) return 'loading';
+    const execution = this.store.activeSessionExecution();
+    if (execution?.phase === 'waiting' || execution?.phase === 'paused') {
+      return 'waiting';
+    }
+    if (
+      execution?.lastOutcome === 'failed' ||
+      execution?.lastOutcome === 'interrupted'
+    ) {
+      return 'error';
+    }
     if (this.store.isGenerating() || this.store.isSubmitting())
       return 'working';
     if (this.store.activeSession()?.status === 'blocked') return 'waiting';

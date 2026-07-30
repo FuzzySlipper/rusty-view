@@ -155,7 +155,7 @@
           data-testid="session-row"
           [attr.data-session-id]="session.session_id"
           [attr.data-profile-id]="session.profile_id"
-          [attr.data-session-status]="session.status"
+          [attr.data-session-status]="sessionState(session)"
           [class.rv-sessions-panel__row--active]="
                 store.activeSessionId() === session.session_id
               "
@@ -168,13 +168,8 @@
             {{ session.profile_id }} ·
             <span
               class="rv-sessions-panel__status"
-              [class.rv-sessions-panel__status--active]="
-                    session.status === 'active'
-                  "
-              [class.rv-sessions-panel__status--idle]="
-                    session.status === 'idle'
-                  "
-              >{{ session.status }}</span
+              [attr.data-status-tone]="sessionStateTone(session)"
+              >{{ sessionStateLabel(session) }}</span
             >
             · {{ session.message_count ?? 0 }} msgs · {{ session.updated_at |
             date: 'short' }}

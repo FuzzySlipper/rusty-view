@@ -17,6 +17,7 @@ import { ChatTransportError } from './chat-transport-error';
  */
 const KNOWN_EVENT_KINDS: Record<ChatEventKind, true> = {
   session_snapshot: true,
+  session_execution_changed: true,
   message_created: true,
   assistant_turn_started: true,
   assistant_text_delta: true,

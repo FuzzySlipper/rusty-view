@@ -545,6 +545,7 @@ export interface components {
             bindingId?: string | null;
             bindingStatus?: components["schemas"]["ExternalBindingStatus"] | null;
             displayLabel: string;
+            execution?: components["schemas"]["SessionExecutionState"] | null;
             profileId: string;
             routabilityReasonCode?: string | null;
             routable: boolean;
@@ -1052,6 +1053,10 @@ export interface components {
             /** @constant */
             type: "brain_wake_requested";
         } | {
+            execution: components["schemas"]["SessionExecutionState"];
+            /** @constant */
+            type: "session_execution_observed";
+        } | {
             lifecycle: components["schemas"]["LogicalTurnLifecycleEvent"];
             /** @constant */
             type: "logical_turn_lifecycle_observed";
@@ -1073,7 +1078,7 @@ export interface components {
             type: "completion_packet_delivered";
         };
         /** @enum {string} */
-        CoreEventKind: "session_created" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "logical_turn_lifecycle_observed" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
+        CoreEventKind: "session_created" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "session_execution_observed" | "logical_turn_lifecycle_observed" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
         /** @enum {string} */
         CrewAgentSessionCreationOutcome: "created" | "replayed" | "recovered";
         CrewAgentSessionCreationRecord: {
@@ -2117,13 +2122,6 @@ export interface components {
         RuntimeActivityCensusQuery: {
             /** @default [] */
             liveEvidence: components["schemas"]["RuntimeActivityLiveEvidence"][];
-            /**
-             * @description Transitional service projection of sessions currently executing a
-             *     wake. Rust compares it with durable activity; it never treats it as
-             *     execution authority.
-             * @default null
-             */
-            projectedActiveSessionIds: string[] | null;
             /** Format: uint32 */
             recentAbnormalLimit?: number | null;
             /** Format: uint64 */
@@ -2261,6 +2259,25 @@ export interface components {
             session_id: string;
             tool_profile: components["schemas"]["ToolProfile"];
         };
+        /** @enum {string} */
+        SessionExecutionOutcome: "completed" | "failed" | "cancelled" | "interrupted";
+        /** @enum {string} */
+        SessionExecutionPhase: "idle" | "queued" | "active" | "waiting" | "paused" | "cancelling";
+        /** @enum {string} */
+        SessionExecutionSource: "session_lifecycle" | "logical_turn" | "runtime_activity";
+        SessionExecutionState: {
+            lastOutcome?: components["schemas"]["SessionExecutionOutcome"] | null;
+            lifecycleStatus: components["schemas"]["SessionLifecycleStatus"];
+            logicalTurnId?: string | null;
+            phase: components["schemas"]["SessionExecutionPhase"];
+            reasonCode?: string | null;
+            sessionId: string;
+            source: components["schemas"]["SessionExecutionSource"];
+            startedAt?: string | null;
+            summary?: string | null;
+            updatedAt: string;
+            wakeId?: string | null;
+        };
         SessionHistoryWindow: {
             /** Format: uint32 */
             max_messages?: number | null;
@@ -2270,6 +2287,8 @@ export interface components {
         };
         /** @enum {string} */
         SessionKind: "full" | "worker" | "delegated";
+        /** @enum {string} */
+        SessionLifecycleStatus: "live" | "archived";
         SessionState: {
             agent_id: string;
             /** Format: uint32 */

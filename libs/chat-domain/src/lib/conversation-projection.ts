@@ -1,6 +1,7 @@
 import type { ChatEvent, ChatSessionSummary } from '@rusty-view/protocol';
 
 import { attachmentKindForMimeType } from './attachments';
+import { legacySessionStatusForExecution } from './session-execution-status';
 import {
   emptyProjection,
   type ActiveAssistantTurn,
@@ -126,6 +127,8 @@ function applyEvent(
     case 'conversation_branch_head_updated':
     case 'conversation_snapshot_created':
       return withCursor;
+    case 'session_execution_changed':
+      return applySessionExecutionChanged(withCursor, event);
     case 'attachment_uploaded':
     case 'attachment_linked':
     case 'attachment_removed':
@@ -157,6 +160,37 @@ function applySessionSnapshot(
   // A session_snapshot always carries a ChatSessionSummary; transport validated
   // the envelope, so reading it as that shape is safe at the domain boundary.
   return { ...projection, sessionMetadata: session as ChatSessionSummary };
+}
+
+function applySessionExecutionChanged(
+  projection: ConversationProjection,
+  event: ChatEvent,
+): ConversationProjection {
+  const payload = payloadRecord(event.payload);
+  const execution = payload['execution'];
+  const session = projection.sessionMetadata;
+  if (
+    session === undefined ||
+    !isPayloadObject(execution) ||
+    execution['sessionId'] !== session.session_id
+  ) {
+    return projection;
+  }
+  const nextExecution = execution as ChatSessionSummary['execution'];
+  if (
+    session.execution !== undefined &&
+    nextExecution.updatedAt < session.execution.updatedAt
+  ) {
+    return projection;
+  }
+  return {
+    ...projection,
+    sessionMetadata: {
+      ...session,
+      status: legacySessionStatusForExecution(nextExecution),
+      execution: nextExecution,
+    },
+  };
 }
 
 // ---- message created ----

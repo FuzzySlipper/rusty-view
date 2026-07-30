@@ -39,6 +39,7 @@ export function sessionStatusTone(status: string): SessionStatusTone {
     case 'accepted':
     case 'active':
     case 'in_progress':
+    case 'queued':
     case 'running':
     case 'sending':
     case 'starting':
@@ -66,6 +67,7 @@ export function sessionStatusTone(status: string): SessionStatusTone {
 
     case 'attention':
     case 'blocked':
+    case 'cancelling':
     case 'expired':
     case 'interrupted':
     case 'paused':

@@ -7,14 +7,24 @@ import type { ChatSessionSummary } from '@rusty-view/protocol';
 function makeSession(
   overrides: Partial<ChatSessionSummary>,
 ): ChatSessionSummary {
+  const sessionId = overrides.session_id ?? 'sess_fixture';
+  const status = overrides.status ?? 'active';
+  const updatedAt = overrides.updated_at ?? '2026-06-22T10:00:00Z';
   return {
-    session_id: overrides.session_id ?? 'sess_fixture',
+    session_id: sessionId,
     agent_id: overrides.agent_id ?? 'agent_narrator',
     profile_id: overrides.profile_id ?? 'profile_rp',
     kind: overrides.kind ?? 'full',
-    status: overrides.status ?? 'active',
+    status,
+    execution: overrides.execution ?? {
+      sessionId,
+      lifecycleStatus: status === 'archived' ? 'archived' : 'live',
+      phase: status === 'active' ? 'active' : 'idle',
+      source: status === 'archived' ? 'session_lifecycle' : 'runtime_activity',
+      updatedAt,
+    },
     latest_cursor: overrides.latest_cursor ?? 'cur_0',
-    updated_at: overrides.updated_at ?? '2026-06-22T10:00:00Z',
+    updated_at: updatedAt,
     ...adjustOptionals(overrides),
   };
 }

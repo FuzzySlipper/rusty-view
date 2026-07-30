@@ -313,6 +313,38 @@ describe('ProfilePanelComponent', () => {
     expect(status?.getAttribute('data-status-tone')).toBe('active');
   });
 
+  it('renders the canonical Crew execution phase over a stale legacy idle', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'native-working',
+        profile_id: 'p1',
+        status: 'idle',
+        execution: {
+          sessionId: 'native-working',
+          lifecycleStatus: 'live',
+          phase: 'waiting',
+          source: 'logical_turn',
+          updatedAt: '2026-07-30T09:00:00Z',
+        },
+      }),
+    ]);
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '.rv-profile__status',
+    );
+    const session = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-session-id="native-working"]',
+    );
+
+    expect(profile?.textContent?.trim()).toBe('Waiting');
+    expect(profile?.getAttribute('data-status-tone')).toBe('warning');
+    expect(session?.getAttribute('data-session-status')).toBe('waiting');
+    expect(
+      session
+        ?.querySelector('.rv-profile-session__status')
+        ?.getAttribute('data-status-tone'),
+    ).toBe('warning');
+  });
+
   it('marks the selected profile', async () => {
     const { fixture, store } = await createPanel([
       makeSession({

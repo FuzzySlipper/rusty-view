@@ -677,6 +677,7 @@ export interface components {
             /** @enum {string} */
             kind: "full" | "worker" | "delegated";
             status: components["schemas"]["ChatSessionStatus"];
+            execution: components["schemas"]["SessionExecutionState"];
             title?: string;
             latest_cursor: string;
             /** Format: date-time */
@@ -810,10 +811,13 @@ export interface components {
             payload: components["schemas"]["ChatEventPayload"];
         };
         /** @enum {string} */
-        ChatEventKind: "session_snapshot" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "logical_turn_admitted" | "logical_turn_continuing" | "logical_turn_yielding" | "logical_turn_queued_to_continue" | "logical_turn_attention_required" | "logical_turn_cancelling" | "logical_turn_completed" | "logical_turn_cancelled" | "logical_turn_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
-        ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantReasoningDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["LogicalTurnLifecyclePayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
+        ChatEventKind: "session_snapshot" | "session_execution_changed" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "logical_turn_admitted" | "logical_turn_continuing" | "logical_turn_yielding" | "logical_turn_queued_to_continue" | "logical_turn_attention_required" | "logical_turn_cancelling" | "logical_turn_completed" | "logical_turn_cancelled" | "logical_turn_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
+        ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantReasoningDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["LogicalTurnLifecyclePayload"] | components["schemas"]["SessionExecutionChangedPayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
         SessionSnapshotPayload: {
             session: components["schemas"]["ChatSessionSummary"];
+        };
+        SessionExecutionChangedPayload: {
+            execution: components["schemas"]["SessionExecutionState"];
         };
         MessageCreatedPayload: {
             message_id: string;
@@ -1623,6 +1627,27 @@ export interface components {
             response?: {
                 [key: string]: unknown;
             };
+        };
+        /** @enum {string} */
+        SessionExecutionOutcome: "completed" | "failed" | "cancelled" | "interrupted";
+        /** @enum {string} */
+        SessionLifecycleStatus: "live" | "archived";
+        /** @enum {string} */
+        SessionExecutionPhase: "idle" | "queued" | "active" | "waiting" | "paused" | "cancelling";
+        /** @enum {string} */
+        SessionExecutionSource: "session_lifecycle" | "logical_turn" | "runtime_activity";
+        SessionExecutionState: {
+            lastOutcome?: components["schemas"]["SessionExecutionOutcome"] | null;
+            lifecycleStatus: components["schemas"]["SessionLifecycleStatus"];
+            logicalTurnId?: string | null;
+            phase: components["schemas"]["SessionExecutionPhase"];
+            reasonCode?: string | null;
+            sessionId: string;
+            source: components["schemas"]["SessionExecutionSource"];
+            startedAt?: string | null;
+            summary?: string | null;
+            updatedAt: string;
+            wakeId?: string | null;
         };
         "schemas-ApiEnvelope": {
             ok: boolean;

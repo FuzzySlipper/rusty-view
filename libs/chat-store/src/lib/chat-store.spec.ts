@@ -10,6 +10,7 @@ import type {
   SessionContextUsageResult,
   LogicalTurnDiagnostic,
   LogicalTurnDiagnosticPage,
+  SessionExecutionState,
 } from '@rusty-view/protocol';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
@@ -194,6 +195,37 @@ function emptySessionPage(): ChatSessionPage {
   return { items: [], total: 0, limit: 100, offset: 0 };
 }
 
+function executionState(
+  sessionId: string,
+  phase: SessionExecutionState['phase'],
+  updatedAt: string,
+  overrides: Partial<SessionExecutionState> = {},
+): SessionExecutionState {
+  return {
+    sessionId,
+    lifecycleStatus: 'live',
+    phase,
+    source: 'runtime_activity',
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function sessionExecutionEvent(
+  sessionId: string,
+  sequenceId: number,
+  execution: SessionExecutionState,
+): ChatEvent {
+  return {
+    event_id: `${sessionId}:${sequenceId}`,
+    session_id: sessionId,
+    sequence_id: sequenceId,
+    created_at: execution.updatedAt,
+    kind: 'session_execution_changed',
+    payload: { execution },
+  };
+}
+
 function emptyOpenResult(): ChatSessionOpenResult {
   return {
     session: {
@@ -202,6 +234,7 @@ function emptyOpenResult(): ChatSessionOpenResult {
       profile_id: 'prof_1',
       kind: 'full',
       status: 'active',
+      execution: executionState('sess_test', 'active', '2026-06-22T10:00:00Z'),
       latest_cursor: 'cur_0',
       updated_at: '2026-06-22T10:00:00Z',
     },
@@ -392,6 +425,7 @@ describe('ChatStore', () => {
             profile_id: 'p1',
             kind: 'full',
             status: 'active',
+            execution: executionState('s1', 'active', '2026-06-22T10:00:00Z'),
             latest_cursor: 'c1',
             updated_at: '2026-06-22T10:00:00Z',
           },
@@ -490,7 +524,15 @@ describe('ChatStore', () => {
     const transport = createMockTransport({
       openResult: {
         ...emptyOpenResult(),
-        session: { ...emptyOpenResult().session, status: 'idle' },
+        session: {
+          ...emptyOpenResult().session,
+          status: 'idle',
+          execution: executionState(
+            'sess_test',
+            'idle',
+            '2026-06-22T10:00:00Z',
+          ),
+        },
         events: [snapshot, completed, finished],
         has_more_before: true,
       },
@@ -587,7 +629,15 @@ describe('ChatStore', () => {
     const transport = createMockTransport({
       openResult: {
         ...emptyOpenResult(),
-        session: { ...emptyOpenResult().session, status: 'idle' },
+        session: {
+          ...emptyOpenResult().session,
+          status: 'idle',
+          execution: executionState(
+            'sess_test',
+            'idle',
+            '2026-06-22T10:00:00Z',
+          ),
+        },
         events: [deltaEvent],
       },
     });
@@ -617,7 +667,15 @@ describe('ChatStore', () => {
     const transport = createMockTransport({
       openResult: {
         ...emptyOpenResult(),
-        session: { ...emptyOpenResult().session, status: 'idle' },
+        session: {
+          ...emptyOpenResult().session,
+          status: 'idle',
+          execution: executionState(
+            'sess_test',
+            'idle',
+            '2026-06-22T10:00:00Z',
+          ),
+        },
         events: [],
       },
       streamEvents: [streamDelta],
@@ -1253,6 +1311,11 @@ describe('ChatStore', () => {
             profile_id: 'p1',
             kind: 'full',
             status: 'active',
+            execution: executionState(
+              'sess_new',
+              'active',
+              '2026-06-22T10:00:00Z',
+            ),
             latest_cursor: 'cur_0',
             updated_at: '2026-06-22T10:00:00Z',
           },
@@ -1828,6 +1891,155 @@ function makeSession(
 }
 
 describe('ChatStore profiles', () => {
+  it('applies selected-session execution events immediately and ignores stale phases', async () => {
+    const initial = makeSession({
+      session_id: 'native-1',
+      status: 'idle',
+      execution: executionState('native-1', 'idle', '2026-07-30T09:00:00Z'),
+    });
+    const transport = createMockTransport({
+      sessions: {
+        items: [initial],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+      openResult: {
+        ...emptyOpenResult(),
+        session: initial,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('native-1');
+
+    store.ingestEvents([
+      sessionExecutionEvent(
+        'native-1',
+        1,
+        executionState('native-1', 'queued', '2026-07-30T09:00:01Z'),
+      ),
+      sessionExecutionEvent(
+        'native-1',
+        2,
+        executionState('native-1', 'waiting', '2026-07-30T09:00:02Z'),
+      ),
+    ]);
+
+    expect(store.activeSessionDisplayStatus()).toBe('waiting');
+    expect(store.activeSession()?.status).toBe('active');
+    expect(store.isGenerating()).toBe(true);
+
+    store.ingestEvents([
+      sessionExecutionEvent(
+        'native-1',
+        3,
+        executionState('native-1', 'idle', '2026-07-30T09:00:03Z', {
+          lastOutcome: 'completed',
+        }),
+      ),
+    ]);
+
+    expect(store.activeSessionDisplayStatus()).toBe('completed');
+    expect(store.activeSession()?.status).toBe('idle');
+    expect(store.isGenerating()).toBe(false);
+
+    store.ingestEvents([
+      sessionExecutionEvent(
+        'native-1',
+        4,
+        executionState('native-1', 'active', '2026-07-30T09:00:01Z'),
+      ),
+    ]);
+
+    expect(store.activeSessionDisplayStatus()).toBe('completed');
+    expect(store.activeSession()?.status).toBe('idle');
+
+    store.ingestEvents([
+      sessionExecutionEvent(
+        'native-1',
+        6,
+        executionState('native-1', 'waiting', '2026-07-30T09:00:04Z'),
+      ),
+    ]);
+    store.ingestEvents([
+      sessionExecutionEvent(
+        'native-1',
+        5,
+        executionState('native-1', 'queued', '2026-07-30T09:00:04Z'),
+      ),
+    ]);
+
+    expect(store.activeSessionDisplayStatus()).toBe('waiting');
+    expect(store.activeSession()?.status).toBe('active');
+  });
+
+  it('polls background execution snapshots without replacing unchanged rows or selection', async () => {
+    const selected = makeSession({
+      session_id: 'selected',
+      profile_id: 'p1',
+      execution: executionState('selected', 'idle', '2026-07-30T09:00:00Z'),
+    });
+    const background = makeSession({
+      session_id: 'background',
+      profile_id: 'p2',
+      execution: executionState('background', 'idle', '2026-07-30T09:00:00Z'),
+    });
+    const page: ChatSessionPage = {
+      items: [selected, background],
+      total: 2,
+      limit: 100,
+      offset: 0,
+    };
+    const transport = createMockTransport({
+      sessions: page,
+      openResult: {
+        ...emptyOpenResult(),
+        session: selected,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.selectSession('selected');
+    const selectedRow = store
+      .sessions()
+      .find((session) => session.session_id === 'selected');
+
+    page.items = [
+      selected,
+      {
+        ...background,
+        status: 'active',
+        execution: executionState(
+          'background',
+          'active',
+          '2026-07-30T09:00:01Z',
+        ),
+      },
+    ];
+    await store.refreshSessionExecutionSnapshots();
+
+    expect(store.activeSessionId()).toBe('selected');
+    expect(
+      store.sessions().find((session) => session.session_id === 'selected'),
+    ).toBe(selectedRow);
+    expect(
+      store.sessions().find((session) => session.session_id === 'background')
+        ?.execution.phase,
+    ).toBe('active');
+
+    page.items = [selected, background];
+    page.items[1] = {
+      ...background,
+      execution: executionState('background', 'idle', '2026-07-30T09:00:01Z'),
+    };
+    await store.refreshSessionExecutionSnapshots();
+    expect(
+      store.sessions().find((session) => session.session_id === 'background')
+        ?.execution.phase,
+    ).toBe('active');
+  });
+
   it('derives profiles from the session list', async () => {
     const transport = createMockTransport({
       sessions: {

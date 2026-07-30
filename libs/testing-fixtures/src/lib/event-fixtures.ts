@@ -34,6 +34,13 @@ export const sessionSnapshotEvent: ChatEvent = makeEvent('session_snapshot', {
     profile_id: 'profile_rp',
     kind: 'full',
     status: 'active',
+    execution: {
+      sessionId: 'sess_fixture',
+      lifecycleStatus: 'live',
+      phase: 'active',
+      source: 'runtime_activity',
+      updatedAt: '2026-06-22T10:00:00Z',
+    },
     title: 'Fixture Session',
     latest_cursor: 'cur_0',
     created_at: '2026-06-22T09:00:00Z',
@@ -42,6 +49,19 @@ export const sessionSnapshotEvent: ChatEvent = makeEvent('session_snapshot', {
     tool_event_count: 0,
   } satisfies ChatSessionSummary,
 });
+
+export const sessionExecutionChangedEvent: ChatEvent = makeEvent(
+  'session_execution_changed',
+  {
+    execution: {
+      sessionId: 'sess_fixture',
+      lifecycleStatus: 'live',
+      phase: 'waiting',
+      source: 'logical_turn',
+      updatedAt: '2026-06-22T10:00:01Z',
+    },
+  },
+);
 
 export const userMessageEvent: ChatEvent = makeEvent('message_created', {
   message_id: 'msg_user_1',
@@ -160,6 +180,7 @@ export const coercedFutureKindEvent: ChatEvent = unknownKindEvent;
 /** All known event kinds in one array (for exhaustive projection tests). */
 export const allKindEvents: readonly ChatEvent[] = Object.freeze([
   sessionSnapshotEvent,
+  sessionExecutionChangedEvent,
   userMessageEvent,
   assistantTurnStartedEvent,
   assistantDeltaEvent,

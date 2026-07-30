@@ -15,6 +15,7 @@
 // Event fixtures (one per known kind)
 export {
   sessionSnapshotEvent,
+  sessionExecutionChangedEvent,
   userMessageEvent,
   assistantTurnStartedEvent,
   assistantDeltaEvent,

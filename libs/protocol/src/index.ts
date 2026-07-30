@@ -233,6 +233,11 @@ export type GetMemorySurfaceCatalogResponse =
 
 // ---- sessions ----
 export type ChatSessionStatus = Schemas['ChatSessionStatus'];
+export type SessionExecutionOutcome = Schemas['SessionExecutionOutcome'];
+export type SessionLifecycleStatus = Schemas['SessionLifecycleStatus'];
+export type SessionExecutionPhase = Schemas['SessionExecutionPhase'];
+export type SessionExecutionSource = Schemas['SessionExecutionSource'];
+export type SessionExecutionState = Schemas['SessionExecutionState'];
 export type ChatSessionSummary = Schemas['ChatSessionSummary'];
 export type ChatSessionPage = Schemas['ChatSessionPage'];
 export type ChatSessionOpenResult = Schemas['ChatSessionOpenResult'];
@@ -264,6 +269,8 @@ export type ChatEvent = Schemas['ChatEvent'];
 export type ChatEventKind = Schemas['ChatEventKind'];
 export type ChatEventPayload = Schemas['ChatEventPayload'];
 export type SessionSnapshotPayload = Schemas['SessionSnapshotPayload'];
+export type SessionExecutionChangedPayload =
+  Schemas['SessionExecutionChangedPayload'];
 export type MessageCreatedPayload = Schemas['MessageCreatedPayload'];
 export type AssistantTextDeltaPayload = Schemas['AssistantTextDeltaPayload'];
 export type AssistantReasoningDeltaPayload =

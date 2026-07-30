@@ -139,6 +139,45 @@ describe('projectConversation', () => {
     expect(projection.sessionMetadata?.session_id).toBe('sess_1');
   });
 
+  it('projects fresh session execution events and rejects stale regressions', () => {
+    const session = {
+      session_id: 'sess_1',
+      agent_id: 'agent_1',
+      profile_id: 'prof_1',
+      kind: 'full' as const,
+      status: 'idle' as const,
+      execution: {
+        sessionId: 'sess_1',
+        lifecycleStatus: 'live' as const,
+        phase: 'idle' as const,
+        source: 'logical_turn' as const,
+        lastOutcome: 'completed' as const,
+        updatedAt: '2026-07-30T09:00:03Z',
+      },
+      latest_cursor: 'cur_0',
+      updated_at: '2026-07-30T09:00:03Z',
+    };
+    const projection = projectConversation([
+      makeEvent('session_snapshot', { session }, { sequence_id: 1 }),
+      makeEvent(
+        'session_execution_changed',
+        {
+          execution: {
+            ...session.execution,
+            phase: 'active',
+            lastOutcome: null,
+            updatedAt: '2026-07-30T09:00:01Z',
+          },
+        },
+        { sequence_id: 2 },
+      ),
+    ]);
+
+    expect(projection.sessionMetadata?.execution.phase).toBe('idle');
+    expect(projection.sessionMetadata?.execution.lastOutcome).toBe('completed');
+    expect(projection.sessionMetadata?.status).toBe('idle');
+  });
+
   it('message_created creates a completed message with a text block', () => {
     const projection = projectConversation([
       makeEvent('message_created', {
