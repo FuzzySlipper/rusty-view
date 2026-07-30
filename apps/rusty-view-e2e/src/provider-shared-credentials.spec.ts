@@ -38,7 +38,9 @@ test('two provider aliases reuse one credential and unlink without deleting it',
     .locator('.rv-admin-providers__provider')
     .filter({ hasText: 'terra' });
   await expect(terraRow).toContainText('no shared credential');
-  await terraRow.getByRole('button', { name: 'Edit' }).press('Enter');
+  await terraRow
+    .getByRole('button', { name: 'Edit' })
+    .evaluate((button: HTMLButtonElement) => button.click());
   expect(pageErrors).toEqual([]);
   await expect(
     panel.getByRole('heading', { name: 'Edit Provider' }),

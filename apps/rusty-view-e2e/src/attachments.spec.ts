@@ -34,6 +34,17 @@ function fulfillJson(route: Route, data: unknown): Promise<void> {
   });
 }
 
+function fulfillSessionPage(route: Route): Promise<void> {
+  const archived =
+    new URL(route.request().url()).searchParams.get('status') === 'archived';
+  return fulfillJson(route, {
+    items: archived ? [] : [SESSION],
+    total: archived ? 0 : 1,
+    limit: 100,
+    offset: 0,
+  });
+}
+
 function link(
   attachmentId: string,
   messageId: string,
@@ -161,14 +172,7 @@ test('attachment events render stable responsive image blocks and lifecycle stat
   await page.route('**/v1/chat/commands', (route) =>
     fulfillJson(route, { commands: [] }),
   );
-  await page.route('**/v1/chat/sessions', (route) =>
-    fulfillJson(route, {
-      items: [SESSION],
-      total: 1,
-      limit: 100,
-      offset: 0,
-    }),
-  );
+  await page.route('**/v1/chat/sessions*', fulfillSessionPage);
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, { items: [], latest_cursor: SESSION.latest_cursor }),
   );

@@ -157,6 +157,14 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
     .toBe(true);
 
   await transcript.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    element.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: bounds.right - 1,
+        clientY: bounds.top + 20,
+      }),
+    );
     element.scrollTop = 0;
     element.dispatchEvent(new Event('scroll'));
   });

@@ -167,6 +167,17 @@ function fulfillJson(route: Route, data: unknown): Promise<void> {
   });
 }
 
+function fulfillSessionPage(route: Route, session: unknown): Promise<void> {
+  const archived =
+    new URL(route.request().url()).searchParams.get('status') === 'archived';
+  return fulfillJson(route, {
+    items: archived ? [] : [session],
+    total: archived ? 0 : 1,
+    limit: 100,
+    offset: 0,
+  });
+}
+
 const TOOL_DEBUG_DETAIL = {
   debug_detail_id: TOOL_DEBUG_DETAIL_ID,
   tool_call_id: 'tc1',
@@ -211,13 +222,8 @@ test('selecting a session renders message rows in the transcript', async ({
   await page.route('**/v1/chat/commands', (route) =>
     fulfillJson(route, { commands: [] }),
   );
-  await page.route('**/v1/chat/sessions', (route) =>
-    fulfillJson(route, {
-      items: [SESSION_SUMMARY],
-      total: 1,
-      limit: 100,
-      offset: 0,
-    }),
+  await page.route('**/v1/chat/sessions*', (route) =>
+    fulfillSessionPage(route, SESSION_SUMMARY),
   );
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, { items: [] }),
@@ -455,13 +461,8 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
   await page.route('**/v1/chat/commands', (route) =>
     fulfillJson(route, { commands: [] }),
   );
-  await page.route('**/v1/chat/sessions', (route) =>
-    fulfillJson(route, {
-      items: [liveSessionSummary],
-      total: 1,
-      limit: 100,
-      offset: 0,
-    }),
+  await page.route('**/v1/chat/sessions*', (route) =>
+    fulfillSessionPage(route, liveSessionSummary),
   );
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, {
@@ -548,13 +549,8 @@ test('expanding a tool block does not overlap adjacent messages', async ({
   await page.route('**/v1/chat/commands', (route) =>
     fulfillJson(route, { commands: [] }),
   );
-  await page.route('**/v1/chat/sessions', (route) =>
-    fulfillJson(route, {
-      items: [SESSION_SUMMARY],
-      total: 1,
-      limit: 100,
-      offset: 0,
-    }),
+  await page.route('**/v1/chat/sessions*', (route) =>
+    fulfillSessionPage(route, SESSION_SUMMARY),
   );
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, { items: [] }),
