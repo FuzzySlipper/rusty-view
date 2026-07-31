@@ -27,6 +27,17 @@ import {
 import { SessionOptionsComponent } from './session-options';
 import { profileWakeTimeoutLabel } from './wake-timeout-display';
 
+const PROFILE_STATUS_TONE_PRIORITY: Readonly<
+  Record<SessionStatusTone, number>
+> = {
+  error: 0,
+  warning: 1,
+  active: 2,
+  completed: 3,
+  idle: 4,
+  muted: 5,
+};
+
 const PINNED_PROFILES_STORAGE_KEY = 'rusty-view:pinned-profiles:v1';
 
 /**
@@ -156,15 +167,21 @@ export class ProfilePanelComponent {
 
   /**
    * Keep the profile headline coherent with the session rows operators can
-   * actually see. In particular, a live Codex thread's current phase/status
-   * supersedes an older Crew execution outcome retained for diagnostics.
+   * actually see. Attention-worthy and working states outrank quieter states,
+   * independent of which live session happens to be the navigation default.
    */
   protected profileState(profile: BrainProfile): string {
-    const session =
-      profile.liveSessions.find(
-        (candidate) => candidate.session_id === profile.defaultSessionId,
-      ) ?? profile.liveSessions[0];
-    return session === undefined ? profile.status : this.sessionState(session);
+    let selected: string | undefined;
+    let selectedPriority = Number.POSITIVE_INFINITY;
+    for (const session of profile.liveSessions) {
+      const state = this.sessionState(session);
+      const priority = PROFILE_STATUS_TONE_PRIORITY[sessionStatusTone(state)];
+      if (priority < selectedPriority) {
+        selected = state;
+        selectedPriority = priority;
+      }
+    }
+    return selected ?? profile.status;
   }
 
   protected profileStatusTone(status: string): SessionStatusTone {

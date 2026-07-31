@@ -621,6 +621,184 @@ describe('ProfilePanelComponent', () => {
     ).toBe('error');
   });
 
+  it('shows a failed non-default visible session over the newer idle default', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'newer-idle',
+        agent_id: 'external-agent-idle',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-07-31T12:00:00Z',
+      }),
+      makeSession({
+        session_id: 'older-failed',
+        agent_id: 'external-agent-failed',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-07-31T11:00:00Z',
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        binding: {
+          bindingId: 'binding-newer-idle',
+          sessionId: 'newer-idle',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+      {
+        phase: 'failed',
+        binding: {
+          bindingId: 'binding-older-failed',
+          sessionId: 'older-failed',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="p1"]',
+    );
+    expect(profile?.getAttribute('data-default-session-id')).toBe('newer-idle');
+    expect(profile?.getAttribute('data-profile-status')).toBe('failed');
+  });
+
+  it('shows a failed visible session regardless of live-session ordering', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'newer-failed',
+        agent_id: 'external-agent-failed',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-07-31T12:00:00Z',
+      }),
+      makeSession({
+        session_id: 'older-idle',
+        agent_id: 'external-agent-idle',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-07-31T11:00:00Z',
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        phase: 'failed',
+        binding: {
+          bindingId: 'binding-newer-failed',
+          sessionId: 'newer-failed',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+      {
+        binding: {
+          bindingId: 'binding-older-idle',
+          sessionId: 'older-idle',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="p1"]',
+    );
+    expect(profile?.getAttribute('data-profile-status')).toBe('failed');
+  });
+
+  it('ignores a failed archived session when the only visible session is idle', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'visible-idle',
+        agent_id: 'external-agent-idle',
+        profile_id: 'p1',
+        status: 'idle',
+      }),
+      makeSession({
+        session_id: 'archived-failed',
+        agent_id: 'external-agent-failed',
+        profile_id: 'p1',
+        status: 'archived',
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        binding: {
+          bindingId: 'binding-visible-idle',
+          sessionId: 'visible-idle',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+      {
+        phase: 'failed',
+        binding: {
+          bindingId: 'binding-archived-failed',
+          sessionId: 'archived-failed',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="p1"]',
+    );
+    expect(profile?.getAttribute('data-profile-status')).toBe('idle');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-session-id="archived-failed"]',
+      ),
+    ).toBeNull();
+  });
+
+  it('shows a working visible session over an idle navigation default', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'newer-idle',
+        agent_id: 'external-agent-idle',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-07-31T12:00:00Z',
+      }),
+      makeSession({
+        session_id: 'older-working',
+        agent_id: 'external-agent-working',
+        profile_id: 'p1',
+        status: 'idle',
+        updated_at: '2026-07-31T11:00:00Z',
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        binding: {
+          bindingId: 'binding-newer-idle',
+          sessionId: 'newer-idle',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+      {
+        phase: 'active',
+        binding: {
+          bindingId: 'binding-older-working',
+          sessionId: 'older-working',
+        },
+        thread: { status: 'active' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="p1"]',
+    );
+    expect(profile?.getAttribute('data-default-session-id')).toBe('newer-idle');
+    expect(profile?.getAttribute('data-profile-status')).toBe('active');
+    expect(
+      profile
+        ?.querySelector('.rv-profile__status')
+        ?.getAttribute('data-status-tone'),
+    ).toBe('active');
+  });
+
   it('pins profiles first, persists the choice, and does not select them', async () => {
     const sessions = [
       makeSession({
