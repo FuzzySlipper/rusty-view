@@ -30,6 +30,9 @@ import {
   FONT_SCALE_MAX,
   FONT_SCALE_MIN,
   FONT_SCALE_STEP,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_MIN,
+  SIDEBAR_WIDTH_STEP,
   ChatTheme,
 } from '@rusty-view/chat-theme';
 
@@ -84,6 +87,9 @@ export class AppearanceTabComponent {
   protected readonly composerHeightMin = COMPOSER_HEIGHT_MIN;
   protected readonly composerHeightMax = COMPOSER_HEIGHT_MAX;
   protected readonly composerHeightStep = COMPOSER_HEIGHT_STEP;
+  protected readonly sidebarWidthMin = SIDEBAR_WIDTH_MIN;
+  protected readonly sidebarWidthMax = SIDEBAR_WIDTH_MAX;
+  protected readonly sidebarWidthStep = SIDEBAR_WIDTH_STEP;
 
   /** Full semantic colour palette rendered in the tab (task #3691). */
   protected readonly colorFields = APPEARANCE_COLOR_FIELDS;
@@ -178,6 +184,14 @@ export class AppearanceTabComponent {
     const parsed = Number.parseFloat(target.value);
     if (Number.isNaN(parsed)) return;
     void this.theme.update({ composerHeightPx: parsed });
+  }
+
+  protected onSidebarWidth(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const parsed = Number.parseFloat(target.value);
+    if (Number.isNaN(parsed)) return;
+    void this.theme.update({ sidebarWidthPx: parsed });
   }
 
   protected resetComposerHeight(): void {

@@ -154,15 +154,40 @@ export class ProfilePanelComponent {
     return sessionStatusLabel(status);
   }
 
+  /**
+   * Keep the profile headline coherent with the session rows operators can
+   * actually see. In particular, a live Codex thread's current phase/status
+   * supersedes an older Crew execution outcome retained for diagnostics.
+   */
+  protected profileState(profile: BrainProfile): string {
+    const session =
+      profile.liveSessions.find(
+        (candidate) => candidate.session_id === profile.defaultSessionId,
+      ) ?? profile.liveSessions[0];
+    return session === undefined ? profile.status : this.sessionState(session);
+  }
+
   protected profileStatusTone(status: string): SessionStatusTone {
     return sessionStatusTone(status);
   }
 
   protected sessionState(session: ChatSessionSummary): string {
     const external = this.externalSession(session);
+    const directory = this.store.sessionDirectoryEntry(session.session_id);
+    const directoryStatus =
+      directory?.runtimeKind !== 'codex_app_server'
+        ? undefined
+        : directory.execution == null
+          ? directory.sessionStatus
+          : sessionExecutionDisplayStatus({
+              ...session,
+              status: directory.sessionStatus,
+              execution: directory.execution,
+            });
     return (
       external?.phase ??
       external?.thread.status ??
+      directoryStatus ??
       sessionExecutionDisplayStatus(session)
     );
   }

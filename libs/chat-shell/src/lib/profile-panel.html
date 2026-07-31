@@ -31,7 +31,7 @@
         class="rv-profile"
         data-testid="profile-row"
         [attr.data-profile-id]="profile.profileId"
-        [attr.data-profile-status]="profile.status"
+        [attr.data-profile-status]="profileState(profile)"
         [attr.data-default-session-id]="profile.defaultSessionId"
         [class.rv-profile--selected]="selectedProfileId() === profile.profileId"
         (click)="onSelectProfile(profile.profileId)"
@@ -40,8 +40,8 @@
         <span class="rv-profile__meta">
           <span
             class="rv-profile__status"
-            [attr.data-status-tone]="profileStatusTone(profile.status)"
-            >{{ profileStatusLabel(profile.status) }}</span
+            [attr.data-status-tone]="profileStatusTone(profileState(profile))"
+            >{{ profileStatusLabel(profileState(profile)) }}</span
           >
           · {{ profile.sessionCount }} session(s)
         </span>

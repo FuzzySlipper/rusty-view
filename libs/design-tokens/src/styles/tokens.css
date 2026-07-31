@@ -98,6 +98,7 @@
   --rv-chat-width: 100%;
   --rv-message-padding-y: var(--rv-space-sm);
   --rv-composer-height: 72px;
+  --rv-sidebar-width: 240px;
 
   /* ---- z-index ---- */
   --rv-z-base: 1;

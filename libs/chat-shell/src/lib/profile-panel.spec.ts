@@ -510,6 +510,117 @@ describe('ProfilePanelComponent', () => {
     ).toBe('completed');
   });
 
+  it('does not let a retained Crew failure override an idle visible Codex session', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'rusty-engine-planner',
+        status: 'idle',
+        execution: {
+          sessionId: 'managed-session',
+          lifecycleStatus: 'live',
+          phase: 'idle',
+          source: 'runtime_activity',
+          lastOutcome: 'failed',
+          reasonCode: 'brain_unavailable',
+          summary: 'wake dispatch failed',
+          updatedAt: '2026-07-28T05:48:33Z',
+        },
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        binding: {
+          bindingId: 'binding-managed-session',
+          sessionId: 'managed-session',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="rusty-engine-planner"]',
+    );
+    const session = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-session-id="managed-session"]',
+    );
+
+    expect(profile?.getAttribute('data-profile-status')).toBe('idle');
+    expect(profile?.querySelector('.rv-profile__status')?.textContent).toBe(
+      'Idle',
+    );
+    expect(session?.getAttribute('data-session-status')).toBe('idle');
+  });
+
+  it('uses the current Codex directory status when native inventory is not loaded', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'rusty-engine-planner',
+        status: 'idle',
+        execution: {
+          sessionId: 'managed-session',
+          lifecycleStatus: 'live',
+          phase: 'idle',
+          source: 'runtime_activity',
+          lastOutcome: 'failed',
+          reasonCode: 'brain_unavailable',
+          summary: 'wake dispatch failed',
+          updatedAt: '2026-07-28T05:48:33Z',
+        },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="rusty-engine-planner"]',
+    );
+    const session = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-session-id="managed-session"]',
+    );
+
+    expect(profile?.getAttribute('data-profile-status')).toBe('idle');
+    expect(profile?.querySelector('.rv-profile__status')?.textContent).toBe(
+      'Idle',
+    );
+    expect(session?.getAttribute('data-session-status')).toBe('idle');
+  });
+
+  it('keeps a current visible Codex failure on the profile headline', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'managed-session',
+        agent_id: 'external-agent-1',
+        profile_id: 'p1',
+        status: 'idle',
+      }),
+    ]);
+    fixture.componentRef.setInput('externalSessions', [
+      {
+        phase: 'failed',
+        binding: {
+          bindingId: 'binding-managed-session',
+          sessionId: 'managed-session',
+        },
+        thread: { status: 'idle' },
+      } as unknown as ExternalAgentSession,
+    ]);
+    fixture.detectChanges();
+
+    const profile = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-profile-id="p1"]',
+    );
+    expect(profile?.getAttribute('data-profile-status')).toBe('failed');
+    expect(
+      profile
+        ?.querySelector('.rv-profile__status')
+        ?.getAttribute('data-status-tone'),
+    ).toBe('error');
+  });
+
   it('pins profiles first, persists the choice, and does not select them', async () => {
     const sessions = [
       makeSession({

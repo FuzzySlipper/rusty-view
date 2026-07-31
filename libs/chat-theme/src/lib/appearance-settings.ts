@@ -213,6 +213,8 @@ export interface AppearanceSettings {
   readonly chatWidthPercent: number;
   /** Preferred message composer height in CSS pixels. */
   readonly composerHeightPx: number;
+  /** Preferred desktop Agents/Codex sidebar width in CSS pixels. */
+  readonly sidebarWidthPx: number;
   readonly reducedMotion: boolean;
   readonly disableShadows: boolean;
   readonly showTimestamps: boolean;
@@ -258,6 +260,11 @@ export const CHAT_WIDTH_STEP = 5;
 export const COMPOSER_HEIGHT_MIN = 56;
 export const COMPOSER_HEIGHT_MAX = 320;
 export const COMPOSER_HEIGHT_STEP = 8;
+
+/** Inclusive bounds for the fixed desktop Agents/Codex sidebar width. */
+export const SIDEBAR_WIDTH_MIN = 200;
+export const SIDEBAR_WIDTH_MAX = 520;
+export const SIDEBAR_WIDTH_STEP = 10;
 
 /**
  * Base font-size pixel values. These mirror `libs/design-tokens/src/styles/
@@ -306,6 +313,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   messageSpacing: 'normal',
   chatWidthPercent: 100,
   composerHeightPx: 72,
+  sidebarWidthPx: 240,
   reducedMotion: false,
   disableShadows: false,
   showTimestamps: false,
@@ -394,6 +402,16 @@ export function clampComposerHeightPx(value: number): number {
   const clamped = Math.min(
     COMPOSER_HEIGHT_MAX,
     Math.max(COMPOSER_HEIGHT_MIN, value),
+  );
+  return Math.round(clamped);
+}
+
+/** Clamp the desktop sidebar width into a usable persisted range. */
+export function clampSidebarWidthPx(value: number): number {
+  if (Number.isNaN(value)) return DEFAULT_APPEARANCE.sidebarWidthPx;
+  const clamped = Math.min(
+    SIDEBAR_WIDTH_MAX,
+    Math.max(SIDEBAR_WIDTH_MIN, value),
   );
   return Math.round(clamped);
 }

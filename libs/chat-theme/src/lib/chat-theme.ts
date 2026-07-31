@@ -32,6 +32,7 @@ import {
   clampChatWidthPercent,
   clampComposerHeightPx,
   clampFontScale,
+  clampSidebarWidthPx,
   DEFAULT_APPEARANCE,
   densityMultiplier,
   MESSAGE_SPACING_Y,
@@ -93,6 +94,7 @@ const MANAGED_TOKENS: readonly string[] = [
   LAYOUT_TOKENS.chatWidth,
   LAYOUT_TOKENS.messagePaddingY,
   LAYOUT_TOKENS.composerHeight,
+  LAYOUT_TOKENS.sidebarWidth,
   ...Object.values(COLOR_FIELD_TOKENS),
 ];
 
@@ -279,6 +281,9 @@ export class ChatTheme {
       composerHeightPx: clampComposerHeightPx(
         settings.composerHeightPx ?? DEFAULT_APPEARANCE.composerHeightPx,
       ),
+      sidebarWidthPx: clampSidebarWidthPx(
+        settings.sidebarWidthPx ?? DEFAULT_APPEARANCE.sidebarWidthPx,
+      ),
       reducedMotion: settings.reducedMotion === true,
       disableShadows: settings.disableShadows === true,
       showTimestamps: settings.showTimestamps === true,
@@ -403,6 +408,10 @@ export class ChatTheme {
     root.style.setProperty(
       LAYOUT_TOKENS.composerHeight,
       `${settings.composerHeightPx}px`,
+    );
+    root.style.setProperty(
+      LAYOUT_TOKENS.sidebarWidth,
+      `${settings.sidebarWidthPx}px`,
     );
 
     if (settings.reducedMotion) {

@@ -43,6 +43,7 @@ describe('ChatTheme', () => {
     expect(style.getPropertyValue('--rv-font-size-md')).toBe('13px');
     expect(style.getPropertyValue('--rv-color-bg')).toBe('');
     expect(style.getPropertyValue('--rv-composer-height')).toBe('72px');
+    expect(style.getPropertyValue('--rv-sidebar-width')).toBe('240px');
     expect(theme.settings()).toEqual(DEFAULT_APPEARANCE);
   });
 
@@ -57,6 +58,22 @@ describe('ChatTheme', () => {
       document.documentElement.style.getPropertyValue('--rv-composer-height'),
     ).toBe('320px');
     expect((await storage.load())?.composerHeightPx).toBe(320);
+  });
+
+  it('clamps and persists desktop sidebar width as a live layout token', async () => {
+    const theme = TestBed.inject(ChatTheme);
+
+    await theme.update({ sidebarWidthPx: 999 });
+    TestBed.flushEffects?.();
+
+    expect(theme.settings().sidebarWidthPx).toBe(520);
+    expect(
+      document.documentElement.style.getPropertyValue('--rv-sidebar-width'),
+    ).toBe('520px');
+    expect((await storage.load())?.sidebarWidthPx).toBe(520);
+
+    await theme.update({ sidebarWidthPx: 1 });
+    expect(theme.settings().sidebarWidthPx).toBe(200);
   });
 
   it('persists shell visibility and message-action preferences', async () => {

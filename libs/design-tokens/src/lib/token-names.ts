@@ -96,6 +96,7 @@ export const LAYOUT_TOKENS = {
   chatWidth: '--rv-chat-width',
   messagePaddingY: '--rv-message-padding-y',
   composerHeight: '--rv-composer-height',
+  sidebarWidth: '--rv-sidebar-width',
 } as const;
 
 export const Z_INDEX_TOKENS = {

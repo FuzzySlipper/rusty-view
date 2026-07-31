@@ -79,8 +79,8 @@
 
 .rv-debug__sidebar {
   display: none;
-  width: 240px;
-  flex: 0 0 240px;
+  width: var(--rv-sidebar-width);
+  flex: 0 0 var(--rv-sidebar-width);
   min-height: 0;
   border-right: 1px solid var(--rv-color-border);
   background: var(--rv-color-surface);

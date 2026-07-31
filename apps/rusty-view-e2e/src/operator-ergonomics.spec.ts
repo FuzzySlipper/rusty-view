@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-test('persists composer sizing and configurable hotkeys in a real browser', async ({
+test('persists panel sizing and configurable hotkeys in a real browser', async ({
   page,
 }) => {
   await page.goto('/');
@@ -16,6 +16,20 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
       ),
     )
     .toBe('160px');
+
+  await page.getByTestId('appearance-sidebar-width').fill('360');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue('--rv-sidebar-width')
+          .trim(),
+      ),
+    )
+    .toBe('360px');
+  await expect(page.locator('.rv-debug__sidebar')).toHaveCSS('width', '360px');
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await expect(page.locator('.rv-debug__sidebar')).toHaveCSS('width', '360px');
 
   await page.getByTestId('appearance-message-actions').uncheck();
   await page.getByTestId('appearance-session-status-bar').uncheck();
@@ -37,6 +51,8 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
   await expect(page.getByTestId('inspector-toggle')).toHaveText(
     'Show Inspector',
   );
+  await page.getByTestId('profiles-toggle').click();
+  await expect(page.locator('.rv-debug__sidebar')).toHaveCSS('width', '360px');
   await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
   await expect(
     page.getByTestId('appearance-message-actions'),
@@ -55,7 +71,7 @@ test('persists composer sizing and configurable hotkeys in a real browser', asyn
 
 async function readAppearanceSetting(
   page: Page,
-  key: 'showInspector' | 'autoExpandReasoning',
+  key: 'showInspector' | 'autoExpandReasoning' | 'sidebarWidthPx',
 ): Promise<unknown> {
   return page.evaluate(
     (settingKey) =>

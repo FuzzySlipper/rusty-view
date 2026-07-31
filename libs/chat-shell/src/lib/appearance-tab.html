@@ -93,6 +93,21 @@
         />
         <strong>{{ theme.settings().composerHeightPx }}px</strong>
       </label>
+
+      <label class="rv-appearance__range-row">
+        <span>Agents/Codex Sidebar Width</span>
+        <input
+          type="range"
+          class="rv-appearance__slider"
+          data-testid="appearance-sidebar-width"
+          [min]="sidebarWidthMin"
+          [max]="sidebarWidthMax"
+          [step]="sidebarWidthStep"
+          [value]="theme.settings().sidebarWidthPx"
+          (input)="onSidebarWidth($event)"
+        />
+        <strong>{{ theme.settings().sidebarWidthPx }}px</strong>
+      </label>
       <div class="rv-appearance__actions">
         <button
           type="button"
