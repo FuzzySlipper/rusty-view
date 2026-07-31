@@ -2014,6 +2014,90 @@ function makeSession(
 }
 
 describe('ChatStore profiles', () => {
+  it('excludes archived Codex bindings from Crew-facing navigation while preserving active and native sessions', async () => {
+    const archivedCodex = makeSession({
+      session_id: 'external-session-archived',
+      profile_id: 'codex-profile',
+      status: 'idle',
+    });
+    const activeCodex = makeSession({
+      session_id: 'external-session-active',
+      profile_id: 'codex-profile',
+      status: 'idle',
+    });
+    const native = makeSession({
+      session_id: 'native-session',
+      profile_id: 'native-profile',
+      status: 'idle',
+    });
+    const transport = createMockTransport({
+      sessions: {
+        items: [archivedCodex, activeCodex, native],
+        total: 3,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    vi.mocked(transport.coordinationAgentDirectory).mockResolvedValue({
+      deploymentRole: 'production',
+      agents: [
+        {
+          agentId: 'external-agent-archived',
+          sessionId: archivedCodex.session_id,
+          profileId: archivedCodex.profile_id,
+          displayLabel: 'Archived Codex',
+          sessionKind: 'full',
+          sessionStatus: 'idle',
+          runtimeKind: 'codex_app_server',
+          runtimeId: 'codex-runtime',
+          bindingId: 'binding-archived',
+          bindingStatus: 'archived',
+          routable: false,
+          routabilityReasonCode: 'external_binding_not_active',
+        },
+        {
+          agentId: 'external-agent-active',
+          sessionId: activeCodex.session_id,
+          profileId: activeCodex.profile_id,
+          displayLabel: 'Active Codex',
+          sessionKind: 'full',
+          sessionStatus: 'idle',
+          runtimeKind: 'codex_app_server',
+          runtimeId: 'codex-runtime',
+          bindingId: 'binding-active',
+          bindingStatus: 'active',
+          routable: true,
+        },
+      ],
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.refreshSessions();
+    await store.refreshSessionDirectory();
+
+    expect(store.sessions()).toHaveLength(3);
+    expect(store.allSessions().map((session) => session.session_id)).toEqual(
+      expect.arrayContaining([activeCodex.session_id, native.session_id]),
+    );
+    expect(
+      store.allSessions().map((session) => session.session_id),
+    ).not.toContain(archivedCodex.session_id);
+    expect(
+      store
+        .profiles()
+        .flatMap((profile) => profile.liveSessions)
+        .map((session) => session.session_id),
+    ).toEqual(
+      expect.arrayContaining([activeCodex.session_id, native.session_id]),
+    );
+    expect(
+      store
+        .profiles()
+        .flatMap((profile) => profile.liveSessions)
+        .map((session) => session.session_id),
+    ).not.toContain(archivedCodex.session_id);
+  });
+
   it('applies selected-session execution events immediately and ignores stale phases', async () => {
     const initial = makeSession({
       session_id: 'native-1',

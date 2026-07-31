@@ -294,9 +294,32 @@ export class ChatStore implements OnDestroy {
   }
 
   // ---- profile / historical-session view state ----
+  /**
+   * Sessions eligible for Crew-facing navigation.
+   *
+   * Archiving a native Codex thread archives its Crew binding but deliberately
+   * preserves the companion chat-session record for restore/history. Once the
+   * coordination directory confirms that archived binding, keep the preserved
+   * live-looking chat summary out of Agents and the Crew Sessions panel. Codex
+   * management remains the authority for browsing and restoring that history.
+   */
+  private readonly navigationSessions = computed<readonly ChatSessionSummary[]>(
+    () => {
+      const directoryBySessionId = new Map(
+        this._sessionDirectory().map((entry) => [entry.sessionId, entry]),
+      );
+      return this._sessions().filter((session) => {
+        const directory = directoryBySessionId.get(session.session_id);
+        return !(
+          directory?.runtimeKind === 'codex_app_server' &&
+          directory.bindingStatus === 'archived'
+        );
+      });
+    },
+  );
   /** Profiles derived from the session list, ordered by recent activity. */
   readonly profiles = computed<readonly BrainProfile[]>(() =>
-    projectProfiles(this._sessions()),
+    projectProfiles(this.navigationSessions()),
   );
   readonly selectedProfileId = this._selectedProfileId.asReadonly();
   /** Submitted slash commands, newest-first (for Up/Down navigation). */
@@ -329,7 +352,7 @@ export class ChatStore implements OnDestroy {
   );
   /** All sessions across profiles, newest first (for the Sessions menu). */
   readonly allSessions = computed<readonly ChatSessionSummary[]>(() =>
-    [...this._sessions()].sort((a, b) =>
+    [...this.navigationSessions()].sort((a, b) =>
       b.updated_at.localeCompare(a.updated_at),
     ),
   );
