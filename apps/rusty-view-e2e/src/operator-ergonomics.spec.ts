@@ -344,7 +344,8 @@ test('rapid streamed tail growth stays visually pinned without blank frames', as
         sample.tailGap <= 2 &&
         sample.bottomOffset <= 80 &&
         Math.abs(sample.renderedEndMismatch) <= 2 &&
-        sample.lastMessageId === 'external-event:streaming-growth-tail',
+        sample.lastMessageId ===
+          'external:thread-1:streaming-growth-turn:assistant',
     ),
     JSON.stringify(
       samples.filter(
@@ -352,7 +353,8 @@ test('rapid streamed tail growth stays visually pinned without blank frames', as
           sample.tailGap > 2 ||
           sample.bottomOffset > 80 ||
           Math.abs(sample.renderedEndMismatch) > 2 ||
-          sample.lastMessageId !== 'external-event:streaming-growth-tail',
+          sample.lastMessageId !==
+            'external:thread-1:streaming-growth-turn:assistant',
       ),
     ),
   ).toBe(true);
@@ -417,6 +419,7 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
       viewportCoverageGap: number;
       turnRowCount: number;
       turnMessageCount: number;
+      turnBlockCount: number;
       lastVirtualRowId: string | undefined;
       lastMessageId: string | undefined;
       lastMessageStatus: string | undefined;
@@ -450,11 +453,11 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
           );
           const lastVirtualRow = virtualRows.item(virtualRows.length - 1);
           const turnRows = viewport.querySelectorAll<HTMLElement>(
-            '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
+            '[data-virtual-row-id="message:external:thread-1:multi-item-turn:assistant"]',
           );
           const turnRow = turnRows.item(0);
           const finalMessage = viewport.querySelector<HTMLElement>(
-            '[data-testid="transcript-item"][data-message-id="external-event:multi-final"]',
+            '[data-testid="transcript-item"][data-message-id="external:thread-1:multi-item-turn:assistant"]',
           );
           const finalMessageRow =
             finalMessage?.querySelector<HTMLElement>(
@@ -484,6 +487,8 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
               turnMessageCount:
                 turnRow?.querySelectorAll('[data-testid="transcript-item"]')
                   .length ?? 0,
+              turnBlockCount:
+                turnRow?.querySelectorAll('rv-message-block').length ?? 0,
               lastVirtualRowId: lastVirtualRow?.dataset['virtualRowId'],
               lastMessageId: lastItem.dataset['messageId'],
               lastMessageStatus: lastItem.querySelector<HTMLElement>(
@@ -505,12 +510,13 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
     await expect(page.getByTestId('transcript-shell')).toContainText(marker);
 
     const turnRows = transcript.locator(
-      '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
+      '[data-virtual-row-id="message:external:thread-1:multi-item-turn:assistant"]',
     );
     await expect(turnRows).toHaveCount(1);
     await expect(
       turnRows.locator('[data-testid="transcript-item"]'),
-    ).toHaveCount(step + 1);
+    ).toHaveCount(1);
+    await expect(turnRows.locator('rv-message-block')).toHaveCount(step + 1);
     await transcript.evaluate(
       () =>
         new Promise<void>((resolve) =>
@@ -523,7 +529,7 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
   await page.getByTestId('external-agent-refresh').click();
   await expect(
     transcript.locator(
-      '[data-testid="transcript-item"][data-message-id="external-event:multi-final"] [data-testid="message-row"]',
+      '[data-testid="transcript-item"][data-message-id="external:thread-1:multi-item-turn:assistant"] [data-testid="message-row"]',
     ),
   ).toHaveAttribute('data-message-status', 'completed');
   await transcript.evaluate(
@@ -542,6 +548,7 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
         viewportCoverageGap: number;
         turnRowCount: number;
         turnMessageCount: number;
+        turnBlockCount: number;
         lastVirtualRowId: string | undefined;
         lastMessageId: string | undefined;
         lastMessageStatus: string | undefined;
@@ -553,14 +560,6 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
     return state.__rvMultiItemGeometrySamples ?? [];
   });
 
-  const expectedMessageIds = [
-    'external-event:multi-reasoning-a',
-    'external-event:multi-command',
-    'external-event:multi-commentary',
-    'external-event:multi-reasoning-b',
-    'external-event:multi-tool',
-    'external-event:multi-final',
-  ];
   const firstTurnSample = samples.findIndex(
     (sample) => sample.turnRowCount > 0,
   );
@@ -568,16 +567,17 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
   const turnSamples = samples.slice(firstTurnSample);
   expect(turnSamples.length).toBeGreaterThan(0);
 
-  let priorMessageIndex = -1;
+  let priorBlockCount = 0;
   const invalidSamples = turnSamples.filter((sample) => {
-    const messageIndex = expectedMessageIds.indexOf(sample.lastMessageId ?? '');
-    const reversed = messageIndex < priorMessageIndex;
-    priorMessageIndex = Math.max(priorMessageIndex, messageIndex);
+    const reversed = sample.turnBlockCount < priorBlockCount;
+    priorBlockCount = Math.max(priorBlockCount, sample.turnBlockCount);
     return (
       sample.turnRowCount !== 1 ||
-      sample.lastVirtualRowId !== 'external-turn:thread-1:multi-item-turn:0' ||
-      messageIndex < 0 ||
-      sample.turnMessageCount !== messageIndex + 1 ||
+      sample.lastVirtualRowId !==
+        'message:external:thread-1:multi-item-turn:assistant' ||
+      sample.lastMessageId !== 'external:thread-1:multi-item-turn:assistant' ||
+      sample.turnMessageCount !== 1 ||
+      sample.turnBlockCount < 1 ||
       reversed ||
       sample.tailGap > 2 ||
       sample.bottomOffset > 80 ||
@@ -586,16 +586,17 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
     );
   });
   expect(invalidSamples, JSON.stringify(invalidSamples)).toEqual([]);
-  expect(new Set(turnSamples.map((sample) => sample.turnMessageCount))).toEqual(
+  expect(new Set(turnSamples.map((sample) => sample.turnBlockCount))).toEqual(
     new Set([1, 2, 3, 4, 5, 6]),
   );
 
   const finalSample = turnSamples.at(-1);
   expect(finalSample).toMatchObject({
     turnRowCount: 1,
-    turnMessageCount: 6,
-    lastVirtualRowId: 'external-turn:thread-1:multi-item-turn:0',
-    lastMessageId: 'external-event:multi-final',
+    turnMessageCount: 1,
+    turnBlockCount: 6,
+    lastVirtualRowId: 'message:external:thread-1:multi-item-turn:assistant',
+    lastMessageId: 'external:thread-1:multi-item-turn:assistant',
     finalMessageStatus: 'completed',
   });
   expect(finalSample?.tailGap).toBeLessThanOrEqual(2);
@@ -614,7 +615,7 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
     .toBeLessThanOrEqual(80);
   await expect(
     transcript.locator(
-      '[data-virtual-row-id^="external-turn:thread-1:multi-item-turn:"]',
+      '[data-virtual-row-id="message:external:thread-1:multi-item-turn:assistant"]',
     ),
   ).toHaveCount(1);
   await expect(page.getByTestId('transcript-shell')).toContainText(
@@ -700,10 +701,10 @@ test('session cycling does not leave blank space after the transcript tail', asy
 
   const transcript = page.getByTestId('transcript-viewport');
   const tailIds = new Map([
-    ['thread-1', 'external:thread-1:turn-1:reasoning-visible'],
+    ['thread-1', 'external:thread-1:turn-1:assistant'],
     [
       'thread-native-hidden',
-      'external:thread-native-hidden:turn-native:second-tail',
+      'external:thread-native-hidden:turn-native:assistant',
     ],
   ]);
   for (let cycle = 0; cycle < 6; cycle += 1) {

@@ -402,11 +402,11 @@ test('external agent fleet, transcript activity, interactions, and controls are 
 
   let createdRow = page.locator('[data-thread-id="thread-created"]');
   await createdRow.getByTestId('external-agent-options').click();
-  const options = page.getByTestId('external-agent-options-form');
+  const options = page.getByTestId('session-options-panel');
   await options.getByLabel('Label').fill('Renamed external session');
   await options.getByLabel('Den project').fill('asha');
   await options.getByLabel('Task').fill('4281');
-  await options.getByTestId('external-agent-options-save').click();
+  await options.getByTestId('session-options-save').click();
   await expect(createdRow).toContainText('Renamed external session');
   await expect(createdRow).toContainText('asha · #4281');
   expect(metadataRequest).toEqual({
@@ -420,19 +420,13 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   createdRow = page.locator('[data-thread-id="thread-created"]');
   await expect(createdRow).toContainText('asha · #4281');
   await createdRow.getByTestId('external-agent-options').click();
+  await page.getByTestId('session-options-panel').getByLabel('Label').fill('');
   await page
-    .getByTestId('external-agent-options-form')
-    .getByLabel('Label')
-    .fill('');
-  await page
-    .getByTestId('external-agent-options-form')
+    .getByTestId('session-options-panel')
     .getByLabel('Den project')
     .fill('');
-  await page
-    .getByTestId('external-agent-options-form')
-    .getByLabel('Task')
-    .fill('');
-  await page.getByTestId('external-agent-options-save').click();
+  await page.getByTestId('session-options-panel').getByLabel('Task').fill('');
+  await page.getByTestId('session-options-save').click();
   await expect(createdRow).toContainText('New browser-created Codex session');
   expect(metadataRequest).toEqual({
     expectedRevision: 2,
@@ -813,7 +807,8 @@ test('keeps durable Codex bindings visible when native inventory is disconnected
     'title',
     '/home/dev/rusty-view',
   );
-  const archive = row.getByTestId('external-agent-archive');
+  await row.getByTestId('external-agent-options').click();
+  const archive = page.getByTestId('session-options-archive');
   await expect(archive).toBeDisabled();
   await expect(archive).toHaveAttribute(
     'title',
