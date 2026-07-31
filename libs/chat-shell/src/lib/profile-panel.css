@@ -177,7 +177,8 @@
   gap: 2px;
   width: calc(100% - var(--rv-space-md));
   margin-left: var(--rv-space-md);
-  padding: var(--rv-space-xs) calc(var(--rv-space-xl) + var(--rv-space-md))
+  padding: var(--rv-space-xs)
+    calc(var(--rv-space-xl) + var(--rv-space-xl) + var(--rv-space-lg))
     var(--rv-space-lg) var(--rv-space-sm);
   border: 0;
   border-left: 2px solid var(--rv-color-border);
@@ -240,7 +241,11 @@
 }
 
 .rv-profile-session__status {
+  position: absolute;
+  top: var(--rv-space-xs);
+  right: var(--rv-space-sm);
   font-weight: var(--rv-font-weight-bold);
+  text-align: right;
 }
 
 .rv-profile-session__workdir,

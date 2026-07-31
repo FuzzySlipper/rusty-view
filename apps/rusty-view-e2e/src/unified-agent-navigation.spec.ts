@@ -335,12 +335,21 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     .locator('xpath=..')
     .getByTestId('profile-session-options');
   await expect(directOptions).toBeVisible();
-  const [directRowBox, directOptionsBox] = await Promise.all([
+  const [directRowBox, directOptionsBox, directStatusBox] = await Promise.all([
     directRow.boundingBox(),
     directOptions.boundingBox(),
+    directRow.locator('.rv-profile-session__status').boundingBox(),
   ]);
   expect(directRowBox).not.toBeNull();
   expect(directOptionsBox).not.toBeNull();
+  expect(directStatusBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (directRowBox?.x ?? 0) +
+        (directRowBox?.width ?? 0) -
+        ((directStatusBox?.x ?? 0) + (directStatusBox?.width ?? 0)),
+    ),
+  ).toBeLessThanOrEqual(12);
   expect(directOptionsBox?.width).toBeLessThan(64);
   expect(directOptionsBox?.x).toBeGreaterThan(
     (directRowBox?.x ?? 0) + (directRowBox?.width ?? 0) / 2,
