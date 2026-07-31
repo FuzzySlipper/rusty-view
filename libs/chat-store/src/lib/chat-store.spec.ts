@@ -1490,94 +1490,128 @@ describe('ChatStore', () => {
     ).toHaveLength(1);
   });
 
-  it('archives one exact non-selected session and removes a lagging row on the follow-up refresh', async () => {
-    vi.useFakeTimers();
-    try {
-      const target = makeSession({
-        session_id: 'target-session',
-        profile_id: 'p1',
-        status: 'idle',
-      });
-      const selected = makeSession({
-        session_id: 'selected-session',
-        profile_id: 'p2',
-        status: 'idle',
-      });
-      const archivedTarget = makeSession({
-        ...target,
-        status: 'archived',
-      });
-      let archiveCommitted = false;
-      let projectionSettled = false;
-      const transport = createMockTransport({});
-      vi.mocked(transport.listSessions).mockImplementation(async (query) => {
-        if (query?.status === 'archived') {
-          return archiveCommitted && projectionSettled
-            ? {
-                items: [archivedTarget],
-                total: 1,
-                limit: 100,
-                offset: 0,
-              }
-            : emptySessionPage();
-        }
-        const items =
-          archiveCommitted && projectionSettled
-            ? [selected]
-            : [target, selected];
-        return {
-          items,
-          total: items.length,
-          limit: 100,
-          offset: 0,
-        };
-      });
-      vi.mocked(transport.sendCommand).mockImplementation(
-        async (sessionId, request) => {
-          expect(sessionId).toBe('target-session');
-          expect(request).toEqual({ command: '/archive' });
-          archiveCommitted = true;
+  it.each([
+    {
+      executionAge: 'equal',
+      archivedExecutionAt: '2026-07-30T09:00:00Z',
+    },
+    {
+      executionAge: 'older',
+      archivedExecutionAt: '2026-07-30T08:59:59Z',
+    },
+  ])(
+    'archives one exact non-selected session when the archived execution is $executionAge on the follow-up refresh',
+    async ({ archivedExecutionAt }) => {
+      vi.useFakeTimers();
+      try {
+        const currentExecution = executionState(
+          'target-session',
+          'idle',
+          '2026-07-30T09:00:00Z',
+        );
+        const target = makeSession({
+          session_id: 'target-session',
+          profile_id: 'p1',
+          status: 'idle',
+          execution: currentExecution,
+        });
+        const selected = makeSession({
+          session_id: 'selected-session',
+          profile_id: 'p2',
+          status: 'idle',
+        });
+        const archivedTarget = makeSession({
+          ...target,
+          status: 'archived',
+          execution: executionState(
+            'target-session',
+            'idle',
+            archivedExecutionAt,
+          ),
+        });
+        let archiveCommitted = false;
+        let projectionSettled = false;
+        const transport = createMockTransport({});
+        vi.mocked(transport.listSessions).mockImplementation(async (query) => {
+          if (query?.status === 'archived') {
+            return archiveCommitted && projectionSettled
+              ? {
+                  items: [archivedTarget],
+                  total: 1,
+                  limit: 100,
+                  offset: 0,
+                }
+              : emptySessionPage();
+          }
+          const items =
+            archiveCommitted && projectionSettled
+              ? [selected]
+              : [target, selected];
           return {
-            status: 'completed',
-            command_name: 'archive',
-            summary: 'Archived session',
-            latest_cursor: 'cur_1',
+            items,
+            total: items.length,
+            limit: 100,
+            offset: 0,
           };
-        },
-      );
-      const store = setupStore(transport, new InMemoryChatStorage());
-      await store.refreshSessions();
-      await store.selectProfileSession('selected-session');
+        });
+        vi.mocked(transport.sendCommand).mockImplementation(
+          async (sessionId, request) => {
+            expect(sessionId).toBe('target-session');
+            expect(request).toEqual({ command: '/archive' });
+            archiveCommitted = true;
+            return {
+              status: 'completed',
+              command_name: 'archive',
+              summary: 'Archived session',
+              latest_cursor: 'cur_1',
+            };
+          },
+        );
+        const store = setupStore(transport, new InMemoryChatStorage());
+        await store.refreshSessions();
+        await store.selectProfileSession('selected-session');
 
-      await expect(store.archiveSession('target-session')).resolves.toBe(true);
+        await expect(store.archiveSession('target-session')).resolves.toBe(
+          true,
+        );
 
-      expect(store.activeSessionId()).toBe('selected-session');
-      expect(
-        store
-          .profiles()
-          .flatMap((profile) => profile.liveSessions)
-          .map((session) => session.session_id),
-      ).toContain('target-session');
+        expect(store.activeSessionId()).toBe('selected-session');
+        expect(
+          store
+            .profiles()
+            .flatMap((profile) => profile.liveSessions)
+            .map((session) => session.session_id),
+        ).toContain('target-session');
 
-      projectionSettled = true;
-      await vi.advanceTimersByTimeAsync(350);
+        projectionSettled = true;
+        await vi.advanceTimersByTimeAsync(350);
 
-      expect(store.activeSessionId()).toBe('selected-session');
-      expect(
-        store
-          .profiles()
-          .flatMap((profile) => profile.liveSessions)
-          .map((session) => session.session_id),
-      ).not.toContain('target-session');
-      expect(
-        store
-          .allSessions()
-          .find((session) => session.session_id === 'target-session'),
-      ).toMatchObject({ status: 'archived' });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+        expect(store.activeSessionId()).toBe('selected-session');
+        expect(
+          store
+            .profiles()
+            .flatMap((profile) => profile.liveSessions)
+            .map((session) => session.session_id),
+        ).not.toContain('target-session');
+        expect(
+          store
+            .allSessions()
+            .find((session) => session.session_id === 'target-session'),
+        ).toMatchObject({
+          status: 'archived',
+          execution: currentExecution,
+        });
+        expect(
+          store
+            .profiles()
+            .flatMap((profile) => profile.liveSessions)
+            .map((session) => session.session_id),
+        ).toContain('selected-session');
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('preserves same-profile archive fallback when bounded History omits the target', async () => {
     const archivedTarget = makeSession({

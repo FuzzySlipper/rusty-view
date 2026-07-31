@@ -1611,7 +1611,11 @@ function mergeSessionSummary(
   const candidate = incomingExecutionIsStale
     ? {
         ...incoming,
-        status: current.status,
+        // Execution freshness and lifecycle membership are independent.
+        // Preserve the fresher execution snapshot, but never let its derived
+        // live status overwrite an authoritative archived-list projection.
+        status:
+          incoming.status === 'archived' ? incoming.status : current.status,
         execution: currentExecution,
       }
     : incoming;
