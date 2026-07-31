@@ -24,6 +24,7 @@ import {
   sessionStatusTone,
   type SessionStatusTone,
 } from './session-status-label';
+import { SessionOptionsComponent } from './session-options';
 
 const CREATION_ATTEMPTS_STORAGE_KEY =
   'rusty-view:external-agent-creation-attempts:v1';
@@ -36,6 +37,7 @@ type SessionCreatorMode = 'crew' | 'codex';
 
 @Component({
   selector: 'rv-external-agent-panel',
+  imports: [SessionOptionsComponent],
   templateUrl: './external-agent-panel.html',
   styleUrl: './external-agent-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -62,10 +64,7 @@ export class ExternalAgentPanelComponent {
   protected readonly label = signal('');
   protected readonly taskProjectId = signal('');
   protected readonly taskId = signal('');
-  protected readonly editingBindingId = signal<string | undefined>(undefined);
-  protected readonly metadataLabel = signal('');
-  protected readonly metadataProjectId = signal('');
-  protected readonly metadataTaskId = signal('');
+  protected readonly editingSessionKey = signal<string | undefined>(undefined);
   protected readonly attempted = signal(false);
   private readonly creationAttemptKeys = loadCreationAttemptKeys();
   private lastCreatorRequest = 0;
@@ -216,20 +215,6 @@ export class ExternalAgentPanelComponent {
     );
   }
 
-  protected async archive(session: ExternalAgentSession): Promise<void> {
-    const warning = session.binding
-      ? 'This also archives the associated Crew binding.'
-      : 'This thread has no Crew binding.';
-    if (
-      !globalThis.confirm(
-        `Archive native Codex thread ${session.thread.threadId}?\n\n${warning}\n${session.thread.cwd}`,
-      )
-    ) {
-      return;
-    }
-    await this.store.archiveThread(session);
-  }
-
   protected async restoreNativeHistory(
     session: ExternalAgentSession,
   ): Promise<void> {
@@ -270,48 +255,14 @@ export class ExternalAgentPanelComponent {
   }
 
   protected openOptions(session: ExternalAgentSession): void {
-    const binding = session.binding;
-    if (binding === undefined) return;
-    this.metadataLabel.set(binding.label ?? '');
-    this.metadataProjectId.set(binding.taskRef?.project_id ?? '');
-    this.metadataTaskId.set(binding.taskRef?.task_id ?? '');
     this.store.metadataError.set(undefined);
     this.store.metadataNotice.set(undefined);
-    this.editingBindingId.set(binding.bindingId);
+    this.editingSessionKey.set(session.key);
   }
 
   protected closeOptions(): void {
-    this.editingBindingId.set(undefined);
+    this.editingSessionKey.set(undefined);
     this.store.metadataError.set(undefined);
-  }
-
-  protected metadataPending(session: ExternalAgentSession): boolean {
-    const bindingId = session.binding?.bindingId;
-    return (
-      bindingId !== undefined &&
-      this.store.metadataPendingBindingIds().has(bindingId)
-    );
-  }
-
-  protected async saveOptions(
-    session: ExternalAgentSession,
-    event: Event,
-  ): Promise<void> {
-    event.preventDefault();
-    const label = this.metadataLabel().trim();
-    const projectId = this.metadataProjectId().trim();
-    const taskId = this.metadataTaskId().trim();
-    const saved = await this.store.updateSessionMetadata(session, {
-      label: label === '' ? null : label,
-      taskRef:
-        projectId === '' && taskId === ''
-          ? null
-          : {
-              ...(projectId === '' ? {} : { project_id: projectId }),
-              ...(taskId === '' ? {} : { task_id: taskId }),
-            },
-    });
-    if (saved) this.editingBindingId.set(undefined);
   }
 
   protected openCreator(): void {

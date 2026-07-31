@@ -14,6 +14,7 @@ import {
 import {
   AdminStore,
   ChatStore,
+  ExternalAgentStore,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
 import type { ChatSessionSummary } from '@rusty-view/protocol';
@@ -23,6 +24,7 @@ import {
   sessionStatusTone,
   type SessionStatusTone,
 } from './session-status-label';
+import { SessionOptionsComponent } from './session-options';
 import { profileWakeTimeoutLabel } from './wake-timeout-display';
 
 const PINNED_PROFILES_STORAGE_KEY = 'rusty-view:pinned-profiles:v1';
@@ -43,6 +45,7 @@ const PINNED_PROFILES_STORAGE_KEY = 'rusty-view:pinned-profiles:v1';
  */
 @Component({
   selector: 'rv-profile-panel',
+  imports: [SessionOptionsComponent],
   templateUrl: './profile-panel.html',
   styleUrl: './profile-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,7 +57,9 @@ export class ProfilePanelComponent {
   readonly newSessionRequested = output<void>();
   protected readonly store = inject(ChatStore);
   protected readonly admin = inject(AdminStore);
+  protected readonly external = inject(ExternalAgentStore);
   private readonly pinnedProfileIds = signal(loadPinnedProfileIds());
+  protected readonly optionsSessionId = signal<string | null>(null);
 
   protected readonly profiles = computed(() => {
     const profiles = this.store.profiles();
@@ -117,7 +122,26 @@ export class ProfilePanelComponent {
   }
 
   protected onRefresh(): void {
-    void this.store.refreshSessions();
+    void Promise.all([this.store.refreshSessions(), this.external.refresh()]);
+  }
+
+  protected toggleSessionOptions(sessionId: string): void {
+    this.optionsSessionId.update((current) =>
+      current === sessionId ? null : sessionId,
+    );
+  }
+
+  protected closeSessionOptions(): void {
+    this.optionsSessionId.set(null);
+  }
+
+  protected sessionOptionsUnavailableReason(
+    session: ChatSessionSummary,
+  ): string | undefined {
+    return this.sessionRuntimeKind(session) === 'codex_app_server' &&
+      this.externalSession(session) === undefined
+      ? 'Codex session options are loading. Refresh and try again.'
+      : undefined;
   }
 
   protected wakeTimeoutLabel(profile: BrainProfile): string | undefined {
@@ -188,7 +212,7 @@ export class ProfilePanelComponent {
     return null;
   }
 
-  private externalSession(
+  protected externalSession(
     session: ChatSessionSummary,
   ): ExternalAgentSession | undefined {
     const directory = this.store.sessionDirectoryEntry(session.session_id);

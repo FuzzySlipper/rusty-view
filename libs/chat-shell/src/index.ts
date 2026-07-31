@@ -32,6 +32,7 @@ export {
 export { HelpPanelComponent } from './lib/help-panel';
 export { DebugPanelComponent } from './lib/debug-panel';
 export { ProfilePanelComponent } from './lib/profile-panel';
+export { SessionOptionsComponent } from './lib/session-options';
 export { ExternalAgentPanelComponent } from './lib/external-agent-panel';
 export { SessionsPanelComponent } from './lib/sessions-panel';
 export { AdminProfilesPanelComponent } from './lib/admin-profiles-panel';

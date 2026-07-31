@@ -54,6 +54,7 @@ interface CachedNativeTranscript {
 const NATIVE_TRANSCRIPT_CACHE_CAPACITY = 8;
 const NATIVE_TRANSCRIPT_CACHE_WEIGHT = 60_000;
 const SESSION_EXECUTION_POLL_INTERVAL_MS = 3_000;
+const SESSION_LIFECYCLE_FOLLOW_UP_MS = 350;
 const SESSION_PAGE_LIMIT = 500;
 const MAX_SESSION_PAGES = 100;
 
@@ -134,6 +135,10 @@ export class ChatStore implements OnDestroy {
   private readonly _crewSessionCreating = signal(false);
   private readonly _crewSessionCreationError = signal<string | null>(null);
   private readonly _crewSessionCreationNotice = signal<string | null>(null);
+  private readonly _sessionLifecyclePendingIds = signal<ReadonlySet<string>>(
+    new Set(),
+  );
+  private readonly _sessionLifecycleError = signal<string | null>(null);
 
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
@@ -142,6 +147,8 @@ export class ChatStore implements OnDestroy {
   private sessionDirectoryRefresh: Promise<void> | undefined;
   private sessionExecutionRefresh: Promise<void> | undefined;
   private readonly sessionExecutionPollTimer: ReturnType<typeof setInterval>;
+  private sessionLifecycleRefreshTimer: ReturnType<typeof setTimeout> | null =
+    null;
   /** Exact live profile member selected across native and external runtimes. */
   private rememberedLiveSessionId: string | null = null;
   /**
@@ -179,6 +186,9 @@ export class ChatStore implements OnDestroy {
     this._crewSessionCreationError.asReadonly();
   readonly crewSessionCreationNotice =
     this._crewSessionCreationNotice.asReadonly();
+  readonly sessionLifecyclePendingIds =
+    this._sessionLifecyclePendingIds.asReadonly();
+  readonly sessionLifecycleError = this._sessionLifecycleError.asReadonly();
   /** True when a message or command is currently in flight. */
   readonly isSubmitting = computed(() => {
     const sessionId = this._activeSessionId();
@@ -362,6 +372,83 @@ export class ChatStore implements OnDestroy {
     if (this._selectedProfileId() === null) {
       await this.restoreUiState();
     }
+  }
+
+  /**
+   * Refresh both immediately and once after a short lifecycle-settle window.
+   *
+   * Archive writes are durable before this returns, but coordination and
+   * external-binding projections can settle on different ticks. The immediate
+   * refresh keeps the UI responsive; the bounded follow-up prevents a stale
+   * live row from surviving until a manual reload.
+   */
+  async reconcileSessionsAfterLifecycleMutation(
+    archivedSessionId?: string,
+    archivedProfileId?: string | null,
+  ): Promise<void> {
+    await this.refreshSessions();
+    if (
+      archivedSessionId !== undefined &&
+      this._activeSessionId() === archivedSessionId
+    ) {
+      await this.reconcileSelectionAfterArchive(
+        archivedSessionId,
+        archivedProfileId ?? null,
+      );
+    }
+    this.scheduleLifecycleFollowUpRefresh(
+      archivedSessionId,
+      archivedProfileId ?? null,
+    );
+  }
+
+  /** Archive one exact native Crew session without changing selection first. */
+  async archiveSession(sessionId: string): Promise<boolean> {
+    const session = this._sessions().find(
+      (candidate) =>
+        candidate.session_id === sessionId && candidate.status !== 'archived',
+    );
+    if (session === undefined) {
+      this._sessionLifecycleError.set(
+        'The selected Crew session is no longer available.',
+      );
+      return false;
+    }
+    if (this._sessionLifecyclePendingIds().has(sessionId)) return false;
+    this._sessionLifecyclePendingIds.update(
+      (current) => new Set([...current, sessionId]),
+    );
+    this._sessionLifecycleError.set(null);
+    try {
+      const result = await this.transport.sendCommand(sessionId, {
+        command: '/archive',
+      });
+      if (!isArchiveCommandName(result.command_name)) {
+        throw new Error(
+          `Expected archive receipt, received ${result.command_name}.`,
+        );
+      }
+      await this.reconcileSessionsAfterLifecycleMutation(
+        sessionId,
+        session.profile_id,
+      );
+      return true;
+    } catch (error) {
+      this._sessionLifecycleError.set(
+        `Archive failed: ${storeErrorMessage(error)}`,
+      );
+      return false;
+    } finally {
+      this._sessionLifecyclePendingIds.update((current) => {
+        const next = new Set(current);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  }
+
+  clearSessionLifecycleError(): void {
+    this._sessionLifecycleError.set(null);
   }
 
   /**
@@ -1226,6 +1313,30 @@ export class ChatStore implements OnDestroy {
     this.resetProfileNavigation(true);
   }
 
+  private scheduleLifecycleFollowUpRefresh(
+    archivedSessionId: string | undefined,
+    archivedProfileId: string | null,
+  ): void {
+    if (this.sessionLifecycleRefreshTimer !== null) {
+      globalThis.clearTimeout(this.sessionLifecycleRefreshTimer);
+    }
+    this.sessionLifecycleRefreshTimer = globalThis.setTimeout(() => {
+      this.sessionLifecycleRefreshTimer = null;
+      void (async () => {
+        await this.refreshSessions();
+        if (
+          archivedSessionId !== undefined &&
+          this._activeSessionId() === archivedSessionId
+        ) {
+          await this.reconcileSelectionAfterArchive(
+            archivedSessionId,
+            archivedProfileId,
+          );
+        }
+      })().catch(() => undefined);
+    }, SESSION_LIFECYCLE_FOLLOW_UP_MS);
+  }
+
   private nextPendingOperationId(kind: 'pending' | 'cmd'): string {
     const sequence = this.pendingOperationSequence;
     this.pendingOperationSequence += 1;
@@ -1453,6 +1564,9 @@ export class ChatStore implements OnDestroy {
   /** Clean up resources when the store is destroyed. */
   ngOnDestroy(): void {
     globalThis.clearInterval(this.sessionExecutionPollTimer);
+    if (this.sessionLifecycleRefreshTimer !== null) {
+      globalThis.clearTimeout(this.sessionLifecycleRefreshTimer);
+    }
     this.closeStream();
   }
 }

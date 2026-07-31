@@ -16,9 +16,6 @@ import {
 
 interface PanelApi {
   readonly cwd: WritableSignal<string>;
-  readonly metadataLabel: WritableSignal<string>;
-  readonly metadataProjectId: WritableSignal<string>;
-  readonly metadataTaskId: WritableSignal<string>;
   readonly creatorMode: WritableSignal<'crew' | 'codex'>;
   taskRefLabel(session: ExternalAgentSession): string;
   sessionTitle(session: ExternalAgentSession): string;
@@ -31,7 +28,6 @@ interface PanelApi {
   setCreatorMode(mode: 'crew' | 'codex'): void;
   updateDraft(target: WritableSignal<string>, event: Event): void;
   create(event: Event): Promise<void>;
-  saveOptions(session: ExternalAgentSession, event: Event): Promise<void>;
 }
 
 function input(value: string): Event {
@@ -86,6 +82,11 @@ async function createPanel(
     crewSessionCreationNotice: signal<string | null>(null),
     createCrewSession: vi.fn(createCrewSession),
     clearCrewSessionCreationFeedback: vi.fn(),
+    reconcileSessionsAfterLifecycleMutation: vi.fn(async () => undefined),
+    archiveSession: vi.fn(async () => true),
+    sessionLifecyclePendingIds: signal(new Set<string>()),
+    sessionLifecycleError: signal<string | null>(null),
+    clearSessionLifecycleError: vi.fn(),
   };
   await TestBed.configureTestingModule({
     imports: [ExternalAgentPanelComponent],
@@ -478,7 +479,7 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     confirm.mockRestore();
   });
 
-  it('places Options below Archive and saves explicit nullable metadata', async () => {
+  it('moves Archive into Options and saves explicit nullable metadata', async () => {
     const base = inventorySession(1, {
       bound: true,
       attention: false,
@@ -502,16 +503,28 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     const actionLabels = [
       ...fixture.nativeElement.querySelectorAll('.rv-agent__actions button'),
     ].map((button) => (button as HTMLButtonElement).textContent?.trim());
-    expect(actionLabels).toEqual(['Archive', 'Options']);
+    expect(actionLabels).toEqual(['Options']);
     expect(panel.sessionTitle(session)).toBe('Existing label');
 
     panel.openOptions(session);
-    panel.updateDraft(panel.metadataLabel, input(''));
-    panel.updateDraft(panel.metadataProjectId, input(''));
-    panel.updateDraft(panel.metadataTaskId, input(''));
-    await panel.saveOptions(session, {
-      preventDefault: vi.fn(),
-    } as unknown as Event);
+    fixture.detectChanges();
+    const optionsPanel = fixture.nativeElement.querySelector(
+      '[data-testid="session-options-panel"]',
+    ) as HTMLFormElement;
+    expect(
+      optionsPanel.querySelector('[data-testid="session-options-archive"]'),
+    ).not.toBeNull();
+    const metadataInputs = Array.from(
+      optionsPanel.querySelectorAll<HTMLInputElement>('input'),
+    );
+    for (const metadataInput of metadataInputs) {
+      metadataInput.value = '';
+      metadataInput.dispatchEvent(new Event('input'));
+    }
+    optionsPanel
+      .querySelector<HTMLButtonElement>('[data-testid="session-options-save"]')
+      ?.click();
+    await fixture.whenStable();
 
     expect(store.updateSessionMetadata).toHaveBeenCalledWith(session, {
       label: null,

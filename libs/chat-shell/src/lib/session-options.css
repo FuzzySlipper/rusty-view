@@ -1,0 +1,106 @@
+:host {
+  display: block;
+}
+
+.rv-session-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-sm);
+  border-top: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+  font-family: var(--rv-font-technical);
+}
+
+.rv-session-options__heading,
+.rv-session-options__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rv-space-sm);
+}
+
+.rv-session-options__heading button {
+  border: 0;
+  background: transparent;
+  color: var(--rv-color-accent);
+  cursor: pointer;
+}
+
+.rv-session-options label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-session-options input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  font: inherit;
+}
+
+.rv-session-options__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, 0.55fr);
+  gap: var(--rv-space-sm);
+}
+
+.rv-session-options__hint {
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-xs);
+  line-height: 1.35;
+}
+
+.rv-session-options__error {
+  color: var(--rv-color-danger);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-session-options__actions {
+  justify-content: flex-end;
+}
+
+.rv-session-options__actions button {
+  min-height: 32px;
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  cursor: pointer;
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-session-options__actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rv-session-options__archive {
+  margin-right: auto;
+  background: transparent;
+  color: var(--rv-color-danger);
+}
+
+.rv-session-options__save {
+  border-color: var(--rv-color-accent);
+  background: var(--rv-color-accent);
+  color: var(--rv-color-accent-text);
+}
+
+@media (max-width: 720px) {
+  .rv-session-options__row {
+    grid-template-columns: 1fr;
+  }
+
+  .rv-session-options__actions button {
+    min-height: 44px;
+  }
+}

@@ -79,6 +79,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     readonly pathname: string;
     readonly body: unknown;
   }> = [];
+  let sessionListReads = 0;
   let coordinationGate: Deferred<void> | undefined;
 
   await page.route('http://crew.test/v1/**', async (route) => {
@@ -110,6 +111,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
           applyResult: {},
         });
       }
+      sessionListReads += 1;
       return ok({
         items: [
           ...(crewCreated ? [createdCrewSession] : []),
@@ -329,6 +331,37 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     'data-runtime-kind',
     'codex_app_server',
   );
+  const directOptions = directRow
+    .locator('xpath=..')
+    .getByTestId('profile-session-options');
+  await expect(directOptions).toBeVisible();
+  const [directRowBox, directOptionsBox] = await Promise.all([
+    directRow.boundingBox(),
+    directOptions.boundingBox(),
+  ]);
+  expect(directRowBox).not.toBeNull();
+  expect(directOptionsBox).not.toBeNull();
+  expect(directOptionsBox?.width).toBeLessThan(64);
+  expect(directOptionsBox?.x).toBeGreaterThan(
+    (directRowBox?.x ?? 0) + (directRowBox?.width ?? 0) / 2,
+  );
+  expect(
+    Math.abs(
+      (directOptionsBox?.y ?? 0) +
+        (directOptionsBox?.height ?? 0) -
+        ((directRowBox?.y ?? 0) + (directRowBox?.height ?? 0)),
+    ),
+  ).toBeLessThanOrEqual(8);
+  await directOptions.click();
+  await expect(page.getByTestId('session-options-panel')).toBeVisible();
+  await expect(page.getByTestId('session-options-archive')).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  const readsBeforeManualRefresh = sessionListReads;
+  await page.getByTestId('profile-refresh').click();
+  await expect
+    .poll(() => sessionListReads)
+    .toBeGreaterThan(readsBeforeManualRefresh);
 
   await directRow.click();
   await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
@@ -409,8 +442,11 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
 
   await page.getByTestId('external-agents-tab').click();
   await expect(page.getByTestId('external-agent-create')).toBeVisible();
-  await expect(page.getByTestId('external-agent-archive')).toBeVisible();
+  await expect(page.getByTestId('external-agent-archive')).toHaveCount(0);
   await expect(page.getByTestId('external-agent-options')).toBeVisible();
+  await page.getByTestId('external-agent-options').click();
+  await expect(page.getByTestId('session-options-archive')).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
 
   await page.getByTestId('crew-agents-tab').click();
   await expect(page.getByTestId('session-status-bar')).toHaveAttribute(

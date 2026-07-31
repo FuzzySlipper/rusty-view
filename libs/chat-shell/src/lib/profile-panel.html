@@ -1,13 +1,18 @@
 <div class="rv-profiles" data-testid="profile-panel">
   <div class="rv-profiles__header">
     <span>Agents</span>
-    <button
-      type="button"
-      data-testid="profile-new-session"
-      (click)="newSessionRequested.emit()"
-    >
-      New
-    </button>
+    <div class="rv-profiles__header-actions">
+      <button
+        type="button"
+        data-testid="profile-new-session"
+        (click)="newSessionRequested.emit()"
+      >
+        New
+      </button>
+      <button type="button" data-testid="profile-refresh" (click)="onRefresh()">
+        Refresh
+      </button>
+    </div>
   </div>
 
   @if (!hasProfiles()) {
@@ -72,33 +77,63 @@
       @if (profile.liveSessions.length > 0) {
       <ul class="rv-profile-sessions">
         @for (session of profile.liveSessions; track session.session_id) {
-        <li>
-          <button
-            type="button"
-            class="rv-profile-session"
-            data-testid="profile-session-row"
-            [attr.data-session-id]="session.session_id"
-            [attr.data-session-status]="sessionState(session)"
-            [attr.data-runtime-kind]="sessionRuntimeKind(session)"
-            [attr.data-workdir]="sessionWorkdir(session)"
-            [class.rv-profile-session--selected]="
-              selectedSessionId() === session.session_id
-            "
-            (click)="onSelectSession(session.session_id)"
-          >
-            <span class="rv-profile-session__heading">
-              <strong>{{ sessionRuntimeLabel(session) }}</strong>
-              <span
-                class="rv-profile-session__status"
-                [attr.data-status-tone]="sessionStateTone(session)"
-                >{{ sessionStateLabel(session) }}</span
+        <li class="rv-profile-session-item">
+          <div class="rv-profile-session-row">
+            <button
+              type="button"
+              class="rv-profile-session"
+              data-testid="profile-session-row"
+              [attr.data-session-id]="session.session_id"
+              [attr.data-session-status]="sessionState(session)"
+              [attr.data-runtime-kind]="sessionRuntimeKind(session)"
+              [attr.data-workdir]="sessionWorkdir(session)"
+              [class.rv-profile-session--selected]="
+                selectedSessionId() === session.session_id
+              "
+              (click)="onSelectSession(session.session_id)"
+            >
+              <span class="rv-profile-session__heading">
+                <strong>{{ sessionRuntimeLabel(session) }}</strong>
+                <span
+                  class="rv-profile-session__status"
+                  [attr.data-status-tone]="sessionStateTone(session)"
+                  >{{ sessionStateLabel(session) }}</span
+                >
+              </span>
+              @if (sessionWorkdir(session); as workdir) {
+              <span class="rv-profile-session__workdir">{{ workdir }}</span>
+              }
+              <span class="rv-profile-session__id"
+                >{{ session.session_id }}</span
               >
-            </span>
-            @if (sessionWorkdir(session); as workdir) {
-            <span class="rv-profile-session__workdir">{{ workdir }}</span>
-            }
-            <span class="rv-profile-session__id">{{ session.session_id }}</span>
-          </button>
+            </button>
+            <button
+              type="button"
+              class="rv-profile-session__options"
+              data-testid="profile-session-options"
+              [attr.aria-expanded]="
+                optionsSessionId() === session.session_id
+              "
+              [attr.aria-label]="'Options for session ' + session.session_id"
+              [disabled]="
+                sessionOptionsUnavailableReason(session) !== undefined
+              "
+              [title]="
+                sessionOptionsUnavailableReason(session) ?? 'Session options'
+              "
+              (click)="toggleSessionOptions(session.session_id)"
+            >
+              Options
+            </button>
+          </div>
+          @if (optionsSessionId() === session.session_id) {
+          <rv-session-options
+            [chatSession]="session"
+            [externalSession]="externalSession(session)"
+            (closed)="closeSessionOptions()"
+            (archived)="closeSessionOptions()"
+          />
+          }
         </li>
         }
       </ul>
@@ -107,13 +142,4 @@
     }
   </ul>
   }
-
-  <button
-    type="button"
-    class="rv-profiles__refresh"
-    data-testid="profile-refresh"
-    (click)="onRefresh()"
-  >
-    Refresh
-  </button>
 </div>

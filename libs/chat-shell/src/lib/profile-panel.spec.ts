@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +7,7 @@ import {
   AdminStore,
   ChatStore,
   CHAT_STORAGE_ADAPTER,
+  ExternalAgentStore,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
@@ -183,11 +185,21 @@ function makeTransport(sessions: ChatSessionSummary[]): ChatTransport {
 }
 
 async function createPanel(sessions: ChatSessionSummary[]) {
+  const externalStore = {
+    refresh: vi.fn(async () => undefined),
+    lifecyclePendingThreadIds: signal(new Set<string>()),
+    metadataPendingBindingIds: signal(new Set<string>()),
+    metadataError: signal<string | undefined>(undefined),
+    interactions: signal([]),
+    updateSessionMetadata: vi.fn(async () => true),
+    archiveThread: vi.fn(async () => true),
+  };
   await TestBed.configureTestingModule({
     imports: [ProfilePanelComponent],
     providers: [
       ChatStore,
       AdminStore,
+      { provide: ExternalAgentStore, useValue: externalStore },
       { provide: ChatTransport, useValue: makeTransport(sessions) },
       { provide: CHAT_STORAGE_ADAPTER, useClass: InMemStorage },
     ],
@@ -196,7 +208,7 @@ async function createPanel(sessions: ChatSessionSummary[]) {
   await store.refreshSessions();
   const fixture = TestBed.createComponent(ProfilePanelComponent);
   fixture.detectChanges();
-  return { fixture, store };
+  return { fixture, store, externalStore };
 }
 
 describe('ProfilePanelComponent', () => {
@@ -211,6 +223,20 @@ describe('ProfilePanelComponent', () => {
     const { fixture } = await createPanel([]);
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('No agents found');
+  });
+
+  it('refreshes both unified Crew and Codex inventories from the header', async () => {
+    const { fixture, store, externalStore } = await createPanel([
+      makeSession({ session_id: 'live', profile_id: 'p1' }),
+    ]);
+    const crewRefresh = vi.spyOn(store, 'refreshSessions');
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[data-testid="profile-refresh"]')
+      ?.click();
+    await fixture.whenStable();
+
+    expect(crewRefresh).toHaveBeenCalled();
+    expect(externalStore.refresh).toHaveBeenCalled();
   });
 
   it('renders one row per profile', async () => {
@@ -401,6 +427,34 @@ describe('ProfilePanelComponent', () => {
     managed?.click();
 
     expect(selected).toHaveBeenCalledWith('managed-session');
+  });
+
+  it('places a compact options control on each exact session without selecting it', async () => {
+    const { fixture } = await createPanel([
+      makeSession({
+        session_id: 'direct-session',
+        agent_id: 'software-engineer',
+        profile_id: 'p1',
+      }),
+    ]);
+    const selected = vi.fn();
+    fixture.componentInstance.profileSelected.subscribe(selected);
+    const options = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLButtonElement>(
+      '[data-session-id="direct-session"] + [data-testid="profile-session-options"]',
+    );
+
+    expect(options?.textContent?.trim()).toBe('Options');
+    options?.click();
+    fixture.detectChanges();
+
+    expect(selected).not.toHaveBeenCalled();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="session-options-panel"]',
+      ),
+    ).not.toBeNull();
   });
 
   it('shows the native Codex phase instead of the coordination status', async () => {

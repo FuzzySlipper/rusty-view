@@ -1,0 +1,88 @@
+<form
+  class="rv-session-options"
+  data-testid="session-options-panel"
+  (submit)="save($event)"
+>
+  <div class="rv-session-options__heading">
+    <strong>Session options</strong>
+    <button type="button" (click)="closed.emit()">Close</button>
+  </div>
+
+  @if (binding()) {
+  <label>
+    Label
+    <input
+      type="text"
+      maxlength="256"
+      placeholder="Use prompt preview when blank"
+      autocomplete="off"
+      [value]="metadataLabel()"
+      (input)="updateDraft(metadataLabel, $event)"
+    />
+  </label>
+  <div class="rv-session-options__row">
+    <label>
+      Den project
+      <input
+        type="text"
+        placeholder="Optional"
+        autocomplete="off"
+        [value]="metadataProjectId()"
+        (input)="updateDraft(metadataProjectId, $event)"
+      />
+    </label>
+    <label>
+      Task
+      <input
+        type="text"
+        inputmode="numeric"
+        placeholder="Optional"
+        autocomplete="off"
+        [value]="metadataTaskId()"
+        (input)="updateDraft(metadataTaskId, $event)"
+      />
+    </label>
+  </div>
+  <div class="rv-session-options__hint">
+    Clear fields to restore the prompt-derived title or remove the Den mapping.
+  </div>
+  } @else if (isCodex()) {
+  <div class="rv-session-options__hint">
+    This native Codex thread has no Crew metadata binding to edit.
+  </div>
+  } @else {
+  <div class="rv-session-options__hint">
+    This is a native Crew brain session. Its profile remains the configuration
+    authority.
+  </div>
+  } @if (actionError() || external.metadataError() ||
+  chat.sessionLifecycleError()) {
+  <div class="rv-session-options__error" role="alert">
+    {{ actionError() ?? external.metadataError() ?? chat.sessionLifecycleError()
+    }}
+  </div>
+  }
+
+  <div class="rv-session-options__actions">
+    <button
+      type="button"
+      class="rv-session-options__archive"
+      data-testid="session-options-archive"
+      [disabled]="archiveDisabledReason() !== undefined"
+      [title]="archiveDisabledReason() ?? 'Archive this exact session'"
+      (click)="archive()"
+    >
+      Archive
+    </button>
+    @if (binding()) {
+    <button
+      type="submit"
+      class="rv-session-options__save"
+      data-testid="session-options-save"
+      [disabled]="metadataPending()"
+    >
+      {{ metadataPending() ? 'Saving…' : 'Save options' }}
+    </button>
+    }
+  </div>
+</form>
