@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test('focuses a large native inventory and archives then restores through Crew', async ({
   page,
@@ -25,13 +25,18 @@ test('focuses a large native inventory and archives then restores through Crew',
     '600',
   );
   const attentionArchive = page
+    .getByTestId('session-options-panel')
+    .getByTestId('session-options-archive');
+  await page
     .locator('[data-thread-id="thread-99"]')
-    .getByTestId('external-agent-archive');
+    .getByTestId('external-agent-options')
+    .click();
   await expect(attentionArchive).toBeDisabled();
   await expect(attentionArchive).toHaveAttribute(
     'title',
     'Resolve the pending interaction first.',
   );
+  await page.getByTestId('session-options-panel').getByText('Close').click();
 
   await page.getByTestId('external-agent-mode-all').click();
   await expect(page.getByTestId('external-agent-row')).toHaveCount(100);
@@ -40,7 +45,7 @@ test('focuses a large native inventory and archives then restores through Crew',
 
   const disposable = page.locator('[data-thread-id="thread-50"]');
   page.once('dialog', (dialog) => dialog.accept());
-  await disposable.getByTestId('external-agent-archive').click();
+  await archiveExternalAgent(page, disposable);
   await expect(disposable).toHaveCount(0);
   await expect(page.getByRole('status')).toContainText(
     'Archived native Codex thread thread-50',
@@ -58,7 +63,7 @@ test('focuses a large native inventory and archives then restores through Crew',
   await page.getByTestId('external-agent-mode-all').click();
   const managedToRestore = page.locator('[data-thread-id="thread-0"]');
   page.once('dialog', (dialog) => dialog.accept());
-  await managedToRestore.getByTestId('external-agent-archive').click();
+  await archiveExternalAgent(page, managedToRestore);
   await page.getByTestId('external-agent-mode-archived').click();
   const archivedManaged = page.locator('[data-thread-id="thread-0"]');
   await expect(archivedManaged).toContainText('Crew session restore available');
@@ -76,7 +81,7 @@ test('focuses a large native inventory and archives then restores through Crew',
   await expect(nativeRestoredManaged).toBeVisible();
   await expect(nativeRestoredManaged).toContainText('Crew Archived');
   page.once('dialog', (dialog) => dialog.accept());
-  await nativeRestoredManaged.getByTestId('external-agent-archive').click();
+  await archiveExternalAgent(page, nativeRestoredManaged);
   await page.getByTestId('external-agent-mode-archived').click();
 
   const archivedManagedAgain = page.locator('[data-thread-id="thread-0"]');
@@ -103,7 +108,7 @@ test('focuses a large native inventory and archives then restores through Crew',
   await page.getByTestId('external-agent-mode-all').click();
   const deletable = page.locator('[data-thread-id="thread-51"]');
   page.once('dialog', (dialog) => dialog.accept());
-  await deletable.getByTestId('external-agent-archive').click();
+  await archiveExternalAgent(page, deletable);
   await page.getByTestId('external-agent-mode-archived').click();
   const permanentlyDelete = page.locator('[data-thread-id="thread-51"]');
   page.once('dialog', (dialog) => dialog.accept('thread-51'));
@@ -174,6 +179,14 @@ test('renders one compact phased assistant turn identically after reload', async
   ).toHaveCount(1);
   await expect(page.getByTestId('transcript-viewport')).toHaveText(before);
 });
+
+async function archiveExternalAgent(page: Page, row: Locator): Promise<void> {
+  await row.getByTestId('external-agent-options').click();
+  await page
+    .getByTestId('session-options-panel')
+    .getByTestId('session-options-archive')
+    .click();
+}
 
 async function installHistoryFixture(page: Page): Promise<void> {
   const runtime = {
