@@ -30,41 +30,84 @@ export function projectExternalAgentTranscript(
         items: [],
       };
       snapshotCoverageByTurn.set(turn.turnId, coverage);
+      const assistantBlocks: MessageBlock[] = [];
+      const assistantCoverage: Array<
+        Omit<SnapshotItemCoverage, 'messageIndex'>
+      > = [];
+      let hasExternalAgentText = false;
       for (const item of turn.items) {
-        const messageIndex = messages.length;
         const status = item.status ?? turn.status;
         const content =
           item.text ?? item.summary?.join('\n') ?? item.status ?? item.kind;
-        coverage.items.push({
+        const block = withExternalItemMetadata(
+          blockForItem(item.itemId, item.kind, content, status),
+          item.itemId,
+          item.kind,
+          item.messagePhase,
+        );
+        if (roleForItem(item.kind) === 'user') {
+          const messageIndex = messages.length;
+          coverage.items.push({
+            itemId: item.itemId,
+            kind: item.kind,
+            content,
+            messageIndex,
+            blockIndex: 0,
+          });
+          messages.push(
+            buildMessage(
+              `external:${thread.threadId}:${turn.turnId}:${item.itemId}`,
+              thread.sessionId,
+              'user',
+              unixDate(turn.startedAt ?? thread.updatedAt),
+              [block],
+              messageStatus(status),
+              {
+                nativeThreadId: thread.threadId,
+                nativeTurnId: turn.turnId,
+                itemId: item.itemId,
+              },
+            ),
+          );
+          continue;
+        }
+        assistantCoverage.push({
           itemId: item.itemId,
           kind: item.kind,
           content,
-          messageIndex,
+          blockIndex: assistantBlocks.length,
         });
+        assistantBlocks.push(block);
+        hasExternalAgentText ||= item.kind === 'agentMessage';
+      }
+      const errorMessage = buildSnapshotTurnErrorMessage(thread, turn);
+      if (errorMessage !== undefined) {
+        assistantBlocks.push(...errorMessage.blocks);
+      }
+      if (assistantBlocks.length > 0) {
+        const messageIndex = messages.length;
+        coverage.items.push(
+          ...assistantCoverage.map((item) => ({ ...item, messageIndex })),
+        );
+        const messagePhase = messagePhaseForBlocks(assistantBlocks);
         messages.push(
           buildMessage(
-            `external:${thread.threadId}:${turn.turnId}:${item.itemId}`,
+            externalTurnMessageId(thread.threadId, turn.turnId),
             thread.sessionId,
-            roleForItem(item.kind),
+            'assistant',
             unixDate(turn.startedAt ?? thread.updatedAt),
-            [blockForItem(item.itemId, item.kind, content, status)],
-            messageStatus(status),
+            assistantBlocks,
+            errorMessage?.status ?? messageStatus(turn.status),
             {
               nativeThreadId: thread.threadId,
               nativeTurnId: turn.turnId,
-              itemId: item.itemId,
-              ...(item.kind === 'agentMessage'
-                ? { externalAgentText: true }
-                : {}),
-              ...(item.messagePhase === undefined
-                ? {}
-                : { messagePhase: item.messagePhase }),
+              ...(hasExternalAgentText ? { externalAgentText: true } : {}),
+              ...(messagePhase === undefined ? {} : { messagePhase }),
+              ...errorMessage?.metadata,
             },
           ),
         );
       }
-      const errorMessage = buildSnapshotTurnErrorMessage(thread, turn);
-      if (errorMessage !== undefined) messages.push(errorMessage);
     }
   }
   const grouped = new Map<string, NormalizedExternalRuntimeEvent[]>();
@@ -77,10 +120,12 @@ export function projectExternalAgentTranscript(
   for (const [key, group] of grouped) {
     const first = group[0];
     if (first === undefined) continue;
-    const status = terminalStatus(
-      group,
-      terminalByTurn.get(first.nativeTurnId ?? ''),
-    );
+    const turnTerminalStatus = terminalByTurn.get(first.nativeTurnId ?? '');
+    const status = terminalStatus(group, turnTerminalStatus);
+    const assistantTurnStatus =
+      first.nativeTurnId == null
+        ? status
+        : (turnTerminalStatus ?? turnErrorStatus(group));
     const reconciliation = reconcileSnapshotEventGroup(
       snapshotCoverageByTurn.get(first.nativeTurnId ?? ''),
       group,
@@ -90,6 +135,7 @@ export function projectExternalAgentTranscript(
         applyMessagePhase(
           messages,
           reconciliation.item.messageIndex,
+          reconciliation.item.blockIndex,
           reconciliation.messagePhase,
         );
       }
@@ -100,8 +146,9 @@ export function projectExternalAgentTranscript(
         appendSnapshotContinuation(
           messages,
           reconciliation.item.messageIndex,
+          reconciliation.item.blockIndex,
           reconciliation.uncoveredContent,
-          status,
+          assistantTurnStatus,
         );
       }
       continue;
@@ -124,8 +171,34 @@ export function projectExternalAgentTranscript(
     ) {
       continue;
     }
-    const blocks = blocksForGroup(group, status);
+    const messagePhase = messagePhaseForEvents(group);
+    const projectedBlocks = blocksForGroup(group, status);
+    const itemIdentity = first.itemId ?? key;
+    const blocks = projectedBlocks.map((block, index) =>
+      withExternalItemMetadata(
+        {
+          ...block,
+          id:
+            projectedBlocks.length === 1
+              ? `block:${itemIdentity}`
+              : `block:${itemIdentity}:${block.kind}:${index}`,
+        },
+        itemIdentity,
+        first.kind,
+        messagePhase,
+      ),
+    );
     if (blocks.length === 0) continue;
+    if (first.nativeTurnId != null) {
+      appendExternalTurnBlocks(
+        messages,
+        first,
+        blocks,
+        assistantTurnStatus,
+        messagePhase,
+      );
+      continue;
+    }
     messages.push(
       buildMessage(
         `external-event:${key}`,
@@ -142,9 +215,7 @@ export function projectExternalAgentTranscript(
           ...(blocks.some((block) => block.kind === 'text')
             ? { externalAgentText: true }
             : {}),
-          ...(messagePhaseForEvents(group) === undefined
-            ? {}
-            : { messagePhase: messagePhaseForEvents(group) }),
+          ...(messagePhase === undefined ? {} : { messagePhase }),
         },
       ),
     );
@@ -157,6 +228,7 @@ interface SnapshotItemCoverage {
   readonly kind: string;
   readonly content: string;
   readonly messageIndex: number;
+  readonly blockIndex: number;
 }
 
 interface SnapshotTurnCoverage {
@@ -315,47 +387,57 @@ function suffixPrefixOverlap(snapshot: string, events: string): number {
 function appendSnapshotContinuation(
   messages: ChatMessage[],
   messageIndex: number,
+  blockIndex: number,
   continuation: string,
   status: ChatMessage['status'],
 ): void {
   if (continuation === '') return;
   const message = messages[messageIndex];
-  const block = message?.blocks[0];
+  const block = message?.blocks[blockIndex];
   if (message === undefined || block === undefined) return;
+  const blocks = [...message.blocks];
+  blocks[blockIndex] = {
+    ...block,
+    content: `${block.content}${continuation}`,
+    ...(block.tool === undefined
+      ? {}
+      : {
+          tool: {
+            ...block.tool,
+            status: toolStatus(undefined, status),
+          },
+        }),
+  };
   messages[messageIndex] = {
     ...message,
     status,
-    blocks: [
-      {
-        ...block,
-        content: `${block.content}${continuation}`,
-        ...(block.tool === undefined
-          ? {}
-          : {
-              tool: {
-                ...block.tool,
-                status: toolStatus(undefined, status),
-              },
-            }),
-      },
-      ...message.blocks.slice(1),
-    ],
+    blocks,
   };
 }
 
 function applyMessagePhase(
   messages: ChatMessage[],
   messageIndex: number,
+  blockIndex: number,
   phase: 'commentary' | 'final_answer' | 'unknown' | undefined,
 ): void {
   if (phase === undefined) return;
   const message = messages[messageIndex];
-  if (message === undefined || message.metadata?.['messagePhase'] === phase) {
-    return;
-  }
+  const block = message?.blocks[blockIndex];
+  if (message === undefined || block === undefined) return;
+  const blocks = [...message.blocks];
+  blocks[blockIndex] = {
+    ...block,
+    metadata: { ...block.metadata, messagePhase: phase },
+  };
+  const messagePhase = messagePhaseForBlocks(blocks);
   messages[messageIndex] = {
     ...message,
-    metadata: { ...message.metadata, messagePhase: phase },
+    blocks,
+    metadata: {
+      ...message.metadata,
+      ...(messagePhase === undefined ? {} : { messagePhase }),
+    },
   };
 }
 
@@ -871,6 +953,118 @@ function buildMessage(
   };
 }
 
+function appendExternalTurnBlocks(
+  messages: ChatMessage[],
+  event: NormalizedExternalRuntimeEvent,
+  blocks: readonly MessageBlock[],
+  status: ChatMessage['status'],
+  eventPhase: 'commentary' | 'final_answer' | 'unknown' | undefined,
+): void {
+  const turnId = event.nativeTurnId;
+  if (turnId == null) return;
+  const threadId =
+    event.nativeThreadId ??
+    event.sessionId ??
+    `${event.runtimeId}:unbound-thread`;
+  const messageIndex = messages.findIndex(
+    (message) =>
+      message.author.role !== 'user' &&
+      message.metadata?.['nativeTurnId'] === turnId &&
+      (event.nativeThreadId == null ||
+        message.metadata?.['nativeThreadId'] === event.nativeThreadId),
+  );
+  if (messageIndex < 0) {
+    const messagePhase = messagePhaseForBlocks(blocks) ?? eventPhase;
+    messages.push(
+      buildMessage(
+        externalTurnMessageId(threadId, turnId),
+        event.sessionId ?? `${event.runtimeId}:${threadId}`,
+        'assistant',
+        event.createdAt,
+        blocks,
+        status,
+        {
+          runtimeId: event.runtimeId,
+          nativeThreadId: event.nativeThreadId,
+          nativeTurnId: turnId,
+          ...(blocks.some((block) => block.kind === 'text')
+            ? { externalAgentText: true }
+            : {}),
+          ...(messagePhase === undefined ? {} : { messagePhase }),
+        },
+      ),
+    );
+    return;
+  }
+
+  const message = messages[messageIndex];
+  if (message === undefined) return;
+  const appendedBlocks = blocks.map((block) => ({
+    ...block,
+    messageId: message.id,
+  }));
+  const nextBlocks = [...message.blocks, ...appendedBlocks];
+  const messagePhase = messagePhaseForBlocks(nextBlocks) ?? eventPhase;
+  messages[messageIndex] = {
+    ...message,
+    status: mergeTurnMessageStatus(message.status, status),
+    blocks: nextBlocks,
+    metadata: {
+      ...message.metadata,
+      runtimeId: event.runtimeId,
+      ...(nextBlocks.some((block) => block.kind === 'text')
+        ? { externalAgentText: true }
+        : {}),
+      ...(messagePhase === undefined ? {} : { messagePhase }),
+    },
+  };
+}
+
+function mergeTurnMessageStatus(
+  current: ChatMessage['status'],
+  incoming: ChatMessage['status'],
+): ChatMessage['status'] {
+  if (current === 'error' || incoming === 'error') return 'error';
+  if (current === 'completed' || incoming === 'completed') return 'completed';
+  return 'streaming';
+}
+
+function externalTurnMessageId(threadId: string, turnId: string): string {
+  return `external:${threadId}:${turnId}:assistant`;
+}
+
+function withExternalItemMetadata(
+  block: MessageBlock,
+  itemId: string,
+  itemKind: string,
+  phase: 'commentary' | 'final_answer' | 'unknown' | undefined,
+): MessageBlock {
+  return {
+    ...block,
+    metadata: {
+      ...block.metadata,
+      externalItemId: itemId,
+      externalItemKind: itemKind,
+      ...(phase === undefined ? {} : { messagePhase: phase }),
+    },
+  };
+}
+
+function messagePhaseForBlocks(
+  blocks: readonly MessageBlock[],
+): 'commentary' | 'final_answer' | 'unknown' | undefined {
+  const phases = blocks
+    .map((block) => block.metadata?.['messagePhase'])
+    .filter(
+      (phase): phase is 'commentary' | 'final_answer' | 'unknown' =>
+        phase === 'commentary' ||
+        phase === 'final_answer' ||
+        phase === 'unknown',
+    );
+  if (phases.includes('final_answer')) return 'final_answer';
+  return phases.at(-1);
+}
+
 function simpleBlock(id: string, kind: string, content: string): MessageBlock {
   return {
     id: `block:${id}`,
@@ -1032,6 +1226,18 @@ function eventMessageStatus(
   if (event.payload.error?.willRetry === true) return 'streaming';
   if (event.payload.error !== undefined) return 'error';
   return messageStatus(event.payload.status);
+}
+
+function turnErrorStatus(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): ChatMessage['status'] {
+  return events.some(
+    (event) =>
+      event.payload.error !== undefined &&
+      event.payload.error.willRetry !== true,
+  )
+    ? 'error'
+    : 'streaming';
 }
 
 function eventGroupKey(event: NormalizedExternalRuntimeEvent): string {

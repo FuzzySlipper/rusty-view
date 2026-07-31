@@ -42,93 +42,66 @@ function message(
 }
 
 describe('projectTranscriptVirtualRows', () => {
-  it('keeps distinct Codex items from one active turn in one stable row', () => {
-    const turn = 'thread-1:turn-1';
-    const before = projectTranscriptVirtualRows(
-      [
-        message('reasoning', {
-          status: 'streaming',
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-      ],
-      new Set([turn]),
-    );
-    const after = projectTranscriptVirtualRows(
-      [
-        message('reasoning', {
-          status: 'completed',
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-        message('command', {
-          status: 'completed',
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-        message('final', {
-          status: 'streaming',
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-      ],
-      new Set([turn]),
-    );
+  it('keeps a growing Codex turn message in one stable row', () => {
+    const projected = message('assistant-turn', {
+      status: 'streaming',
+      thread: 'thread-1',
+      turn: 'turn-1',
+    });
+    const baseBlock = projected.blocks[0];
+    if (baseBlock === undefined) throw new Error('fixture block missing');
+    const before = projectTranscriptVirtualRows([projected]);
+    const after = projectTranscriptVirtualRows([
+      {
+        ...projected,
+        blocks: [
+          ...projected.blocks,
+          { ...baseBlock, id: 'command:block', kind: 'command' },
+          { ...baseBlock, id: 'final:block', content: 'final' },
+        ],
+      },
+    ]);
 
     expect(before).toHaveLength(1);
     expect(after).toHaveLength(1);
     expect(after[0]?.id).toBe(before[0]?.id);
-    expect(after[0]?.messages.map((entry) => entry.id)).toEqual([
-      'reasoning',
-      'command',
-      'final',
-    ]);
+    expect(after[0]?.messages[0]?.blocks).toHaveLength(3);
   });
 
-  it('keeps a remembered turn grouped after its messages become terminal', () => {
-    const rows = projectTranscriptVirtualRows(
-      [
-        message('reasoning', {
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-        message('final', {
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-      ],
-      new Set(['thread-1:turn-1']),
-    );
+  it('does not retain stateful grouping after a turn becomes terminal', () => {
+    const terminal = message('assistant-turn', {
+      thread: 'thread-1',
+      turn: 'turn-1',
+    });
+    const rows = projectTranscriptVirtualRows([terminal]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.messages).toHaveLength(2);
+    expect(rows[0]?.id).toBe('message:assistant-turn');
+    expect(rows[0]?.messages).toEqual([terminal]);
   });
 
-  it('does not merge user prompts or separate turns into an active turn row', () => {
-    const rows = projectTranscriptVirtualRows(
-      [
-        message('prompt', {
-          role: 'user',
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-        message('reasoning', {
-          status: 'streaming',
-          thread: 'thread-1',
-          turn: 'turn-1',
-        }),
-        message('next-turn', {
-          status: 'streaming',
-          thread: 'thread-1',
-          turn: 'turn-2',
-        }),
-      ],
-      new Set(['thread-1:turn-1', 'thread-1:turn-2']),
-    );
+  it('keeps user prompts and separate turns in separate rows', () => {
+    const rows = projectTranscriptVirtualRows([
+      message('prompt', {
+        role: 'user',
+        thread: 'thread-1',
+        turn: 'turn-1',
+      }),
+      message('assistant-turn', {
+        status: 'streaming',
+        thread: 'thread-1',
+        turn: 'turn-1',
+      }),
+      message('next-turn', {
+        status: 'streaming',
+        thread: 'thread-1',
+        turn: 'turn-2',
+      }),
+    ]);
 
     expect(rows.map((row) => row.messages.map((entry) => entry.id))).toEqual([
       ['prompt'],
-      ['reasoning'],
+      ['assistant-turn'],
       ['next-turn'],
     ]);
   });

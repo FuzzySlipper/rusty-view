@@ -114,7 +114,7 @@ test('focuses a large native inventory and archives then restores through Crew',
   );
 });
 
-test('renders commentary, activity, and one final answer identically after reload', async ({
+test('renders one compact phased assistant turn identically after reload', async ({
   page,
 }) => {
   await installHistoryFixture(page);
@@ -122,18 +122,21 @@ test('renders commentary, activity, and one final answer identically after reloa
   await page.getByTestId('external-agents-tab').click();
   await page.locator('[data-thread-id="thread-0"]').click();
 
-  const phases = page.locator('[data-message-phase]');
-  await expect(phases).toHaveCount(2);
-  await expect(phases.nth(0)).toHaveAttribute(
-    'data-message-phase',
-    'commentary',
-  );
-  await expect(page.locator('[data-block-kind="command"]')).toBeVisible();
-  await expect(phases.nth(1)).toHaveAttribute(
+  const assistantTurn = page.locator('[data-message-role="assistant"]');
+  await expect(assistantTurn).toHaveCount(1);
+  await expect(assistantTurn).toHaveAttribute(
     'data-message-phase',
     'final_answer',
   );
-  await expect(phases.nth(1)).toContainText('Final answer from Codex.');
+  await expect(
+    assistantTurn.locator('[data-block-message-phase="commentary"]'),
+  ).toContainText('Checking the browser state.');
+  await expect(
+    assistantTurn.locator('[data-block-kind="command"]'),
+  ).toBeVisible();
+  await expect(
+    assistantTurn.locator('[data-block-message-phase="final_answer"]'),
+  ).toContainText('Final answer from Codex.');
   await expect(page.locator('.rv-transcript__item').last()).toContainText(
     'Final answer from Codex.',
   );
@@ -162,7 +165,13 @@ test('renders commentary, activity, and one final answer identically after reloa
   await page.reload();
   await page.getByTestId('external-agents-tab').click();
   await page.locator('[data-thread-id="thread-0"]').click();
-  await expect(page.locator('[data-message-phase]')).toHaveCount(2);
+  await expect(page.locator('[data-message-role="assistant"]')).toHaveCount(1);
+  await expect(
+    page.locator('[data-block-message-phase="commentary"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('[data-block-message-phase="final_answer"]'),
+  ).toHaveCount(1);
   await expect(page.getByTestId('transcript-viewport')).toHaveText(before);
 });
 

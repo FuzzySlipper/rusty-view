@@ -295,9 +295,16 @@
   class="rv-block rv-block--text"
   data-testid="text-block"
   [class.rv-block--search-match]="searchMatched()"
+  [class.rv-block--commentary]="messagePhase() === 'commentary'"
+  [class.rv-block--final-answer]="messagePhase() === 'final_answer'"
   [attr.data-block-id]="block().id"
+  [attr.data-block-message-phase]="messagePhase()"
 >
-  @if (shouldRenderFormatted() && renderedHtml()) {
+  @if (messagePhaseLabel()) {
+  <div class="rv-block__phase" data-testid="text-block-phase">
+    {{ messagePhaseLabel() }}
+  </div>
+  } @if (shouldRenderFormatted() && renderedHtml()) {
   <div
     class="rv-block__markdown"
     data-testid="text-block-formatted"

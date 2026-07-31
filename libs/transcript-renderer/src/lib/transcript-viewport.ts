@@ -212,7 +212,6 @@ export class TranscriptViewportComponent {
    */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
   protected readonly renderRows = signal<readonly TranscriptVirtualRow[]>([]);
-  private readonly groupedExternalTurnIds = new Set<string>();
   protected readonly transcriptTransitioning = signal(false);
   protected readonly searchQuery = signal('');
   protected readonly searchRole = signal<MessageRole | 'all'>('all');
@@ -352,7 +351,6 @@ export class TranscriptViewportComponent {
 
       this.transcriptTransitioning.set(true);
       this.previousMessages = [];
-      this.groupedExternalTurnIds.clear();
       this.isAtBottom.set(true);
       this.resumeTailFollow();
       if (this.viewportReady) {
@@ -584,20 +582,11 @@ export class TranscriptViewportComponent {
     });
   }
 
-  /**
-   * Keep one external Codex turn in one CDK row while its separately projected
-   * reasoning, tool, and text items arrive. CDK autosize otherwise changes its
-   * data length for every item, re-estimates all unseen rows, and can visibly
-   * move the wrapper even while scrollTop remains pinned at the tail.
-   */
+  /** Install stable message rows into CDK's autosize virtualizer. */
   private setRenderedMessages(
     messages: readonly ChatMessage[],
   ): readonly TranscriptVirtualRow[] {
-    rememberStreamingExternalTurns(messages, this.groupedExternalTurnIds);
-    const rows = projectTranscriptVirtualRows(
-      messages,
-      this.groupedExternalTurnIds,
-    );
+    const rows = projectTranscriptVirtualRows(messages);
     this.renderMessages.set(messages);
     this.renderRows.set(rows);
     return rows;
@@ -1331,80 +1320,17 @@ export class TranscriptViewportComponent {
 /**
  * Build the stable data rows owned by the virtualizer.
  *
- * External app-server turns deliberately project into multiple semantic
- * ChatMessages so reasoning, commands, tool activity, and final text keep
- * their own presentation. While such a turn is streaming, those messages are
- * one variable-height virtual row: appending another semantic item then grows
- * the existing row instead of changing CDK autosize's data length.
+ * Every projected message owns one stable row. External app-server projection
+ * now places a native turn's reasoning, tools, commands, and answer in one
+ * ChatMessage, so CDK no longer needs a second stateful grouping layer.
  */
 export function projectTranscriptVirtualRows(
   messages: readonly ChatMessage[],
-  groupedExternalTurnIds: ReadonlySet<string>,
 ): readonly TranscriptVirtualRow[] {
-  const rows: Array<
-    TranscriptVirtualRow & { readonly externalTurnId?: string }
-  > = [];
-  const segmentByTurn = new Map<string, number>();
-
-  for (const message of messages) {
-    const externalTurnId = externalTurnGroupingId(message);
-    const previous = rows.at(-1);
-    if (
-      externalTurnId !== undefined &&
-      groupedExternalTurnIds.has(externalTurnId) &&
-      previous?.externalTurnId === externalTurnId
-    ) {
-      rows[rows.length - 1] = {
-        ...previous,
-        messages: [...previous.messages, message],
-      };
-      continue;
-    }
-
-    if (
-      externalTurnId !== undefined &&
-      groupedExternalTurnIds.has(externalTurnId)
-    ) {
-      const segment = segmentByTurn.get(externalTurnId) ?? 0;
-      segmentByTurn.set(externalTurnId, segment + 1);
-      rows.push({
-        id: `external-turn:${externalTurnId}:${segment}`,
-        messages: [message],
-        externalTurnId,
-      });
-      continue;
-    }
-
-    rows.push({ id: `message:${message.id}`, messages: [message] });
-  }
-
-  return rows;
-}
-
-function rememberStreamingExternalTurns(
-  messages: readonly ChatMessage[],
-  groupedExternalTurnIds: Set<string>,
-): void {
-  for (const message of messages) {
-    if (message.status !== 'streaming') continue;
-    const externalTurnId = externalTurnGroupingId(message);
-    if (externalTurnId !== undefined) {
-      groupedExternalTurnIds.add(externalTurnId);
-    }
-  }
-}
-
-function externalTurnGroupingId(message: ChatMessage): string | undefined {
-  if (message.author.role === 'user') return undefined;
-  const nativeThreadId = message.metadata?.['nativeThreadId'];
-  const nativeTurnId = message.metadata?.['nativeTurnId'];
-  if (typeof nativeThreadId !== 'string' || nativeThreadId.length === 0) {
-    return undefined;
-  }
-  if (typeof nativeTurnId !== 'string' || nativeTurnId.length === 0) {
-    return undefined;
-  }
-  return `${nativeThreadId}:${nativeTurnId}`;
+  return messages.map((message) => ({
+    id: `message:${message.id}`,
+    messages: [message],
+  }));
 }
 
 /** Whether CDK has had enough quiet time to reconcile its autosize estimate. */

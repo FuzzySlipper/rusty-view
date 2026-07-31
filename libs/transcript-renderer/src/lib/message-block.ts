@@ -241,6 +241,27 @@ export class MessageBlockComponent {
   /** Tool/command metadata, when this block represents inline tool activity. */
   protected readonly tool = computed(() => this.block().tool);
 
+  /** Native Codex agent-message phase retained at block granularity. */
+  protected readonly messagePhase = computed(() => {
+    const phase = this.block().metadata?.['messagePhase'];
+    return phase === 'commentary' ||
+      phase === 'final_answer' ||
+      phase === 'unknown'
+      ? phase
+      : undefined;
+  });
+
+  protected readonly messagePhaseLabel = computed(() => {
+    const phase = this.messagePhase();
+    return phase === 'commentary'
+      ? 'Commentary'
+      : phase === 'final_answer'
+        ? 'Final answer'
+        : phase === 'unknown'
+          ? 'Agent message'
+          : '';
+  });
+
   protected readonly toolDebugDetailId = computed(
     () => this.tool()?.debugDetailId,
   );

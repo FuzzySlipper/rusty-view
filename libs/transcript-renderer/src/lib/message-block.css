@@ -6,6 +6,19 @@ rv-message-block {
   margin: var(--rv-space-xs) 0;
 }
 
+.rv-block__phase {
+  margin-bottom: var(--rv-space-xs);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+  font-weight: var(--rv-font-weight-bold);
+  letter-spacing: 0.02em;
+}
+
+.rv-block--final-answer > .rv-block__phase {
+  color: var(--rv-color-accent);
+}
+
 .rv-block--search-match {
   border-left: 2px solid var(--rv-color-accent);
   padding-left: var(--rv-space-sm);

@@ -6,7 +6,7 @@ const threadId =
   process.env['RV_EXTERNAL_PHASE_THREAD_ID'] ??
   '019f564d-6d32-7812-ac90-97ec7b8762e6';
 
-test('reviewed Crew history renders commentary and one final answer after reload @live-agent @phases', async ({
+test('reviewed Crew history renders one compact phased assistant turn after reload @live-agent @phases', async ({
   page,
 }) => {
   test.skip(
@@ -21,15 +21,17 @@ test('reviewed Crew history renders commentary and one final answer after reload
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.locator('.rv-agent__select').click();
 
-  await expect(page.locator('[data-message-phase="commentary"]')).toContainText(
-    'two-step plan',
-  );
-  await expect(page.locator('[data-message-phase="final_answer"]')).toHaveCount(
-    1,
-  );
+  const assistantTurn = page
+    .locator('[data-message-role="assistant"]')
+    .filter({ hasText: 'PHASE_LIVE_5699_OK' });
+  await expect(assistantTurn).toHaveCount(1);
+  await expect(assistantTurn).toContainText('two-step plan');
   await expect(
-    page.locator('[data-message-phase="final_answer"]'),
-  ).toContainText('PHASE_LIVE_5699_OK');
+    assistantTurn.locator('[data-block-message-phase="commentary"]'),
+  ).toHaveCount(1);
+  await expect(
+    assistantTurn.locator('[data-block-message-phase="final_answer"]'),
+  ).toHaveCount(1);
 
   await page.reload();
   await page.getByTestId('external-agents-tab').click();
@@ -37,10 +39,14 @@ test('reviewed Crew history renders commentary and one final answer after reload
   await page
     .locator(`[data-thread-id="${threadId}"] .rv-agent__select`)
     .click();
-  await expect(page.locator('[data-message-phase="commentary"]')).toHaveCount(
-    1,
-  );
-  await expect(page.locator('[data-message-phase="final_answer"]')).toHaveCount(
-    1,
-  );
+  const reloadedAssistantTurn = page
+    .locator('[data-message-role="assistant"]')
+    .filter({ hasText: 'PHASE_LIVE_5699_OK' });
+  await expect(reloadedAssistantTurn).toHaveCount(1);
+  await expect(
+    reloadedAssistantTurn.locator('[data-block-message-phase="commentary"]'),
+  ).toHaveCount(1);
+  await expect(
+    reloadedAssistantTurn.locator('[data-block-message-phase="final_answer"]'),
+  ).toHaveCount(1);
 });

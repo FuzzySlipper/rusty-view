@@ -115,6 +115,26 @@ describe('MessageBlockComponent', () => {
     expect(host.querySelector('.rv-block--text')).not.toBeNull();
   });
 
+  it('labels native Codex message phases retained on compact turn blocks', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: 'The final response.',
+        metadata: { messagePhase: 'final_answer' },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const block = host.querySelector('[data-testid="text-block"]');
+
+    expect(block?.getAttribute('data-block-message-phase')).toBe(
+      'final_answer',
+    );
+    expect(block?.classList.contains('rv-block--final-answer')).toBe(true);
+    expect(
+      host.querySelector('[data-testid="text-block-phase"]')?.textContent,
+    ).toContain('Final answer');
+  });
+
   it('keeps the reusable message-block host block-level outside flex layouts', async () => {
     const fixture = await createBlock(
       makeBlock({ kind: 'text', content: 'Standalone block' }),

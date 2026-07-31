@@ -56,6 +56,85 @@ describe('projectExternalAgentTranscript', () => {
     ]);
   });
 
+  it('projects one native turn as one user prompt and one stable assistant card', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread',
+        sessionId: 'session',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/workspace',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'user',
+                kind: 'userMessage',
+                text: 'Check it.',
+              },
+              {
+                itemId: 'reasoning',
+                kind: 'reasoning',
+                text: 'Checking.',
+              },
+              {
+                itemId: 'command',
+                kind: 'commandExecution',
+                text: 'pnpm test',
+              },
+              {
+                itemId: 'final',
+                kind: 'agentMessage',
+                text: 'Done.',
+                messagePhase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.author.role).toBe('user');
+    expect(messages[1]).toMatchObject({
+      id: 'external:thread:turn:assistant',
+      author: { role: 'assistant' },
+      status: 'completed',
+      metadata: {
+        nativeThreadId: 'thread',
+        nativeTurnId: 'turn',
+        externalAgentText: true,
+        messagePhase: 'final_answer',
+      },
+    });
+    expect(messages[1]?.blocks.map((block) => block.kind)).toEqual([
+      'reasoning',
+      'command',
+      'text',
+    ]);
+    expect(messages[1]?.blocks.map((block) => block.id)).toEqual([
+      'block:reasoning',
+      'block:command',
+      'block:final',
+    ]);
+  });
+
   it('keeps plans, commands, files, reasoning, and unknown events inspectable', () => {
     const events: NormalizedExternalRuntimeEvent[] = [
       event('1', 'plan_delta', {
@@ -117,21 +196,24 @@ describe('projectExternalAgentTranscript', () => {
       'text',
       'file_change',
     ]);
-    expect(messages[1]?.blocks[0]?.tool?.status).toBe('completed');
-    expect(messages[2]?.blocks[0]?.content).toContain('src/app.ts');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks[1]?.tool?.status).toBe('completed');
+    expect(messages[0]?.blocks[2]?.content).toContain('src/app.ts');
     expect(messages.every((message) => message.status === 'completed')).toBe(
       true,
     );
-    expect(messages.at(-1)?.blocks[0]?.tool).toMatchObject({
+    expect(messages[0]?.blocks.at(-1)?.tool).toMatchObject({
       name: 'Aggregate diff',
       status: 'completed',
     });
-    expect(messages.at(-1)?.blocks[0]?.metadata).toEqual({
+    expect(messages[0]?.blocks.at(-1)?.metadata).toEqual({
       boundedDetailRef: 'detail-empty-final-diff',
       boundedDetailRefs: ['detail-diff', 'detail-empty-final-diff'],
+      externalItemId: 'turn-1:turn_lifecycle',
+      externalItemKind: 'turn_lifecycle',
       externalRuntimeId: 'runtime-1',
     });
-    expect(messages.at(-1)?.blocks[0]?.content).toContain(
+    expect(messages[0]?.blocks.at(-1)?.content).toContain(
       'available on demand',
     );
   });
@@ -252,7 +334,7 @@ describe('projectExternalAgentTranscript', () => {
     });
   });
 
-  it('preserves command identity and failure across output-only updates', () => {
+  it('preserves command identity and failure without ending the active turn', () => {
     const messages = projectExternalAgentTranscript(undefined, [
       {
         ...event('1', 'command_activity', {
@@ -284,7 +366,7 @@ describe('projectExternalAgentTranscript', () => {
     ]);
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.status).toBe('error');
+    expect(messages[0]?.status).toBe('streaming');
     expect(messages[0]?.blocks).toHaveLength(1);
     expect(messages[0]?.blocks[0]).toMatchObject({
       id: 'block:command-failed',
@@ -344,6 +426,45 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.blocks).toHaveLength(1);
     expect(messages[0]?.blocks[0]?.content).toHaveLength(500);
+  });
+
+  it('keeps the turn message identity stable as new live items arrive', () => {
+    const reasoning = {
+      ...event('1', 'reasoning_delta', {
+        nativeMethod: 'item/reasoning/delta',
+        text: 'Thinking',
+      }),
+      itemId: 'reasoning',
+    };
+    const before = projectExternalAgentTranscript(undefined, [reasoning]);
+    const after = projectExternalAgentTranscript(undefined, [
+      reasoning,
+      {
+        ...event('2', 'command_activity', {
+          nativeMethod: 'item/commandExecution/completed',
+          command: 'pnpm test',
+          output: 'passed',
+          status: 'completed',
+        }),
+        itemId: 'command',
+      },
+      {
+        ...event('3', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'Done',
+        }),
+        itemId: 'final',
+      },
+    ]);
+
+    expect(before).toHaveLength(1);
+    expect(after).toHaveLength(1);
+    expect(after[0]?.id).toBe(before[0]?.id);
+    expect(after[0]?.blocks.map((block) => block.id)).toEqual([
+      'block:reasoning',
+      'block:command',
+      'block:final',
+    ]);
   });
 
   it('coalesces text deltas when an item lifecycle event starts the group', () => {
@@ -502,11 +623,12 @@ describe('projectExternalAgentTranscript', () => {
       ],
     );
 
-    expect(messages.map((message) => message.blocks[0]?.content)).toEqual([
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks.map((block) => block.content)).toEqual([
       'Canonical reasoning',
       'Canonical final answer',
     ]);
-    expect(messages.at(-1)?.metadata?.['messagePhase']).toBe('final_answer');
+    expect(messages[0]?.metadata?.['messagePhase']).toBe('final_answer');
   });
 
   it('keeps later text and command items after an in-progress snapshot', () => {
@@ -629,6 +751,56 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages[0]?.blocks[0]?.content).toBe('Hello world');
   });
 
+  it('continues the exact covered block inside a compact snapshot turn', () => {
+    const itemId = 'message-1';
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'active',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'inProgress',
+            startedAt: 1,
+            completedAt: null,
+            durationMs: null,
+            items: [
+              { itemId: 'reasoning', kind: 'reasoning', text: 'Thought' },
+              { itemId, kind: 'agentMessage', text: 'Hello' },
+            ],
+          },
+        ],
+      },
+      [
+        {
+          ...event('10', 'assistant_text_delta', {
+            nativeMethod: 'item/agentMessage/delta',
+            text: 'Hello world',
+          }),
+          itemId,
+        },
+      ],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks.map((block) => block.content)).toEqual([
+      'Thought',
+      'Hello world',
+    ]);
+  });
+
   it('keeps empty MCP startup and usage diagnostics out of the transcript', () => {
     const messages = projectExternalAgentTranscript(undefined, [
       event('1', 'mcp_activity', {
@@ -692,10 +864,12 @@ describe('projectExternalAgentTranscript', () => {
       [],
     );
 
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.metadata?.['messagePhase']).toBe('final_answer');
     expect(
-      messages.map((message) => message.metadata?.['messagePhase']),
+      messages[0]?.blocks.map((block) => block.metadata?.['messagePhase']),
     ).toEqual(['commentary', undefined, 'final_answer']);
-    expect(messages.map((message) => message.blocks[0]?.content)).toEqual([
+    expect(messages[0]?.blocks.map((block) => block.content)).toEqual([
       'I am checking the runtime.',
       'pnpm test',
       'The runtime is healthy.',
@@ -743,9 +917,11 @@ describe('projectExternalAgentTranscript', () => {
 
     const messages = projectExternalAgentTranscript(undefined, events);
 
-    expect(messages).toHaveLength(2);
-    expect(messages[0]?.metadata?.['messagePhase']).toBe('commentary');
-    expect(messages[1]?.metadata?.['messagePhase']).toBe('final_answer');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.metadata?.['messagePhase']).toBe('final_answer');
+    expect(
+      messages[0]?.blocks.map((block) => block.metadata?.['messagePhase']),
+    ).toEqual(['commentary', 'final_answer']);
     expect(messages.every((message) => message.status === 'completed')).toBe(
       true,
     );
@@ -797,30 +973,29 @@ describe('projectExternalAgentTranscript', () => {
       [],
     );
 
-    expect(messages.map((message) => message.blocks[0]?.content)).toEqual([
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks.map((block) => block.content)).toEqual([
       'SystemError',
       expect.stringContaining('Message: response stream disconnected'),
     ]);
-    expect(messages.at(-1)).toMatchObject({
+    expect(messages[0]).toMatchObject({
       status: 'error',
       metadata: {
         statusSource: 'crew_terminal',
         terminalReasonCode: 'codex_failed',
         retrying: false,
       },
-      blocks: [
-        {
-          kind: 'external_turn_error',
-          tool: {
-            name: 'Codex turn failed',
-            status: 'failed',
-            summary: 'response stream disconnected',
-            reasonCode: 'codex_failed',
-          },
-        },
-      ],
     });
-    expect(messages.at(-1)?.blocks[0]?.content).toContain(
+    expect(messages[0]?.blocks[1]).toMatchObject({
+      kind: 'external_turn_error',
+      tool: {
+        name: 'Codex turn failed',
+        status: 'failed',
+        summary: 'response stream disconnected',
+        reasonCode: 'codex_failed',
+      },
+    });
+    expect(messages[0]?.blocks.at(-1)?.content).toContain(
       'Additional details: upstream closed before final answer',
     );
   });
