@@ -73,7 +73,9 @@ export class ProfilePanelComponent {
   protected readonly optionsSessionId = signal<string | null>(null);
 
   protected readonly profiles = computed(() => {
-    const profiles = this.store.profiles();
+    const profiles = this.store
+      .profiles()
+      .filter((profile) => profile.liveSessions.length > 0);
     const pinned = this.pinnedProfileIds();
     return [
       ...profiles.filter((profile) => pinned.has(profile.profileId)),

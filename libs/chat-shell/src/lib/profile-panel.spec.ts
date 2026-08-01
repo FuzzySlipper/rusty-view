@@ -239,8 +239,8 @@ describe('ProfilePanelComponent', () => {
     expect(externalStore.refresh).toHaveBeenCalled();
   });
 
-  it('renders one row per profile', async () => {
-    const { fixture } = await createPanel([
+  it('hides archived-only profiles from normal Agents navigation', async () => {
+    const { fixture, store } = await createPanel([
       makeSession({
         session_id: 's1',
         profile_id: 'p1',
@@ -257,11 +257,40 @@ describe('ProfilePanelComponent', () => {
     const rows = (fixture.nativeElement as HTMLElement).querySelectorAll(
       '.rv-profile',
     );
-    expect(rows.length).toBe(2);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.getAttribute('data-profile-id')).toBe('p1');
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain(
+      'p2',
+    );
+    expect(store.profiles()).toHaveLength(2);
+    expect(store.allSessions()).toHaveLength(2);
+  });
+
+  it('shows the empty state when every profile is archived-only', async () => {
+    const { fixture, store } = await createPanel([
+      makeSession({
+        session_id: 'archived-a',
+        profile_id: 'p1',
+        status: 'archived',
+      }),
+      makeSession({
+        session_id: 'archived-b',
+        profile_id: 'p2',
+        status: 'archived',
+      }),
+    ]);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelectorAll('[data-testid="profile-row"]')).toHaveLength(
+      0,
+    );
+    expect(host.textContent).toContain('No agents found');
+    expect(store.profiles()).toHaveLength(2);
+    expect(store.allSessions()).toHaveLength(2);
   });
 
   it('renders every live same-profile session with runtime, workdir, and id', async () => {
-    const { fixture } = await createPanel([
+    const { fixture, store } = await createPanel([
       makeSession({
         session_id: 'direct-session',
         agent_id: 'software-engineer',
@@ -299,6 +328,8 @@ describe('ProfilePanelComponent', () => {
     expect(rows.map((row) => row.textContent).join(' ')).toContain(
       'managed-session',
     );
+    expect(store.profiles()[0]?.sessions).toHaveLength(3);
+    expect(store.allSessions()).toHaveLength(3);
   });
 
   it('shows effective wake timeout summary per profile', async () => {
