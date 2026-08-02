@@ -591,24 +591,27 @@ function applyAssistantMessageCompleted(
 ): ConversationProjection {
   const payload = event.payload;
 
-  // The OpenAPI contract specifies `message_id` and `body`. Some live backend
-  // terminal events carry only `status` + `summary` (and sometimes `wake_id`);
-  // the summary is status/debug metadata, not an authoritative message body.
-  const messageId =
-    'message_id' in payload && typeof payload.message_id === 'string'
-      ? payload.message_id
-      : 'wake_id' in payload && typeof payload.wake_id === 'string'
-        ? `asst:${payload.wake_id}`
-        : projection.activeTurn?.messageId;
-
   const body =
     'body' in payload && typeof payload.body === 'string'
       ? payload.body
       : undefined;
   const summary =
-    'summary' in payload && typeof payload.summary === 'string'
+    'summary' in payload &&
+    typeof payload.summary === 'string' &&
+    payload.summary.trim() !== ''
       ? payload.summary
       : undefined;
+  // The OpenAPI contract specifies `message_id` and `body`. Live Crew
+  // completion-tool turns can instead carry only `status` + `summary` and may
+  // arrive after the active draft has been cleared. The event id is a stable
+  // final fallback so replay/readback can still materialize the terminal text.
+  const messageId =
+    'message_id' in payload && typeof payload.message_id === 'string'
+      ? payload.message_id
+      : 'wake_id' in payload && typeof payload.wake_id === 'string'
+        ? `asst:${payload.wake_id}`
+        : (projection.activeTurn?.messageId ??
+          (summary !== undefined ? `asst:${event.event_id}` : undefined));
   const status =
     'status' in payload && typeof payload.status === 'string'
       ? payload.status
@@ -1434,6 +1437,13 @@ function finalizeAssistantMessage(
       if (wakeTimeout) {
         return addWakeTimeoutNotice(msg, event, summary, timeoutMs, wakeId);
       }
+      if (
+        body === undefined &&
+        summary !== undefined &&
+        hasCompletedDeliveryTool(msg)
+      ) {
+        return reconcileDeliveredCompletionSummary(msg, event, summary);
+      }
       const textBlocks = msg.blocks.filter((b) => b.kind === 'text');
       if (textBlocks.length === 1) {
         if (body === undefined) {
@@ -1495,6 +1505,39 @@ function finalizeAssistantMessage(
     [{ kind: 'text', content }],
   );
   return [...messages, message];
+}
+
+function hasCompletedDeliveryTool(message: ChatMessage): boolean {
+  return message.blocks.some(
+    (block) =>
+      block.kind === 'tool_call' &&
+      block.tool?.name === 'deliver_completion_md' &&
+      block.tool.status === 'completed',
+  );
+}
+
+function reconcileDeliveredCompletionSummary(
+  message: ChatMessage,
+  event: ChatEvent,
+  summary: string,
+): ChatMessage {
+  if (
+    message.blocks.some(
+      (block) => block.kind === 'text' && block.content === summary,
+    )
+  ) {
+    return { ...message, status: 'completed' };
+  }
+
+  const block: MessageBlock = {
+    ...makeTextBlock(message.id, message.blocks.length, summary),
+    id: `${message.id}-completion-${event.event_id}`,
+  };
+  return {
+    ...message,
+    status: 'completed',
+    blocks: replaceBlock(message.blocks, block),
+  };
 }
 
 function addWakeTimeoutNotice(

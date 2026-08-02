@@ -282,6 +282,116 @@ describe('projectConversation', () => {
     expect(projection.activeTurn).toBeUndefined();
   });
 
+  it('materializes a completion-tool-only summary as terminal assistant text', () => {
+    const projection = projectConversation([
+      makeEvent(
+        'tool_call_started',
+        {
+          wake_id: 'wake-delivery',
+          tool_call_id: 'delivery-1',
+          tool_name: 'deliver_completion_md',
+        },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'tool_call_completed',
+        {
+          wake_id: 'wake-delivery',
+          tool_call_id: 'delivery-1',
+          tool_name: 'deliver_completion_md',
+          is_error: false,
+        },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'assistant_message_completed',
+        {
+          wake_id: 'wake-delivery',
+          status: 'completed',
+          summary: '# Final result\n\nEverything passed.',
+        },
+        { event_id: 'e3' },
+      ),
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    expect(projection.messages[0]?.id).toBe('asst:wake-delivery');
+    expect(projection.messages[0]?.status).toBe('completed');
+    expect(
+      projection.messages[0]?.blocks.find((block) => block.kind === 'text')
+        ?.content,
+    ).toBe('# Final result\n\nEverything passed.');
+  });
+
+  it('reconciles a delivered completion summary onto its draft idempotently', () => {
+    const beforeCompletion = projectConversation([
+      makeEvent(
+        'assistant_text_delta',
+        { wake_id: 'wake-delivery', text: 'Preparing final response.' },
+        { event_id: 'e1' },
+      ),
+      makeEvent(
+        'tool_call_started',
+        {
+          wake_id: 'wake-delivery',
+          tool_call_id: 'delivery-1',
+          tool_name: 'deliver_completion_md',
+        },
+        { event_id: 'e2' },
+      ),
+      makeEvent(
+        'tool_call_completed',
+        {
+          wake_id: 'wake-delivery',
+          tool_call_id: 'delivery-1',
+          tool_name: 'deliver_completion_md',
+          is_error: false,
+        },
+        { event_id: 'e3' },
+      ),
+    ]);
+    const completion = makeEvent(
+      'assistant_message_completed',
+      {
+        wake_id: 'wake-delivery',
+        status: 'completed',
+        summary: '# Final result\n\nEverything passed.',
+      },
+      { event_id: 'e4' },
+    );
+
+    const completed = projectConversation([completion], beforeCompletion);
+    const replayed = projectConversation([completion], completed);
+    const text = replayed.messages[0]?.blocks
+      .filter((block) => block.kind === 'text')
+      .map((block) => block.content);
+
+    expect(replayed.messages).toHaveLength(1);
+    expect(replayed.messages[0]?.id).toBe('asst:wake-delivery');
+    expect(replayed.messages[0]?.status).toBe('completed');
+    expect(text).toEqual([
+      'Preparing final response.',
+      '# Final result\n\nEverything passed.',
+    ]);
+  });
+
+  it('materializes an orphaned non-empty terminal summary with a replay-stable id', () => {
+    const completion = makeEvent(
+      'assistant_message_completed',
+      { status: 'completed', summary: 'Recovered terminal answer.' },
+      { event_id: 'completion-only' },
+    );
+
+    const completed = projectConversation([completion]);
+    const replayed = projectConversation([completion], completed);
+
+    expect(replayed.messages).toHaveLength(1);
+    expect(replayed.messages[0]?.id).toBe('asst:completion-only');
+    expect(replayed.messages[0]?.blocks[0]?.content).toBe(
+      'Recovered terminal answer.',
+    );
+  });
+
   it('renders wake timeout completions as service notices without replacing streamed text', () => {
     const projection = projectConversation([
       makeEvent('assistant_turn_started', {}, { event_id: 'e1' }),
