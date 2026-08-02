@@ -256,14 +256,30 @@ test('attributes current transcript scroll writers across deterministic baseline
     element.dispatchEvent(new Event('scroll'));
   });
   await invoke(page, 'clear');
+  const pausedOffsetBefore = await viewport.evaluate(
+    (element) => element.scrollTop,
+  );
   await invoke(page, 'refresh');
   await page.waitForTimeout(150);
   const pausedGrowth = await trace(page);
+  const pausedOffsetAfter = await viewport.evaluate(
+    (element) => element.scrollTop,
+  );
+  expect(pausedGrowth).toHaveLength(0);
+  expect(pausedOffsetAfter).toBe(pausedOffsetBefore);
 
+  const idleOffsetBefore = await viewport.evaluate(
+    (element) => element.scrollTop,
+  );
   await invoke(page, 'clear');
   await invoke(page, 'refresh');
   await page.waitForTimeout(150);
   const idleRefresh = await trace(page);
+  const idleOffsetAfter = await viewport.evaluate(
+    (element) => element.scrollTop,
+  );
+  expect(idleRefresh).toHaveLength(0);
+  expect(idleOffsetAfter).toBe(idleOffsetBefore);
 
   await page.getByRole('button', { name: 'Search' }).click();
   await invoke(page, 'clear');
@@ -295,6 +311,18 @@ test('attributes current transcript scroll writers across deterministic baseline
   const artifact = {
     capturedAt: new Date().toISOString(),
     browserErrors,
+    geometry: {
+      pausedGrowth: {
+        scrollTopBefore: pausedOffsetBefore,
+        scrollTopAfter: pausedOffsetAfter,
+        delta: pausedOffsetAfter - pausedOffsetBefore,
+      },
+      idleRefresh: {
+        scrollTopBefore: idleOffsetBefore,
+        scrollTopAfter: idleOffsetAfter,
+        delta: idleOffsetAfter - idleOffsetBefore,
+      },
+    },
     scenarios: {
       following,
       pausedGrowth,
@@ -310,6 +338,7 @@ test('attributes current transcript scroll writers across deterministic baseline
   console.log(
     JSON.stringify({
       browserErrorCount: browserErrors.length,
+      geometry: artifact.geometry,
       scenarios: Object.fromEntries(
         Object.entries(artifact.scenarios).map(([name, entries]) => [
           name,

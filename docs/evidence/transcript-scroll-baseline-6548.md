@@ -22,6 +22,19 @@ geometry. The component retains at most 500 entries.
 | Active search seek | 50 | `seek-estimated-row`, `seek-rendered-message` |
 | Session replacement | 14 | `estimator-reset`, `tail-geometry-rendered-resize`, `tail-geometry-estimated-resize`, `tail-follow-render`, `tail-geometry-frame`, `geometry-reconcile-settled` |
 
+The same probe samples the semantic viewport independently of the application
+write trace. Both no-write scenarios assert exact `scrollTop` stability and
+retain their measurements in the attached JSON artifact:
+
+| Scenario | `scrollTop` before | `scrollTop` after | Delta | Application writes |
+|---|---:|---:|---:|---:|
+| Paused growth refresh | 0 | 0 | 0 | 0 |
+| Byte-identical idle refresh | 0 | 0 | 0 | 0 |
+
+This separates "the application did not request a scroll" from "the semantic
+viewport did not move." A future CDK- or browser-owned movement can therefore
+fail the geometry assertion even while the application trace remains empty.
+
 The fixture also recorded five Angular `NG0103` infinite-change-detection errors
 during the repeated identical/grown refresh sequence. This baseline does not
 claim those errors are caused by the diagnostic wrapper: tracing is a passive
