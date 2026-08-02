@@ -394,49 +394,52 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(debugPanel).toContainText('"query": "amber lantern"');
 });
 
-test('scrollToMessageId materializes a live assistant row after tall history', async ({
+test('scrollToMessageId materializes a live assistant row beyond the bounded window', async ({
   page,
 }) => {
-  const historicalEvents = Array.from({ length: 28 }, (_, index) => ({
-    event_id: `${LIVE_SCROLL_SESSION_ID}:${index + 1}`,
-    session_id: LIVE_SCROLL_SESSION_ID,
-    sequence_id: index + 1,
-    created_at: '2026-06-22T10:00:00Z',
-    kind: 'message_created',
-    payload: {
-      message_id: `msg_live_scroll_user_${index + 1}`,
-      role: 'user',
-      body: [
-        `Historical prompt ${index + 1}`,
-        'This row is intentionally tall so the keyed transcript window must preserve variable-height layout.',
-        'It mimics accumulated live-test history with long prompts, tool requests, and diagnostic instructions above the new assistant turn.',
-        'The target assistant row lands after these messages and must still be reachable through scrollToMessageId.',
-      ].join('\n'),
-    },
-  }));
+  const historicalMessageCount = 96;
+  const historicalEvents = Array.from(
+    { length: historicalMessageCount },
+    (_, index) => ({
+      event_id: `${LIVE_SCROLL_SESSION_ID}:${index + 1}`,
+      session_id: LIVE_SCROLL_SESSION_ID,
+      sequence_id: index + 1,
+      created_at: '2026-06-22T10:00:00Z',
+      kind: 'message_created',
+      payload: {
+        message_id: `msg_live_scroll_user_${index + 1}`,
+        role: 'user',
+        body: [
+          `Historical prompt ${index + 1}`,
+          'This row is intentionally tall so the keyed transcript window must preserve variable-height layout.',
+          'It mimics accumulated live-test history with long prompts, tool requests, and diagnostic instructions above the new assistant turn.',
+          'The target assistant row lands after these messages and must still be reachable through scrollToMessageId.',
+        ].join('\n'),
+      },
+    }),
+  );
   const liveAssistantEvents = [
     sseFrame(
       LIVE_SCROLL_SESSION_ID,
-      `${LIVE_SCROLL_SESSION_ID}:29`,
-      29,
+      `${LIVE_SCROLL_SESSION_ID}:97`,
+      97,
       'assistant_turn_started',
       {},
     ),
     sseFrame(
       LIVE_SCROLL_SESSION_ID,
-      `${LIVE_SCROLL_SESSION_ID}:30`,
-      30,
+      `${LIVE_SCROLL_SESSION_ID}:98`,
+      98,
       'assistant_text_delta',
       {
         message_id: LIVE_SCROLL_ASSISTANT_ID,
-        delta:
-          'Live assistant row rendered after SSE state update and tall history.',
+        delta: 'Assistant row rendered after state update and tall history.',
       },
     ),
     sseFrame(
       LIVE_SCROLL_SESSION_ID,
-      `${LIVE_SCROLL_SESSION_ID}:31`,
-      31,
+      `${LIVE_SCROLL_SESSION_ID}:99`,
+      99,
       'assistant_message_completed',
       {
         message_id: LIVE_SCROLL_ASSISTANT_ID,
@@ -451,10 +454,10 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
     kind: 'full',
     status: 'idle',
     title: 'Live Scroll Fixture',
-    latest_cursor: `${LIVE_SCROLL_SESSION_ID}:28`,
+    latest_cursor: `${LIVE_SCROLL_SESSION_ID}:${historicalMessageCount}`,
     created_at: '2026-06-22T09:00:00Z',
     updated_at: '2026-06-22T10:00:00Z',
-    message_count: 29,
+    message_count: historicalMessageCount + 1,
     tool_event_count: 0,
   };
 
@@ -467,7 +470,7 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, {
       items: [],
-      latest_cursor: `${LIVE_SCROLL_SESSION_ID}:31`,
+      latest_cursor: `${LIVE_SCROLL_SESSION_ID}:99`,
       has_more: false,
     }),
   );
@@ -524,6 +527,7 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
       `[data-testid="message-row"][data-message-id="${LIVE_SCROLL_ASSISTANT_ID}"]`,
     ),
   ).toHaveCount(0);
+  await expect(page.getByTestId('transcript-item')).toHaveCount(64);
 
   await page.evaluate((messageId) => {
     const api = (
@@ -539,7 +543,7 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
   );
   await expect(assistantRow).toBeVisible({ timeout: 10_000 });
   await expect(assistantRow).toContainText(
-    'Live assistant row rendered after SSE state update',
+    'Assistant row rendered after state update',
   );
 });
 
