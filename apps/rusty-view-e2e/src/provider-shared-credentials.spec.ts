@@ -214,6 +214,7 @@ function providerRecord(provider: ProviderFixture) {
     displayName: provider.alias.toUpperCase(),
     baseUrl: 'https://chatgpt.com/backend-api/codex',
     modelId: `gpt-5.6-${provider.alias}`,
+    responsesDialect: 'openai_stateful',
     chatCompletionsDialect: 'standard',
     thinkingMode: 'provider_default',
     reasoningHistory: 'provider_default',
