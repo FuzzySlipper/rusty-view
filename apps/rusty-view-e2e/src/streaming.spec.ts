@@ -1,4 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+
+import { test } from './live/live-fixture';
 
 /**
  * Live streaming E2E test (task #3205).
@@ -7,32 +9,18 @@ import { expect, test } from '@playwright/test';
  * browser: user types a message → transport POSTs to the backend → SSE stream
  * delivers assistant response events → the transcript renders the response.
  *
- * Requires a running rusty-crew backend at http://127.0.0.1:9347 with an
- * active agent profile that can respond to messages. Auto-skips if the backend
- * is unreachable.
+ * Uses the shared opt-in live fixture, which defaults to rusty-crew-debug,
+ * creates an isolated profile/session, and archives/deletes it during teardown.
  *
  * This test uses a generous timeout (120s) because streamed responses depend
  * on model/agent latency.
  */
 
-const BACKEND_URL = 'http://127.0.0.1:9347';
-
-async function isBackendReachable(): Promise<boolean> {
-  try {
-    const response = await fetch(`${BACKEND_URL}/v1/chat/sessions`, {
-      signal: AbortSignal.timeout(3_000),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-test('send message → assistant response appears in transcript', async ({
+test('send message → assistant response appears in transcript @live-agent', async ({
+  live,
   page,
 }) => {
-  const reachable = await isBackendReachable();
-  test.skip(!reachable, 'backend not reachable at ' + BACKEND_URL);
+  await live.requireLiveRun();
 
   test.setTimeout(120_000); // 120s for model/agent response latency
 
@@ -41,28 +29,7 @@ test('send message → assistant response appears in transcript', async ({
     console.log('PAGE ERROR during streaming test:', err.message),
   );
 
-  await page.goto('/');
-
-  // Wait for profiles to load.
-  const profileButtons = page.locator('.rv-profile');
-  await expect(profileButtons.first()).toBeVisible({ timeout: 10_000 });
-
-  // Prefer an active/idle profile (archived profiles may not respond to wakes).
-  // Try to find a non-archived profile; fall back to the first.
-  const count = await profileButtons.count();
-  let targetIndex = 0;
-  for (let i = 0; i < count; i++) {
-    const text = await profileButtons.nth(i).textContent();
-    if (text !== null && !text.includes('archived')) {
-      targetIndex = i;
-      break;
-    }
-  }
-
-  await profileButtons.nth(targetIndex).click();
-  await expect(page.locator('rv-transcript-viewport')).toBeVisible({
-    timeout: 10_000,
-  });
+  await live.openAppAndSelectProfile();
 
   // Type a message in the input and send it.
   const textarea = page.locator('.rv-input__field');

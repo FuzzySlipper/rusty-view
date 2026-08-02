@@ -2,7 +2,7 @@
 
 import { chromium } from '@playwright/test';
 
-const baseUrl = process.env['BASE_URL'] ?? 'http://127.0.0.1:9347';
+const baseUrl = process.env['BASE_URL'] ?? 'http://127.0.0.1:9348';
 const depths = (process.env['RV_TRANSCRIPT_DEPTHS'] ?? '250,1000,5000,10000')
   .split(',')
   .map((value) => Number(value.trim()))

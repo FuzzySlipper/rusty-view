@@ -68,7 +68,7 @@ go run ./playwright-broker/cmd/den-playwright run rusty-view \
 Useful environment variables:
 
 ```bash
-RV_LIVE_BACKEND_URL=http://127.0.0.1:9347
+RV_LIVE_BACKEND_URL=http://127.0.0.1:9348
 RV_LIVE_PROFILE=tester
 RV_EXTERNAL_LIVE_RUN=1
 RV_LIVE_PROFILE_PREFIX=rv-live-custom
@@ -88,6 +88,15 @@ supported `?api=<backend>` runtime override, records the rendered backend in
 does not match the fixture backend. This lets agents run the app from a broker
 or dev-server port while targeting the debug Rusty Crew service on `9348`.
 
+Automated live tests default to `rusty-crew-debug.service` on `9348`. Use the
+production `rusty-crew.service` on `9347` only for deliberate production or
+dual-service certification. A production-targeted run must leave no test
+sessions behind: the shared isolated fixture archives every session it created
+and deletes its temporary profile during teardown, including failed scenarios.
+Cleanup failure fails the test and is recorded in the evidence packet. Tests
+that deliberately disable profile isolation are operator-owned and must not
+create disposable sessions on the production service.
+
 `RV_LIVE_PROFILE` names the existing source profile whose provider/tool defaults
 should be reused. When `RV_LIVE_RUN=1`, the live fixture isolates by default: it
 creates one fresh Rusty Crew profile/session per Playwright test through
@@ -95,6 +104,10 @@ creates one fresh Rusty Crew profile/session per Playwright test through
 `RV_LIVE_PROFILE_PREFIX` only to customize that generated id prefix. Set
 `RV_LIVE_PROFILE_ISOLATION=0` only for deliberate debugging against an existing
 profile transcript.
+
+The fixture teardown archives all non-archived sessions belonging to that
+generated profile and then deletes the profile. Do not add a live scenario that
+bypasses this teardown path when it creates Crew state.
 
 The isolated profile derives its provider alias and local tool profile from the
 active session for `RV_LIVE_PROFILE`, so `tester` can remain the configured

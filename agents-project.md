@@ -7,6 +7,17 @@ Use project ID `rusty-crew` with tag filter `rusty-view` for Den tasks,
 messages, documents, librarian queries, and guidance lookups related to
 this frontend.
 
+## Live-test service hygiene
+
+- Automated live tests default to `rusty-crew-debug.service` on port `9348`.
+- Use production `rusty-crew.service` on `9347` only for explicit production or
+  dual-service certification.
+- Every test-created Crew session must be archived during teardown. Shared live
+  fixtures must also delete temporary profiles, and cleanup failure is a test
+  failure rather than a warning.
+- When isolation is deliberately disabled, the operator owns cleanup and must
+  not leave disposable sessions on the production service.
+
 ## Source-of-truth posture
 
 This local file is bootstrap context for agents entering the repository. It is

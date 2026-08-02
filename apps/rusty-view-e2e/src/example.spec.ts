@@ -3,13 +3,15 @@ import { test, expect } from '@playwright/test';
 /**
  * Smoke tests for the rusty-view reference app.
  *
- * When the rusty-crew backend is reachable at http://127.0.0.1:9347, these
+ * When the debug rusty-crew backend is reachable, these
  * prove the full live stack: browser app → CORS → transport → backend →
  * sessions rendered in the shell. When the backend is not reachable, the
  * structural smoke still runs but the live assertions are skipped.
  */
 
-const BACKEND_URL = 'http://127.0.0.1:9347';
+const BACKEND_URL =
+  process.env['RV_LIVE_BACKEND_URL'] ?? 'http://127.0.0.1:9348';
+const APP_URL = `/?api=${encodeURIComponent(BACKEND_URL)}`;
 let backendReachable = false;
 
 test.beforeAll(async () => {
@@ -26,7 +28,7 @@ test.beforeAll(async () => {
 test('rusty-view renders the shell with sidebar and header', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto(APP_URL);
 
   const header = page.locator('.rv-debug__header');
   await expect(header).toBeVisible();
@@ -38,7 +40,7 @@ test('rusty-view renders the shell with sidebar and header', async ({
 
 test('sessions from the backend appear in the sidebar', async ({ page }) => {
   test.skip(!backendReachable, 'backend not reachable at ' + BACKEND_URL);
-  await page.goto('/');
+  await page.goto(APP_URL);
 
   // The app initializer calls refreshSessions() on startup. Wait for at
   // least one profile button to appear in the sidebar.
@@ -51,7 +53,7 @@ test('sessions from the backend appear in the sidebar', async ({ page }) => {
 
 test('selecting a session shows the transcript region', async ({ page }) => {
   test.skip(!backendReachable, 'backend not reachable at ' + BACKEND_URL);
-  await page.goto('/');
+  await page.goto(APP_URL);
 
   const profileButton = page.locator('.rv-profile').first();
   await expect(profileButton).toBeVisible({ timeout: 10_000 });

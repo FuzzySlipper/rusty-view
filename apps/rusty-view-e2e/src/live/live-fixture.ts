@@ -102,6 +102,10 @@ interface LiveProfileIsolation {
   createRequest?: LiveProfileCreateRequest;
   createdAtMs?: number;
   createdSessionId?: string;
+  cleanupAttemptedAtMs?: number;
+  archivedSessionIds?: string[];
+  profileDeletedAtMs?: number;
+  cleanupError?: string;
 }
 
 export interface IsolatedProfileIdInput {
@@ -125,6 +129,83 @@ export interface LiveProfileCreateRequest {
   readonly kind: 'full';
   readonly localToolProfileId: string;
   readonly reason: string;
+}
+
+export const DEFAULT_LIVE_BACKEND_URL = 'http://127.0.0.1:9348';
+
+export interface IsolatedLiveProfileCleanupInput {
+  readonly backendUrl: string;
+  readonly profileId: string;
+  readonly reason: string;
+  readonly idempotencyScope: string;
+  readonly fetchImpl?: typeof fetch;
+}
+
+export async function cleanupIsolatedLiveProfile(
+  input: IsolatedLiveProfileCleanupInput,
+): Promise<string[]> {
+  const request = input.fetchImpl ?? fetch;
+  const listResponse = await request(
+    `${input.backendUrl}/v1/chat/sessions?profile_id=${encodeURIComponent(input.profileId)}&limit=100`,
+    { signal: AbortSignal.timeout(10_000) },
+  );
+  const listText = await listResponse.text();
+  if (!listResponse.ok) {
+    throw new Error(
+      `Failed to list isolated live sessions for ${input.profileId}: HTTP ${listResponse.status} ${listText}`,
+    );
+  }
+  const sessions = adminControlPayload(parseJsonObject(listText));
+  const items = Array.isArray(sessions['items']) ? sessions['items'] : [];
+  const archivedSessionIds: string[] = [];
+  for (const item of items) {
+    if (!isRecord(item) || stringValue(item, 'status') === 'archived') {
+      continue;
+    }
+    const sessionId = stringValue(item, 'session_id');
+    if (sessionId === undefined) {
+      continue;
+    }
+    const archiveResponse = await request(
+      `${input.backendUrl}/v1/chat/sessions/${encodeURIComponent(sessionId)}/commands`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'Idempotency-Key': `rv-live-cleanup-${sessionId}-${input.idempotencyScope}`,
+        },
+        body: JSON.stringify({ command: '/archive' }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    const archiveText = await archiveResponse.text();
+    if (!archiveResponse.ok) {
+      throw new Error(
+        `Failed to archive isolated live session ${sessionId}: HTTP ${archiveResponse.status} ${archiveText}`,
+      );
+    }
+    archivedSessionIds.push(sessionId);
+  }
+
+  const deleteResponse = await request(
+    `${input.backendUrl}/v1/admin/control/profiles/${encodeURIComponent(input.profileId)}/delete`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reason: input.reason,
+        confirmProfileId: input.profileId,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+  const deleteText = await deleteResponse.text();
+  if (!deleteResponse.ok) {
+    throw new Error(
+      `Failed to delete isolated live profile ${input.profileId}: HTTP ${deleteResponse.status} ${deleteText}`,
+    );
+  }
+  return archivedSessionIds;
 }
 
 export interface RustyViewDebugSnapshot {
@@ -178,7 +259,7 @@ export const test = base.extend<{ live: LiveConversation }>({
 });
 
 export class LiveConversation {
-  readonly backendUrl = env('RV_LIVE_BACKEND_URL') ?? 'http://127.0.0.1:9347';
+  readonly backendUrl = env('RV_LIVE_BACKEND_URL') ?? DEFAULT_LIVE_BACKEND_URL;
   readonly appUrl = liveAppUrlForBackend(this.backendUrl);
   readonly sourceProfile = env('RV_LIVE_PROFILE') ?? 'tester';
   readonly targetProfile: string;
@@ -278,17 +359,46 @@ export class LiveConversation {
 
   async finish(): Promise<void> {
     this.recordTimeline('fixture:finish:start');
-    const visibleTranscriptText = await this.visibleTranscriptText();
-    const finalDebugSnapshot = await this.captureDebugSnapshot('final');
-    await this.writeJson('console.json', this.consoleEntries);
-    await this.writeJson('page-errors.json', this.pageErrors);
-    await this.writeText('visible-transcript.txt', visibleTranscriptText);
-    await this.writeJson('debug-snapshot.json', finalDebugSnapshot);
-    await this.writeText('scenario-summary.md', this.summaryMarkdown());
-    await this.writeJson(
-      'evidence-packet.json',
-      this.evidencePacket(visibleTranscriptText, finalDebugSnapshot),
-    );
+    const finishErrors: Error[] = [];
+    let visibleTranscriptText = '';
+    let finalDebugSnapshot: RustyViewDebugSnapshot | null = null;
+    try {
+      visibleTranscriptText = await this.visibleTranscriptText();
+      finalDebugSnapshot = await this.captureDebugSnapshot('final');
+    } catch (error) {
+      const captureError = asError(error);
+      finishErrors.push(captureError);
+      this.note(`Final live evidence capture failed: ${captureError.message}`);
+    }
+
+    try {
+      await this.cleanupIsolatedProfile();
+    } catch (error) {
+      const cleanupError = asError(error);
+      finishErrors.push(cleanupError);
+      this.profileIsolation.cleanupError = cleanupError.message;
+      this.recordTimeline('profile:cleanup:failed', {
+        profileId: this.targetProfile,
+        error: cleanupError.message,
+      });
+      this.note(
+        `Isolated live profile cleanup failed for ${this.targetProfile}: ${cleanupError.message}`,
+      );
+    }
+
+    try {
+      await this.writeJson('console.json', this.consoleEntries);
+      await this.writeJson('page-errors.json', this.pageErrors);
+      await this.writeText('visible-transcript.txt', visibleTranscriptText);
+      await this.writeJson('debug-snapshot.json', finalDebugSnapshot);
+      await this.writeText('scenario-summary.md', this.summaryMarkdown());
+      await this.writeJson(
+        'evidence-packet.json',
+        this.evidencePacket(visibleTranscriptText, finalDebugSnapshot),
+      );
+    } catch (error) {
+      finishErrors.push(asError(error));
+    }
 
     if (this.traceStarted) {
       try {
@@ -302,6 +412,12 @@ export class LiveConversation {
 
     this.recordTimeline('fixture:finish:complete');
     this.note(`Live artifacts: ${this.artifactDir}`);
+    if (finishErrors.length > 0) {
+      throw new AggregateError(
+        finishErrors,
+        `Rusty View live fixture teardown failed with ${finishErrors.length} error(s).`,
+      );
+    }
   }
 
   async requireLiveRun(): Promise<void> {
@@ -1090,6 +1206,34 @@ export class LiveConversation {
     );
   }
 
+  private async cleanupIsolatedProfile(): Promise<void> {
+    if (!this.profileIsolation.enabled || !this.profilePrepared) {
+      return;
+    }
+
+    this.profileIsolation.cleanupAttemptedAtMs = Date.now();
+    this.recordTimeline('profile:cleanup:start', {
+      backendUrl: this.backendUrl,
+      profileId: this.targetProfile,
+    });
+
+    const archivedSessionIds = await cleanupIsolatedLiveProfile({
+      backendUrl: this.backendUrl,
+      profileId: this.targetProfile,
+      reason: `Rusty View live test cleanup for ${this.testInfo.title}`,
+      idempotencyScope: String(this.startedAt),
+    });
+    this.profileIsolation.archivedSessionIds = archivedSessionIds;
+    this.profileIsolation.profileDeletedAtMs = Date.now();
+    this.recordTimeline('profile:cleanup:complete', {
+      profileId: this.targetProfile,
+      archivedSessionIds,
+    });
+    this.note(
+      `Archived ${archivedSessionIds.length} isolated live session(s) and deleted profile ${this.targetProfile}.`,
+    );
+  }
+
   private async resolveLiveProfileDefaults(): Promise<{
     readonly providerAlias: string;
     readonly localToolProfileId: string;
@@ -1383,6 +1527,10 @@ export class LiveConversation {
 
 function env(name: string): string | undefined {
   return process.env[name];
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(errorMessage(value));
 }
 
 export function isolatedLiveProfileId(input: IsolatedProfileIdInput): string {

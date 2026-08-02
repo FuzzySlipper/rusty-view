@@ -9,6 +9,8 @@ import {
   liveProfileCreateRequest,
   type RustyViewDebugSnapshot,
   LiveConversation,
+  DEFAULT_LIVE_BACKEND_URL,
+  cleanupIsolatedLiveProfile,
 } from './live-fixture';
 
 const messages = [
@@ -141,6 +143,60 @@ test('live profile isolation is enabled by default for opted-in live runs', () =
       liveRun: '1',
     }),
   ).toBe('rv-live');
+});
+
+test('live automation defaults to the debug Crew service', () => {
+  expect(DEFAULT_LIVE_BACKEND_URL).toBe('http://127.0.0.1:9348');
+});
+
+test('isolated live cleanup archives active sessions and deletes the profile', async () => {
+  const requests: Array<{
+    url: string;
+    init: RequestInit | undefined;
+  }> = [];
+  const responses = [
+    new Response(
+      JSON.stringify({
+        data: {
+          items: [
+            { session_id: 'live-a', status: 'active' },
+            { session_id: 'old', status: 'archived' },
+            { session_id: 'live-b', status: 'idle' },
+          ],
+        },
+      }),
+      { status: 200 },
+    ),
+    new Response('{}', { status: 200 }),
+    new Response('{}', { status: 200 }),
+    new Response('{}', { status: 200 }),
+  ];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    requests.push({ url: String(input), init });
+    return responses.shift() as Response;
+  };
+
+  await expect(
+    cleanupIsolatedLiveProfile({
+      backendUrl: 'http://127.0.0.1:9348',
+      profileId: 'rv-live-cleanup',
+      reason: 'unit cleanup',
+      idempotencyScope: 'test',
+      fetchImpl,
+    }),
+  ).resolves.toEqual(['live-a', 'live-b']);
+
+  expect(requests.map(({ url }) => url)).toEqual([
+    'http://127.0.0.1:9348/v1/chat/sessions?profile_id=rv-live-cleanup&limit=100',
+    'http://127.0.0.1:9348/v1/chat/sessions/live-a/commands',
+    'http://127.0.0.1:9348/v1/chat/sessions/live-b/commands',
+    'http://127.0.0.1:9348/v1/admin/control/profiles/rv-live-cleanup/delete',
+  ]);
+  expect(requests.slice(1).map(({ init }) => init?.method)).toEqual([
+    'POST',
+    'POST',
+    'POST',
+  ]);
 });
 
 test('live profile isolation can be named or explicitly disabled', () => {
