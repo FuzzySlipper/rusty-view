@@ -18,8 +18,8 @@ Supported filters:
   previews.
 
 Search results preserve transcript order and identify the matched message and
-block. The transcript viewport uses those ids for virtual-scroll-safe jumping
-and highlighting.
+block. The transcript viewport uses those ids to admit the keyed row window
+around the target before semantic scrolling and highlighting.
 
 ## Viewport UI
 
@@ -35,7 +35,7 @@ The built-in toolbar supports:
 - previous/next result navigation;
 - active result snippet;
 - message/block highlighting;
-- jump-to-message through the existing virtual scroll path.
+- jump-to-message through the bounded keyed-window path.
 
 The existing `targetMessageId` input remains the generic programmatic jump API
 for search results, branch breadcrumbs, snapshots, bookmarks, and downstream

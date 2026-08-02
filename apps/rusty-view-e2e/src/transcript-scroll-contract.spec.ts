@@ -45,10 +45,7 @@ type ContractCheck = {
 
 type ContractReport = {
   readonly schemaVersion: 1;
-  readonly implementation:
-    | 'current-post-churn-fix'
-    | 'option-b-full-dom'
-    | 'owned-pin-window';
+  readonly implementation: 'owned-pin-window';
   readonly checks: readonly ContractCheck[];
 };
 
@@ -209,7 +206,6 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
 }
 
 async function requireOwnedWindowEndAtBottom(viewport: Locator): Promise<void> {
-  if (process.env['RV_TRANSCRIPT_RENDERER'] !== 'owned-window') return;
   await expect
     .poll(async () => (await semanticFrame(viewport)).bottomError)
     .toBeLessThanOrEqual(1);
@@ -363,12 +359,7 @@ async function attachReport(
 ): Promise<void> {
   const report: ContractReport = {
     schemaVersion: 1,
-    implementation:
-      process.env['RV_TRANSCRIPT_RENDERER'] === 'full-dom'
-        ? 'option-b-full-dom'
-        : process.env['RV_TRANSCRIPT_RENDERER'] === 'owned-window'
-          ? 'owned-pin-window'
-          : 'current-post-churn-fix',
+    implementation: 'owned-pin-window',
     checks,
   };
   await testInfo.attach(name, {
@@ -379,11 +370,9 @@ async function attachReport(
   expect(report.checks.map((check) => check.id)).toEqual([
     ...new Set(report.checks.map((check) => check.id)),
   ]);
-  if (process.env['RV_TRANSCRIPT_REQUIRE_PASS'] === '1') {
-    expect(
-      report.checks.filter((check) => !check.pass).map((check) => check.id),
-    ).toEqual([]);
-  }
+  expect(
+    report.checks.filter((check) => !check.pass).map((check) => check.id),
+  ).toEqual([]);
 }
 
 test('semantic scoring rejects recovered drift and overscan-only targets', () => {
@@ -677,12 +666,7 @@ async function installScrollContractFixture(
 }
 
 async function openContractSession(page: Page): Promise<Locator> {
-  const renderer = process.env['RV_TRANSCRIPT_RENDERER'];
-  await page.goto(
-    renderer === 'full-dom' || renderer === 'owned-window'
-      ? `/?__rvTranscriptRenderer=${renderer}`
-      : '/',
-  );
+  await page.goto('/');
   await page
     .locator(
       `[data-testid="profile-session-row"][data-session-id="${SESSION_A}"]`,

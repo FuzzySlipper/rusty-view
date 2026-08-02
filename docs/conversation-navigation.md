@@ -78,13 +78,13 @@ priority is `headMessageId`, then `originMessageId`, then `parentMessageId`.
 
 When no branches or snapshots are supplied, the transcript renders exactly as it
 did before. When supplied, a compact navigation strip renders above the
-virtualized transcript. Selecting a breadcrumb or snapshot emits a generic
+bounded transcript. Selecting a breadcrumb or snapshot emits a generic
 `ConversationNavigationTarget` and calls the viewport's existing stable
 message-id jump path.
 
-The virtual scroll key remains the message id. Tree navigation does not replace
-the rendered message array, so scroll anchoring and tail-follow behavior stay
-under the same viewport code path.
+The resident-window key remains the message id. Tree navigation does not
+replace the rendered message array, so scroll anchoring and tail-follow
+behavior stay under the same viewport code path.
 
 ## Backend Gaps
 

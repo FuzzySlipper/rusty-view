@@ -1,10 +1,10 @@
 # Transcript owned-pin window scorecard and architecture decision — task #6553
 
-Captured 2026-08-02 against the debug/test-only
-`?__rvTranscriptRenderer=owned-window` candidate. This spike exists only to
-compare the dimension that rejected Option B; production still selects the
-current CDK renderer until task #6554 replaces it and removes both bake-off
-paths.
+Captured 2026-08-02 against the original debug/test-only candidate. Task #6554
+subsequently promoted this decision to the sole production renderer and
+deleted the URL bake-off switch, CDK autosize path, observer clocks, and
+settlement/reconciliation loops. Historical candidate commands below remain as
+the decision evidence; current certification runs against `/` directly.
 
 ## Decision
 
@@ -120,27 +120,42 @@ requirement.
   passes the real 1k gate and retains exact pinned/paused semantics. A measured
   future distribution materially beyond 1k plus a failure of this window is
   required before reconsidering a virtualizer.
-- **Current CDK autosize control system: rejected as the end state.** It remains
-  production only until #6554; it cannot be retained as a hidden second mode.
+- **Former CDK autosize control system: removed.** Task #6554 deleted it rather
+  than retaining it as a hidden second mode.
 
 ## Production migration and deletion list
 
-Task #6554 must turn the selected debug candidate into the sole path and:
+Task #6554 turned the selected debug candidate into the sole path:
 
-1. replace the URL switch and prototype names with explicit production state;
-2. preserve the public `TranscriptViewportComponent` inputs/outputs and RP
+1. replaced the URL switch and prototype branches with explicit
+   `following`/`paused`/`seeking`/`session-replacement` state;
+2. preserved the public `TranscriptViewportComponent` inputs/outputs and RP
    extension surface;
-3. harden progressive window shifts, keyed prepend retention, focus, selection,
+3. hardened progressive window shifts, keyed prepend retention, focus, selection,
    and touch/scrollbar interaction at window boundaries;
-4. retain one application writer and zero paused writes;
-5. delete `CdkAutoSizeVirtualScroll`, its viewport wrapper, private
+4. retained one audited application writer and zero paused writes;
+5. deleted `CdkAutoSizeVirtualScroll`, its viewport wrapper, private
    `_scrollStrategy` access/reattach, estimator size reconciliation,
    `MAX_SAFE_INTEGER` seeks, 50ms/rAF settlement and paused-offset loops, and
    Resize/Mutation observers used as scroll clocks;
-6. delete the full-DOM and current-renderer bake-off branches and all CDK
+6. deleted the full-DOM/current-renderer bake-off branches and all CDK
    selector acceptance tests;
-7. make the semantic harness fail closed for the sole production renderer;
-8. update architecture comments that still promise 10k CDK virtualization.
+7. made the semantic harness fail closed for the sole production renderer;
+8. updated architecture comments to describe bounded keyed residency.
+
+The production path reran the fail-closed semantic contract directly at `/`:
+Chromium 3/3 and Firefox 3/3 passed. Both engines kept all six paused mutation
+classes at 0px drift with zero paused application writes, reached first/middle/
+last/search targets in one frame with 64 resident messages, and replaced the
+session by frame 4 without an empty or inherited frame. Chromium stayed exactly
+at bottom over 72 following frames; Firefox's maximum bottom error was 0.5px.
+
+The deployed production build was also remeasured at 250 and 1,000 messages
+(three repetitions each). At 1,000 messages, median switch was 121.4ms, search
+101.8ms, next input frame 2.0ms, heap 9.45MiB, and residency 1,316 transcript
+nodes / 64 messages. Cold history held the same key at 0px drift across all
+three runs with no per-frame extent, offset, or thumb-fraction change. These
+values remain inside every frozen #6551 ship budget.
 
 ## Certification limitation and expiry
 
@@ -149,8 +164,9 @@ physical Android Chrome/iOS Safari or screen-reader device was available.
 Rusty Roleplay was not run against a published exact candidate package. These
 are active certification limitations, not inferred passes.
 
-They expire only when #6554's sole production path and #6555's cross-consumer
-certification pass Chromium, Firefox, WebKit, physical Android/iOS momentum and
-installed-shell smoke, keyboard focus/selection across window boundaries, and
-the Rusty Roleplay decorated transcript. A failure may revise this decision
-before release; it must not revive a long-lived dual production mode.
+The production-path portion expired with #6554's Chromium and Firefox proof.
+The remaining limitations expire only when #6555's cross-consumer certification
+passes WebKit, physical Android/iOS momentum and installed-shell smoke,
+keyboard focus/selection across window boundaries, and the Rusty Roleplay
+decorated transcript. A failure may revise this decision before release; it
+must not revive a long-lived dual production mode.

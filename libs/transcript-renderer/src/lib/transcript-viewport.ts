@@ -15,14 +15,6 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import {
-  CdkVirtualScrollViewport,
-  ScrollingModule,
-} from '@angular/cdk/scrolling';
-import {
-  CdkAutoSizeVirtualScroll,
-  ScrollingModule as ExperimentalScrollingModule,
-} from '@angular/cdk-experimental/scrolling';
 import type { ChatMessage, MessageRole } from '@rusty-view/chat-domain';
 import {
   branchBreadcrumbs as buildBranchBreadcrumbs,
@@ -48,10 +40,9 @@ import type {
   MessageRevisionCapabilities,
 } from './message-revision-controls';
 import {
-  assessTranscriptGeometry,
-  transcriptGeometryPresentationKey,
-  type TranscriptGeometryMeasurement,
-} from './transcript-geometry';
+  projectTranscriptWindowGeometry,
+  TRANSCRIPT_WINDOW_ROW_COUNT,
+} from './transcript-window-geometry';
 
 const EMPTY_BLOCK_SET = new Set<string>();
 
@@ -63,20 +54,14 @@ export interface TranscriptVirtualRow {
 export type TranscriptScrollWriteReason =
   | 'explicit-latest'
   | 'tail-follow-render'
-  | 'tail-follow-settle'
-  | 'tail-geometry-mutation'
-  | 'tail-geometry-rendered-resize'
-  | 'tail-geometry-estimated-resize'
-  | 'tail-geometry-frame'
-  | 'estimator-reset'
-  | 'paused-offset-hold'
   | 'seek-rendered-message'
-  | 'seek-first-row'
-  | 'seek-estimated-row'
-  | 'seek-tail'
-  | 'geometry-reconcile-streaming'
-  | 'geometry-reconcile-settled'
-  | 'prepend-anchor-restore';
+  | 'session-replacement';
+
+type TranscriptViewportState =
+  | 'following'
+  | 'paused'
+  | 'seeking'
+  | 'session-replacement';
 
 export interface TranscriptScrollWriteTrace {
   readonly sequence: number;
@@ -96,60 +81,37 @@ export interface TranscriptScrollWriteTrace {
 }
 
 /**
- * Virtualized transcript viewport.
+ * Bounded, chronological transcript viewport.
  *
- * Renders 10k+ messages efficiently using Angular CDK virtual scroll with the
- * **autosize** strategy (`CdkAutoSizeVirtualScroll` from
- * `@angular/cdk-experimental/scrolling`). The autosize strategy measures real
- * item heights after rendering and uses an averaging estimator for unseen
- * items, so messages and expanded tool blocks lay out without overlap.
+ * The component owns one keyed 64-row window with conservative spacers. Native
+ * browser anchoring owns paused content growth; every programmatic scroll goes
+ * through `writeScrollPosition` and is attributed to application or user input.
  *
  * Scroll behavior:
  * - Tail-follow: when the user is at the bottom, new content auto-scrolls.
  *   When the user scrolls up, tail-follow pauses (no fighting the user).
- * - Jump-to-message: set `targetMessageId` to scroll to a specific message.
- *   Uses an estimated pixel offset (based on average item size) since the
- *   autosize strategy does not support `scrollToIndex`.
- * - Scroll anchor preservation: when older history is prepended above the
- *   viewport (cursor-based replay), the viewport stays anchored to the message
- *   the user was looking at — no visible jump.
+ * - Jump-to-message: admit the target's keyed window, then scroll the semantic
+ *   message into view.
+ * - Scroll anchor preservation: native anchoring keeps the paused semantic row
+ *   stable while prepend and variable-height content change around it.
  *
  * Streaming-safe: each message is a separate OnPush component. When a text
- * delta updates one message, only that message's view re-renders — the virtual
- * scroll does not re-render non-visible or unchanged items.
+ * delta updates one message, only that message's view re-renders; non-resident
+ * and presentation-identical rows retain their stable projection identity.
  *
- * The chosen virtualizer (CDK) is hidden behind this component; the public API
- * is inputs/outputs only, so the virtualizer can be swapped without affecting
- * callers.
+ * The bounded window is hidden behind this component's input/output API so its
+ * geometry policy can evolve without affecting callers.
  */
 @Component({
   selector: 'rv-transcript-viewport',
-  imports: [ScrollingModule, ExperimentalScrollingModule, MessageItemComponent],
+  imports: [MessageItemComponent],
   templateUrl: './transcript-viewport.html',
   styleUrl: './transcript-viewport.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscriptViewportComponent {
-  private readonly cdkViewport = viewChild(CdkVirtualScrollViewport);
-  private readonly cdkAutoSize = viewChild(CdkAutoSizeVirtualScroll);
-  private readonly fullDomViewport =
-    viewChild<ElementRef<HTMLElement>>('fullDomViewport');
-
-  /** Temporary bake-off switch. It is deliberately URL-only and is not part
-   * of the public component API or the user-facing Options surface. */
-  private readonly prototypeRenderer =
-    typeof location === 'undefined'
-      ? 'current'
-      : (new URLSearchParams(location.search).get('__rvTranscriptRenderer') ??
-        'current');
-  protected readonly fullDomPrototypeEnabled =
-    this.prototypeRenderer === 'full-dom' ||
-    this.prototypeRenderer === 'owned-window';
-  protected readonly ownedWindowPrototypeEnabled =
-    this.prototypeRenderer === 'owned-window';
-  protected readonly prototypeRendererLabel = this.ownedWindowPrototypeEnabled
-    ? 'owned-window'
-    : 'full-dom';
+  private readonly viewportElement =
+    viewChild.required<ElementRef<HTMLElement>>('viewportElement');
 
   /** Messages to render (from ChatStore.projection().messages). */
   readonly messages = input.required<readonly ChatMessage[]>();
@@ -201,33 +163,16 @@ export class TranscriptViewportComponent {
 
   /** Pixel threshold from bottom to consider "at bottom" for tail-follow. */
   private static readonly BOTTOM_THRESHOLD_PX = 80;
-
-  /**
-   * CDK autosize revises its estimated content size while a variable-height
-   * tail row grows. Rewriting the strategy's total size during that window can
-   * fight the next measurement and produce visible reverse jumps, so only run
-   * the stale-spacer repair after the tail has been quiet for this long.
-   */
-  private static readonly TAIL_GEOMETRY_QUIET_MS = 150;
-
-  /**
-   * A session switch can replace an expanded multi-thousand-pixel reasoning row
-   * with a short tail. Experimental autosize may need several observer/render
-   * cycles to discard the retained average, so bound settlement by elapsed time
-   * rather than an unrealistically small fixed number of passes.
-   */
-  private static readonly TAIL_SETTLE_MAX_MS = 2_500;
-
-  /** Default estimated item height used for offset estimation when the autosize
-   * strategy hasn't measured enough items yet. Matches the CSS-based minimum
-   * height of a single-line message row. */
-  private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
-  private static readonly OWNED_WINDOW_ROW_COUNT = 64;
-  private static readonly OWNED_WINDOW_ROW_ESTIMATE_PX = 120;
   private static readonly OWNED_WINDOW_ADMISSION_FRAME_BUDGET = 8;
 
+  private readonly viewportState = signal<TranscriptViewportState>('following');
   protected readonly isAtBottom = signal(true);
-  protected readonly followingTail = signal(true);
+  protected readonly followingTail = computed(
+    () => this.viewportState() === 'following',
+  );
+  protected readonly transcriptTransitioning = computed(
+    () => this.viewportState() === 'session-replacement',
+  );
   protected readonly showScrollToBottom = computed(
     () =>
       this.renderMessages().length > 0 &&
@@ -239,30 +184,19 @@ export class TranscriptViewportComponent {
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
-  private readonly pendingSeekTimers = new Set<ReturnType<typeof setTimeout>>();
-  private readonly pausedScrollHoldTimers = new Set<
-    ReturnType<typeof setTimeout>
-  >();
-  private tailSettleTimer: ReturnType<typeof setTimeout> | undefined;
   private tailFollowGeneration = 0;
-  private pausedScrollHoldGeneration = 0;
   private tailFollowRenderPending = false;
-  private tailGeometryChangedAt = Number.NEGATIVE_INFINITY;
-  private renderedContentHeight: number | undefined;
-  private estimatedTotalHeight: number | undefined;
-  private geometryPresentationKey: string | undefined;
   private previousTranscriptKey: string | undefined;
-  private pendingPausedScrollOffset: number | undefined;
   private resumeFollowOnUserScrollToTail = false;
   private scrollbarDragActive = false;
   private touchScrollActive = false;
-  private transcriptTransitionFrame: number | undefined;
-  private tailGeometryFrame: number | undefined;
-  private fullDomFollowFrame: number | undefined;
+  private tailFollowFrame: number | undefined;
+  private seekFrame: number | undefined;
+  private pendingSeekSource: 'programmatic' | 'search' | undefined;
+  private seekGeneration = 0;
   private ownedWindowEndFrame: number | undefined;
   private ownedWindowEndGeneration = 0;
   private ownedWindowEndAdmissionPending = false;
-  private fullDomRenderFollowPending = false;
   private scrollDiagnosticsEnabled = false;
   private scrollWriteSequence = 0;
   private scrollWriteFrame = 0;
@@ -271,47 +205,27 @@ export class TranscriptViewportComponent {
 
   private static readonly MAX_SCROLL_TRACE_ENTRIES = 500;
 
-  /**
-   * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
-   * input: CDK registers the rendered data length with its scroll strategy when
-   * `*cdkVirtualForOf` first receives data. If that happens while the viewport is
-   * still measured at 0 (messages preloaded before layout settles, or rendered
-   * behind an `@if`), the strategy records a length of 0 and renders nothing
-   * until the next data change. So we hold the data here and emit it only once
-   * the viewport has a real size, then keep it in sync with the input.
-   */
+  /** Presentation-stable rows and the sole bounded resident window. */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
   protected readonly renderRows = signal<readonly TranscriptVirtualRow[]>([]);
   private readonly ownedWindowStart = signal(0);
-  protected readonly prototypeRenderRows = computed(() => {
-    const rows = this.renderRows();
-    if (!this.ownedWindowPrototypeEnabled) return rows;
-    const start = Math.min(this.ownedWindowStart(), rows.length);
-    return rows.slice(
-      start,
-      Math.min(
-        rows.length,
-        start + TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
-      ),
-    );
-  });
-  protected readonly ownedWindowTopSpacerPx = computed(() =>
-    this.ownedWindowPrototypeEnabled
-      ? this.ownedWindowStart() *
-        TranscriptViewportComponent.OWNED_WINDOW_ROW_ESTIMATE_PX
-      : 0,
+  private readonly windowGeometry = computed(() =>
+    projectTranscriptWindowGeometry(
+      this.renderRows().length,
+      this.ownedWindowStart(),
+    ),
   );
-  protected readonly ownedWindowBottomSpacerPx = computed(() => {
-    if (!this.ownedWindowPrototypeEnabled) return 0;
-    const remaining = Math.max(
-      0,
-      this.renderRows().length -
-        this.ownedWindowStart() -
-        TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
-    );
-    return remaining * TranscriptViewportComponent.OWNED_WINDOW_ROW_ESTIMATE_PX;
+  protected readonly windowRenderRows = computed(() => {
+    const rows = this.renderRows();
+    const geometry = this.windowGeometry();
+    return rows.slice(geometry.start, geometry.end);
   });
-  protected readonly transcriptTransitioning = signal(false);
+  protected readonly ownedWindowTopSpacerPx = computed(
+    () => this.windowGeometry().topSpacerPx,
+  );
+  protected readonly ownedWindowBottomSpacerPx = computed(
+    () => this.windowGeometry().bottomSpacerPx,
+  );
   protected readonly searchQuery = signal('');
   protected readonly searchRole = signal<MessageRole | 'all'>('all');
   protected readonly searchDateFrom = signal('');
@@ -416,28 +330,12 @@ export class TranscriptViewportComponent {
     return result.snippet;
   });
 
-  /** True once the viewport has been sized and has received the initial data. */
-  private viewportReady = false;
-
   constructor() {
     this.destroyRef.onDestroy(() => {
-      for (const timer of this.pendingSeekTimers) {
-        clearTimeout(timer);
+      if (this.tailFollowFrame !== undefined) {
+        cancelAnimationFrame(this.tailFollowFrame);
       }
-      this.pendingSeekTimers.clear();
-      this.cancelPausedScrollHold();
-      if (this.tailSettleTimer !== undefined) {
-        clearTimeout(this.tailSettleTimer);
-      }
-      if (this.transcriptTransitionFrame !== undefined) {
-        cancelAnimationFrame(this.transcriptTransitionFrame);
-      }
-      if (this.tailGeometryFrame !== undefined) {
-        cancelAnimationFrame(this.tailGeometryFrame);
-      }
-      if (this.fullDomFollowFrame !== undefined) {
-        cancelAnimationFrame(this.fullDomFollowFrame);
-      }
+      if (this.seekFrame !== undefined) cancelAnimationFrame(this.seekFrame);
       if (this.ownedWindowEndFrame !== undefined) {
         cancelAnimationFrame(this.ownedWindowEndFrame);
       }
@@ -458,213 +356,43 @@ export class TranscriptViewportComponent {
         return;
       }
 
-      this.transcriptTransitioning.set(true);
+      this.cancelPendingSeeks();
+      this.cancelTailFollowWork();
+      this.viewportState.set('session-replacement');
       this.previousMessages = [];
       this.isAtBottom.set(true);
-      this.resumeTailFollow();
-      if (this.viewportReady) {
-        if (this.fullDomPrototypeEnabled) {
-          const messages = this.messages();
-          if (messages.length > 0) {
-            this.setRenderedMessages(messages);
-            this.requestFullDomTailPlacement('tail-follow-render', true);
-            this.afterNextRender(() => this.transcriptTransitioning.set(false));
-          }
-          return;
-        }
-        // Install both the replacement data and a valid tail range in the same
-        // signal turn. If CDK first observes the new data through the old
-        // transcript's range, a short/very-tall predecessor can leave the
-        // range outside the replacement and produce a blank frame.
-        const messages = this.messages();
-        const rows = this.setRenderedMessages(messages);
-        this.viewport().setRenderedRange({
-          start: Math.max(0, rows.length - 20),
-          end: rows.length,
-        });
-        this.afterNextRender(() => {
-          this.resetAutoSizeEstimator();
-          this.finishTranscriptTransitionWhenRendered();
-        });
-      } else {
-        this.transcriptTransitioning.set(false);
-      }
+      this.setRenderedMessages(this.messages());
+      this.placeOwnedWindowAtTail();
+      this.finishSessionReplacementAfterRender();
     });
 
-    // Keep the rendered data in sync with the input once the viewport is ready.
+    // Fresh object graphs from polling are common. Keep byte-identical visible
+    // projections entirely outside the renderer and scroll state machine.
     effect(() => {
       const msgs = this.messages();
-      if (this.viewportReady) {
-        // Keep the identity guard ahead of the paused-anchor layout read. Idle
-        // polling commonly supplies fresh but presentation-identical objects;
-        // those ticks must not synchronously measure or touch CDK at all.
-        if (!transcriptPresentationChanged(this.renderMessages(), msgs)) {
-          return;
-        }
-        if (this.fullDomPrototypeEnabled) {
-          if (this.transcriptTransitioning() && msgs.length === 0) return;
-          this.setRenderedMessages(msgs, true);
-          if (this.transcriptTransitioning()) {
-            this.requestFullDomTailPlacement('tail-follow-render', true);
-            this.afterNextRender(() => this.transcriptTransitioning.set(false));
-          }
-          return;
-        }
-        this.pendingPausedScrollOffset = !this.followingTail()
-          ? this.viewport().measureScrollOffset('top')
-          : undefined;
-        this.setRenderedMessages(msgs, true);
-      }
+      if (!transcriptPresentationChanged(this.renderMessages(), msgs)) return;
+      if (this.transcriptTransitioning() && msgs.length === 0) return;
+      this.setRenderedMessages(msgs, true);
     });
 
-    // Keep presentation-driven height invalidation in one explicit model.
-    // Actual DOM height remains authoritative (the wrapper ResizeObserver
-    // below also covers Markdown, HTML, custom renderers, and future content),
-    // while this key makes settings that affect unrendered rows visible to the
-    // virtualizer before those rows materialize.
+    // Presentation controls can change row height without changing messages.
+    // Angular performs the layout; following mode contributes one coalesced
+    // post-render tail write, while native anchoring exclusively owns paused
+    // layout changes.
     effect(() => {
       const visibility = this.activityVisibility();
-      const key = transcriptGeometryPresentationKey({
-        autoExpandReasoning: this.autoExpandReasoning(),
-        reasoningVisible: visibility.reasoning,
-        toolsVisible: visibility.tools,
-        revisionActionsVisible: this.showRevisionActions(),
-        alternateSlotCount: this.alternateSlots().length,
-      });
-      const changed =
-        this.geometryPresentationKey !== undefined &&
-        this.geometryPresentationKey !== key;
-      this.geometryPresentationKey = key;
-      if (!changed || !this.viewportReady) return;
-
-      this.noteTailGeometryChange();
-      if (this.fullDomPrototypeEnabled) {
-        if (this.tailFollow() && this.followingTail()) {
-          this.requestFullDomTailPlacement('tail-follow-render', true);
-        }
-        return;
-      }
-      this.afterNextRender(() => {
-        this.viewport().checkViewportSize();
-        if (this.tailFollow() && this.followingTail()) {
-          this.requestTailFollow();
-        }
-      });
-    });
-
-    // Emit the initial data once the viewport has a non-zero size. A
-    // ResizeObserver covers both initial sizing (behind an `@if`, or a CSS-grid
-    // cell resolving from 0 → its real height) and later layout changes. A ready
-    // viewport can move away from the tail when it shrinks without emitting a
-    // scroll event, so every resize also refreshes CDK's measurements and the
-    // tail-control state.
-    this.afterNextRender(() => {
-      const host = this.scrollHost();
-      const emitWhenSized = () => {
-        if (!this.viewportReady && host.clientHeight > 0) {
-          this.viewportReady = true;
-          this.setRenderedMessages(this.messages());
-        }
-        if (this.viewportReady) {
-          if (this.fullDomPrototypeEnabled) {
-            if (this.followingTail()) {
-              this.requestFullDomTailPlacement('tail-follow-render', true);
-            }
-          } else {
-            this.viewport().checkViewportSize();
-          }
-          this.recomputeBottomState();
-        }
-      };
-      emitWhenSized();
-      if (typeof ResizeObserver !== 'undefined') {
-        const viewportObserver = new ResizeObserver(() => emitWhenSized());
-        viewportObserver.observe(host);
-
-        if (this.fullDomPrototypeEnabled) {
-          const content = host.querySelector<HTMLElement>(
-            '.rv-transcript__full-content',
-          );
-          const contentObserver = new ResizeObserver(() => {
-            if (this.tailFollow() && this.followingTail()) {
-              this.requestFullDomTailPlacement('tail-geometry-rendered-resize');
-            }
-          });
-          if (content !== null) contentObserver.observe(content);
-          this.destroyRef.onDestroy(() => {
-            viewportObserver.disconnect();
-            contentObserver.disconnect();
-          });
-          return;
-        }
-
-        const contentWrapper = host.querySelector<HTMLElement>(
-          '.cdk-virtual-scroll-content-wrapper',
-        );
-        const contentObserver = new ResizeObserver((entries) => {
-          const height = entries.at(-1)?.contentRect.height;
-          if (height !== undefined) this.onRenderedContentResize(height);
-        });
-        if (contentWrapper !== null) contentObserver.observe(contentWrapper);
-
-        const spacer = host.querySelector<HTMLElement>(
-          '.cdk-virtual-scroll-spacer',
-        );
-        const spacerObserver = new ResizeObserver((entries) => {
-          const height = entries.at(-1)?.contentRect.height;
-          if (height !== undefined) this.onEstimatedTotalResize(height);
-        });
-        if (spacer !== null) spacerObserver.observe(spacer);
-
-        this.destroyRef.onDestroy(() => {
-          viewportObserver.disconnect();
-          contentObserver.disconnect();
-          spacerObserver.disconnect();
-        });
-      }
-      if (this.fullDomPrototypeEnabled) return;
-      if (typeof MutationObserver !== 'undefined') {
-        const contentWrapper = host.querySelector<HTMLElement>(
-          '.cdk-virtual-scroll-content-wrapper',
-        );
-        const spacer = host.querySelector<HTMLElement>(
-          '.cdk-virtual-scroll-spacer',
-        );
-        const geometryObserver = new MutationObserver(() => {
-          if (
-            !this.viewportReady ||
-            !this.tailFollow() ||
-            !this.followingTail() ||
-            !this.tailIsStreaming()
-          ) {
-            return;
-          }
-          this.followMaterializedTailGeometryNow('tail-geometry-mutation');
-          this.scheduleMaterializedTailGeometryFollow();
-        });
-        if (contentWrapper !== null) {
-          geometryObserver.observe(contentWrapper, {
-            attributes: true,
-            attributeFilter: ['style'],
-            characterData: true,
-            childList: true,
-            subtree: true,
-          });
-        }
-        if (spacer !== null) {
-          geometryObserver.observe(spacer, {
-            attributes: true,
-            attributeFilter: ['style'],
-          });
-        }
-        this.destroyRef.onDestroy(() => geometryObserver.disconnect());
+      void visibility.reasoning;
+      void visibility.tools;
+      void this.autoExpandReasoning();
+      void this.showRevisionActions();
+      void this.alternateSlots().length;
+      if (this.tailFollow() && this.followingTail()) {
+        this.requestTailPlacement('tail-follow-render', true);
       }
     });
 
-    // Tail-follow + scroll anchor preservation: when the rendered messages
-    // change, decide whether to scroll to bottom (tail-follow) or preserve the
-    // anchor (prepend). Tracks `renderMessages` so it fires when the data is
-    // first emitted to the viewport, not just when the input changes.
+    // Native browser anchoring exclusively owns paused growth and prepend.
+    // Application writes are admitted only while following or seeking.
     effect(() => {
       const msgs = this.renderMessages();
       const prev = this.previousMessages;
@@ -672,60 +400,24 @@ export class TranscriptViewportComponent {
 
       if (msgs.length === 0) return;
 
-      const prependedCount = countPrependedMessages(prev, msgs);
       const tailChanged = transcriptTailChanged(prev, msgs);
-      const projectionChanged = transcriptPresentationChanged(prev, msgs);
-      const offsetBeforeProjection = this.pendingPausedScrollOffset;
-      this.pendingPausedScrollOffset = undefined;
-      const pausedScrollOffset =
-        projectionChanged &&
-        prependedCount === 0 &&
-        !this.followingTail() &&
-        !this.scrollbarDragActive &&
-        !this.touchScrollActive
-          ? offsetBeforeProjection
-          : undefined;
-      if (tailChanged) {
-        this.noteTailGeometryChange();
-      }
 
       // Keep a compatibility fallback for standalone consumers that have not
       // supplied a transcript key. The app shell always supplies one.
       const replaced =
         this.transcriptKey() === undefined && messagesWereReplaced(prev, msgs);
-      if (this.fullDomPrototypeEnabled) {
-        if (replaced) {
-          this.isAtBottom.set(true);
-          this.resumeTailFollow();
-        }
-        if (tailChanged && this.tailFollow() && this.followingTail()) {
-          this.requestFullDomTailPlacement('tail-follow-render', true);
-        }
-        // Native browser anchoring exclusively owns paused growth and prepend.
-        return;
-      }
       if (replaced) {
+        this.cancelPendingSeeks();
+        this.cancelTailFollowWork();
+        this.viewportState.set('session-replacement');
         this.isAtBottom.set(true);
-        this.resumeTailFollow();
-        this.afterNextRender(() => this.resetAutoSizeEstimator());
-      }
-
-      if (prependedCount > 0 && !this.followingTail()) {
-        // Older history was prepended above the viewport. Preserve the anchor
-        // so the user doesn't see a jump.
-        this.afterNextRender(() => {
-          this.preserveScrollAnchor();
-        });
-        return;
-      }
-
-      if (pausedScrollOffset !== undefined) {
-        this.holdPausedScrollOffset(pausedScrollOffset);
+        this.placeOwnedWindowAtTail();
+        this.finishSessionReplacementAfterRender();
         return;
       }
 
       if (tailChanged && this.tailFollow() && this.followingTail()) {
-        this.requestTailFollow();
+        this.requestTailPlacement('tail-follow-render', true);
       }
     });
 
@@ -733,7 +425,7 @@ export class TranscriptViewportComponent {
     effect(() => {
       const targetId = this.targetMessageId();
       if (targetId === undefined) return;
-      this.scrollToMessageId(targetId);
+      untracked(() => this.scrollToMessageId(targetId));
     });
 
     effect(() => {
@@ -750,49 +442,27 @@ export class TranscriptViewportComponent {
     effect(() => {
       const seekKey = this.activeSearchSeekKey();
       if (seekKey === undefined) {
-        this.cancelPendingSeeks();
+        if (this.pendingSeekSource === 'search') this.cancelPendingSeeks();
         return;
       }
       const result = untracked(() => this.activeSearchResult());
       if (result?.id !== seekKey) return;
-      this.scrollToMessageId(result.messageId);
+      untracked(() => this.scrollToMessageId(result.messageId, 'search'));
     });
   }
 
-  private viewport(): CdkVirtualScrollViewport {
-    const viewport = this.cdkViewport();
-    if (viewport === undefined) {
-      throw new Error('CDK viewport is unavailable in the full-DOM prototype');
-    }
-    return viewport;
-  }
-
-  private autoSize(): CdkAutoSizeVirtualScroll {
-    const autoSize = this.cdkAutoSize();
-    if (autoSize === undefined) {
-      throw new Error('CDK autosize is unavailable in the full-DOM prototype');
-    }
-    return autoSize;
-  }
-
   private scrollHost(): HTMLElement {
-    const fullDomHost = this.fullDomViewport()?.nativeElement;
-    if (this.fullDomPrototypeEnabled && fullDomHost !== undefined) {
-      return fullDomHost;
-    }
-    return this.viewport().elementRef.nativeElement;
+    return this.viewportElement().nativeElement;
   }
 
-  /** Install stable message rows into CDK's autosize virtualizer. */
+  /** Install presentation-stable message rows into the keyed window. */
   private setRenderedMessages(
     messages: readonly ChatMessage[],
     presentationChanged?: boolean,
   ): readonly TranscriptVirtualRow[] {
     const previousMessages = this.renderMessages();
     const previousRows = this.renderRows();
-    const previousWindowFirstId = this.ownedWindowPrototypeEnabled
-      ? previousRows[this.ownedWindowStart()]?.id
-      : undefined;
+    const previousWindowFirstId = previousRows[this.ownedWindowStart()]?.id;
     const changed =
       presentationChanged ??
       transcriptPresentationChanged(previousMessages, messages);
@@ -802,29 +472,24 @@ export class TranscriptViewportComponent {
     const rows = projectTranscriptVirtualRows(messages, previousRows);
     this.renderMessages.set(messages);
     this.renderRows.set(rows);
-    if (this.ownedWindowPrototypeEnabled) {
-      const retainedStart =
-        previousWindowFirstId === undefined
-          ? -1
-          : rows.findIndex((row) => row.id === previousWindowFirstId);
-      if (this.followingTail() || this.transcriptTransitioning()) {
-        this.placeOwnedWindowAtTail();
-      } else if (retainedStart >= 0) {
-        this.ownedWindowStart.set(retainedStart);
-      } else {
-        // Codex reconciliation can replace every projected row id without a
-        // conversation switch. Preserve the paused logical slice by index in
-        // that case; never seize the tail merely because identities changed.
-        this.ownedWindowStart.set(
-          Math.min(
-            this.ownedWindowStart(),
-            Math.max(
-              0,
-              rows.length - TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
-            ),
-          ),
-        );
-      }
+    const retainedStart =
+      previousWindowFirstId === undefined
+        ? -1
+        : rows.findIndex((row) => row.id === previousWindowFirstId);
+    if (this.followingTail() || this.transcriptTransitioning()) {
+      this.placeOwnedWindowAtTail();
+    } else if (retainedStart >= 0) {
+      this.ownedWindowStart.set(retainedStart);
+    } else {
+      // Codex reconciliation can replace every projected row id without a
+      // conversation switch. Preserve the paused logical slice by index in
+      // that case; never seize the tail merely because identities changed.
+      this.ownedWindowStart.set(
+        Math.min(
+          this.ownedWindowStart(),
+          Math.max(0, rows.length - TRANSCRIPT_WINDOW_ROW_COUNT),
+        ),
+      );
     }
     return rows;
   }
@@ -832,28 +497,23 @@ export class TranscriptViewportComponent {
   private placeOwnedWindowAtTail(): void {
     const start = Math.max(
       0,
-      this.renderRows().length -
-        TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
+      this.renderRows().length - TRANSCRIPT_WINDOW_ROW_COUNT,
     );
     this.ownedWindowStart.set(start);
   }
 
   private placeOwnedWindowAround(index: number): void {
     const rows = this.renderRows();
-    const half = Math.floor(
-      TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT / 2,
-    );
-    const maxStart = Math.max(
-      0,
-      rows.length - TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
-    );
+    const half = Math.floor(TRANSCRIPT_WINDOW_ROW_COUNT / 2);
+    const maxStart = Math.max(0, rows.length - TRANSCRIPT_WINDOW_ROW_COUNT);
     this.ownedWindowStart.set(Math.max(0, Math.min(maxStart, index - half)));
   }
 
   private syncOwnedWindowToScrollPosition(): void {
     if (
-      !this.ownedWindowPrototypeEnabled ||
       this.ownedWindowEndAdmissionPending ||
+      this.viewportState() === 'seeking' ||
+      this.viewportState() === 'session-replacement' ||
       this.renderRows().length === 0
     ) {
       return;
@@ -863,19 +523,10 @@ export class TranscriptViewportComponent {
     const fraction = Math.max(0, Math.min(1, host.scrollTop / maximum));
     const index = Math.round(fraction * (this.renderRows().length - 1));
     const currentStart = this.ownedWindowStart();
-    const currentEnd =
-      currentStart + TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT;
+    const currentEnd = currentStart + TRANSCRIPT_WINDOW_ROW_COUNT;
     if (index < currentStart + 16 || index >= currentEnd - 16) {
       this.placeOwnedWindowAround(index);
     }
-  }
-
-  /** Stable CDK identity prevents a growing Codex turn from recreating its row. */
-  protected trackByVirtualRowId(
-    _index: number,
-    row: TranscriptVirtualRow,
-  ): string {
-    return row.id;
   }
 
   /** Called on viewport scroll to track whether the user is at the bottom. */
@@ -895,7 +546,6 @@ export class TranscriptViewportComponent {
    * broader visual "near bottom" threshold. */
   protected onWheel(event: WheelEvent): void {
     this.cancelOwnedWindowEndAdmission();
-    this.cancelPausedScrollHold();
     if (event.deltaY < 0) {
       this.resumeFollowOnUserScrollToTail = false;
       this.pauseTailFollow();
@@ -907,7 +557,6 @@ export class TranscriptViewportComponent {
   /** Touch scrolling always begins under user control. */
   protected onTouchStart(): void {
     this.cancelOwnedWindowEndAdmission();
-    this.cancelPausedScrollHold();
     this.touchScrollActive = true;
     this.resumeFollowOnUserScrollToTail = false;
     this.pauseTailFollow();
@@ -918,14 +567,13 @@ export class TranscriptViewportComponent {
     this.resumeFollowIfUserReachedTail();
   }
 
-  /** Stop pending tail settlement before a native scrollbar drag begins. */
+  /** Cancel pending owned tail admission before a scrollbar drag begins. */
   protected onPointerDown(event: PointerEvent): void {
     const host = this.scrollHost();
     const bounds = host.getBoundingClientRect();
     const scrollbarWidth = Math.max(16, host.offsetWidth - host.clientWidth);
     if (event.clientX >= bounds.right - scrollbarWidth) {
       this.cancelOwnedWindowEndAdmission();
-      this.cancelPausedScrollHold();
       this.scrollbarDragActive = true;
       this.resumeFollowOnUserScrollToTail = false;
       this.pauseTailFollow();
@@ -933,7 +581,6 @@ export class TranscriptViewportComponent {
   }
 
   protected onKeyboardScroll(event: KeyboardEvent): void {
-    if (!this.fullDomPrototypeEnabled) return;
     this.cancelOwnedWindowEndAdmission();
     const host = this.scrollHost();
     let target: number | undefined;
@@ -948,7 +595,7 @@ export class TranscriptViewportComponent {
     if (target === undefined) return;
     event.preventDefault();
     this.pauseTailFollow();
-    if (event.key === 'End' && this.ownedWindowPrototypeEnabled) {
+    if (event.key === 'End') {
       const generation = this.ownedWindowEndGeneration;
       this.ownedWindowEndAdmissionPending = true;
       this.placeOwnedWindowAtTail();
@@ -1139,62 +786,26 @@ export class TranscriptViewportComponent {
     this.cancelPendingSeeks();
     this.isAtBottom.set(true);
     this.resumeTailFollow();
-    const generation = this.tailFollowGeneration;
-    if (this.fullDomPrototypeEnabled) {
-      this.requestFullDomTailPlacement(reason);
-      return;
-    }
-    this.scrollToBottomOffset(reason);
-    this.settleScrollToBottom(0, generation);
+    this.requestTailPlacement(reason);
   }
 
-  private requestTailFollow(): void {
-    if (this.fullDomPrototypeEnabled) {
-      this.requestFullDomTailPlacement('tail-follow-render', true);
-      return;
-    }
-    if (this.tailFollowRenderPending) return;
-    const generation = this.tailFollowGeneration;
-    this.tailFollowRenderPending = true;
-    this.afterNextRender(() => {
-      if (generation !== this.tailFollowGeneration) return;
-      this.tailFollowRenderPending = false;
-      if (!this.tailFollow() || !this.followingTail()) return;
-      // A newly materialized streaming row can inherit CDK autosize's
-      // provisional spacer extent until its first ResizeObserver pass. Repair
-      // that disagreement in Angular's render completion callback so the
-      // browser never paints a bottom-pinned blank frame in between.
-      if (this.tailIsStreaming()) {
-        if (this.isTailMaterialized()) {
-          this.followMaterializedTailGeometryNow('tail-follow-render');
-        }
-        this.scheduleMaterializedTailGeometryFollow();
-      }
-      if (this.viewport().measureScrollOffset('bottom') > 2) {
-        this.scrollToBottomOffset('tail-follow-render');
-      }
-      this.settleScrollToBottom(0, generation);
-    });
-  }
-
-  /** Option B has one scroll authority: a single write coalesced into the next
-   * animation frame. ResizeObserver and Angular projection changes may both
-   * request it, but neither can create a second writer or a settlement loop. */
-  private requestFullDomTailPlacement(
+  /** Each render turn can request at most one application-owned tail write. */
+  private requestTailPlacement(
     reason: TranscriptScrollWriteReason,
     afterRender = false,
   ): void {
-    if (this.ownedWindowPrototypeEnabled) this.placeOwnedWindowAtTail();
+    this.placeOwnedWindowAtTail();
     if (afterRender) {
-      if (this.fullDomRenderFollowPending) return;
+      if (this.tailFollowRenderPending) return;
       const generation = this.tailFollowGeneration;
-      this.fullDomRenderFollowPending = true;
+      this.tailFollowRenderPending = true;
       this.afterNextRender(() => {
-        this.fullDomRenderFollowPending = false;
+        this.tailFollowRenderPending = false;
         if (
           generation !== this.tailFollowGeneration ||
           !this.tailFollow() ||
-          !this.followingTail()
+          !this.followingTail() ||
+          this.scrollHost().clientHeight <= 0
         ) {
           return;
         }
@@ -1203,14 +814,15 @@ export class TranscriptViewportComponent {
       });
       return;
     }
-    if (this.fullDomFollowFrame !== undefined) return;
+    if (this.tailFollowFrame !== undefined) return;
     const generation = this.tailFollowGeneration;
-    this.fullDomFollowFrame = requestAnimationFrame(() => {
-      this.fullDomFollowFrame = undefined;
+    this.tailFollowFrame = requestAnimationFrame(() => {
+      this.tailFollowFrame = undefined;
       if (
         generation !== this.tailFollowGeneration ||
         !this.tailFollow() ||
-        !this.followingTail()
+        !this.followingTail() ||
+        this.scrollHost().clientHeight <= 0
       ) {
         return;
       }
@@ -1219,241 +831,104 @@ export class TranscriptViewportComponent {
     });
   }
 
-  private noteTailGeometryChange(): void {
-    this.tailGeometryChangedAt = Date.now();
-  }
-
-  /**
-   * Experimental autosize retains a lifetime-weighted item-height average even
-   * when a wholly different data set replaces the transcript. Reset only on a
-   * proven session replacement so expanded content from the prior session
-   * cannot determine the next session's rendered range. Calling `attach`
-   * directly is deliberate: the strategy's attach path resets its averager and
-   * recalculates the range, while a preceding detach creates a real empty-row
-   * interval before CDK materializes the replacement range.
-   */
-  private resetAutoSizeEstimator(): void {
-    const strategy = this.autoSize()._scrollStrategy;
-    strategy.attach(this.viewport());
-    this.noteTailGeometryChange();
-    this.scrollToBottomOffset('estimator-reset');
-  }
-
-  private finishTranscriptTransitionWhenRendered(attempt = 0): void {
-    if (this.transcriptTransitionFrame !== undefined) {
-      cancelAnimationFrame(this.transcriptTransitionFrame);
-    }
-    this.transcriptTransitionFrame = requestAnimationFrame(() => {
-      this.transcriptTransitionFrame = undefined;
-      const hasRenderedRow =
-        this.viewport().elementRef.nativeElement.querySelector(
-          '.rv-transcript__item',
-        ) !== null;
-      if (hasRenderedRow || attempt >= 10) {
-        this.transcriptTransitioning.set(false);
+  private finishSessionReplacementAfterRender(): void {
+    this.afterNextRender(() => {
+      if (!this.transcriptTransitioning()) return;
+      const host = this.scrollHost();
+      if (host.clientHeight <= 0) {
+        this.viewportState.set('following');
         return;
       }
-      this.finishTranscriptTransitionWhenRendered(attempt + 1);
-    });
-  }
-
-  private onRenderedContentResize(height: number): void {
-    if (
-      this.renderedContentHeight !== undefined &&
-      Math.abs(this.renderedContentHeight - height) <= 0.5
-    ) {
-      return;
-    }
-    this.renderedContentHeight = height;
-    this.noteTailGeometryChange();
-    if (this.viewportReady && this.tailFollow() && this.followingTail()) {
-      this.followMaterializedTailGeometryNow('tail-geometry-rendered-resize');
-      this.scheduleMaterializedTailGeometryFollow();
-      this.requestTailFollow();
-    }
-  }
-
-  private onEstimatedTotalResize(height: number): void {
-    if (
-      this.estimatedTotalHeight !== undefined &&
-      Math.abs(this.estimatedTotalHeight - height) <= 0.5
-    ) {
-      return;
-    }
-    this.estimatedTotalHeight = height;
-    this.noteTailGeometryChange();
-    if (this.viewportReady && this.tailFollow() && this.followingTail()) {
-      this.followMaterializedTailGeometryNow('tail-geometry-estimated-resize');
-      this.scheduleMaterializedTailGeometryFollow();
-      this.requestTailFollow();
-    }
-  }
-
-  /**
-   * ResizeObserver runs before paint. Keep the materialized tail aligned in
-   * that same frame instead of exposing CDK's intermediate spacer/wrapper
-   * disagreement until the next Angular render and settlement timer.
-   */
-  private followMaterializedTailGeometryNow(
-    reason: TranscriptScrollWriteReason,
-  ): void {
-    this.scrollToBottomOffset(reason);
-    if (this.isTailMaterialized()) {
-      this.reconcileMaterializedTailGeometry(false);
-    }
-    this.recomputeBottomState();
-  }
-
-  /**
-   * CDK's own ResizeObserver can run after ours and update the wrapper transform
-   * without changing its measured height, which provides no second observer
-   * notification. Re-assert the coherent tail after all resize callbacks for
-   * the frame have completed. A newly appended virtual row may materialize a
-   * few frames after its data signal, so follow that bounded render window
-   * until the streaming tail exists.
-   */
-  private scheduleMaterializedTailGeometryFollow(attempt = 0): void {
-    if (this.tailGeometryFrame !== undefined) return;
-    this.tailGeometryFrame = requestAnimationFrame(() => {
-      this.tailGeometryFrame = undefined;
-      if (!this.viewportReady || !this.tailFollow() || !this.followingTail()) {
-        return;
-      }
-      if (
-        this.tailIsStreaming() &&
-        !this.isTailMaterialized() &&
-        attempt < 10
-      ) {
-        this.scheduleMaterializedTailGeometryFollow(attempt + 1);
-        return;
-      }
-      this.followMaterializedTailGeometryNow('tail-geometry-frame');
+      this.writeScrollPosition(
+        'session-replacement',
+        host.scrollHeight,
+        null,
+        () => {
+          host.scrollTop = host.scrollHeight;
+        },
+      );
+      this.viewportState.set('following');
+      this.recomputeBottomState();
     });
   }
 
   private pauseTailFollow(): void {
-    this.cancelPausedScrollHold();
-    if (!this.followingTail()) return;
-    this.followingTail.set(false);
+    if (this.viewportState() === 'paused') return;
     this.cancelTailFollowWork();
-    this.cancelPendingSeeks();
+    // A semantic seek has already admitted its target window. Let that single
+    // requested placement finish even if a wheel event arrives in the render
+    // gap; explicit replacement or another seek still cancels it through
+    // `cancelPendingSeeks`.
+    if (this.viewportState() !== 'seeking') this.seekGeneration += 1;
+    this.viewportState.set('paused');
   }
 
   private resumeTailFollow(): void {
     this.cancelTailFollowWork();
-    this.cancelPausedScrollHold();
+    this.seekGeneration += 1;
     this.resumeFollowOnUserScrollToTail = false;
     this.scrollbarDragActive = false;
     this.touchScrollActive = false;
-    this.followingTail.set(true);
-  }
-
-  /** CDK autosize can preserve the provisional bottom instead of the user's
-   * top offset while appending a variable-height row. Hold the pre-render
-   * offset across its bounded measurement passes, but let the next gesture
-   * cancel the hold immediately. */
-  private holdPausedScrollOffset(offset: number): void {
-    this.cancelPausedScrollHold();
-    const generation = this.pausedScrollHoldGeneration;
-    const startedAt = Date.now();
-
-    const restore = (): void => {
-      this.afterNextRender(() => {
-        if (
-          generation !== this.pausedScrollHoldGeneration ||
-          this.followingTail()
-        ) {
-          return;
-        }
-        const viewport = this.viewport();
-        if (Math.abs(viewport.measureScrollOffset('top') - offset) > 0.5) {
-          this.writeScrollPosition('paused-offset-hold', offset, null, () => {
-            viewport.scrollToOffset(offset);
-          });
-        }
-        if (
-          Date.now() - startedAt >=
-          TranscriptViewportComponent.TAIL_SETTLE_MAX_MS
-        ) {
-          this.recomputeBottomState();
-          return;
-        }
-        const timer = setTimeout(() => {
-          this.pausedScrollHoldTimers.delete(timer);
-          restore();
-        }, 50);
-        this.pausedScrollHoldTimers.add(timer);
-      });
-    };
-
-    restore();
-  }
-
-  private cancelPausedScrollHold(): void {
-    this.pausedScrollHoldGeneration += 1;
-    for (const timer of this.pausedScrollHoldTimers) clearTimeout(timer);
-    this.pausedScrollHoldTimers.clear();
+    this.viewportState.set('following');
   }
 
   private cancelTailFollowWork(): void {
     this.tailFollowGeneration += 1;
     this.tailFollowRenderPending = false;
-    this.fullDomRenderFollowPending = false;
-    if (this.fullDomFollowFrame !== undefined) {
-      cancelAnimationFrame(this.fullDomFollowFrame);
-      this.fullDomFollowFrame = undefined;
-    }
-    if (this.tailSettleTimer !== undefined) {
-      clearTimeout(this.tailSettleTimer);
-      this.tailSettleTimer = undefined;
+    if (this.tailFollowFrame !== undefined) {
+      cancelAnimationFrame(this.tailFollowFrame);
+      this.tailFollowFrame = undefined;
     }
   }
 
   private scrollToBottomOffset(reason: TranscriptScrollWriteReason): void {
-    if (this.fullDomPrototypeEnabled) {
-      const host = this.scrollHost();
-      this.writeScrollPosition(reason, host.scrollHeight, null, () => {
-        host.scrollTop = host.scrollHeight;
-      });
-      return;
-    }
-    const vp = this.viewport();
-    // Scroll to a very large offset — CDK clamps to the maximum scrollable
-    // distance. This works with both fixed-size and autosize strategies.
-    this.writeScrollPosition(reason, Number.MAX_SAFE_INTEGER, null, () => {
-      vp.scrollToOffset(Number.MAX_SAFE_INTEGER);
+    const host = this.scrollHost();
+    this.writeScrollPosition(reason, host.scrollHeight, null, () => {
+      host.scrollTop = host.scrollHeight;
     });
   }
 
-  scrollToMessageId(messageId: string): void {
-    this.pauseTailFollow();
+  scrollToMessageId(
+    messageId: string,
+    source: 'programmatic' | 'search' = 'programmatic',
+  ): void {
     this.cancelPendingSeeks();
     const index = this.virtualRowIndexForMessage(messageId);
-    if (index >= 0) {
-      if (this.ownedWindowPrototypeEnabled) {
-        this.placeOwnedWindowAround(index);
+    if (index < 0) return;
+    this.cancelTailFollowWork();
+    this.viewportState.set('seeking');
+    this.pendingSeekSource = source;
+    const generation = this.seekGeneration;
+    this.placeOwnedWindowAround(index);
+    this.seekFrame = requestAnimationFrame(() => {
+      this.seekFrame = undefined;
+      if (generation !== this.seekGeneration) return;
+      const target = this.findRenderedMessageElement(messageId);
+      if (target !== null) {
+        this.writeScrollPosition('seek-rendered-message', null, messageId, () =>
+          // Put the semantic target at the viewport start. `nearest` can leave
+          // a tall target partially above the viewport, which makes a later
+          // image decode or reasoning expansion move the first visible row
+          // even though the user explicitly sought this message.
+          target.scrollIntoView({ block: 'start' }),
+        );
       }
-      this.afterNextRender(() => {
-        if (this.fullDomPrototypeEnabled) {
-          const target = this.findRenderedMessageElement(messageId);
-          if (target !== null) {
-            this.writeScrollPosition(
-              'seek-rendered-message',
-              null,
-              messageId,
-              () => target.scrollIntoView({ block: 'nearest' }),
-            );
-          }
-          return;
-        }
-        this.seekMessageIntoView(messageId, index, 0);
-      });
-    }
+      this.viewportState.set('paused');
+      this.pendingSeekSource = undefined;
+      this.recomputeBottomState();
+    });
   }
 
   private cancelPendingSeeks(): void {
-    for (const timer of this.pendingSeekTimers) clearTimeout(timer);
-    this.pendingSeekTimers.clear();
+    this.seekGeneration += 1;
+    this.pendingSeekSource = undefined;
+    if (this.seekFrame !== undefined) {
+      cancelAnimationFrame(this.seekFrame);
+      this.seekFrame = undefined;
+    }
+    if (this.viewportState() === 'seeking') {
+      this.viewportState.set('paused');
+    }
   }
 
   private afterNextRender(callback: () => void): void {
@@ -1539,103 +1014,9 @@ export class TranscriptViewportComponent {
     this.revisionRequested.emit(action);
   }
 
-  private seekMessageIntoView(
-    messageId: string,
-    index: number,
-    attempt: number,
-  ): void {
-    if (this.viewportReady) {
-      this.setRenderedMessages(this.messages());
-    }
-
-    const rendered = this.findRenderedMessageElement(messageId);
-    if (rendered !== null) {
-      this.writeScrollPosition('seek-rendered-message', null, messageId, () =>
-        rendered.scrollIntoView({ block: 'nearest' }),
-      );
-      return;
-    }
-
-    this.scrollTowardIndex(index);
-
-    if (attempt >= 12) return;
-    const timer = setTimeout(() => {
-      this.pendingSeekTimers.delete(timer);
-      this.afterNextRender(() => {
-        this.seekMessageIntoView(messageId, index, attempt + 1);
-      });
-    }, 50);
-    this.pendingSeekTimers.add(timer);
-  }
-
-  private scrollTowardIndex(index: number): void {
-    const vp = this.viewport();
-    vp.checkViewportSize();
-
-    const rows = this.renderRows();
-    if (rows.length === 0) return;
-
-    const clampedIndex = Math.max(0, Math.min(index, rows.length - 1));
-    if (clampedIndex === 0) {
-      this.writeScrollPosition('seek-first-row', 0, null, () => {
-        vp.scrollToOffset(0);
-      });
-      return;
-    }
-
-    if (clampedIndex >= rows.length - 1) {
-      this.scrollToBottomFor('seek-tail');
-      return;
-    }
-
-    const range = vp.getRenderedRange();
-    const averageItemSize = this.averageRenderedItemSize();
-    const currentOffset = vp.measureScrollOffset('top');
-
-    let nextOffset: number;
-    if (range.end > 0 && clampedIndex >= range.end) {
-      nextOffset =
-        currentOffset + (clampedIndex - range.end + 1) * averageItemSize;
-    } else if (range.start > 0 && clampedIndex < range.start) {
-      nextOffset =
-        currentOffset - (range.start - clampedIndex + 1) * averageItemSize;
-    } else {
-      nextOffset = clampedIndex * averageItemSize;
-    }
-
-    const requestedOffset = Math.max(0, nextOffset);
-    this.writeScrollPosition(
-      'seek-estimated-row',
-      requestedOffset,
-      null,
-      () => {
-        vp.scrollToOffset(requestedOffset);
-      },
-    );
-  }
-
   private virtualRowIndexForMessage(messageId: string): number {
     return this.renderRows().findIndex((row) =>
       row.messages.some((message) => message.id === messageId),
-    );
-  }
-
-  private averageRenderedItemSize(): number {
-    const vp = this.viewport();
-    const range = vp.getRenderedRange();
-    const renderedCount = Math.max(0, range.end - range.start);
-    if (renderedCount === 0) {
-      return TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX;
-    }
-
-    const measured = vp.measureRenderedContentSize();
-    if (measured <= 0) {
-      return TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX;
-    }
-
-    return Math.max(
-      TranscriptViewportComponent.DEFAULT_ITEM_HEIGHT_PX,
-      measured / renderedCount,
     );
   }
 
@@ -1650,250 +1031,14 @@ export class TranscriptViewportComponent {
     }
     return null;
   }
-
-  private settleScrollToBottom(
-    attempt: number,
-    generation: number,
-    startedAt = Date.now(),
-  ): void {
-    if (
-      Date.now() - startedAt >=
-      TranscriptViewportComponent.TAIL_SETTLE_MAX_MS
-    ) {
-      this.recomputeBottomState();
-      return;
-    }
-    if (this.tailSettleTimer !== undefined) {
-      clearTimeout(this.tailSettleTimer);
-    }
-    this.tailSettleTimer = setTimeout(() => {
-      this.tailSettleTimer = undefined;
-      this.afterNextRender(() => {
-        if (
-          generation !== this.tailFollowGeneration ||
-          !this.tailFollow() ||
-          !this.followingTail()
-        ) {
-          return;
-        }
-        const bottomOffset = this.viewport().measureScrollOffset('bottom');
-        const tailMaterialized = this.isTailMaterialized();
-        // Keep the materialized wrapper and spacer coherent even while a
-        // stable virtual row is streaming. Streaming trusts the freshly
-        // measured wrapper; terminal settlement trusts CDK's stable spacer.
-        if (tailMaterialized && this.reconcileMaterializedTailGeometry(false)) {
-          this.settleScrollToBottom(attempt + 1, generation, startedAt);
-          return;
-        }
-        if (!this.tailGeometryCanReconcile()) {
-          // Keep following real growth, but leave CDK's size estimate alone
-          // until the active row stops changing. A later settlement attempt
-          // performs the stale-spacer repair against stable measurements.
-          if (bottomOffset > TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
-            this.scrollToBottomOffset('tail-follow-settle');
-          }
-          this.settleScrollToBottom(attempt + 1, generation, startedAt);
-          return;
-        }
-        if (tailMaterialized && this.reconcileMaterializedTailGeometry(true)) {
-          this.settleScrollToBottom(attempt + 1, generation, startedAt);
-          return;
-        }
-        // Autosize may temporarily report a zero bottom offset while its
-        // estimator still has not materialized the actual last row. Stopping
-        // at that provisional bottom is what could hide a final_answer after
-        // a long refreshed transcript. Only settle once the tail row exists.
-        if (
-          bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX &&
-          tailMaterialized
-        ) {
-          this.isAtBottom.set(true);
-          return;
-        }
-        // Autosize can converge on a provisional content size whose reported
-        // bottom is real in pixels but whose rendered range stops one or more
-        // rows before the data tail. Repeating the same clamped offset cannot
-        // escape that estimate. After a few normal attempts, explicitly seed a
-        // tail range; the strategy remeasures it on the next render and can
-        // then place the actual final row at the bottom.
-        if (attempt >= 3 && !this.isTailMaterialized()) {
-          this.materializeTailRange();
-        } else {
-          this.scrollToBottomOffset('tail-follow-settle');
-        }
-        this.settleScrollToBottom(attempt + 1, generation, startedAt);
-      });
-    }, 50);
-  }
-
-  private tailGeometryCanReconcile(): boolean {
-    return (
-      !this.tailIsStreaming() &&
-      tailGeometryIsStable(
-        this.tailGeometryChangedAt,
-        Date.now(),
-        TranscriptViewportComponent.TAIL_GEOMETRY_QUIET_MS,
-      )
-    );
-  }
-
-  private tailIsStreaming(): boolean {
-    return this.renderMessages().some(
-      (message) => message.status === 'streaming',
-    );
-  }
-
-  private isTailMaterialized(): boolean {
-    const lastMessage = this.renderMessages().at(-1);
-    return (
-      lastMessage === undefined ||
-      this.findRenderedMessageElement(lastMessage.id) !== null
-    );
-  }
-
-  /** Keep a materialized tail aligned with the browser's authoritative scroll extent. */
-  private reconcileMaterializedTailGeometry(
-    includeViewportCoverageRepair: boolean,
-  ): boolean {
-    const viewport = this.viewport();
-    const measurement = this.measureTranscriptGeometry();
-    if (measurement === undefined) return false;
-    if (
-      measurement.totalContentSize <= 0 ||
-      measurement.renderedContentSize <= 0
-    ) {
-      return false;
-    }
-    const assessment = assessTranscriptGeometry(measurement);
-    if (!assessment.tailRangeMaterialized) return false;
-
-    if (!assessment.tailEndCoherent) {
-      if (this.tailIsStreaming()) {
-        // The rendered streaming tail is the fresh measurement; the spacer is
-        // an autosize estimate which can lag a growing row in either direction.
-        // Preserve the visible wrapper and make the scroll extent meet its real
-        // end, then pin the viewport to that corrected bottom.
-        viewport.setTotalContentSize(assessment.renderedContentEnd);
-        this.writeScrollPosition(
-          'geometry-reconcile-streaming',
-          Number.MAX_SAFE_INTEGER,
-          null,
-          () => viewport.scrollToOffset(Number.MAX_SAFE_INTEGER),
-        );
-        return true;
-      }
-      // For settled content, correct only the independently positioned wrapper.
-      // The browser scroll extent already resolves whether the spacer or the
-      // rendered content reaches farther.
-      viewport.setRenderedContentOffset(
-        assessment.correctedRenderedContentOffset,
-      );
-      this.writeScrollPosition(
-        'geometry-reconcile-settled',
-        Number.MAX_SAFE_INTEGER,
-        null,
-        () => viewport.scrollToOffset(Number.MAX_SAFE_INTEGER),
-      );
-      return true;
-    }
-
-    if (!includeViewportCoverageRepair) return false;
-
-    if (assessment.tailViewportCovered) return false;
-
-    // A retained average dominated by tall expanded content can predict that
-    // one short row fills the viewport. Reset the estimator and let its normal
-    // render path choose a default-size tail window. Directly forcing a range
-    // here would bypass autosize's cached offset/size bookkeeping.
-    this.resetAutoSizeEstimator();
-    return true;
-  }
-
-  private measureTranscriptGeometry():
-    | TranscriptGeometryMeasurement
-    | undefined {
-    const viewport = this.viewport();
-    const host = viewport.elementRef.nativeElement;
-    const contentWrapper = host.querySelector<HTMLElement>(
-      '.cdk-virtual-scroll-content-wrapper',
-    );
-    const spacer = host.querySelector<HTMLElement>(
-      '.cdk-virtual-scroll-spacer',
-    );
-    if (contentWrapper === null || spacer === null) return undefined;
-
-    const hostBounds = host.getBoundingClientRect();
-    const contentBounds = contentWrapper.getBoundingClientRect();
-    const renderedItems = contentWrapper.querySelectorAll<HTMLElement>(
-      '.rv-transcript__item',
-    );
-    const lastRenderedItem = renderedItems.item(renderedItems.length - 1);
-    const measuredRenderedContentSize =
-      lastRenderedItem === null
-        ? contentBounds.height
-        : Math.max(
-            0,
-            lastRenderedItem.getBoundingClientRect().bottom - contentBounds.top,
-          );
-    return {
-      dataLength: this.renderRows().length,
-      renderedRange: viewport.getRenderedRange(),
-      viewportSize: host.clientHeight,
-      scrollOffset: viewport.measureScrollOffset('top'),
-      scrollSize: host.scrollHeight,
-      // A grouped streaming row can temporarily extend beyond CDK's spacer.
-      // Browser scrollHeight already resolves both competing extents and is
-      // therefore the authoritative total the user can actually scroll.
-      totalContentSize: host.scrollHeight,
-      renderedContentOffset:
-        viewport.measureScrollOffset('top') +
-        contentBounds.top -
-        hostBounds.top,
-      // The CDK wrapper and virtual row can retain trailing strategy space.
-      // The final semantic message is the authoritative visible content end
-      // for tail geometry and blank-space detection.
-      renderedContentSize: measuredRenderedContentSize,
-    };
-  }
-
-  private materializeTailRange(): void {
-    const length = this.renderRows().length;
-    if (length === 0) return;
-    // Reattaching resets the retained average and uses autosize's own range,
-    // offset, and total-size update path to materialize the tail coherently.
-    this.resetAutoSizeEstimator();
-  }
-
-  /**
-   * Preserve scroll anchor when older messages are prepended.
-   *
-   * The autosize strategy tracks real pixel positions, so we simply restore
-   * the scroll offset from the top. The prepended messages shift all items
-   * down, and restoring the offset keeps the viewport visually stable.
-   */
-  private preserveScrollAnchor(): void {
-    const vp = this.viewport();
-
-    // Record the scroll offset from the top before CDK recalculates.
-    const scrollOffsetFromTop = vp.measureScrollOffset('top');
-
-    // With autosize, just restore the pixel offset — the strategy has already
-    // remeasured and repositioned items after the data change.
-    this.writeScrollPosition(
-      'prepend-anchor-restore',
-      scrollOffsetFromTop,
-      null,
-      () => vp.scrollToOffset(scrollOffsetFromTop),
-    );
-  }
 }
 
 /**
- * Build the stable data rows owned by the virtualizer.
+ * Build stable keyed data rows for the resident window.
  *
  * Every projected message owns one stable row. External app-server projection
  * now places a native turn's reasoning, tools, commands, and answer in one
- * ChatMessage, so CDK no longer needs a second stateful grouping layer.
+ * ChatMessage, so the viewport needs no second stateful grouping layer.
  */
 export function projectTranscriptVirtualRows(
   messages: readonly ChatMessage[],
@@ -1926,15 +1071,6 @@ export function transcriptSearchSeekKey(
   result: { readonly id: string } | undefined,
 ): string | undefined {
   return query.trim().length === 0 ? undefined : result?.id;
-}
-
-/** Whether CDK has had enough quiet time to reconcile its autosize estimate. */
-export function tailGeometryIsStable(
-  lastChangeAt: number,
-  now: number,
-  quietPeriodMs: number,
-): boolean {
-  return now - lastChangeAt >= quietPeriodMs;
 }
 
 /**
@@ -2047,41 +1183,4 @@ function messagesWereReplaced(
   if (previous.length === 0 || current.length === 0) return false;
   const previousIds = new Set(previous.map((message) => message.id));
   return current.every((message) => !previousIds.has(message.id));
-}
-
-/**
- * Count how many new messages were prepended to the beginning of the array.
- *
- * Compares the old and new message arrays by message ID. If the new array
- * starts with messages not present at the start of the old array, those are
- * prepended items.
- */
-function countPrependedMessages(
-  prev: readonly ChatMessage[],
-  current: readonly ChatMessage[],
-): number {
-  if (prev.length === 0) return 0;
-  if (current.length <= prev.length) return 0;
-
-  // Find where the old messages start in the new array.
-  // The old first message ID should appear somewhere in the new array.
-  const oldFirstId = prev[0]?.id;
-  if (oldFirstId === undefined) return 0;
-
-  // Check if the old first message is in the new array at a shifted position.
-  const newIndex = current.findIndex((m) => m.id === oldFirstId);
-  if (newIndex <= 0) return 0; // not found or still at position 0
-
-  // Verify that the messages after the prepend match the old array.
-  // This prevents false positives from reordering. We must check ALL of prev's
-  // items — if current doesn't have enough items after the anchor, it's not a
-  // clean prepend.
-  for (let i = 0; i < prev.length; i++) {
-    const oldMsg = prev[i];
-    const newMsg = current[newIndex + i];
-    if (oldMsg === undefined || newMsg === undefined) return 0;
-    if (oldMsg.id !== newMsg.id) return 0; // not a clean prepend
-  }
-
-  return newIndex;
 }

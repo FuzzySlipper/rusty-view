@@ -1,12 +1,11 @@
 /**
  * @rusty-view/transcript-renderer
  *
- * Virtualized transcript rendering: 10k+ messages, streaming-safe delta
+ * Bounded keyed transcript rendering: 10k+ messages, streaming-safe delta
  * rendering, scroll anchoring, tail-follow, jump-to-message, collapsible
  * blocks, and product-agnostic extension hooks.
  *
- * The virtualizer (Angular CDK) is hidden behind the public component API.
- * Implemented in Den task #3184.
+ * The owned window is hidden behind the public component API.
  */
 
 export { TranscriptViewportComponent } from './lib/transcript-viewport';

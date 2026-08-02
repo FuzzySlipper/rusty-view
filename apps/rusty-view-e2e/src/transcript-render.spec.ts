@@ -408,7 +408,7 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
       role: 'user',
       body: [
         `Historical prompt ${index + 1}`,
-        'This row is intentionally tall so autosize virtual scroll cannot rely on a fixed 50px item estimate.',
+        'This row is intentionally tall so the keyed transcript window must preserve variable-height layout.',
         'It mimics accumulated live-test history with long prompts, tool requests, and diagnostic instructions above the new assistant turn.',
         'The target assistant row lands after these messages and must still be reachable through scrollToMessageId.',
       ].join('\n'),
@@ -544,13 +544,11 @@ test('scrollToMessageId materializes a live assistant row after tall history', a
 });
 
 /**
- * Variable-height autosize test (task #3277).
+ * Variable-height transcript test (task #3277).
  *
  * Proves that expanding a tool block reflows without overlapping adjacent
- * messages. The transcript uses CDK autosize virtual scroll which measures
- * real item heights. With a fixed 50px item size, expanding a tool block
- * would cause its message to grow past its allocated slot and overlap the
- * next message. The autosize strategy should remeasure and reflow.
+ * messages. Expanding a tool block must let native keyed-window layout reflow
+ * without overlapping the next message.
  */
 test('expanding a tool block does not overlap adjacent messages', async ({
   page,
@@ -594,7 +592,7 @@ test('expanding a tool block does not overlap adjacent messages', async ({
   await toolBlock.locator('.rv-block__tool-header').click();
   await expect(toolBlock.locator('.rv-block__content')).toBeVisible();
 
-  // Give the autosize strategy a frame to remeasure.
+  // Give native layout a frame to reflow.
   await page.waitForTimeout(200);
 
   // Bounding box check: the assistant message (index 1) should not overlap

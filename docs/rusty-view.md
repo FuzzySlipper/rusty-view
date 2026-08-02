@@ -89,6 +89,13 @@ The transcript renderer is the core engineering surface. It must support:
 - extension-provided content renderers.
 - avatar-capable speaker identity and generic semantic text scopes.
 
+The production viewport is one chronological owned keyed window: at most 64
+consecutive rows are resident, conservative spacers preserve logical extent,
+and all programmatic movement crosses one attributed scroll-writer boundary.
+Native browser anchoring owns paused growth and prepend; explicit component
+states own following, paused, seeking, and session replacement. The surface has
+no CDK autosize strategy, observer-driven scroll clock, or settlement loop.
+
 See:
 
 - [transcript-search-navigation.md](transcript-search-navigation.md)

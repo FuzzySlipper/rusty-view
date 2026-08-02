@@ -48,10 +48,8 @@ test('scroll position is preserved when older messages are prepended', async ({
     timeout: 10_000,
   });
 
-  // The scroll anchor logic is implemented in the component and verified via
-  // the countPrependedMessages unit test. The real-browser behavior (CDK
-  // virtual scroll offset preservation) is architecturally inherent to the
-  // scrollToIndex + scrollToOffset calls in preserveScrollAnchor().
+  // Paused anchor preservation is browser-owned in the keyed transcript
+  // window and is covered by the semantic scroll contract.
   //
   // A full browser-level test would:
   // 1. Inject 100 messages, scroll to index 50
@@ -59,10 +57,8 @@ test('scroll position is preserved when older messages are prepended', async ({
   // 3. Inject 50 prepended messages
   // 4. Verify the same message ID is at the top
   //
-  // This requires accessing the Angular component instance from Playwright,
-  // which is fragile. The unit test proves the detection logic; the component
-  // implementation uses CDK's own scrollToIndex/scrollToOffset which are
-  // well-tested by Angular CDK itself.
+  // The focused contract uses deterministic fixture mutation and semantic
+  // viewport measurements rather than implementation selectors.
 
   // Structural assertion: the transcript viewport is present and has the
   // scroll handler wired (the component is active).

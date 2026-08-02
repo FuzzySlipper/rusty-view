@@ -130,14 +130,13 @@
   </div>
   }
 </section>
-} @if (fullDomPrototypeEnabled) {
+}
 <div
-  #fullDomViewport
-  class="rv-transcript rv-transcript--full-dom"
-  [class.rv-transcript--full-dom-following]="followingTail()"
-  [class.rv-transcript--owned-window]="ownedWindowPrototypeEnabled"
+  #viewportElement
+  class="rv-transcript rv-transcript--owned-window"
+  [class.rv-transcript--owned-window-following]="followingTail()"
   data-testid="transcript-viewport"
-  [attr.data-transcript-renderer]="prototypeRendererLabel"
+  data-transcript-renderer="owned-window"
   tabindex="0"
   [attr.data-tail-following]="followingTail()"
   (scroll)="onScroll()"
@@ -148,14 +147,13 @@
   (pointerdown)="onPointerDown($event)"
   (keydown)="onKeyboardScroll($event)"
 >
-  <div class="rv-transcript__full-content">
-    @if (ownedWindowPrototypeEnabled) {
+  <div class="rv-transcript__owned-window-content">
     <div
       class="rv-transcript__window-spacer"
       aria-hidden="true"
       [style.height.px]="ownedWindowTopSpacerPx()"
     ></div>
-    } @for (row of prototypeRenderRows(); track row.id) {
+    @for (row of windowRenderRows(); track row.id) {
     <div
       class="rv-transcript__virtual-row"
       data-testid="transcript-virtual-row"
@@ -183,59 +181,16 @@
       </div>
       }
     </div>
-    } @if (ownedWindowPrototypeEnabled) {
+    }
     <div
       class="rv-transcript__window-spacer"
       aria-hidden="true"
       [style.height.px]="ownedWindowBottomSpacerPx()"
     ></div>
-    }
     <div class="rv-transcript__tail-anchor" aria-hidden="true"></div>
   </div>
 </div>
-} @else {
-<cdk-virtual-scroll-viewport
-  autosize
-  class="rv-transcript"
-  data-testid="transcript-viewport"
-  [attr.data-tail-following]="followingTail()"
-  (scroll)="onScroll()"
-  (wheel)="onWheel($event)"
-  (touchstart)="onTouchStart()"
-  (touchend)="onTouchEnd()"
-  (touchcancel)="onTouchEnd()"
-  (pointerdown)="onPointerDown($event)"
->
-  <div
-    *cdkVirtualFor="let row of renderRows(); trackBy: trackByVirtualRowId"
-    class="rv-transcript__virtual-row"
-    data-testid="transcript-virtual-row"
-    [attr.data-virtual-row-id]="row.id"
-  >
-    @for (message of row.messages; track message.id) {
-    <div
-      class="rv-transcript__item"
-      data-testid="transcript-item"
-      [attr.data-message-id]="message.id"
-    >
-      <rv-message-item
-        [message]="message"
-        [searchQuery]="searchQuery()"
-        [matchedBlockIds]="matchedBlocksFor(message.id)"
-        [searchMatched]="matchedMessageIds().has(message.id)"
-        [searchActive]="activeSearchMessageId() === message.id"
-        [alternateSlot]="alternateSlotFor(message.id)"
-        [revisionCapabilities]="revisionCapabilities()"
-        [showRevisionActions]="showRevisionActions()"
-        [autoExpandReasoning]="autoExpandReasoning()"
-        [activityVisibility]="activityVisibility()"
-        (revisionAction)="onRevisionAction($event)"
-      />
-    </div>
-    }
-  </div>
-</cdk-virtual-scroll-viewport>
-} @if (transcriptTransitioning()) {
+@if (transcriptTransitioning()) {
 <div
   class="rv-transcript__item rv-transcript__transition"
   data-testid="transcript-transition"

@@ -224,7 +224,7 @@ async function installHistoryFixture(page: Page): Promise<void> {
           kind: 'reasoning',
           summary: [
             `Reasoning checkpoint ${index}`,
-            'This deliberately tall refreshed-history item forces the autosize strategy to revise its provisional tail estimate.',
+            'This deliberately tall refreshed-history item exercises variable-height keyed-window layout.',
             'The final answer after this history must be materially rendered, not merely present in the snapshot.',
           ],
         })),

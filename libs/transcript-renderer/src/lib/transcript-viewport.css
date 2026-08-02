@@ -37,14 +37,11 @@
   height: auto;
   min-height: 0;
   overflow-y: auto;
-  /* CDK owns anchoring for this transform-based virtual list. Native browser
-     anchoring can otherwise apply a second, opposing correction as the
-     streaming tail and CDK's autosize estimate change. Tail-follow is always
-     immediate; appearance reduced-motion must never inherit smooth scrolling
-     from a host page or downstream shell. */
-  overflow-anchor: none;
+  /* Native anchoring owns paused growth. Following mode moves anchoring to the
+     semantic tail so variable-height content cannot pull the viewport away. */
+  overflow-anchor: auto;
   scroll-behavior: auto;
-  contain: strict;
+  contain: layout paint;
 }
 
 .rv-transcript__virtual-row {
@@ -52,12 +49,7 @@
   width: 100%;
 }
 
-.rv-transcript--full-dom {
-  overflow-anchor: auto;
-  contain: layout paint;
-}
-
-.rv-transcript__full-content {
+.rv-transcript__owned-window-content {
   min-height: 100%;
   width: 100%;
 }
@@ -66,11 +58,6 @@
   contain: strict;
   width: 1px;
   pointer-events: none;
-}
-
-.rv-transcript--full-dom .rv-transcript__item {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
 }
 
 .rv-transcript--owned-window .rv-transcript__item {
@@ -84,11 +71,11 @@
   pointer-events: none;
 }
 
-.rv-transcript--full-dom-following .rv-transcript__item {
+.rv-transcript--owned-window-following .rv-transcript__item {
   overflow-anchor: none;
 }
 
-.rv-transcript--full-dom-following .rv-transcript__tail-anchor {
+.rv-transcript--owned-window-following .rv-transcript__tail-anchor {
   overflow-anchor: auto;
 }
 

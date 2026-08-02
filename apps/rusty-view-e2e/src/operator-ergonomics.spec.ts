@@ -163,7 +163,7 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
         };
       }),
     )
-    .toEqual({ overflowAnchor: 'none', scrollBehavior: 'auto' });
+    .toEqual({ overflowAnchor: 'auto', scrollBehavior: 'auto' });
   await expect
     .poll(() =>
       transcript.evaluate(
@@ -294,31 +294,25 @@ test('rapid streamed tail growth stays visually pinned without blank frames', as
       requestAnimationFrame(() => {
         setTimeout(() => {
           if (!state.__rvTailGeometryCapture) return;
-          const wrapper = viewport.querySelector<HTMLElement>(
-            '.cdk-virtual-scroll-content-wrapper',
-          );
-          const spacer = viewport.querySelector<HTMLElement>(
-            '.cdk-virtual-scroll-spacer',
+          const content = viewport.querySelector<HTMLElement>(
+            '.rv-transcript__owned-window-content',
           );
           const items = viewport.querySelectorAll<HTMLElement>(
             '.rv-transcript__item',
           );
           const lastItem = items.item(items.length - 1);
-          if (wrapper !== null && spacer !== null && lastItem !== null) {
+          if (content !== null && lastItem !== null) {
             const viewportBounds = viewport.getBoundingClientRect();
-            const wrapperBounds = wrapper.getBoundingClientRect();
             const lastBounds = lastItem.getBoundingClientRect();
-            const renderedContentSize = lastBounds.bottom - wrapperBounds.top;
-            const renderedOffset =
-              viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
+            const renderedContentEnd =
+              viewport.scrollTop + lastBounds.bottom - viewportBounds.top;
             state.__rvTailGeometrySamples?.push({
               tailGap: viewportBounds.bottom - lastBounds.bottom,
               bottomOffset:
                 viewport.scrollHeight -
                 viewport.scrollTop -
                 viewport.clientHeight,
-              renderedEndMismatch:
-                renderedOffset + renderedContentSize - viewport.scrollHeight,
+              renderedEndMismatch: renderedContentEnd - viewport.scrollHeight,
               lastMessageId: lastItem.dataset['messageId'],
             });
           }
@@ -454,11 +448,8 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
         setTimeout(() => {
           if (!state.__rvMultiItemGeometryCapture) return;
           frame += 1;
-          const wrapper = viewport.querySelector<HTMLElement>(
-            '.cdk-virtual-scroll-content-wrapper',
-          );
-          const spacer = viewport.querySelector<HTMLElement>(
-            '.cdk-virtual-scroll-spacer',
+          const content = viewport.querySelector<HTMLElement>(
+            '.rv-transcript__owned-window-content',
           );
           const items = viewport.querySelectorAll<HTMLElement>(
             '.rv-transcript__item',
@@ -479,13 +470,12 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
             finalMessage?.querySelector<HTMLElement>(
               '[data-testid="message-row"]',
             ) ?? null;
-          if (wrapper !== null && spacer !== null && lastItem !== null) {
+          if (content !== null && lastItem !== null) {
             const viewportBounds = viewport.getBoundingClientRect();
-            const wrapperBounds = wrapper.getBoundingClientRect();
+            const contentBounds = content.getBoundingClientRect();
             const lastBounds = lastItem.getBoundingClientRect();
-            const renderedContentSize = lastBounds.bottom - wrapperBounds.top;
-            const renderedOffset =
-              viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
+            const renderedContentEnd =
+              viewport.scrollTop + lastBounds.bottom - viewportBounds.top;
             state.__rvMultiItemGeometrySamples?.push({
               frame,
               tailGap: viewportBounds.bottom - lastBounds.bottom,
@@ -493,11 +483,10 @@ test('multi-item Codex turns keep one coherent virtual tail while streaming', as
                 viewport.scrollHeight -
                 viewport.scrollTop -
                 viewport.clientHeight,
-              renderedEndMismatch:
-                renderedOffset + renderedContentSize - viewport.scrollHeight,
+              renderedEndMismatch: renderedContentEnd - viewport.scrollHeight,
               viewportCoverageGap: Math.max(
                 0,
-                wrapperBounds.top - viewportBounds.top,
+                contentBounds.top - viewportBounds.top,
               ),
               turnRowCount: turnRows.length,
               turnMessageCount:
@@ -1156,17 +1145,14 @@ async function transcriptGeometryAfter(
     (viewport, delay) =>
       new Promise((resolve) => {
         setTimeout(() => {
-          const wrapper = viewport.querySelector<HTMLElement>(
-            '.cdk-virtual-scroll-content-wrapper',
-          );
-          const spacer = viewport.querySelector<HTMLElement>(
-            '.cdk-virtual-scroll-spacer',
+          const content = viewport.querySelector<HTMLElement>(
+            '.rv-transcript__owned-window-content',
           );
           const items = viewport.querySelectorAll<HTMLElement>(
             '.rv-transcript__item',
           );
           const lastItem = items.item(items.length - 1);
-          if (wrapper === null || spacer === null || lastItem === null) {
+          if (content === null || lastItem === null) {
             resolve({
               tailGap: Number.POSITIVE_INFINITY,
               bottomOffset: Number.POSITIVE_INFINITY,
@@ -1177,22 +1163,20 @@ async function transcriptGeometryAfter(
           }
 
           const viewportBounds = viewport.getBoundingClientRect();
-          const wrapperBounds = wrapper.getBoundingClientRect();
+          const contentBounds = content.getBoundingClientRect();
           const lastBounds = lastItem.getBoundingClientRect();
-          const renderedContentSize = lastBounds.bottom - wrapperBounds.top;
-          const renderedOffset =
-            viewport.scrollTop + wrapperBounds.top - viewportBounds.top;
+          const renderedContentEnd =
+            viewport.scrollTop + lastBounds.bottom - viewportBounds.top;
           resolve({
             tailGap: viewportBounds.bottom - lastBounds.bottom,
             bottomOffset:
               viewport.scrollHeight -
               viewport.scrollTop -
               viewport.clientHeight,
-            renderedEndMismatch:
-              renderedOffset + renderedContentSize - viewport.scrollHeight,
+            renderedEndMismatch: renderedContentEnd - viewport.scrollHeight,
             viewportCoverageGap: Math.max(
               0,
-              wrapperBounds.top - viewportBounds.top,
+              contentBounds.top - viewportBounds.top,
             ),
           });
         }, delay);

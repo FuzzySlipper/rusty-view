@@ -3,7 +3,6 @@
 import { chromium } from '@playwright/test';
 
 const baseUrl = process.env['BASE_URL'] ?? 'http://127.0.0.1:9347';
-const renderer = process.env['RV_TRANSCRIPT_RENDERER'] ?? 'current';
 const depths = (process.env['RV_TRANSCRIPT_DEPTHS'] ?? '250,1000,5000,10000')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -20,7 +19,7 @@ const report = {
   schemaVersion: 1,
   capturedAt: new Date().toISOString(),
   baseUrl,
-  renderer,
+  renderer: 'owned-window',
   browser: {
     engine: 'chromium',
     version: browser.version(),
@@ -39,7 +38,7 @@ try {
     const runs = [];
     for (let repeat = 0; repeat < repeats; repeat += 1) {
       process.stderr.write(
-        `measure transcript renderer=${renderer} depth=${depth} run=${repeat + 1}/${repeats}\n`,
+        `measure transcript renderer=owned-window depth=${depth} run=${repeat + 1}/${repeats}\n`,
       );
       try {
         runs.push(await measureDepth(browser, depth));
@@ -97,9 +96,6 @@ async function measureDepth(browserInstance, depth) {
 
   const loadStarted = performance.now();
   const applicationUrl = new URL(baseUrl);
-  if (renderer === 'full-dom' || renderer === 'owned-window') {
-    applicationUrl.searchParams.set('__rvTranscriptRenderer', renderer);
-  }
   await page.goto(applicationUrl.href);
   const primarySessionId = `scale-${depth}`;
   await page

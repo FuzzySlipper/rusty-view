@@ -326,7 +326,9 @@ test('attributes current transcript scroll writers across deterministic baseline
   await expect(viewport).toBeVisible();
   await expect
     .poll(async () =>
-      (await trace(page)).some((entry) => entry.reason === 'estimator-reset'),
+      (await trace(page)).some(
+        (entry) => entry.reason === 'session-replacement',
+      ),
     )
     .toBe(true);
   const sessionReplacement = await trace(page);
