@@ -105,4 +105,37 @@ describe('projectTranscriptVirtualRows', () => {
       ['next-turn'],
     ]);
   });
+
+  it('retains the row array and row objects for a fresh identical projection', () => {
+    const before = projectTranscriptVirtualRows([message('a'), message('b')]);
+    const after = projectTranscriptVirtualRows(
+      [message('a'), message('b')],
+      before,
+    );
+
+    expect(after).toBe(before);
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).toBe(before[1]);
+  });
+
+  it('replaces only the row whose visible message changed', () => {
+    const a = message('a');
+    const b = message('b');
+    const before = projectTranscriptVirtualRows([a, b]);
+    const block = b.blocks[0];
+    if (block === undefined) throw new Error('fixture block missing');
+    const changedB = {
+      ...b,
+      blocks: [{ ...block, content: 'changed presentation' }],
+    };
+    const after = projectTranscriptVirtualRows(
+      [message('a'), changedB],
+      before,
+    );
+
+    expect(after).not.toBe(before);
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).not.toBe(before[1]);
+    expect(after[1]?.messages[0]).toBe(changedB);
+  });
 });

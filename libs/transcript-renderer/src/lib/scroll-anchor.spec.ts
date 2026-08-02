@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ChatMessage } from '@rusty-view/chat-domain';
 import {
   tailGeometryIsStable,
+  transcriptSearchSeekKey,
   transcriptPresentationChanged,
   transcriptTailChanged,
 } from './transcript-viewport';
@@ -218,6 +219,28 @@ describe('transcriptPresentationChanged', () => {
         [changed, makeMessage('b')],
       ),
     ).toBe(true);
+  });
+
+  it('detects non-block presentation metadata instead of retaining a stale row', () => {
+    const original = makeMessage('a');
+    const changed = { ...original, metadata: { label: 'updated' } };
+
+    expect(transcriptPresentationChanged([original], [changed])).toBe(true);
+  });
+});
+
+describe('transcriptSearchSeekKey', () => {
+  it('returns the same primitive for freshly allocated copies of one result', () => {
+    expect(transcriptSearchSeekKey('needle', { id: 'm1:b1:0' })).toBe(
+      transcriptSearchSeekKey('needle', { id: 'm1:b1:0' }),
+    );
+  });
+
+  it('changes only when the selected stable result changes', () => {
+    expect(transcriptSearchSeekKey('needle', { id: 'm1:b1:0' })).not.toBe(
+      transcriptSearchSeekKey('needle', { id: 'm2:b1:0' }),
+    );
+    expect(transcriptSearchSeekKey('   ', { id: 'm1:b1:0' })).toBeUndefined();
   });
 });
 

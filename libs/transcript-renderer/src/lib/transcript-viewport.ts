@@ -11,6 +11,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import {
@@ -323,6 +324,10 @@ export class TranscriptViewportComponent {
     return results[Math.min(this.activeSearchIndex(), results.length - 1)];
   });
 
+  private readonly activeSearchSeekKey = computed(() =>
+    transcriptSearchSeekKey(this.searchQuery(), this.activeSearchResult()),
+  );
+
   protected readonly matchedMessageIds = computed(() => {
     return new Set(this.searchResults().map((result) => result.messageId));
   });
@@ -419,10 +424,16 @@ export class TranscriptViewportComponent {
     effect(() => {
       const msgs = this.messages();
       if (this.viewportReady) {
+        // Keep the identity guard ahead of the paused-anchor layout read. Idle
+        // polling commonly supplies fresh but presentation-identical objects;
+        // those ticks must not synchronously measure or touch CDK at all.
+        if (!transcriptPresentationChanged(this.renderMessages(), msgs)) {
+          return;
+        }
         this.pendingPausedScrollOffset = !this.followingTail()
           ? this.viewport().measureScrollOffset('top')
           : undefined;
-        this.setRenderedMessages(msgs);
+        this.setRenderedMessages(msgs, true);
       }
     });
 
@@ -616,10 +627,13 @@ export class TranscriptViewportComponent {
     });
 
     effect(() => {
-      const result = this.activeSearchResult();
-      if (result === undefined || this.searchQuery().trim().length === 0) {
+      const seekKey = this.activeSearchSeekKey();
+      if (seekKey === undefined) {
+        this.cancelPendingSeeks();
         return;
       }
+      const result = untracked(() => this.activeSearchResult());
+      if (result?.id !== seekKey) return;
       this.scrollToMessageId(result.messageId);
     });
   }
@@ -627,8 +641,16 @@ export class TranscriptViewportComponent {
   /** Install stable message rows into CDK's autosize virtualizer. */
   private setRenderedMessages(
     messages: readonly ChatMessage[],
+    presentationChanged?: boolean,
   ): readonly TranscriptVirtualRow[] {
-    const rows = projectTranscriptVirtualRows(messages);
+    const previousMessages = this.renderMessages();
+    const changed =
+      presentationChanged ??
+      transcriptPresentationChanged(previousMessages, messages);
+    if (!changed) {
+      return this.renderRows();
+    }
+    const rows = projectTranscriptVirtualRows(messages, this.renderRows());
     this.renderMessages.set(messages);
     this.renderRows.set(rows);
     return rows;
@@ -1478,11 +1500,35 @@ export class TranscriptViewportComponent {
  */
 export function projectTranscriptVirtualRows(
   messages: readonly ChatMessage[],
+  previousRows: readonly TranscriptVirtualRow[] = [],
 ): readonly TranscriptVirtualRow[] {
-  return messages.map((message) => ({
-    id: `message:${message.id}`,
-    messages: [message],
-  }));
+  const previousById = new Map(previousRows.map((row) => [row.id, row]));
+  const rows = messages.map((message) => {
+    const id = `message:${message.id}`;
+    const previous = previousById.get(id);
+    const previousMessage = previous?.messages[0];
+    if (
+      previous !== undefined &&
+      previous.messages.length === 1 &&
+      !messageRenderChanged(previousMessage, message)
+    ) {
+      return previous;
+    }
+    return { id, messages: [message] } satisfies TranscriptVirtualRow;
+  });
+  return rows.length === previousRows.length &&
+    rows.every((row, index) => row === previousRows[index])
+    ? previousRows
+    : rows;
+}
+
+/** Stable primitive used by the search effect so fresh result objects do not
+ * restart the same seek chain. */
+export function transcriptSearchSeekKey(
+  query: string,
+  result: { readonly id: string } | undefined,
+): string | undefined {
+  return query.trim().length === 0 ? undefined : result?.id;
 }
 
 /** Whether CDK has had enough quiet time to reconcile its autosize estimate. */
@@ -1529,8 +1575,51 @@ export function transcriptPresentationChanged(
 ): boolean {
   if (previous.length !== current.length) return true;
   return current.some((message, index) =>
-    messagePresentationChanged(previous[index], message),
+    messageRenderChanged(previous[index], message),
   );
+}
+
+function messageRenderChanged(
+  before: ChatMessage | undefined,
+  after: ChatMessage | undefined,
+): boolean {
+  if (before === after) return false;
+  if (before === undefined || after === undefined) return before !== after;
+  if (
+    before.id !== after.id ||
+    before.sessionId !== after.sessionId ||
+    before.createdAt !== after.createdAt ||
+    before.status !== after.status ||
+    before.author.role !== after.author.role ||
+    before.author.displayName !== after.author.displayName ||
+    jsonValueChanged(before.author.speaker, after.author.speaker) ||
+    jsonValueChanged(before.tree, after.tree) ||
+    jsonValueChanged(before.metadata, after.metadata) ||
+    before.blocks.length !== after.blocks.length
+  ) {
+    return true;
+  }
+  return before.blocks.some((block, index) => {
+    const next = after.blocks[index];
+    return (
+      next === undefined ||
+      block.id !== next.id ||
+      block.messageId !== next.messageId ||
+      block.kind !== next.kind ||
+      block.content !== next.content ||
+      block.estimatedHeight !== next.estimatedHeight ||
+      block.renderPolicy !== next.renderPolicy ||
+      jsonValueChanged(block.tool, next.tool) ||
+      jsonValueChanged(block.textSpans, next.textSpans) ||
+      jsonValueChanged(block.attachment, next.attachment) ||
+      jsonValueChanged(block.metadata, next.metadata)
+    );
+  });
+}
+
+function jsonValueChanged(before: unknown, after: unknown): boolean {
+  if (before === after) return false;
+  return JSON.stringify(before) !== JSON.stringify(after);
 }
 
 function messagePresentationChanged(

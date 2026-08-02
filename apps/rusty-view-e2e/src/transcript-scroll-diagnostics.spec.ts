@@ -293,7 +293,30 @@ test('attributes current transcript scroll writers across deterministic baseline
     )
     .toBe(true);
   const activeSearch = await trace(page);
+  expect(
+    activeSearch.filter((entry) => entry.reason.startsWith('seek-')),
+  ).toHaveLength(1);
 
+  await page.getByTestId('transcript-search-input').fill('Diagnostic row');
+  await expect(page.getByTestId('transcript-search-status')).toContainText('/');
+  await expect
+    .poll(
+      async () =>
+        (await trace(page)).filter((entry) => entry.reason.startsWith('seek-'))
+          .length,
+    )
+    .toBe(2);
+  await invoke(page, 'clear');
+  await page.getByTestId('transcript-search-next').click();
+  await expect
+    .poll(
+      async () =>
+        (await trace(page)).filter((entry) => entry.reason.startsWith('seek-'))
+          .length,
+    )
+    .toBe(1);
+
+  await page.getByTestId('transcript-search-clear').click();
   await invoke(page, 'clear');
   await page
     .locator(
@@ -307,6 +330,9 @@ test('attributes current transcript scroll writers across deterministic baseline
     )
     .toBe(true);
   const sessionReplacement = await trace(page);
+  expect(
+    sessionReplacement.some((entry) => entry.reason.startsWith('seek-')),
+  ).toBe(false);
 
   const artifact = {
     capturedAt: new Date().toISOString(),
