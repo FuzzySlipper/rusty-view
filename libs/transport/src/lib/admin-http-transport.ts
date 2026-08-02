@@ -1085,6 +1085,12 @@ function providerWriteBody(
   if (request.reasoningFormat !== undefined) {
     body['reasoningFormat'] = request.reasoningFormat;
   }
+  if (
+    request.protocol === 'responses' &&
+    request.responsesDialect !== undefined
+  ) {
+    body['responsesDialect'] = request.responsesDialect;
+  }
   if (request.chatCompletionsDialect !== undefined) {
     body['chatCompletionsDialect'] = request.chatCompletionsDialect;
   }

@@ -19,6 +19,7 @@ import type {
   ModelProviderWriteRequest,
   ModelProviderWriteResponse,
   OpenAiOauthPendingLogin,
+  ResponsesProviderDialect,
   ServiceCredentialRecord,
 } from '@rusty-view/transport';
 
@@ -43,6 +44,7 @@ interface ProviderFormState {
   readonly reasoningEffort: string;
   /** Probe/readback diagnostic only; Crew does not map this as configuration. */
   readonly reasoningFormat: string;
+  readonly responsesDialect: ResponsesProviderDialect | '';
   readonly chatCompletionsDialect: ChatCompletionsDialect;
   readonly thinkingMode: ChatCompletionsThinkingMode;
   readonly reasoningHistory: ChatCompletionsReasoningHistory;
@@ -69,6 +71,7 @@ function initialForm(): ProviderFormState {
     temperature: '',
     reasoningEffort: '',
     reasoningFormat: '',
+    responsesDialect: '',
     chatCompletionsDialect: 'standard',
     thinkingMode: 'provider_default',
     reasoningHistory: 'provider_default',
@@ -102,6 +105,16 @@ const CHAT_COMPLETIONS_DIALECTS: readonly ChatCompletionsDialect[] = [
   'glm',
   'qwen',
   'deepseek',
+];
+
+const RESPONSES_DIALECT_OPTIONS: readonly {
+  value: ResponsesProviderDialect;
+  label: string;
+}[] = [
+  { value: 'openai_stateful', label: 'OpenAI stateful' },
+  { value: 'openai_stateless', label: 'OpenAI stateless' },
+  { value: 'generic_stateless', label: 'Generic stateless' },
+  { value: 'deepseek', label: 'DeepSeek (direct)' },
 ];
 
 const THINKING_MODES: readonly ChatCompletionsThinkingMode[] = [
@@ -139,6 +152,7 @@ export class AdminProvidersPanelComponent {
   readonly dismissed = output<void>();
 
   protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
+  protected readonly responsesDialectOptions = RESPONSES_DIALECT_OPTIONS;
   protected readonly chatCompletionsDialects = CHAT_COMPLETIONS_DIALECTS;
   protected readonly thinkingModes = THINKING_MODES;
   protected readonly reasoningHistoryOptions = REASONING_HISTORY_OPTIONS;
@@ -229,6 +243,9 @@ export class AdminProvidersPanelComponent {
     // Create requires an alias and model id; edit uses the path alias.
     if (this.editingAlias() === null && form.alias.trim() === '') return true;
     if (form.modelId.trim() === '') return true;
+    if (form.protocol === 'responses' && form.responsesDialect === '') {
+      return true;
+    }
     return this.reasoningConfigurationIssues().length > 0;
   });
 
@@ -250,6 +267,7 @@ export class AdminProvidersPanelComponent {
       | 'protocol'
       | 'status'
       | 'credentialMode'
+      | 'responsesDialect'
       | 'chatCompletionsDialect'
       | 'thinkingMode'
       | 'reasoningHistory'
@@ -334,8 +352,21 @@ export class AdminProvidersPanelComponent {
   protected updateProtocol(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     if (value === 'responses' || value === 'chat_completions') {
-      this.form.update((current) => ({ ...current, protocol: value }));
+      this.form.update((current) => ({
+        ...current,
+        protocol: value,
+        responsesDialect: '',
+      }));
     }
+  }
+
+  protected updateResponsesDialect(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!isResponsesProviderDialect(value)) return;
+    this.form.update((current) => ({
+      ...current,
+      responsesDialect: value,
+    }));
   }
 
   protected updateChatCompletionsDialect(event: Event): void {
@@ -440,6 +471,7 @@ export class AdminProvidersPanelComponent {
               current.displayName ||
               current.alias,
             protocol: 'responses',
+            responsesDialect: '',
             providerKind:
               current.providerKind.trim() === 'custom'
                 ? 'openai'
@@ -500,6 +532,7 @@ export class AdminProvidersPanelComponent {
           : milliToDecimal(provider.temperatureMilli),
       reasoningEffort: provider.reasoningEffort ?? '',
       reasoningFormat: provider.reasoningFormat ?? '',
+      responsesDialect: provider.responsesDialect ?? '',
       chatCompletionsDialect: provider.chatCompletionsDialect,
       thinkingMode: provider.thinkingMode,
       reasoningHistory: provider.reasoningHistory,
@@ -757,7 +790,9 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
             form.reasoningBudgetTokens,
           ),
         }
-      : {}),
+      : form.responsesDialect === ''
+        ? {}
+        : { responsesDialect: form.responsesDialect }),
   };
   // NOTE: `expectedRevision` is intentionally omitted (task #3722). Crew
   // overwrites the current record when it is absent, so normal edits succeed
@@ -770,6 +805,14 @@ function isChatCompletionsDialect(
   value: string,
 ): value is ChatCompletionsDialect {
   return CHAT_COMPLETIONS_DIALECTS.some((candidate) => candidate === value);
+}
+
+function isResponsesProviderDialect(
+  value: string,
+): value is ResponsesProviderDialect {
+  return RESPONSES_DIALECT_OPTIONS.some(
+    (candidate) => candidate.value === value,
+  );
 }
 
 function isThinkingMode(value: string): value is ChatCompletionsThinkingMode {

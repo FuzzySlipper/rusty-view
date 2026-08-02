@@ -113,6 +113,7 @@ export type {
   OpenAiOauthStartRequest,
   OpenAiOauthStartResponse,
   OpenAiOauthStatusResponse,
+  ResponsesProviderDialect,
   ServiceCredentialDeleteResponse,
   ServiceCredentialImpact,
   ServiceCredentialOpenAiOauthClearResponse,

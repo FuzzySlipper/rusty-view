@@ -622,6 +622,8 @@ export interface components {
         /** @enum {string} */
         AgentMessageDeliveryStatus: "pending" | "accepted" | "rejected" | "expired";
         AgentMessageInboxItem: {
+            /** @description Exact text presented to the recipient brain after Rust-owned provenance framing. */
+            deliveredModelText: string;
             delivery: components["schemas"]["AgentMessageDeliveryReceipt"];
             externalTurnRequestId?: string | null;
             queuedMessageId?: string | null;
@@ -630,9 +632,14 @@ export interface components {
             terminalReasonCode?: string | null;
         };
         AgentMessageInboxQuery: {
+            correlationId?: string | null;
+            fromAgentId?: string | null;
+            fromSessionId?: string | null;
             /** Format: uint32 */
             limit?: number | null;
+            messageId?: string | null;
             toAgentId?: string | null;
+            toSessionId?: string | null;
         };
         /** @enum {string} */
         AgentMessageInboxStatus: "queued" | "in_progress" | "awaiting_reply" | "replied" | "no_reply" | "failed" | "expired" | "rejected";
@@ -653,6 +660,23 @@ export interface components {
             idempotencyKey: string;
             inReplyToMessageId: string;
             messageId: string;
+        };
+        /**
+         * @description One durable coordination delivery leg for operator traffic inspection.
+         *
+         *     Unlike `AgentMessageInboxItem`, reply receipts are not folded into their
+         *     root request. This keeps exact sender/recipient filters truthful.
+         */
+        AgentMessageTrafficItem: {
+            /** @description Exact text presented to this delivery's recipient brain. */
+            deliveredModelText: string;
+            delivery: components["schemas"]["AgentMessageDeliveryReceipt"];
+            /** @description Current external turn phase for managed external-runtime activations. */
+            externalTurnPhase?: components["schemas"]["ExternalTurnPhase"] | null;
+            queuedMessageId?: string | null;
+            terminalReasonCode?: string | null;
+            /** @description Terminal or active direct-brain wake state when the activation was observed. */
+            wakeSettlement?: components["schemas"]["RuntimeActivityWakeSettlement"] | null;
         };
         AgentRoundCommand: {
             body: string;
@@ -2214,6 +2238,12 @@ export interface components {
             elapsedMs: number;
             /** Format: uint64 */
             sinceProgressMs: number;
+        };
+        RuntimeActivityWakeSettlement: {
+            reasonCode?: string | null;
+            status: components["schemas"]["RuntimeActivityStatus"];
+            summary: string;
+            wakeId: string;
         };
         /**
          * @description Bounded per-wake activity digest used by the post-wake capture producer.

@@ -340,12 +340,22 @@ export interface components {
         ModelProviderStatus: "active" | "disabled" | "archived";
         /** @enum {string} */
         ModelProviderProtocol: "responses" | "chat_completions";
+        /**
+         * @description Required when protocol is responses. Selects an explicit provider-owned wire dialect; Crew does not infer it from aliases, URLs, model IDs, or providerKind.
+         * @enum {string}
+         */
+        ResponsesProviderDialect: "openai_stateful" | "openai_stateless" | "generic_stateless" | "deepseek";
         /** @enum {string} */
         ChatCompletionsDialect: "standard" | "kimi" | "glm" | "qwen" | "deepseek";
         /** @enum {string} */
         ChatCompletionsThinkingMode: "provider_default" | "enabled" | "disabled";
         /** @enum {string} */
         ChatCompletionsReasoningHistory: "provider_default" | "discard" | "preserve_all" | "tool_calls_only";
+        /**
+         * @description Rust-owned Anthropic prompt caching policy. Enabled policies require chat_completions, providerKind openrouter, and an anthropic/* model.
+         * @enum {string}
+         */
+        ChatCompletionsPromptCaching: "disabled" | "automatic_5m" | "automatic_1h";
         /** @enum {string} */
         ModelProviderRefreshMode: "none" | "plan" | "apply";
         /** @enum {string} */
@@ -375,10 +385,12 @@ export interface components {
             temperature?: number;
             reasoningEffort?: string;
             reasoningFormat?: string;
+            responsesDialect?: components["schemas"]["ResponsesProviderDialect"];
             chatCompletionsDialect: components["schemas"]["ChatCompletionsDialect"];
             thinkingMode: components["schemas"]["ChatCompletionsThinkingMode"];
             reasoningHistory: components["schemas"]["ChatCompletionsReasoningHistory"];
             reasoningBudgetTokens?: number;
+            promptCaching: components["schemas"]["ChatCompletionsPromptCaching"];
             credential: components["schemas"]["ModelProviderCredential"];
             metadataJson: unknown;
             revision: number;
@@ -413,10 +425,13 @@ export interface components {
             temperature?: number | null;
             reasoningEffort?: string;
             reasoningFormat?: string;
+            responsesDialect?: components["schemas"]["ResponsesProviderDialect"];
             chatCompletionsDialect?: components["schemas"]["ChatCompletionsDialect"];
             thinkingMode?: components["schemas"]["ChatCompletionsThinkingMode"];
             reasoningHistory?: components["schemas"]["ChatCompletionsReasoningHistory"];
             reasoningBudgetTokens?: number;
+            /** @default disabled */
+            promptCaching: components["schemas"]["ChatCompletionsPromptCaching"];
             secret?: string;
             apiKey?: string;
             credentialSecret?: components["schemas"]["ModelProviderCredentialSecret"];

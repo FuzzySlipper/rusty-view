@@ -14,6 +14,7 @@ import type {
   MemorySurfaceOwner,
   ProviderAdminModelProviderRecord,
   ProviderAdminModelProviderWrite,
+  ResponsesProviderDialect,
   RuntimeActivityCensus,
   RuntimeActivityCensusSummary,
   RuntimeActivityFinding,
@@ -39,6 +40,7 @@ export type {
   RuntimeActivityRecord,
   RuntimeActivityStatus,
   RuntimeActivityView,
+  ResponsesProviderDialect,
 };
 
 export type CoordinationDeploymentRole = 'production' | 'debug';
@@ -1435,6 +1437,7 @@ export interface ModelProviderRecord {
   readonly temperatureMilli?: number;
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
+  readonly responsesDialect?: ProviderAdminModelProviderRecord['responsesDialect'];
   readonly chatCompletionsDialect: ProviderAdminModelProviderRecord['chatCompletionsDialect'];
   readonly thinkingMode: ProviderAdminModelProviderRecord['thinkingMode'];
   readonly reasoningHistory: ProviderAdminModelProviderRecord['reasoningHistory'];
@@ -1476,6 +1479,7 @@ export interface ModelProviderWriteRequest {
   readonly temperatureMilli?: number | null;
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
+  readonly responsesDialect?: ProviderAdminModelProviderWrite['responsesDialect'];
   readonly chatCompletionsDialect?: ProviderAdminModelProviderWrite['chatCompletionsDialect'];
   readonly thinkingMode?: ProviderAdminModelProviderWrite['thinkingMode'];
   readonly reasoningHistory?: ProviderAdminModelProviderWrite['reasoningHistory'];

@@ -1359,6 +1359,78 @@ describe('AdminHttpTransport', () => {
     expect(req.body).not.toContain('hasSecret');
   });
 
+  it('serializes the explicit Responses dialect for create and update', async () => {
+    const createCapture = capturingFetch(
+      jsonOk({
+        provider: {
+          alias: 'deepseek-direct',
+          credential: { hasSecret: false },
+        },
+        refresh: { mode: 'apply', affectedProfiles: [], outcomes: [] },
+      }),
+    );
+    const createTransport = new AdminHttpTransport(
+      makeConfig(createCapture.fetch),
+    );
+
+    await createTransport.createModelProvider({
+      alias: 'deepseek-direct',
+      protocol: 'responses',
+      responsesDialect: 'deepseek',
+      modelId: 'deepseek-reasoner',
+    });
+
+    expect(JSON.parse(createCapture.lastRequest().body ?? '{}')).toMatchObject({
+      alias: 'deepseek-direct',
+      protocol: 'responses',
+      responsesDialect: 'deepseek',
+      modelId: 'deepseek-reasoner',
+    });
+
+    const updateCapture = capturingFetch(
+      jsonOk({
+        provider: { alias: 'openai', credential: { hasSecret: false } },
+        refresh: { mode: 'apply', affectedProfiles: [], outcomes: [] },
+      }),
+    );
+    const updateTransport = new AdminHttpTransport(
+      makeConfig(updateCapture.fetch),
+    );
+
+    await updateTransport.updateModelProvider('openai', {
+      protocol: 'responses',
+      responsesDialect: 'openai_stateless',
+      modelId: 'gpt-5',
+    });
+
+    expect(JSON.parse(updateCapture.lastRequest().body ?? '{}')).toMatchObject({
+      protocol: 'responses',
+      responsesDialect: 'openai_stateless',
+      modelId: 'gpt-5',
+    });
+  });
+
+  it('omits a Responses dialect from Chat Completions writes', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        provider: { alias: 'chat', credential: { hasSecret: false } },
+        refresh: { mode: 'apply', affectedProfiles: [], outcomes: [] },
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.createModelProvider({
+      alias: 'chat',
+      protocol: 'chat_completions',
+      responsesDialect: 'deepseek',
+      modelId: 'chat-model',
+    });
+
+    expect(JSON.parse(lastRequest().body ?? '{}')).not.toHaveProperty(
+      'responsesDialect',
+    );
+  });
+
   it('updates a model provider by alias via PATCH', async () => {
     const { fetch, lastRequest } = capturingFetch(
       jsonOk({

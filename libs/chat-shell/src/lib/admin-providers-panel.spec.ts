@@ -311,6 +311,9 @@ function makeTransport(
           protocol: request.protocol,
           providerKind: request.providerKind ?? 'custom',
           modelId: request.modelId,
+          ...(request.responsesDialect === undefined
+            ? {}
+            : { responsesDialect: request.responsesDialect }),
           chatCompletionsDialect: request.chatCompletionsDialect ?? 'standard',
           thinkingMode: request.thinkingMode ?? 'provider_default',
           reasoningHistory: request.reasoningHistory ?? 'provider_default',
@@ -338,6 +341,9 @@ function makeTransport(
           ...(current ?? makeProvider(alias)),
           protocol: request.protocol,
           modelId: request.modelId,
+          ...(request.responsesDialect === undefined
+            ? { responsesDialect: undefined }
+            : { responsesDialect: request.responsesDialect }),
           chatCompletionsDialect: request.chatCompletionsDialect ?? 'standard',
           thinkingMode: request.thinkingMode ?? 'provider_default',
           reasoningHistory: request.reasoningHistory ?? 'provider_default',
@@ -628,6 +634,146 @@ describe('AdminProvidersPanelComponent', () => {
     expect(textContent(fixture)).toContain('reason profile_rebuild_in_flight');
   });
 
+  it('requires and submits an explicit Responses dialect from all generated choices', async () => {
+    const fixture = await createPanel([]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mock: { calls: [ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      form(): { responsesDialect: string };
+      saveDisabled(): boolean;
+      updateText(
+        field: 'alias' | 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      updateProtocol(event: { target: { value: string } }): void;
+      updateResponsesDialect(event: { target: { value: string } }): void;
+      saveProvider(): Promise<void>;
+    };
+
+    component.updateText('alias', { target: { value: 'deepseek-direct' } });
+    component.updateText('modelId', {
+      target: { value: 'deepseek-reasoner' },
+    });
+    component.updateProtocol({ target: { value: 'responses' } });
+    fixture.detectChanges();
+
+    const select = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="provider-responses-dialect"]',
+    ) as HTMLSelectElement | null;
+    expect(select).not.toBeNull();
+    expect(
+      Array.from(select?.options ?? [])
+        .map((option) => option.value)
+        .filter(Boolean),
+    ).toEqual([
+      'openai_stateful',
+      'openai_stateless',
+      'generic_stateless',
+      'deepseek',
+    ]);
+    expect(component.saveDisabled()).toBe(true);
+
+    for (const dialect of [
+      'openai_stateful',
+      'openai_stateless',
+      'generic_stateless',
+      'deepseek',
+    ]) {
+      component.updateResponsesDialect({ target: { value: dialect } });
+      expect(component.form().responsesDialect).toBe(dialect);
+      expect(component.saveDisabled()).toBe(false);
+    }
+
+    await component.saveProvider();
+    expect(transport.createAdminModelProvider.mock.calls[0]?.[0]).toMatchObject(
+      {
+        protocol: 'responses',
+        responsesDialect: 'deepseek',
+        modelId: 'deepseek-reasoner',
+      },
+    );
+    expect(textContent(fixture)).toContain('DeepSeek (direct)');
+  });
+
+  it('clears the hidden dialect on protocol switches and omits it for Chat Completions', async () => {
+    const fixture = await createPanel([]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mock: { calls: [ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      form(): { protocol: string; responsesDialect: string };
+      saveDisabled(): boolean;
+      updateText(
+        field: 'alias' | 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      updateProtocol(event: { target: { value: string } }): void;
+      updateResponsesDialect(event: { target: { value: string } }): void;
+      saveProvider(): Promise<void>;
+    };
+
+    component.updateText('alias', { target: { value: 'switching' } });
+    component.updateText('modelId', { target: { value: 'model' } });
+    component.updateProtocol({ target: { value: 'responses' } });
+    component.updateResponsesDialect({ target: { value: 'deepseek' } });
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    expect(component.form()).toMatchObject({
+      protocol: 'chat_completions',
+      responsesDialect: '',
+    });
+
+    await component.saveProvider();
+    expect(
+      transport.createAdminModelProvider.mock.calls[0]?.[0],
+    ).not.toHaveProperty('responsesDialect');
+
+    component.updateProtocol({ target: { value: 'responses' } });
+    expect(component.form().responsesDialect).toBe('');
+    expect(component.saveDisabled()).toBe(true);
+  });
+
+  it('populates and preserves the saved Responses dialect while editing', async () => {
+    const provider: ModelProviderRecord = {
+      ...makeProvider('responses-edit'),
+      protocol: 'responses',
+      responsesDialect: 'openai_stateful',
+    };
+    const fixture = await createPanel([provider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      form(): { responsesDialect: string };
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      updateText(
+        field: 'displayName',
+        event: { target: { value: string } },
+      ): void;
+      saveProvider(): Promise<void>;
+    };
+
+    expect(textContent(fixture)).toContain('dialect openai_stateful');
+    component.selectProviderForEdit(provider);
+    expect(component.form().responsesDialect).toBe('openai_stateful');
+    component.updateText('displayName', { target: { value: 'Renamed' } });
+    await component.saveProvider();
+
+    expect(transport.updateAdminModelProvider.mock.calls[0]?.[1]).toMatchObject(
+      {
+        protocol: 'responses',
+        responsesDialect: 'openai_stateful',
+        displayName: 'Renamed',
+      },
+    );
+  });
+
   it('creates an OpenAI OAuth provider without asking for raw OAuth credentials', async () => {
     const fixture = await createPanel([]);
     const transport = TestBed.inject(ChatTransport) as unknown as {
@@ -641,6 +787,7 @@ describe('AdminProvidersPanelComponent', () => {
         event: { target: { value: string } },
       ): void;
       updateCredentialMode(event: { target: { value: string } }): void;
+      updateResponsesDialect(event: { target: { value: string } }): void;
       saveProvider(): Promise<void>;
       editingAlias(): string | null;
       form(): {
@@ -656,6 +803,9 @@ describe('AdminProvidersPanelComponent', () => {
     component.updateCredentialMode({
       target: { value: 'create_openai_oauth' },
     });
+    component.updateResponsesDialect({
+      target: { value: 'openai_stateful' },
+    });
     fixture.detectChanges();
     await component.saveProvider();
     fixture.detectChanges();
@@ -664,6 +814,7 @@ describe('AdminProvidersPanelComponent', () => {
     if (call === undefined) throw new Error('expected a create call');
     const [request] = call;
     expect(request.protocol).toBe('responses');
+    expect(request.responsesDialect).toBe('openai_stateful');
     expect(request.providerKind).toBe('openai');
     expect(request).not.toHaveProperty('secret');
     expect(request).not.toHaveProperty('credentialSecret');

@@ -65,6 +65,8 @@ type ProviderAdminSchemas = providerAdminComponents['schemas'];
 // from the dedicated generated admin contract rather than duplicated by hand.
 export type ChatCompletionsDialect =
   ProviderAdminSchemas['ChatCompletionsDialect'];
+export type ResponsesProviderDialect =
+  ProviderAdminSchemas['ResponsesProviderDialect'];
 export type ChatCompletionsThinkingMode =
   ProviderAdminSchemas['ChatCompletionsThinkingMode'];
 export type ChatCompletionsReasoningHistory =

@@ -81,6 +81,26 @@
           <option value="responses">responses</option>
         </select>
       </label>
+      @if (form().protocol === 'responses') {
+      <label>
+        <span>Responses Dialect</span>
+        <select
+          data-testid="provider-responses-dialect"
+          [value]="form().responsesDialect"
+          (change)="updateResponsesDialect($event)"
+          required
+        >
+          <option value="" disabled>Select a Responses dialect</option>
+          @for (option of responsesDialectOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+        <small>
+          Required explicit wire behavior. Choose DeepSeek (direct) for a direct
+          DeepSeek Responses provider; Crew never infers this value.
+        </small>
+      </label>
+      }
       <label>
         <span>Provider Kind</span>
         <input
@@ -505,7 +525,16 @@
           <span>{{ credentialKindLabel(provider) }}</span>
           <span>{{ credentialUpdatedLabel(provider) }}</span>
         </div>
-        @if (provider.protocol === 'chat_completions') {
+        @if (provider.protocol === 'responses') {
+        <div
+          class="rv-admin-providers__meta rv-admin-providers__meta--policy"
+          data-testid="provider-responses-policy-readback"
+        >
+          <span>
+            dialect {{ provider.responsesDialect ?? 'not configured' }}
+          </span>
+        </div>
+        } @if (provider.protocol === 'chat_completions') {
         <div
           class="rv-admin-providers__meta rv-admin-providers__meta--policy"
           data-testid="provider-reasoning-policy-readback"
