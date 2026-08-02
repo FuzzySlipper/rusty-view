@@ -341,8 +341,27 @@ export class LiveConversation {
     }
 
     const target = await this.resolveTargetProfile(profiles, count);
-    await target.click();
-    await expect(target).toHaveClass(/rv-profile--selected/);
+    const defaultSessionId = await target.getAttribute(
+      'data-default-session-id',
+    );
+    const targetSession = this.page.locator(
+      `[data-testid="profile-session-row"][data-session-id="${defaultSessionId ?? ''}"]`,
+    );
+    if (
+      defaultSessionId !== null &&
+      (await targetSession.first().isVisible())
+    ) {
+      await targetSession.first().click();
+      await expect(targetSession.first()).toHaveClass(
+        /rv-profile-session--selected/,
+        { timeout: 30_000 },
+      );
+    } else {
+      await target.click();
+    }
+    await expect(target).toHaveClass(/rv-profile--selected/, {
+      timeout: 10_000,
+    });
     await expect(this.page.getByTestId('transcript-viewport')).toBeVisible({
       timeout: 10_000,
     });

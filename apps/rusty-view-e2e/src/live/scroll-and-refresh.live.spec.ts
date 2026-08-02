@@ -34,10 +34,22 @@ test('scroll interaction during a real streaming turn leaves visual evidence @li
   );
   await expect(assistant).toHaveAttribute('data-message-status', 'streaming');
 
+  const viewport = live.page.getByTestId('transcript-viewport');
+  await expect
+    .poll(
+      async () =>
+        viewport.evaluate(
+          (element) => element.scrollHeight - element.clientHeight,
+        ),
+      { timeout: 120_000 },
+    )
+    .toBeGreaterThan(300);
+  await expect(assistant).toHaveAttribute('data-message-status', 'streaming');
+
   await live.expectVisibleImpact(
     'scroll-during-real-streaming',
     async () => {
-      await live.page.getByTestId('transcript-viewport').hover();
+      await viewport.hover();
       await live.page.mouse.wheel(0, -900);
       await live.page.mouse.wheel(0, 600);
     },
