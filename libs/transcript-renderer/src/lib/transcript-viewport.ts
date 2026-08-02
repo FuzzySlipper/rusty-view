@@ -361,17 +361,28 @@ export class TranscriptViewportComponent {
       this.viewportState.set('session-replacement');
       this.previousMessages = [];
       this.isAtBottom.set(true);
-      this.setRenderedMessages(this.messages());
-      this.placeOwnedWindowAtTail();
-      this.finishSessionReplacementAfterRender();
+      const replacementMessages = this.messages();
+      if (replacementMessages.length > 0) {
+        this.admitSessionReplacement(replacementMessages);
+      }
     });
 
     // Fresh object graphs from polling are common. Keep byte-identical visible
     // projections entirely outside the renderer and scroll state machine.
     effect(() => {
       const msgs = this.messages();
+      if (this.transcriptTransitioning()) {
+        // A composition layer may publish the new conversation identity one
+        // render before its projection. Keep the previous keyed window
+        // resident behind the transition state instead of exposing an empty
+        // semantic frame, then replace it atomically once content is ready.
+        if (msgs.length === 0) return;
+        if (transcriptPresentationChanged(this.renderMessages(), msgs)) {
+          this.admitSessionReplacement(msgs);
+        }
+        return;
+      }
       if (!transcriptPresentationChanged(this.renderMessages(), msgs)) return;
-      if (this.transcriptTransitioning() && msgs.length === 0) return;
       this.setRenderedMessages(msgs, true);
     });
 
@@ -500,6 +511,12 @@ export class TranscriptViewportComponent {
       this.renderRows().length - TRANSCRIPT_WINDOW_ROW_COUNT,
     );
     this.ownedWindowStart.set(start);
+  }
+
+  private admitSessionReplacement(messages: readonly ChatMessage[]): void {
+    this.setRenderedMessages(messages);
+    this.placeOwnedWindowAtTail();
+    this.finishSessionReplacementAfterRender();
   }
 
   private placeOwnedWindowAround(index: number): void {
