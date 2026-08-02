@@ -41,7 +41,11 @@ RV_TRANSCRIPT_RENDERER=full-dom pnpm exec playwright test \
 ```
 
 Both engines completed all three harness tests. Every machine scorecard check
-passed:
+passed in Chromium. Firefox's report is intentionally retained even when a
+cell fails; set `RV_TRANSCRIPT_REQUIRE_PASS=1` to make any failed report cell
+fail the Playwright process. An independent review rerun and local repeated
+runs exposed an intermittent Firefox End-key failure that the original
+shape-only report assertion had hidden.
 
 | Invariant | Chromium | Firefox |
 |---|---:|---:|
@@ -51,7 +55,21 @@ passed:
 | Session replacement | Pass, new row/tail frame 4, no empty/inherited frame | Pass, frame 4 after retaining old rows until replacement |
 | Paused keyed anchor: image/tail/new/prepend/reasoning/font-code | Pass, 0px across every one of 144 samples | Pass, 0px |
 | Paused application-write ownership | Pass, zero writes | Pass, zero writes |
-| Wheel/touch/drag/PageUp/Home/End/Latest | Pass | Pass (synthetic touch API unavailable, state invariant retained) |
+| Wheel/touch/drag/PageUp/Home/End/Latest | Pass | **Fail/intermittent:** End can land at Firefox's provisional cold extent and cease being at the semantic bottom after skipped rows materialize; synthetic touch API is also unavailable |
+
+The harness now supports an opt-in fail-closed score mode:
+
+```text
+RV_TRANSCRIPT_RENDERER=full-dom RV_TRANSCRIPT_REQUIRE_PASS=1 \
+  pnpm exec playwright test \
+  --config apps/rusty-view-e2e/playwright.config.mts \
+  apps/rusty-view-e2e/src/transcript-scroll-contract.spec.ts \
+  --project=firefox --workers=1
+```
+
+This command is expected to return nonzero when the Firefox End-key cell
+reproduces. The prototype deliberately does not add a retry/settlement loop to
+hide that result.
 
 Local WebKit remains blocked by the host-library limitation recorded in #6551;
 this prototype does not infer a WebKit pass.
@@ -96,7 +114,7 @@ real distribution grows far past 1,000.
 
 | ≤1,000 ship gate | Budget | Result |
 |---|---:|---:|
-| #6550 semantic contract | all pass | Pass in Chromium and Firefox |
+| #6550 semantic contract | all pass | Pass in Chromium; **Fail/intermittent in Firefox input modes (End)** |
 | Session switch | ≤250ms | Pass, 183.1ms |
 | Search | ≤300ms | Pass, 157.0ms |
 | Input next frame | ≤50ms | Pass, 12.0ms |
@@ -108,12 +126,13 @@ real distribution grows far past 1,000.
 | Required browser/device coverage | Chromium + Firefox + WebKit + mobile smoke | Incomplete by #6551 limitation |
 
 Option B is therefore a technically successful semantic simplification but
-**does not pass the frozen production scorecard**. Its failure is narrow and
-measured: cold `content-visibility` materialization violates the keyed-anchor
-budget at the real 1,000-message band. A paused corrective loop was not added,
-because it would violate the zero-write ownership invariant and recreate the
-competing-authority architecture this campaign is removing. Final selection
-remains owned by #6554 after Option A is scored.
+**does not pass the frozen production scorecard**. Its failures share one
+measured cause: cold `content-visibility` materialization violates the keyed-
+anchor budget at the real 1,000-message band and can leave Firefox's explicit
+End navigation above the eventual semantic bottom. A corrective settlement
+loop was not added, because it would recreate the competing-authority
+architecture this campaign is removing. Final selection remains owned by #6553
+after additive owned-pin windowing is scored.
 
 ## Direct consumer check
 

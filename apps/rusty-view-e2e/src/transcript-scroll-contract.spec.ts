@@ -367,6 +367,11 @@ async function attachReport(
   expect(report.checks.map((check) => check.id)).toEqual([
     ...new Set(report.checks.map((check) => check.id)),
   ]);
+  if (process.env['RV_TRANSCRIPT_REQUIRE_PASS'] === '1') {
+    expect(
+      report.checks.filter((check) => !check.pass).map((check) => check.id),
+    ).toEqual([]);
+  }
 }
 
 test('semantic scoring rejects recovered drift and overscan-only targets', () => {
