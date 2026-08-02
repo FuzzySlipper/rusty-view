@@ -418,6 +418,38 @@ test('scrollToMessageId materializes a live assistant row beyond the bounded win
       },
     }),
   );
+  const liveAssistantDomainEvents = [
+    {
+      event_id: `${LIVE_SCROLL_SESSION_ID}:97`,
+      session_id: LIVE_SCROLL_SESSION_ID,
+      sequence_id: 97,
+      created_at: '2026-06-22T10:10:00Z',
+      kind: 'assistant_turn_started',
+      payload: {},
+    },
+    {
+      event_id: `${LIVE_SCROLL_SESSION_ID}:98`,
+      session_id: LIVE_SCROLL_SESSION_ID,
+      sequence_id: 98,
+      created_at: '2026-06-22T10:10:01Z',
+      kind: 'assistant_text_delta',
+      payload: {
+        message_id: LIVE_SCROLL_ASSISTANT_ID,
+        delta: 'Assistant row rendered after state update and tall history.',
+      },
+    },
+    {
+      event_id: `${LIVE_SCROLL_SESSION_ID}:99`,
+      session_id: LIVE_SCROLL_SESSION_ID,
+      sequence_id: 99,
+      created_at: '2026-06-22T10:10:02Z',
+      kind: 'assistant_message_completed',
+      payload: {
+        message_id: LIVE_SCROLL_ASSISTANT_ID,
+        status: 'completed',
+      },
+    },
+  ];
   const liveAssistantEvents = [
     sseFrame(
       LIVE_SCROLL_SESSION_ID,
@@ -464,12 +496,30 @@ test('scrollToMessageId materializes a live assistant row beyond the bounded win
   await page.route('**/v1/chat/commands', (route) =>
     fulfillJson(route, { commands: [] }),
   );
+  await page.route('**/v1/coordination/agents', (route) =>
+    fulfillJson(route, {
+      deploymentRole: 'production',
+      agents: [
+        {
+          agentId: 'tester',
+          displayLabel: 'tester',
+          profileId: 'tester',
+          routable: true,
+          runtimeKind: 'direct_brain',
+          sessionId: LIVE_SCROLL_SESSION_ID,
+          sessionKind: 'full',
+          sessionStatus: 'idle',
+          workdir: '/tmp/render-live-scroll',
+        },
+      ],
+    }),
+  );
   await page.route('**/v1/chat/sessions*', (route) =>
     fulfillSessionPage(route, liveSessionSummary),
   );
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, {
-      items: [],
+      items: liveAssistantDomainEvents,
       latest_cursor: `${LIVE_SCROLL_SESSION_ID}:99`,
       has_more: false,
     }),
@@ -495,6 +545,15 @@ test('scrollToMessageId materializes a live assistant row beyond the bounded win
       `[data-testid="profile-session-row"][data-session-id="${LIVE_SCROLL_SESSION_ID}"]`,
     )
     .click();
+  await page.evaluate(async () => {
+    const api = (
+      window as Window & {
+        __RUSTY_VIEW_TEST__?: { refreshActiveSession(): Promise<void> };
+      }
+    ).__RUSTY_VIEW_TEST__;
+    if (api === undefined) throw new Error('Rusty View test API unavailable');
+    await api.refreshActiveSession();
+  });
   await expect
     .poll(() =>
       page.evaluate((messageId) => {
