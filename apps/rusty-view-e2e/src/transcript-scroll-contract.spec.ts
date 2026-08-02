@@ -11,6 +11,7 @@ type ScrollTrace = {
   readonly reason: string;
   readonly offsetBefore: number;
   readonly offsetAfter: number;
+  readonly authority?: 'application' | 'user-input';
 };
 
 type ScrollTestApi = {
@@ -44,7 +45,7 @@ type ContractCheck = {
 
 type ContractReport = {
   readonly schemaVersion: 1;
-  readonly implementation: 'current-post-churn-fix';
+  readonly implementation: 'current-post-churn-fix' | 'option-b-full-dom';
   readonly checks: readonly ContractCheck[];
 };
 
@@ -149,7 +150,7 @@ async function applicationWrites(page: Page): Promise<readonly ScrollTrace[]> {
       (
         window as Window & { __RUSTY_VIEW_TEST__?: ScrollTestApi }
       ).__RUSTY_VIEW_TEST__?.getTranscriptScrollWriteTrace() ?? []
-    );
+    ).filter((entry) => entry.authority !== 'user-input');
   });
 }
 
@@ -352,7 +353,10 @@ async function attachReport(
 ): Promise<void> {
   const report: ContractReport = {
     schemaVersion: 1,
-    implementation: 'current-post-churn-fix',
+    implementation:
+      process.env['RV_TRANSCRIPT_RENDERER'] === 'full-dom'
+        ? 'option-b-full-dom'
+        : 'current-post-churn-fix',
     checks,
   };
   await testInfo.attach(name, {
@@ -656,7 +660,11 @@ async function installScrollContractFixture(
 }
 
 async function openContractSession(page: Page): Promise<Locator> {
-  await page.goto('/');
+  await page.goto(
+    process.env['RV_TRANSCRIPT_RENDERER'] === 'full-dom'
+      ? '/?__rvTranscriptRenderer=full-dom'
+      : '/',
+  );
   await page
     .locator(
       `[data-testid="profile-session-row"][data-session-id="${SESSION_A}"]`,
@@ -988,7 +996,7 @@ test('scores paused anchoring, write ownership, and user input modes semanticall
   inputMeasurements['scrollbarDragPaused'] =
     (await viewport.getAttribute('data-tail-following')) === 'false';
 
-  await viewport.click({ position: { x: 20, y: 20 } });
+  await viewport.focus();
   const keyboardBefore = await semanticFrame(viewport);
   await page.keyboard.press('PageUp');
   await page.keyboard.press('Home');

@@ -3,6 +3,7 @@
 import { chromium } from '@playwright/test';
 
 const baseUrl = process.env['BASE_URL'] ?? 'http://127.0.0.1:9347';
+const renderer = process.env['RV_TRANSCRIPT_RENDERER'] ?? 'current';
 const depths = (process.env['RV_TRANSCRIPT_DEPTHS'] ?? '250,1000,5000,10000')
   .split(',')
   .map((value) => Number(value.trim()))
@@ -19,6 +20,7 @@ const report = {
   schemaVersion: 1,
   capturedAt: new Date().toISOString(),
   baseUrl,
+  renderer,
   browser: {
     engine: 'chromium',
     version: browser.version(),
@@ -36,11 +38,31 @@ try {
   for (const depth of depths) {
     const runs = [];
     for (let repeat = 0; repeat < repeats; repeat += 1) {
-      runs.push(await measureDepth(browser, depth));
+      process.stderr.write(
+        `measure transcript renderer=${renderer} depth=${depth} run=${repeat + 1}/${repeats}\n`,
+      );
+      try {
+        runs.push(await measureDepth(browser, depth));
+      } catch (error) {
+        runs.push({
+          error: {
+            name: error instanceof Error ? error.name : 'UnknownError',
+            message:
+              error instanceof Error
+                ? error.message.split('\n')[0]
+                : String(error),
+          },
+        });
+        await Promise.all(browser.contexts().map((context) => context.close()));
+      }
     }
+    const successfulRuns = runs.filter((run) => run.error === undefined);
     report.depths.push({
       projectedMessages: depth,
-      median: aggregateRuns(runs),
+      successfulRuns: successfulRuns.length,
+      failedRuns: runs.length - successfulRuns.length,
+      median:
+        successfulRuns.length === 0 ? null : aggregateRuns(successfulRuns),
       runs,
     });
   }
@@ -74,7 +96,11 @@ async function measureDepth(browserInstance, depth) {
   await installFixture(page, depth);
 
   const loadStarted = performance.now();
-  await page.goto(baseUrl);
+  const applicationUrl = new URL(baseUrl);
+  if (renderer === 'full-dom') {
+    applicationUrl.searchParams.set('__rvTranscriptRenderer', 'full-dom');
+  }
+  await page.goto(applicationUrl.href);
   const primarySessionId = `scale-${depth}`;
   await page
     .locator(
@@ -90,6 +116,7 @@ async function measureDepth(browserInstance, depth) {
     .waitFor({ state: 'attached', timeout: 60_000 });
   await settleFrames(page, 4);
   const initialLoadMs = performance.now() - loadStarted;
+  const loadLongTasks = await drainLongTasks(page);
 
   const residency = await page.evaluate(() => {
     const transcript = document.querySelector(
@@ -109,6 +136,7 @@ async function measureDepth(browserInstance, depth) {
     };
   });
 
+  await drainLongTasks(page);
   const inputFrameMs = await page
     .getByTestId('message-input-field')
     .evaluate(async (input) => {
@@ -119,8 +147,10 @@ async function measureDepth(browserInstance, depth) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       return performance.now() - started;
     });
+  const inputLongTasks = await drainLongTasks(page);
 
   await page.getByRole('button', { name: 'Search' }).click();
+  await drainLongTasks(page);
   const targetSequence = Math.max(1, Math.floor(depth / 2));
   const searchStarted = performance.now();
   await page
@@ -132,8 +162,10 @@ async function measureDepth(browserInstance, depth) {
     )
     .waitFor({ state: 'visible', timeout: 60_000 });
   const searchMs = performance.now() - searchStarted;
+  const searchLongTasks = await drainLongTasks(page);
   await page.getByTestId('transcript-search-clear').click();
 
+  await drainLongTasks(page);
   const coldHistory = await viewport.evaluate(async (element) => {
     element.scrollTop = Math.max(
       0,
@@ -212,7 +244,9 @@ async function measureDepth(browserInstance, depth) {
             ),
     };
   });
+  const coldHistoryLongTasks = await drainLongTasks(page);
 
+  await drainLongTasks(page);
   const replacementStarted = performance.now();
   await page
     .locator(
@@ -225,10 +259,15 @@ async function measureDepth(browserInstance, depth) {
     )
     .waitFor({ state: 'visible', timeout: 30_000 });
   const sessionSwitchMs = performance.now() - replacementStarted;
+  const sessionSwitchLongTasks = await drainLongTasks(page);
 
-  const longTasks = await page.evaluate(
-    () => window.__RV_SCALE_LONG_TASKS__ ?? [],
-  );
+  const longTasks = [
+    ...loadLongTasks,
+    ...inputLongTasks,
+    ...searchLongTasks,
+    ...coldHistoryLongTasks,
+    ...sessionSwitchLongTasks,
+  ];
   await context.close();
   return {
     projectedMessages: depth,
@@ -245,6 +284,13 @@ async function measureDepth(browserInstance, depth) {
       maxDurationMs: round(
         Math.max(0, ...longTasks.map((entry) => entry.duration)),
       ),
+    },
+    longTasksByPhase: {
+      load: summarizeLongTasks(loadLongTasks),
+      input: summarizeLongTasks(inputLongTasks),
+      search: summarizeLongTasks(searchLongTasks),
+      coldHistory: summarizeLongTasks(coldHistoryLongTasks),
+      sessionSwitch: summarizeLongTasks(sessionSwitchLongTasks),
     },
     coldHistory,
   };
@@ -369,6 +415,24 @@ function round(value) {
   return Math.round(value * 10) / 10;
 }
 
+async function drainLongTasks(page) {
+  return page.evaluate(() => {
+    const tasks = window.__RV_SCALE_LONG_TASKS__ ?? [];
+    window.__RV_SCALE_LONG_TASKS__ = [];
+    return tasks;
+  });
+}
+
+function summarizeLongTasks(tasks) {
+  return {
+    count: tasks.length,
+    totalDurationMs: round(
+      tasks.reduce((total, entry) => total + entry.duration, 0),
+    ),
+    maxDurationMs: round(Math.max(0, ...tasks.map((entry) => entry.duration))),
+  };
+}
+
 function aggregateRuns(runs) {
   const medianAt = (read) => {
     const values = runs
@@ -399,6 +463,22 @@ function aggregateRuns(runs) {
       totalDurationMs: medianAt((run) => run.longTasks.totalDurationMs),
       maxDurationMs: medianAt((run) => run.longTasks.maxDurationMs),
     },
+    longTasksByPhase: Object.fromEntries(
+      ['load', 'input', 'search', 'coldHistory', 'sessionSwitch'].map(
+        (phase) => [
+          phase,
+          {
+            count: medianAt((run) => run.longTasksByPhase[phase].count),
+            totalDurationMs: medianAt(
+              (run) => run.longTasksByPhase[phase].totalDurationMs,
+            ),
+            maxDurationMs: medianAt(
+              (run) => run.longTasksByPhase[phase].maxDurationMs,
+            ),
+          },
+        ],
+      ),
+    ),
     coldHistory: {
       maxPerFrameExtentChangePx: medianAt(
         (run) => run.coldHistory.maxPerFrameExtentChangePx,

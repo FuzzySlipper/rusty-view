@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  type ElementRef,
   effect,
   HostListener,
   inject,
@@ -91,7 +92,7 @@ export interface TranscriptScrollWriteTrace {
   readonly followingTail: boolean;
   readonly atBottom: boolean;
   readonly transcriptKey: string | null;
-  readonly authority: 'application';
+  readonly authority: 'application' | 'user-input';
 }
 
 /**
@@ -129,8 +130,17 @@ export interface TranscriptScrollWriteTrace {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TranscriptViewportComponent {
-  private readonly viewport = viewChild.required(CdkVirtualScrollViewport);
-  private readonly autoSize = viewChild.required(CdkAutoSizeVirtualScroll);
+  private readonly cdkViewport = viewChild(CdkVirtualScrollViewport);
+  private readonly cdkAutoSize = viewChild(CdkAutoSizeVirtualScroll);
+  private readonly fullDomViewport =
+    viewChild<ElementRef<HTMLElement>>('fullDomViewport');
+
+  /** Temporary bake-off switch. It is deliberately URL-only and is not part
+   * of the public component API or the user-facing Options surface. */
+  protected readonly fullDomPrototypeEnabled =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).get('__rvTranscriptRenderer') ===
+      'full-dom';
 
   /** Messages to render (from ChatStore.projection().messages). */
   readonly messages = input.required<readonly ChatMessage[]>();
@@ -236,6 +246,8 @@ export class TranscriptViewportComponent {
   private touchScrollActive = false;
   private transcriptTransitionFrame: number | undefined;
   private tailGeometryFrame: number | undefined;
+  private fullDomFollowFrame: number | undefined;
+  private fullDomRenderFollowPending = false;
   private scrollDiagnosticsEnabled = false;
   private scrollWriteSequence = 0;
   private scrollWriteFrame = 0;
@@ -379,6 +391,9 @@ export class TranscriptViewportComponent {
       if (this.tailGeometryFrame !== undefined) {
         cancelAnimationFrame(this.tailGeometryFrame);
       }
+      if (this.fullDomFollowFrame !== undefined) {
+        cancelAnimationFrame(this.fullDomFollowFrame);
+      }
     });
 
     // Conversation identity is supplied by the composition layer. Do not
@@ -401,6 +416,15 @@ export class TranscriptViewportComponent {
       this.isAtBottom.set(true);
       this.resumeTailFollow();
       if (this.viewportReady) {
+        if (this.fullDomPrototypeEnabled) {
+          const messages = this.messages();
+          if (messages.length > 0) {
+            this.setRenderedMessages(messages);
+            this.requestFullDomTailPlacement('tail-follow-render', true);
+            this.afterNextRender(() => this.transcriptTransitioning.set(false));
+          }
+          return;
+        }
         // Install both the replacement data and a valid tail range in the same
         // signal turn. If CDK first observes the new data through the old
         // transcript's range, a short/very-tall predecessor can leave the
@@ -428,6 +452,15 @@ export class TranscriptViewportComponent {
         // polling commonly supplies fresh but presentation-identical objects;
         // those ticks must not synchronously measure or touch CDK at all.
         if (!transcriptPresentationChanged(this.renderMessages(), msgs)) {
+          return;
+        }
+        if (this.fullDomPrototypeEnabled) {
+          if (this.transcriptTransitioning() && msgs.length === 0) return;
+          this.setRenderedMessages(msgs, true);
+          if (this.transcriptTransitioning()) {
+            this.requestFullDomTailPlacement('tail-follow-render', true);
+            this.afterNextRender(() => this.transcriptTransitioning.set(false));
+          }
           return;
         }
         this.pendingPausedScrollOffset = !this.followingTail()
@@ -458,6 +491,12 @@ export class TranscriptViewportComponent {
       if (!changed || !this.viewportReady) return;
 
       this.noteTailGeometryChange();
+      if (this.fullDomPrototypeEnabled) {
+        if (this.tailFollow() && this.followingTail()) {
+          this.requestFullDomTailPlacement('tail-follow-render', true);
+        }
+        return;
+      }
       this.afterNextRender(() => {
         this.viewport().checkViewportSize();
         if (this.tailFollow() && this.followingTail()) {
@@ -473,14 +512,20 @@ export class TranscriptViewportComponent {
     // scroll event, so every resize also refreshes CDK's measurements and the
     // tail-control state.
     this.afterNextRender(() => {
-      const host = this.viewport().elementRef.nativeElement;
+      const host = this.scrollHost();
       const emitWhenSized = () => {
         if (!this.viewportReady && host.clientHeight > 0) {
           this.viewportReady = true;
           this.setRenderedMessages(this.messages());
         }
         if (this.viewportReady) {
-          this.viewport().checkViewportSize();
+          if (this.fullDomPrototypeEnabled) {
+            if (this.followingTail()) {
+              this.requestFullDomTailPlacement('tail-follow-render', true);
+            }
+          } else {
+            this.viewport().checkViewportSize();
+          }
           this.recomputeBottomState();
         }
       };
@@ -488,6 +533,23 @@ export class TranscriptViewportComponent {
       if (typeof ResizeObserver !== 'undefined') {
         const viewportObserver = new ResizeObserver(() => emitWhenSized());
         viewportObserver.observe(host);
+
+        if (this.fullDomPrototypeEnabled) {
+          const content = host.querySelector<HTMLElement>(
+            '.rv-transcript__full-content',
+          );
+          const contentObserver = new ResizeObserver(() => {
+            if (this.tailFollow() && this.followingTail()) {
+              this.requestFullDomTailPlacement('tail-geometry-rendered-resize');
+            }
+          });
+          if (content !== null) contentObserver.observe(content);
+          this.destroyRef.onDestroy(() => {
+            viewportObserver.disconnect();
+            contentObserver.disconnect();
+          });
+          return;
+        }
 
         const contentWrapper = host.querySelector<HTMLElement>(
           '.cdk-virtual-scroll-content-wrapper',
@@ -513,6 +575,7 @@ export class TranscriptViewportComponent {
           spacerObserver.disconnect();
         });
       }
+      if (this.fullDomPrototypeEnabled) return;
       if (typeof MutationObserver !== 'undefined') {
         const contentWrapper = host.querySelector<HTMLElement>(
           '.cdk-virtual-scroll-content-wrapper',
@@ -583,6 +646,17 @@ export class TranscriptViewportComponent {
       // supplied a transcript key. The app shell always supplies one.
       const replaced =
         this.transcriptKey() === undefined && messagesWereReplaced(prev, msgs);
+      if (this.fullDomPrototypeEnabled) {
+        if (replaced) {
+          this.isAtBottom.set(true);
+          this.resumeTailFollow();
+        }
+        if (tailChanged && this.tailFollow() && this.followingTail()) {
+          this.requestFullDomTailPlacement('tail-follow-render', true);
+        }
+        // Native browser anchoring exclusively owns paused growth and prepend.
+        return;
+      }
       if (replaced) {
         this.isAtBottom.set(true);
         this.resumeTailFollow();
@@ -638,6 +712,30 @@ export class TranscriptViewportComponent {
     });
   }
 
+  private viewport(): CdkVirtualScrollViewport {
+    const viewport = this.cdkViewport();
+    if (viewport === undefined) {
+      throw new Error('CDK viewport is unavailable in the full-DOM prototype');
+    }
+    return viewport;
+  }
+
+  private autoSize(): CdkAutoSizeVirtualScroll {
+    const autoSize = this.cdkAutoSize();
+    if (autoSize === undefined) {
+      throw new Error('CDK autosize is unavailable in the full-DOM prototype');
+    }
+    return autoSize;
+  }
+
+  private scrollHost(): HTMLElement {
+    const fullDomHost = this.fullDomViewport()?.nativeElement;
+    if (this.fullDomPrototypeEnabled && fullDomHost !== undefined) {
+      return fullDomHost;
+    }
+    return this.viewport().elementRef.nativeElement;
+  }
+
   /** Install stable message rows into CDK's autosize virtualizer. */
   private setRenderedMessages(
     messages: readonly ChatMessage[],
@@ -670,7 +768,7 @@ export class TranscriptViewportComponent {
     if (
       this.resumeFollowOnUserScrollToTail &&
       !this.scrollbarDragActive &&
-      this.viewport().measureScrollOffset('bottom') <= 1
+      this.bottomOffset() <= 1
     ) {
       this.resumeTailFollow();
     }
@@ -703,7 +801,7 @@ export class TranscriptViewportComponent {
 
   /** Stop pending tail settlement before a native scrollbar drag begins. */
   protected onPointerDown(event: PointerEvent): void {
-    const host = this.viewport().elementRef.nativeElement;
+    const host = this.scrollHost();
     const bounds = host.getBoundingClientRect();
     const scrollbarWidth = Math.max(16, host.offsetWidth - host.clientWidth);
     if (event.clientX >= bounds.right - scrollbarWidth) {
@@ -712,6 +810,33 @@ export class TranscriptViewportComponent {
       this.resumeFollowOnUserScrollToTail = false;
       this.pauseTailFollow();
     }
+  }
+
+  protected onKeyboardScroll(event: KeyboardEvent): void {
+    if (!this.fullDomPrototypeEnabled) return;
+    const host = this.scrollHost();
+    let target: number | undefined;
+    if (event.key === 'Home') target = 0;
+    if (event.key === 'End') target = host.scrollHeight;
+    if (event.key === 'PageUp') {
+      target = Math.max(0, host.scrollTop - host.clientHeight);
+    }
+    if (event.key === 'PageDown') {
+      target = Math.min(host.scrollHeight, host.scrollTop + host.clientHeight);
+    }
+    if (target === undefined) return;
+    event.preventDefault();
+    this.pauseTailFollow();
+    this.writeScrollPosition(
+      'seek-rendered-message',
+      target,
+      null,
+      () => {
+        host.scrollTop = target;
+      },
+      'user-input',
+    );
+    this.recomputeBottomState();
   }
 
   @HostListener('document:pointerup')
@@ -724,17 +849,20 @@ export class TranscriptViewportComponent {
 
   private resumeFollowIfUserReachedTail(): void {
     this.recomputeBottomState();
-    if (this.viewport().measureScrollOffset('bottom') <= 1) {
+    if (this.bottomOffset() <= 1) {
       this.resumeTailFollow();
     }
   }
 
   private recomputeBottomState(): void {
-    const vp = this.viewport();
-    const bottomOffset = vp.measureScrollOffset('bottom');
     this.isAtBottom.set(
-      bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX,
+      this.bottomOffset() <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX,
     );
+  }
+
+  private bottomOffset(): number {
+    const host = this.scrollHost();
+    return Math.max(0, host.scrollHeight - host.scrollTop - host.clientHeight);
   }
 
   /** Enable the bounded, local-only write trace used by browser certification. */
@@ -757,13 +885,14 @@ export class TranscriptViewportComponent {
     requestedOffset: number | null,
     targetMessageId: string | null,
     write: () => void,
+    authority: 'application' | 'user-input' = 'application',
   ): void {
     if (!this.scrollDiagnosticsEnabled) {
       write();
       return;
     }
 
-    const host = this.viewport().elementRef.nativeElement;
+    const host = this.scrollHost();
     const offsetBefore = host.scrollTop;
     const timestampMs =
       typeof performance === 'undefined' ? Date.now() : performance.now();
@@ -796,7 +925,7 @@ export class TranscriptViewportComponent {
       followingTail: this.followingTail(),
       atBottom: bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX,
       transcriptKey: this.transcriptKey() ?? null,
-      authority: 'application',
+      authority,
     });
     if (
       this.scrollWriteTrace.length >
@@ -820,11 +949,19 @@ export class TranscriptViewportComponent {
     this.isAtBottom.set(true);
     this.resumeTailFollow();
     const generation = this.tailFollowGeneration;
+    if (this.fullDomPrototypeEnabled) {
+      this.requestFullDomTailPlacement(reason);
+      return;
+    }
     this.scrollToBottomOffset(reason);
     this.settleScrollToBottom(0, generation);
   }
 
   private requestTailFollow(): void {
+    if (this.fullDomPrototypeEnabled) {
+      this.requestFullDomTailPlacement('tail-follow-render', true);
+      return;
+    }
     if (this.tailFollowRenderPending) return;
     const generation = this.tailFollowGeneration;
     this.tailFollowRenderPending = true;
@@ -846,6 +983,47 @@ export class TranscriptViewportComponent {
         this.scrollToBottomOffset('tail-follow-render');
       }
       this.settleScrollToBottom(0, generation);
+    });
+  }
+
+  /** Option B has one scroll authority: a single write coalesced into the next
+   * animation frame. ResizeObserver and Angular projection changes may both
+   * request it, but neither can create a second writer or a settlement loop. */
+  private requestFullDomTailPlacement(
+    reason: TranscriptScrollWriteReason,
+    afterRender = false,
+  ): void {
+    if (afterRender) {
+      if (this.fullDomRenderFollowPending) return;
+      const generation = this.tailFollowGeneration;
+      this.fullDomRenderFollowPending = true;
+      this.afterNextRender(() => {
+        this.fullDomRenderFollowPending = false;
+        if (
+          generation !== this.tailFollowGeneration ||
+          !this.tailFollow() ||
+          !this.followingTail()
+        ) {
+          return;
+        }
+        this.scrollToBottomOffset(reason);
+        this.recomputeBottomState();
+      });
+      return;
+    }
+    if (this.fullDomFollowFrame !== undefined) return;
+    const generation = this.tailFollowGeneration;
+    this.fullDomFollowFrame = requestAnimationFrame(() => {
+      this.fullDomFollowFrame = undefined;
+      if (
+        generation !== this.tailFollowGeneration ||
+        !this.tailFollow() ||
+        !this.followingTail()
+      ) {
+        return;
+      }
+      this.scrollToBottomOffset(reason);
+      this.recomputeBottomState();
     });
   }
 
@@ -1028,6 +1206,11 @@ export class TranscriptViewportComponent {
   private cancelTailFollowWork(): void {
     this.tailFollowGeneration += 1;
     this.tailFollowRenderPending = false;
+    this.fullDomRenderFollowPending = false;
+    if (this.fullDomFollowFrame !== undefined) {
+      cancelAnimationFrame(this.fullDomFollowFrame);
+      this.fullDomFollowFrame = undefined;
+    }
     if (this.tailSettleTimer !== undefined) {
       clearTimeout(this.tailSettleTimer);
       this.tailSettleTimer = undefined;
@@ -1035,6 +1218,13 @@ export class TranscriptViewportComponent {
   }
 
   private scrollToBottomOffset(reason: TranscriptScrollWriteReason): void {
+    if (this.fullDomPrototypeEnabled) {
+      const host = this.scrollHost();
+      this.writeScrollPosition(reason, host.scrollHeight, null, () => {
+        host.scrollTop = host.scrollHeight;
+      });
+      return;
+    }
     const vp = this.viewport();
     // Scroll to a very large offset — CDK clamps to the maximum scrollable
     // distance. This works with both fixed-size and autosize strategies.
@@ -1049,6 +1239,18 @@ export class TranscriptViewportComponent {
     const index = this.virtualRowIndexForMessage(messageId);
     if (index >= 0) {
       this.afterNextRender(() => {
+        if (this.fullDomPrototypeEnabled) {
+          const target = this.findRenderedMessageElement(messageId);
+          if (target !== null) {
+            this.writeScrollPosition(
+              'seek-rendered-message',
+              null,
+              messageId,
+              () => target.scrollIntoView({ block: 'nearest' }),
+            );
+          }
+          return;
+        }
         this.seekMessageIntoView(messageId, index, 0);
       });
     }
@@ -1243,7 +1445,7 @@ export class TranscriptViewportComponent {
   }
 
   private findRenderedMessageElement(messageId: string): HTMLElement | null {
-    const host = this.viewport().elementRef.nativeElement;
+    const host = this.scrollHost();
     const items = host.querySelectorAll<HTMLElement>(
       '[data-testid="transcript-item"]',
     );

@@ -52,6 +52,35 @@
   width: 100%;
 }
 
+.rv-transcript--full-dom {
+  overflow-anchor: auto;
+  contain: layout paint;
+}
+
+.rv-transcript__full-content {
+  min-height: 100%;
+  width: 100%;
+}
+
+.rv-transcript--full-dom .rv-transcript__item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+
+.rv-transcript__tail-anchor {
+  height: 1px;
+  overflow-anchor: none;
+  pointer-events: none;
+}
+
+.rv-transcript--full-dom-following .rv-transcript__item {
+  overflow-anchor: none;
+}
+
+.rv-transcript--full-dom-following .rv-transcript__tail-anchor {
+  overflow-anchor: auto;
+}
+
 .rv-transcript__item {
   contain: content;
   width: min(100%, var(--rv-chat-width));
