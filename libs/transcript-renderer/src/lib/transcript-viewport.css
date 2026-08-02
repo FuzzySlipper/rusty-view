@@ -37,9 +37,10 @@
   height: auto;
   min-height: 0;
   overflow-y: auto;
-  /* Native anchoring owns paused growth. Following mode moves anchoring to the
-     semantic tail so variable-height content cannot pull the viewport away. */
-  overflow-anchor: auto;
+  /* One application authority owns both paused compensation and following.
+     Disable native anchoring so Chromium/Firefox cannot race it and WebKit does
+     not silently fall back to unanchored layout. */
+  overflow-anchor: none;
   scroll-behavior: auto;
   contain: layout paint;
 }
@@ -69,14 +70,6 @@
   height: 1px;
   overflow-anchor: none;
   pointer-events: none;
-}
-
-.rv-transcript--owned-window-following .rv-transcript__item {
-  overflow-anchor: none;
-}
-
-.rv-transcript--owned-window-following .rv-transcript__tail-anchor {
-  overflow-anchor: auto;
 }
 
 .rv-transcript__item {

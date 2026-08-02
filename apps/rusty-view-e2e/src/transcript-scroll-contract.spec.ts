@@ -931,6 +931,9 @@ test('scores paused anchoring, write ownership, and user input modes semanticall
   await page.locator('.rv-options__close').click();
 
   const pausedWrites = await applicationWrites(page);
+  const pausedOverflowAnchor = await viewport.evaluate(
+    (element) => getComputedStyle(element).overflowAnchor,
+  );
 
   const inputMeasurements: Record<string, unknown> = {};
   await testApi(page, 'clear');
@@ -1041,11 +1044,16 @@ test('scores paused anchoring, write ownership, and user input modes semanticall
       },
     },
     {
-      id: 'paused-application-write-ownership',
-      pass: pausedWrites.length === 0,
+      id: 'paused-single-scroll-authority',
+      pass:
+        pausedOverflowAnchor === 'none' &&
+        pausedWrites.every(
+          (entry) => entry.reason === 'paused-anchor-compensation',
+        ),
       measurements: {
         writeCount: pausedWrites.length,
         reasons: [...new Set(pausedWrites.map((entry) => entry.reason))],
+        nativeOverflowAnchor: pausedOverflowAnchor,
       },
     },
     {

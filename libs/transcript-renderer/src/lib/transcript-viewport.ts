@@ -53,6 +53,7 @@ export interface TranscriptVirtualRow {
 
 export type TranscriptScrollWriteReason =
   | 'explicit-latest'
+  | 'paused-anchor-compensation'
   | 'tail-follow-render'
   | 'seek-rendered-message'
   | 'session-replacement';
@@ -83,17 +84,20 @@ export interface TranscriptScrollWriteTrace {
 /**
  * Bounded, chronological transcript viewport.
  *
- * The component owns one keyed 64-row window with conservative spacers. Native
- * browser anchoring owns paused content growth; every programmatic scroll goes
- * through `writeScrollPosition` and is attributed to application or user input.
+ * The component owns one keyed 64-row window with conservative spacers. One
+ * explicit application authority owns paused anchoring on every browser; every
+ * programmatic scroll goes through `writeScrollPosition` and is attributed to
+ * application or user input.
  *
  * Scroll behavior:
  * - Tail-follow: when the user is at the bottom, new content auto-scrolls.
  *   When the user scrolls up, tail-follow pauses (no fighting the user).
  * - Jump-to-message: admit the target's keyed window, then scroll the semantic
  *   message into view.
- * - Scroll anchor preservation: native anchoring keeps the paused semantic row
- *   stable while prepend and variable-height content change around it.
+ * - Scroll anchor preservation: a coalesced ResizeObserver correction keeps
+ *   the paused semantic row stable while prepend and variable-height content
+ *   change around it. CSS anchoring is disabled so the two authorities cannot
+ *   race each other on Chromium/Firefox or disappear entirely on WebKit.
  *
  * Streaming-safe: each message is a separate OnPush component. When a text
  * delta updates one message, only that message's view re-renders; non-resident
@@ -202,6 +206,14 @@ export class TranscriptViewportComponent {
   private scrollWriteFrame = 0;
   private scrollWriteFrameOpen = false;
   private readonly scrollWriteTrace: TranscriptScrollWriteTrace[] = [];
+  private pausedAnchor:
+    | { readonly messageId: string; readonly viewportTop: number }
+    | undefined;
+  private pausedAnchorObserver: ResizeObserver | undefined;
+  private pausedAnchorMutationObserver: MutationObserver | undefined;
+  private pausedAnchorFrame: number | undefined;
+  private pausedAnchorRenderPending = false;
+  private pausedAnchorWritePending = false;
 
   private static readonly MAX_SCROLL_TRACE_ENTRIES = 500;
 
@@ -339,7 +351,14 @@ export class TranscriptViewportComponent {
       if (this.ownedWindowEndFrame !== undefined) {
         cancelAnimationFrame(this.ownedWindowEndFrame);
       }
+      if (this.pausedAnchorFrame !== undefined) {
+        cancelAnimationFrame(this.pausedAnchorFrame);
+      }
+      this.pausedAnchorObserver?.disconnect();
+      this.pausedAnchorMutationObserver?.disconnect();
     });
+
+    this.afterNextRender(() => this.installPausedAnchorObserver());
 
     // Conversation identity is supplied by the composition layer. Do not
     // infer it from projected row IDs: Codex can replace every row while
@@ -399,11 +418,14 @@ export class TranscriptViewportComponent {
       void this.alternateSlots().length;
       if (this.tailFollow() && this.followingTail()) {
         this.requestTailPlacement('tail-follow-render', true);
+      } else if (this.viewportState() === 'paused') {
+        this.requestPausedAnchorCompensationAfterRender();
       }
     });
 
-    // Native browser anchoring exclusively owns paused growth and prepend.
-    // Application writes are admitted only while following or seeking.
+    // The cross-browser paused anchor observer exclusively owns paused growth
+    // and prepend. CSS overflow anchoring remains disabled to avoid a second
+    // authority racing these coalesced corrections.
     effect(() => {
       const msgs = this.renderMessages();
       const prev = this.previousMessages;
@@ -502,6 +524,9 @@ export class TranscriptViewportComponent {
         ),
       );
     }
+    if (this.viewportState() === 'paused') {
+      this.requestPausedAnchorCompensationAfterRender();
+    }
     return rows;
   }
 
@@ -550,6 +575,9 @@ export class TranscriptViewportComponent {
   protected onScroll(): void {
     this.syncOwnedWindowToScrollPosition();
     this.recomputeBottomState();
+    if (this.viewportState() === 'paused' && !this.pausedAnchorWritePending) {
+      this.requestPausedAnchorCapture();
+    }
     if (
       this.resumeFollowOnUserScrollToTail &&
       !this.scrollbarDragActive &&
@@ -566,8 +594,10 @@ export class TranscriptViewportComponent {
     if (event.deltaY < 0) {
       this.resumeFollowOnUserScrollToTail = false;
       this.pauseTailFollow();
+      this.releasePausedAnchorForUserInput();
     } else if (event.deltaY > 0 && !this.followingTail()) {
       this.resumeFollowOnUserScrollToTail = true;
+      this.releasePausedAnchorForUserInput();
     }
   }
 
@@ -577,6 +607,7 @@ export class TranscriptViewportComponent {
     this.touchScrollActive = true;
     this.resumeFollowOnUserScrollToTail = false;
     this.pauseTailFollow();
+    this.releasePausedAnchorForUserInput();
   }
 
   protected onTouchEnd(): void {
@@ -594,6 +625,7 @@ export class TranscriptViewportComponent {
       this.scrollbarDragActive = true;
       this.resumeFollowOnUserScrollToTail = false;
       this.pauseTailFollow();
+      this.releasePausedAnchorForUserInput();
     }
   }
 
@@ -612,6 +644,7 @@ export class TranscriptViewportComponent {
     if (target === undefined) return;
     event.preventDefault();
     this.pauseTailFollow();
+    this.releasePausedAnchorForUserInput();
     if (event.key === 'End') {
       const generation = this.ownedWindowEndGeneration;
       this.ownedWindowEndAdmissionPending = true;
@@ -870,7 +903,10 @@ export class TranscriptViewportComponent {
   }
 
   private pauseTailFollow(): void {
-    if (this.viewportState() === 'paused') return;
+    if (this.viewportState() === 'paused') {
+      this.requestPausedAnchorCapture();
+      return;
+    }
     this.cancelTailFollowWork();
     // A semantic seek has already admitted its target window. Let that single
     // requested placement finish even if a wheel event arrives in the render
@@ -878,6 +914,7 @@ export class TranscriptViewportComponent {
     // `cancelPendingSeeks`.
     if (this.viewportState() !== 'seeking') this.seekGeneration += 1;
     this.viewportState.set('paused');
+    this.capturePausedAnchor();
   }
 
   private resumeTailFollow(): void {
@@ -886,6 +923,7 @@ export class TranscriptViewportComponent {
     this.resumeFollowOnUserScrollToTail = false;
     this.scrollbarDragActive = false;
     this.touchScrollActive = false;
+    this.pausedAnchor = undefined;
     this.viewportState.set('following');
   }
 
@@ -931,6 +969,7 @@ export class TranscriptViewportComponent {
         );
       }
       this.viewportState.set('paused');
+      this.capturePausedAnchor();
       this.pendingSeekSource = undefined;
       this.recomputeBottomState();
     });
@@ -950,6 +989,144 @@ export class TranscriptViewportComponent {
 
   private afterNextRender(callback: () => void): void {
     afterNextRender(callback, { injector: this.injector });
+  }
+
+  private installPausedAnchorObserver(): void {
+    const host = this.scrollHost();
+    const content = host.querySelector<HTMLElement>(
+      '.rv-transcript__owned-window-content',
+    );
+    if (content === null || typeof ResizeObserver === 'undefined') return;
+    this.pausedAnchorObserver = new ResizeObserver(() => {
+      if (
+        this.viewportState() !== 'paused' ||
+        this.pausedAnchor === undefined
+      ) {
+        return;
+      }
+      this.requestPausedAnchorCompensation();
+    });
+    this.pausedAnchorObserver.observe(content);
+    this.pausedAnchorMutationObserver = new MutationObserver(() => {
+      if (
+        this.viewportState() !== 'paused' ||
+        this.pausedAnchor === undefined
+      ) {
+        return;
+      }
+      // Mutation delivery precedes the next animation-frame callback. Force
+      // the new layout here so the semantic anchor is corrected before any
+      // frame can observe the intermediate geometry. ResizeObserver remains
+      // the fallback for media/font layout changes without a DOM mutation.
+      this.compensatePausedAnchor();
+    });
+    this.pausedAnchorMutationObserver.observe(content, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    this.pausedAnchorMutationObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+  }
+
+  private requestPausedAnchorCapture(): void {
+    if (this.pausedAnchorFrame !== undefined) {
+      cancelAnimationFrame(this.pausedAnchorFrame);
+    }
+    this.pausedAnchorFrame = requestAnimationFrame(() => {
+      this.pausedAnchorFrame = undefined;
+      if (this.viewportState() === 'paused') this.capturePausedAnchor();
+    });
+  }
+
+  private releasePausedAnchorForUserInput(): void {
+    this.pausedAnchor = undefined;
+    if (this.pausedAnchorFrame !== undefined) {
+      cancelAnimationFrame(this.pausedAnchorFrame);
+      this.pausedAnchorFrame = undefined;
+    }
+  }
+
+  private capturePausedAnchor(): void {
+    const host = this.scrollHost();
+    const hostBounds = host.getBoundingClientRect();
+    const rows = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-message-id]'),
+    );
+    const anchor =
+      rows.find((row) => {
+        const bounds = row.getBoundingClientRect();
+        return (
+          bounds.top >= hostBounds.top - 1 &&
+          bounds.bottom <= hostBounds.bottom + 1
+        );
+      }) ??
+      rows.find((row) => {
+        const bounds = row.getBoundingClientRect();
+        return (
+          bounds.bottom > hostBounds.top + 1 &&
+          bounds.top < hostBounds.bottom - 1
+        );
+      });
+    const messageId = anchor?.dataset['messageId'];
+    if (anchor === undefined || messageId === undefined) {
+      this.pausedAnchor = undefined;
+      return;
+    }
+    this.pausedAnchor = {
+      messageId,
+      viewportTop: anchor.getBoundingClientRect().top - hostBounds.top,
+    };
+  }
+
+  private requestPausedAnchorCompensation(): void {
+    if (this.pausedAnchorFrame !== undefined) return;
+    this.pausedAnchorFrame = requestAnimationFrame(() => {
+      this.pausedAnchorFrame = undefined;
+      this.compensatePausedAnchor();
+    });
+  }
+
+  private requestPausedAnchorCompensationAfterRender(): void {
+    if (this.pausedAnchorRenderPending) return;
+    this.pausedAnchorRenderPending = true;
+    this.afterNextRender(() => {
+      this.pausedAnchorRenderPending = false;
+      this.compensatePausedAnchor();
+    });
+  }
+
+  private compensatePausedAnchor(): void {
+    const anchor = this.pausedAnchor;
+    if (this.viewportState() !== 'paused' || anchor === undefined) return;
+    const host = this.scrollHost();
+    const row = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-message-id]'),
+    ).find((candidate) => candidate.dataset['messageId'] === anchor.messageId);
+    if (row === undefined) {
+      this.capturePausedAnchor();
+      return;
+    }
+    const currentTop =
+      row.getBoundingClientRect().top - host.getBoundingClientRect().top;
+    const delta = currentTop - anchor.viewportTop;
+    if (Math.abs(delta) <= 0.5) return;
+    const target = host.scrollTop + delta;
+    this.pausedAnchorWritePending = true;
+    this.writeScrollPosition(
+      'paused-anchor-compensation',
+      target,
+      anchor.messageId,
+      () => {
+        host.scrollTop = target;
+      },
+    );
+    requestAnimationFrame(() => {
+      this.pausedAnchorWritePending = false;
+    });
   }
 
   protected updateSearchQuery(event: Event): void {
