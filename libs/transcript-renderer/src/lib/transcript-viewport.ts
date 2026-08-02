@@ -137,10 +137,19 @@ export class TranscriptViewportComponent {
 
   /** Temporary bake-off switch. It is deliberately URL-only and is not part
    * of the public component API or the user-facing Options surface. */
+  private readonly prototypeRenderer =
+    typeof location === 'undefined'
+      ? 'current'
+      : (new URLSearchParams(location.search).get('__rvTranscriptRenderer') ??
+        'current');
   protected readonly fullDomPrototypeEnabled =
-    typeof location !== 'undefined' &&
-    new URLSearchParams(location.search).get('__rvTranscriptRenderer') ===
-      'full-dom';
+    this.prototypeRenderer === 'full-dom' ||
+    this.prototypeRenderer === 'owned-window';
+  protected readonly ownedWindowPrototypeEnabled =
+    this.prototypeRenderer === 'owned-window';
+  protected readonly prototypeRendererLabel = this.ownedWindowPrototypeEnabled
+    ? 'owned-window'
+    : 'full-dom';
 
   /** Messages to render (from ChatStore.projection().messages). */
   readonly messages = input.required<readonly ChatMessage[]>();
@@ -213,6 +222,8 @@ export class TranscriptViewportComponent {
    * strategy hasn't measured enough items yet. Matches the CSS-based minimum
    * height of a single-line message row. */
   private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
+  private static readonly OWNED_WINDOW_ROW_COUNT = 64;
+  private static readonly OWNED_WINDOW_ROW_ESTIMATE_PX = 120;
 
   protected readonly isAtBottom = signal(true);
   protected readonly followingTail = signal(true);
@@ -267,6 +278,35 @@ export class TranscriptViewportComponent {
    */
   protected readonly renderMessages = signal<readonly ChatMessage[]>([]);
   protected readonly renderRows = signal<readonly TranscriptVirtualRow[]>([]);
+  private readonly ownedWindowStart = signal(0);
+  protected readonly prototypeRenderRows = computed(() => {
+    const rows = this.renderRows();
+    if (!this.ownedWindowPrototypeEnabled) return rows;
+    const start = Math.min(this.ownedWindowStart(), rows.length);
+    return rows.slice(
+      start,
+      Math.min(
+        rows.length,
+        start + TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
+      ),
+    );
+  });
+  protected readonly ownedWindowTopSpacerPx = computed(() =>
+    this.ownedWindowPrototypeEnabled
+      ? this.ownedWindowStart() *
+        TranscriptViewportComponent.OWNED_WINDOW_ROW_ESTIMATE_PX
+      : 0,
+  );
+  protected readonly ownedWindowBottomSpacerPx = computed(() => {
+    if (!this.ownedWindowPrototypeEnabled) return 0;
+    const remaining = Math.max(
+      0,
+      this.renderRows().length -
+        this.ownedWindowStart() -
+        TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
+    );
+    return remaining * TranscriptViewportComponent.OWNED_WINDOW_ROW_ESTIMATE_PX;
+  });
   protected readonly transcriptTransitioning = signal(false);
   protected readonly searchQuery = signal('');
   protected readonly searchRole = signal<MessageRole | 'all'>('all');
@@ -742,16 +782,81 @@ export class TranscriptViewportComponent {
     presentationChanged?: boolean,
   ): readonly TranscriptVirtualRow[] {
     const previousMessages = this.renderMessages();
+    const previousRows = this.renderRows();
+    const previousWindowFirstId = this.ownedWindowPrototypeEnabled
+      ? previousRows[this.ownedWindowStart()]?.id
+      : undefined;
     const changed =
       presentationChanged ??
       transcriptPresentationChanged(previousMessages, messages);
     if (!changed) {
       return this.renderRows();
     }
-    const rows = projectTranscriptVirtualRows(messages, this.renderRows());
+    const rows = projectTranscriptVirtualRows(messages, previousRows);
     this.renderMessages.set(messages);
     this.renderRows.set(rows);
+    if (this.ownedWindowPrototypeEnabled) {
+      const retainedStart =
+        previousWindowFirstId === undefined
+          ? -1
+          : rows.findIndex((row) => row.id === previousWindowFirstId);
+      if (this.followingTail() || this.transcriptTransitioning()) {
+        this.placeOwnedWindowAtTail();
+      } else if (retainedStart >= 0) {
+        this.ownedWindowStart.set(retainedStart);
+      } else {
+        // Codex reconciliation can replace every projected row id without a
+        // conversation switch. Preserve the paused logical slice by index in
+        // that case; never seize the tail merely because identities changed.
+        this.ownedWindowStart.set(
+          Math.min(
+            this.ownedWindowStart(),
+            Math.max(
+              0,
+              rows.length - TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
+            ),
+          ),
+        );
+      }
+    }
     return rows;
+  }
+
+  private placeOwnedWindowAtTail(): void {
+    const start = Math.max(
+      0,
+      this.renderRows().length -
+        TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
+    );
+    this.ownedWindowStart.set(start);
+  }
+
+  private placeOwnedWindowAround(index: number): void {
+    const rows = this.renderRows();
+    const half = Math.floor(
+      TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT / 2,
+    );
+    const maxStart = Math.max(
+      0,
+      rows.length - TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT,
+    );
+    this.ownedWindowStart.set(Math.max(0, Math.min(maxStart, index - half)));
+  }
+
+  private syncOwnedWindowToScrollPosition(): void {
+    if (!this.ownedWindowPrototypeEnabled || this.renderRows().length === 0) {
+      return;
+    }
+    const host = this.scrollHost();
+    const maximum = Math.max(1, host.scrollHeight - host.clientHeight);
+    const fraction = Math.max(0, Math.min(1, host.scrollTop / maximum));
+    const index = Math.round(fraction * (this.renderRows().length - 1));
+    const currentStart = this.ownedWindowStart();
+    const currentEnd =
+      currentStart + TranscriptViewportComponent.OWNED_WINDOW_ROW_COUNT;
+    if (index < currentStart + 16 || index >= currentEnd - 16) {
+      this.placeOwnedWindowAround(index);
+    }
   }
 
   /** Stable CDK identity prevents a growing Codex turn from recreating its row. */
@@ -764,6 +869,7 @@ export class TranscriptViewportComponent {
 
   /** Called on viewport scroll to track whether the user is at the bottom. */
   protected onScroll(): void {
+    this.syncOwnedWindowToScrollPosition();
     this.recomputeBottomState();
     if (
       this.resumeFollowOnUserScrollToTail &&
@@ -827,6 +933,24 @@ export class TranscriptViewportComponent {
     if (target === undefined) return;
     event.preventDefault();
     this.pauseTailFollow();
+    if (event.key === 'End' && this.ownedWindowPrototypeEnabled) {
+      this.placeOwnedWindowAtTail();
+      this.afterNextRender(() => {
+        this.writeScrollPosition(
+          'seek-rendered-message',
+          host.scrollHeight,
+          null,
+          () => {
+            host
+              .querySelector<HTMLElement>('.rv-transcript__tail-anchor')
+              ?.scrollIntoView({ block: 'end' });
+          },
+          'user-input',
+        );
+        this.recomputeBottomState();
+      });
+      return;
+    }
     this.writeScrollPosition(
       'seek-rendered-message',
       target,
@@ -993,6 +1117,7 @@ export class TranscriptViewportComponent {
     reason: TranscriptScrollWriteReason,
     afterRender = false,
   ): void {
+    if (this.ownedWindowPrototypeEnabled) this.placeOwnedWindowAtTail();
     if (afterRender) {
       if (this.fullDomRenderFollowPending) return;
       const generation = this.tailFollowGeneration;
@@ -1238,6 +1363,9 @@ export class TranscriptViewportComponent {
     this.cancelPendingSeeks();
     const index = this.virtualRowIndexForMessage(messageId);
     if (index >= 0) {
+      if (this.ownedWindowPrototypeEnabled) {
+        this.placeOwnedWindowAround(index);
+      }
       this.afterNextRender(() => {
         if (this.fullDomPrototypeEnabled) {
           const target = this.findRenderedMessageElement(messageId);

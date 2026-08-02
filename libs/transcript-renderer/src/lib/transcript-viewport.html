@@ -135,8 +135,9 @@
   #fullDomViewport
   class="rv-transcript rv-transcript--full-dom"
   [class.rv-transcript--full-dom-following]="followingTail()"
+  [class.rv-transcript--owned-window]="ownedWindowPrototypeEnabled"
   data-testid="transcript-viewport"
-  data-transcript-renderer="full-dom"
+  [attr.data-transcript-renderer]="prototypeRendererLabel"
   tabindex="0"
   [attr.data-tail-following]="followingTail()"
   (scroll)="onScroll()"
@@ -148,7 +149,13 @@
   (keydown)="onKeyboardScroll($event)"
 >
   <div class="rv-transcript__full-content">
-    @for (row of renderRows(); track row.id) {
+    @if (ownedWindowPrototypeEnabled) {
+    <div
+      class="rv-transcript__window-spacer"
+      aria-hidden="true"
+      [style.height.px]="ownedWindowTopSpacerPx()"
+    ></div>
+    } @for (row of prototypeRenderRows(); track row.id) {
     <div
       class="rv-transcript__virtual-row"
       data-testid="transcript-virtual-row"
@@ -176,6 +183,12 @@
       </div>
       }
     </div>
+    } @if (ownedWindowPrototypeEnabled) {
+    <div
+      class="rv-transcript__window-spacer"
+      aria-hidden="true"
+      [style.height.px]="ownedWindowBottomSpacerPx()"
+    ></div>
     }
     <div class="rv-transcript__tail-anchor" aria-hidden="true"></div>
   </div>

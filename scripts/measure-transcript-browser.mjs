@@ -97,8 +97,8 @@ async function measureDepth(browserInstance, depth) {
 
   const loadStarted = performance.now();
   const applicationUrl = new URL(baseUrl);
-  if (renderer === 'full-dom') {
-    applicationUrl.searchParams.set('__rvTranscriptRenderer', 'full-dom');
+  if (renderer === 'full-dom' || renderer === 'owned-window') {
+    applicationUrl.searchParams.set('__rvTranscriptRenderer', renderer);
   }
   await page.goto(applicationUrl.href);
   const primarySessionId = `scale-${depth}`;
@@ -122,13 +122,24 @@ async function measureDepth(browserInstance, depth) {
     const transcript = document.querySelector(
       '[data-testid="transcript-viewport"]',
     );
+    const rendered = Array.from(
+      transcript?.querySelectorAll('[data-testid="transcript-item"]') ?? [],
+    );
+    const spacers = Array.from(
+      transcript?.querySelectorAll('.rv-transcript__window-spacer') ?? [],
+    );
     const memory = performance.memory;
     return {
       documentNodes: document.getElementsByTagName('*').length,
       transcriptNodes: transcript?.getElementsByTagName('*').length ?? 0,
-      renderedMessages:
-        transcript?.querySelectorAll('[data-testid="transcript-item"]')
-          .length ?? 0,
+      renderedMessages: rendered.length,
+      firstRenderedMessageId:
+        rendered.at(0)?.getAttribute('data-message-id') ?? null,
+      lastRenderedMessageId:
+        rendered.at(-1)?.getAttribute('data-message-id') ?? null,
+      windowSpacerHeights: spacers.map(
+        (spacer) => spacer.getBoundingClientRect().height,
+      ),
       usedJsHeapBytes:
         typeof memory?.usedJSHeapSize === 'number'
           ? memory.usedJSHeapSize

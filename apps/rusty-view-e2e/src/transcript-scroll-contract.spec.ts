@@ -45,7 +45,10 @@ type ContractCheck = {
 
 type ContractReport = {
   readonly schemaVersion: 1;
-  readonly implementation: 'current-post-churn-fix' | 'option-b-full-dom';
+  readonly implementation:
+    | 'current-post-churn-fix'
+    | 'option-b-full-dom'
+    | 'owned-pin-window';
   readonly checks: readonly ContractCheck[];
 };
 
@@ -205,6 +208,15 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
   });
 }
 
+async function requireOwnedWindowEndAtBottom(
+  viewport: Locator,
+): Promise<void> {
+  if (process.env['RV_TRANSCRIPT_RENDERER'] !== 'owned-window') return;
+  await expect
+    .poll(async () => (await semanticFrame(viewport)).bottomError)
+    .toBeLessThanOrEqual(1);
+}
+
 async function captureSemanticFrames(
   viewport: Locator,
   count: number,
@@ -356,7 +368,9 @@ async function attachReport(
     implementation:
       process.env['RV_TRANSCRIPT_RENDERER'] === 'full-dom'
         ? 'option-b-full-dom'
-        : 'current-post-churn-fix',
+        : process.env['RV_TRANSCRIPT_RENDERER'] === 'owned-window'
+          ? 'owned-pin-window'
+          : 'current-post-churn-fix',
     checks,
   };
   await testInfo.attach(name, {
@@ -665,9 +679,10 @@ async function installScrollContractFixture(
 }
 
 async function openContractSession(page: Page): Promise<Locator> {
+  const renderer = process.env['RV_TRANSCRIPT_RENDERER'];
   await page.goto(
-    process.env['RV_TRANSCRIPT_RENDERER'] === 'full-dom'
-      ? '/?__rvTranscriptRenderer=full-dom'
+    renderer === 'full-dom' || renderer === 'owned-window'
+      ? `/?__rvTranscriptRenderer=${renderer}`
       : '/',
   );
   await page
@@ -1007,6 +1022,7 @@ test('scores paused anchoring, write ownership, and user input modes semanticall
   await page.keyboard.press('Home');
   const homeFrame = await semanticFrame(viewport);
   await page.keyboard.press('End');
+  await requireOwnedWindowEndAtBottom(viewport);
   const endFrame = await semanticFrame(viewport);
   const inputWrites = await applicationWrites(page);
   inputMeasurements['applicationWritesBeforeResume'] = inputWrites.length;

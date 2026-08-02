@@ -62,9 +62,20 @@
   width: 100%;
 }
 
+.rv-transcript__window-spacer {
+  contain: strict;
+  width: 1px;
+  pointer-events: none;
+}
+
 .rv-transcript--full-dom .rv-transcript__item {
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;
+}
+
+.rv-transcript--owned-window .rv-transcript__item {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
 .rv-transcript__tail-anchor {
