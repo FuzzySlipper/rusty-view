@@ -677,6 +677,14 @@ async function openContractSession(page: Page): Promise<Locator> {
   await expect
     .poll(() => page.getByTestId('transcript-item').count())
     .toBeGreaterThan(0);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    for (let frame = 0; frame < 4; frame += 1) {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve()),
+      );
+    }
+  });
   await expect
     .poll(() =>
       page.evaluate(

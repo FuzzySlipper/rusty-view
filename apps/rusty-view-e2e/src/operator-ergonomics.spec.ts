@@ -163,7 +163,7 @@ test('scroll-to-latest control recovers an overflowing transcript', async ({
         };
       }),
     )
-    .toEqual({ overflowAnchor: 'auto', scrollBehavior: 'auto' });
+    .toEqual({ overflowAnchor: 'none', scrollBehavior: 'auto' });
   await expect
     .poll(() =>
       transcript.evaluate(
