@@ -21,9 +21,9 @@ pass/fail result instead of being weakened to make the current renderer green.
 |---|---|---|
 | Following once per frame | Pass | 72 frames; maximum real bottom error 0px; no reverse-motion frame |
 | Idle identical projection | Pass | zero application writes; semantic `scrollTop` was byte-identical before/after (8648px in the final recorded run) |
-| First/middle/last navigation and search | Pass | targets reached in 2, 7, and 2 frames in the final run (7–10 frames for the middle target across repeats); at most 13 semantic messages rendered; search reached the streamed completion |
+| First/middle/last navigation and search | Pass | targets became viewport-visible in 2, 7, and 2 frames in the final run (7–10 frames for the middle target across repeats); at most 13 semantic messages rendered; search made the streamed completion visible. Rendered overscan alone does not satisfy this check. |
 | Session replacement | Pass | first new-session row at frame 4, tail at frame 5, no empty frame, no inherited old-session row; budget 18 frames |
-| Paused keyed anchor | **Fail** | the first fully visible keyed message changed during tail growth, new-message arrival, prepend, reasoning expansion, font/code reflow, and delayed image decode |
+| Paused keyed anchor | **Fail** | every animation-frame sample is retained and scored against the same keyed anchor during tail growth, new-message arrival, prepend, reasoning expansion, font/code reflow, and delayed image decode; transient drift cannot recover before the final frame and pass |
 | Paused application-write ownership | **Fail** | three to four writes after user pause across repeated runs: `seek-estimated-row`, `prepend-anchor-restore`, `seek-rendered-message`, and occasionally `paused-offset-hold` |
 | Input modes | **Fail** | wheel/trackpad-style inertia, touch plus post-touch momentum, scrollbar drag, and Latest behaved; PageUp/Home/End did not move the semantic viewport because it is not keyboard-focusable; pre-resume input generated zero application writes |
 
@@ -32,7 +32,9 @@ The two JSON attachments are named
 `transcript-scroll-contract-paused.json`. Each uses schema version 1, identifies
 the scored implementation, and retains per-check measurements including frame
 numbers, bottom error, rendered semantic ids/counts, anchor drift, and
-application-write reasons. Alternative renderers can run the same file and
+application-write reasons. Anchor measurements retain every sampled frame and
+their maximum/violating drift; navigation records actual viewport visibility,
+not only virtualizer overscan. Alternative renderers can run the same file and
 compare the same fields without preserving any CDK implementation detail.
 
 The replay covers:

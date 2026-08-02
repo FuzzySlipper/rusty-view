@@ -29,6 +29,8 @@ type SemanticFrame = {
   readonly clientHeight: number;
   readonly bottomError: number;
   readonly renderedMessageIds: readonly string[];
+  readonly visibleMessageIds: readonly string[];
+  readonly messageTops: Readonly<Record<string, number>>;
   readonly firstFullyVisibleId: string | null;
   readonly firstFullyVisibleTop: number | null;
   readonly lastFullyVisibleId: string | null;
@@ -173,6 +175,11 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
         row.bounds.top >= bounds.top - 1 &&
         row.bounds.bottom <= bounds.bottom + 1,
     );
+    const visible = rows.filter(
+      (row) =>
+        row.bounds.bottom > bounds.top + 1 &&
+        row.bounds.top < bounds.bottom - 1,
+    );
     return {
       frame: 0,
       scrollTop: element.scrollTop,
@@ -183,6 +190,10 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
         element.scrollHeight - element.scrollTop - element.clientHeight,
       ),
       renderedMessageIds: rows.map((row) => row.id),
+      visibleMessageIds: visible.map((row) => row.id),
+      messageTops: Object.fromEntries(
+        rows.map((row) => [row.id, row.bounds.top - bounds.top]),
+      ),
       firstFullyVisibleId: fullyVisible.at(0)?.id ?? null,
       firstFullyVisibleTop:
         fullyVisible.length === 0
@@ -217,6 +228,11 @@ async function captureSemanticFrames(
           row.bounds.top >= bounds.top - 1 &&
           row.bounds.bottom <= bounds.bottom + 1,
       );
+      const visible = rows.filter(
+        (row) =>
+          row.bounds.bottom > bounds.top + 1 &&
+          row.bounds.top < bounds.bottom - 1,
+      );
       samples.push({
         frame,
         scrollTop: element.scrollTop,
@@ -227,6 +243,10 @@ async function captureSemanticFrames(
           element.scrollHeight - element.scrollTop - element.clientHeight,
         ),
         renderedMessageIds: rows.map((row) => row.id),
+        visibleMessageIds: visible.map((row) => row.id),
+        messageTops: Object.fromEntries(
+          rows.map((row) => [row.id, row.bounds.top - bounds.top]),
+        ),
         firstFullyVisibleId: fullyVisible.at(0)?.id ?? null,
         firstFullyVisibleTop:
           fullyVisible.length === 0
@@ -256,19 +276,72 @@ function reverseMotionFrames(frames: readonly SemanticFrame[]): number[] {
   return reversed;
 }
 
-function anchorDrift(
+function targetIsVisible(frame: SemanticFrame, messageId: string): boolean {
+  return frame.visibleMessageIds.includes(messageId);
+}
+
+type AnchorDriftScore = {
+  readonly sampleCount: number;
+  readonly sameIdEveryFrame: boolean;
+  readonly maxPixels: number | null;
+  readonly violations: readonly {
+    readonly frame: number;
+    readonly reason: 'anchor-not-rendered' | 'drift';
+    readonly pixels: number | null;
+  }[];
+};
+
+function scoreAnchorDrift(
   baseline: SemanticFrame,
-  after: SemanticFrame,
-): { readonly sameId: boolean; readonly pixels: number | null } {
+  samples: readonly SemanticFrame[],
+): AnchorDriftScore {
+  const anchorId = baseline.firstFullyVisibleId;
+  const baselineTop =
+    anchorId === null ? undefined : baseline.messageTops[anchorId];
+  const measurements = samples.map((sample) => {
+    const sampleTop =
+      anchorId === null ? undefined : sample.messageTops[anchorId];
+    return {
+      frame: sample.frame,
+      rendered: sampleTop !== undefined,
+      pixels:
+        baselineTop === undefined || sampleTop === undefined
+          ? null
+          : Math.abs(sampleTop - baselineTop),
+    };
+  });
+  const violations = measurements.flatMap((measurement) => {
+    if (!measurement.rendered) {
+      return [
+        {
+          frame: measurement.frame,
+          reason: 'anchor-not-rendered' as const,
+          pixels: null,
+        },
+      ];
+    }
+    if (measurement.pixels !== null && measurement.pixels > 1) {
+      return [
+        {
+          frame: measurement.frame,
+          reason: 'drift' as const,
+          pixels: measurement.pixels,
+        },
+      ];
+    }
+    return [];
+  });
+  const pixelMeasurements = measurements.flatMap((measurement) =>
+    measurement.pixels === null ? [] : [measurement.pixels],
+  );
   return {
-    sameId:
-      baseline.firstFullyVisibleId !== null &&
-      baseline.firstFullyVisibleId === after.firstFullyVisibleId,
-    pixels:
-      baseline.firstFullyVisibleTop === null ||
-      after.firstFullyVisibleTop === null
-        ? null
-        : Math.abs(after.firstFullyVisibleTop - baseline.firstFullyVisibleTop),
+    sampleCount: samples.length,
+    sameIdEveryFrame:
+      anchorId !== null &&
+      measurements.every((measurement) => measurement.rendered),
+    maxPixels:
+      pixelMeasurements.length === 0 ? null : Math.max(...pixelMeasurements),
+    violations,
   };
 }
 
@@ -291,6 +364,42 @@ async function attachReport(
     ...new Set(report.checks.map((check) => check.id)),
   ]);
 }
+
+test('semantic scoring rejects recovered drift and overscan-only targets', () => {
+  const frame = (
+    frameNumber: number,
+    anchorTop: number,
+    visibleMessageIds: readonly string[] = ['anchor'],
+  ): SemanticFrame => ({
+    frame: frameNumber,
+    scrollTop: 100,
+    scrollHeight: 1_000,
+    clientHeight: 400,
+    bottomError: 500,
+    renderedMessageIds: ['anchor', 'overscan-target'],
+    visibleMessageIds,
+    messageTops: { anchor: anchorTop, 'overscan-target': 500 },
+    firstFullyVisibleId: 'anchor',
+    firstFullyVisibleTop: anchorTop,
+    lastFullyVisibleId: 'anchor',
+  });
+  const baseline = frame(0, 20);
+  const recovered = scoreAnchorDrift(baseline, [
+    frame(1, 20),
+    frame(2, 28),
+    frame(3, 20),
+  ]);
+
+  expect(recovered.maxPixels).toBe(8);
+  expect(recovered.violations.map((violation) => violation.frame)).toEqual([2]);
+  expect(targetIsVisible(baseline, 'overscan-target')).toBe(false);
+  expect(
+    targetIsVisible(
+      frame(1, 20, ['anchor', 'overscan-target']),
+      'overscan-target',
+    ),
+  ).toBe(true);
+});
 
 interface ScrollContractFixture {
   appendReplayStep(step: number): string;
@@ -624,16 +733,14 @@ test('scores following, idle, navigation, and session replacement semantically',
   ] as const) {
     await jumpToMessage(page, id);
     const frames = await captureSemanticFrames(viewport, MAX_NAVIGATION_FRAMES);
-    const targetFrame = frames.find((frame) =>
-      frame.renderedMessageIds.includes(id),
-    );
+    const targetFrame = frames.find((frame) => targetIsVisible(frame, id));
     navigation.push({
       id,
       frameToTarget: targetFrame?.frame ?? null,
       maxRenderedCount: Math.max(
         ...frames.map((frame) => frame.renderedMessageIds.length),
       ),
-      targetRendered: targetFrame !== undefined,
+      targetVisible: targetFrame !== undefined,
     });
   }
 
@@ -646,7 +753,7 @@ test('scores following, idle, navigation, and session replacement semantically',
     MAX_NAVIGATION_FRAMES,
   );
   const searchTargetReached = searchFrames.some((frame) =>
-    frame.renderedMessageIds.includes('asst:scroll-contract-turn'),
+    targetIsVisible(frame, 'asst:scroll-contract-turn'),
   );
   const searchStatus = await page
     .getByTestId('transcript-search-status')
@@ -706,7 +813,7 @@ test('scores following, idle, navigation, and session replacement semantically',
       pass:
         navigation.every(
           (entry) =>
-            entry['targetRendered'] === true &&
+            entry['targetVisible'] === true &&
             Number(entry['maxRenderedCount']) <=
               MAX_NAVIGATION_RENDERED_MESSAGES,
         ) && searchTargetReached,
@@ -756,59 +863,63 @@ test('scores paused anchoring, write ownership, and user input modes semanticall
     element.dispatchEvent(new Event('scroll'));
   });
   await expect(viewport).toHaveAttribute('data-tail-following', 'false');
+  fixture.appendImage();
+  await testApi(page, 'refresh');
+  await expect(page.getByAltText('contract-image.svg')).toHaveCount(1);
   await testApi(page, 'clear');
   const anchorBefore = await semanticFrame(viewport);
   const driftMeasurements: Record<string, unknown> = {};
 
+  const imageFramesPromise = captureSemanticFrames(viewport, 24);
+  fixture.releaseImage();
+  await expect(page.getByAltText('contract-image.svg')).toBeVisible();
+  driftMeasurements['imageDecode'] = scoreAnchorDrift(
+    anchorBefore,
+    await imageFramesPromise,
+  );
+
+  const tailGrowthFrames = captureSemanticFrames(viewport, 24);
   fixture.appendPausedTailGrowth();
   await testApi(page, 'refresh');
-  driftMeasurements['tailGrowth'] = anchorDrift(
+  driftMeasurements['tailGrowth'] = scoreAnchorDrift(
     anchorBefore,
-    await semanticFrame(viewport),
+    await tailGrowthFrames,
   );
 
+  const newMessageFrames = captureSemanticFrames(viewport, 24);
   fixture.appendNewMessage();
   await testApi(page, 'refresh');
-  driftMeasurements['newMessage'] = anchorDrift(
+  driftMeasurements['newMessage'] = scoreAnchorDrift(
     anchorBefore,
-    await semanticFrame(viewport),
+    await newMessageFrames,
   );
 
+  const prependFrames = captureSemanticFrames(viewport, 24);
   fixture.prependHistory();
   await testApi(page, 'refresh');
-  driftMeasurements['prepend'] = anchorDrift(
+  driftMeasurements['prepend'] = scoreAnchorDrift(
     anchorBefore,
-    await semanticFrame(viewport),
+    await prependFrames,
   );
 
   await page.locator('.rv-top-menu__item', { hasText: 'Options' }).click();
+  const reasoningFrames = captureSemanticFrames(viewport, 24);
   await page.getByTestId('appearance-auto-expand-reasoning').check();
-  const reasoningFrames = await captureSemanticFrames(viewport, 4);
-  driftMeasurements['reasoningExpansion'] = anchorDrift(
+  driftMeasurements['reasoningExpansion'] = scoreAnchorDrift(
     anchorBefore,
-    reasoningFrames.at(-1) ?? (await semanticFrame(viewport)),
+    await reasoningFrames,
   );
+  const fontFrames = captureSemanticFrames(viewport, 24);
   await page.getByLabel('Font Scale').evaluate((input: HTMLInputElement) => {
     input.value = '1.1';
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  const fontFrames = await captureSemanticFrames(viewport, 4);
-  driftMeasurements['fontAndCodeReflow'] = anchorDrift(
+  driftMeasurements['fontAndCodeReflow'] = scoreAnchorDrift(
     anchorBefore,
-    fontFrames.at(-1) ?? (await semanticFrame(viewport)),
+    await fontFrames,
   );
   await page.locator('.rv-options__close').click();
 
-  fixture.appendImage();
-  await testApi(page, 'refresh');
-  const imageFramesPromise = captureSemanticFrames(viewport, 20);
-  fixture.releaseImage();
-  await expect(page.getByAltText('contract-image.svg')).toBeVisible();
-  await imageFramesPromise;
-  driftMeasurements['imageDecode'] = anchorDrift(
-    anchorBefore,
-    await semanticFrame(viewport),
-  );
   const pausedWrites = await applicationWrites(page);
 
   const inputMeasurements: Record<string, unknown> = {};
@@ -902,15 +1013,15 @@ test('scores paused anchoring, write ownership, and user input modes semanticall
   inputMeasurements['latestResumed'] =
     (await viewport.getAttribute('data-tail-following')) === 'true';
 
-  const drifts = Object.values(driftMeasurements) as Array<{
-    sameId: boolean;
-    pixels: number | null;
-  }>;
+  const drifts = Object.values(driftMeasurements) as AnchorDriftScore[];
   await attachReport(testInfo, 'transcript-scroll-contract-paused.json', [
     {
       id: 'paused-keyed-anchor',
       pass: drifts.every(
-        (drift) => drift.sameId && drift.pixels !== null && drift.pixels <= 1,
+        (drift) =>
+          drift.sameIdEveryFrame &&
+          drift.maxPixels !== null &&
+          drift.violations.length === 0,
       ),
       measurements: {
         anchorId: anchorBefore.firstFullyVisibleId,
