@@ -224,6 +224,7 @@ export class TranscriptViewportComponent {
   private static readonly DEFAULT_ITEM_HEIGHT_PX = 50;
   private static readonly OWNED_WINDOW_ROW_COUNT = 64;
   private static readonly OWNED_WINDOW_ROW_ESTIMATE_PX = 120;
+  private static readonly OWNED_WINDOW_ADMISSION_FRAME_BUDGET = 8;
 
   protected readonly isAtBottom = signal(true);
   protected readonly followingTail = signal(true);
@@ -258,6 +259,9 @@ export class TranscriptViewportComponent {
   private transcriptTransitionFrame: number | undefined;
   private tailGeometryFrame: number | undefined;
   private fullDomFollowFrame: number | undefined;
+  private ownedWindowEndFrame: number | undefined;
+  private ownedWindowEndGeneration = 0;
+  private ownedWindowEndAdmissionPending = false;
   private fullDomRenderFollowPending = false;
   private scrollDiagnosticsEnabled = false;
   private scrollWriteSequence = 0;
@@ -433,6 +437,9 @@ export class TranscriptViewportComponent {
       }
       if (this.fullDomFollowFrame !== undefined) {
         cancelAnimationFrame(this.fullDomFollowFrame);
+      }
+      if (this.ownedWindowEndFrame !== undefined) {
+        cancelAnimationFrame(this.ownedWindowEndFrame);
       }
     });
 
@@ -844,7 +851,11 @@ export class TranscriptViewportComponent {
   }
 
   private syncOwnedWindowToScrollPosition(): void {
-    if (!this.ownedWindowPrototypeEnabled || this.renderRows().length === 0) {
+    if (
+      !this.ownedWindowPrototypeEnabled ||
+      this.ownedWindowEndAdmissionPending ||
+      this.renderRows().length === 0
+    ) {
       return;
     }
     const host = this.scrollHost();
@@ -883,6 +894,7 @@ export class TranscriptViewportComponent {
   /** Wheel direction records explicit user intent independently from the
    * broader visual "near bottom" threshold. */
   protected onWheel(event: WheelEvent): void {
+    this.cancelOwnedWindowEndAdmission();
     this.cancelPausedScrollHold();
     if (event.deltaY < 0) {
       this.resumeFollowOnUserScrollToTail = false;
@@ -894,6 +906,7 @@ export class TranscriptViewportComponent {
 
   /** Touch scrolling always begins under user control. */
   protected onTouchStart(): void {
+    this.cancelOwnedWindowEndAdmission();
     this.cancelPausedScrollHold();
     this.touchScrollActive = true;
     this.resumeFollowOnUserScrollToTail = false;
@@ -911,6 +924,7 @@ export class TranscriptViewportComponent {
     const bounds = host.getBoundingClientRect();
     const scrollbarWidth = Math.max(16, host.offsetWidth - host.clientWidth);
     if (event.clientX >= bounds.right - scrollbarWidth) {
+      this.cancelOwnedWindowEndAdmission();
       this.cancelPausedScrollHold();
       this.scrollbarDragActive = true;
       this.resumeFollowOnUserScrollToTail = false;
@@ -920,6 +934,7 @@ export class TranscriptViewportComponent {
 
   protected onKeyboardScroll(event: KeyboardEvent): void {
     if (!this.fullDomPrototypeEnabled) return;
+    this.cancelOwnedWindowEndAdmission();
     const host = this.scrollHost();
     let target: number | undefined;
     if (event.key === 'Home') target = 0;
@@ -934,20 +949,11 @@ export class TranscriptViewportComponent {
     event.preventDefault();
     this.pauseTailFollow();
     if (event.key === 'End' && this.ownedWindowPrototypeEnabled) {
+      const generation = this.ownedWindowEndGeneration;
+      this.ownedWindowEndAdmissionPending = true;
       this.placeOwnedWindowAtTail();
       this.afterNextRender(() => {
-        this.writeScrollPosition(
-          'seek-rendered-message',
-          host.scrollHeight,
-          null,
-          () => {
-            host
-              .querySelector<HTMLElement>('.rv-transcript__tail-anchor')
-              ?.scrollIntoView({ block: 'end' });
-          },
-          'user-input',
-        );
-        this.recomputeBottomState();
+        this.scrollOwnedWindowToEndAfterAdmission(host, generation, 0, 0);
       });
       return;
     }
@@ -961,6 +967,67 @@ export class TranscriptViewportComponent {
       'user-input',
     );
     this.recomputeBottomState();
+  }
+
+  /** Wait for the tail window to be painted before performing the one
+   * user-authority End write. Writing against the outgoing window lets native
+   * anchoring restore its old position after the new spacer geometry arrives. */
+  private scrollOwnedWindowToEndAfterAdmission(
+    host: HTMLElement,
+    generation: number,
+    admittedFrames: number,
+    attempt: number,
+  ): void {
+    this.ownedWindowEndFrame = requestAnimationFrame(() => {
+      this.ownedWindowEndFrame = undefined;
+      if (generation !== this.ownedWindowEndGeneration) return;
+
+      const expectedTailId = this.renderRows().at(-1)?.id;
+      const renderedTailId = Array.from(
+        host.querySelectorAll<HTMLElement>('[data-virtual-row-id]'),
+      ).at(-1)?.dataset['virtualRowId'];
+      const nextAdmittedFrames =
+        expectedTailId !== undefined && renderedTailId === expectedTailId
+          ? admittedFrames + 1
+          : 0;
+      if (
+        nextAdmittedFrames < 2 &&
+        attempt + 1 <
+          TranscriptViewportComponent.OWNED_WINDOW_ADMISSION_FRAME_BUDGET
+      ) {
+        this.scrollOwnedWindowToEndAfterAdmission(
+          host,
+          generation,
+          nextAdmittedFrames,
+          attempt + 1,
+        );
+        return;
+      }
+      if (nextAdmittedFrames < 2) {
+        this.ownedWindowEndAdmissionPending = false;
+        return;
+      }
+
+      this.writeScrollPosition(
+        'seek-rendered-message',
+        host.scrollHeight,
+        null,
+        () => {
+          host.scrollTop = host.scrollHeight;
+        },
+        'user-input',
+      );
+      this.ownedWindowEndAdmissionPending = false;
+      this.recomputeBottomState();
+    });
+  }
+
+  private cancelOwnedWindowEndAdmission(): void {
+    this.ownedWindowEndGeneration += 1;
+    this.ownedWindowEndAdmissionPending = false;
+    if (this.ownedWindowEndFrame === undefined) return;
+    cancelAnimationFrame(this.ownedWindowEndFrame);
+    this.ownedWindowEndFrame = undefined;
   }
 
   @HostListener('document:pointerup')
