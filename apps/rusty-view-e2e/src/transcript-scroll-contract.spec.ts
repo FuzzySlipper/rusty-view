@@ -208,9 +208,7 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
   });
 }
 
-async function requireOwnedWindowEndAtBottom(
-  viewport: Locator,
-): Promise<void> {
+async function requireOwnedWindowEndAtBottom(viewport: Locator): Promise<void> {
   if (process.env['RV_TRANSCRIPT_RENDERER'] !== 'owned-window') return;
   await expect
     .poll(async () => (await semanticFrame(viewport)).bottomError)
