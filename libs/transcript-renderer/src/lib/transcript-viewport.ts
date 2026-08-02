@@ -58,6 +58,41 @@ export interface TranscriptVirtualRow {
   readonly messages: readonly ChatMessage[];
 }
 
+export type TranscriptScrollWriteReason =
+  | 'explicit-latest'
+  | 'tail-follow-render'
+  | 'tail-follow-settle'
+  | 'tail-geometry-mutation'
+  | 'tail-geometry-rendered-resize'
+  | 'tail-geometry-estimated-resize'
+  | 'tail-geometry-frame'
+  | 'estimator-reset'
+  | 'paused-offset-hold'
+  | 'seek-rendered-message'
+  | 'seek-first-row'
+  | 'seek-estimated-row'
+  | 'seek-tail'
+  | 'geometry-reconcile-streaming'
+  | 'geometry-reconcile-settled'
+  | 'prepend-anchor-restore';
+
+export interface TranscriptScrollWriteTrace {
+  readonly sequence: number;
+  readonly frame: number;
+  readonly timestampMs: number;
+  readonly reason: TranscriptScrollWriteReason;
+  readonly requestedOffset: number | null;
+  readonly targetMessageId: string | null;
+  readonly offsetBefore: number;
+  readonly offsetAfter: number;
+  readonly scrollHeight: number;
+  readonly clientHeight: number;
+  readonly followingTail: boolean;
+  readonly atBottom: boolean;
+  readonly transcriptKey: string | null;
+  readonly authority: 'application';
+}
+
 /**
  * Virtualized transcript viewport.
  *
@@ -200,6 +235,13 @@ export class TranscriptViewportComponent {
   private touchScrollActive = false;
   private transcriptTransitionFrame: number | undefined;
   private tailGeometryFrame: number | undefined;
+  private scrollDiagnosticsEnabled = false;
+  private scrollWriteSequence = 0;
+  private scrollWriteFrame = 0;
+  private scrollWriteFrameOpen = false;
+  private readonly scrollWriteTrace: TranscriptScrollWriteTrace[] = [];
+
+  private static readonly MAX_SCROLL_TRACE_ENTRIES = 500;
 
   /**
    * The data actually rendered by `*cdkVirtualFor`. Distinct from the `messages`
@@ -476,7 +518,7 @@ export class TranscriptViewportComponent {
           ) {
             return;
           }
-          this.followMaterializedTailGeometryNow();
+          this.followMaterializedTailGeometryNow('tail-geometry-mutation');
           this.scheduleMaterializedTailGeometryFollow();
         });
         if (contentWrapper !== null) {
@@ -673,13 +715,90 @@ export class TranscriptViewportComponent {
     );
   }
 
+  /** Enable the bounded, local-only write trace used by browser certification. */
+  setScrollDiagnosticsEnabled(enabled: boolean): void {
+    this.scrollDiagnosticsEnabled = enabled;
+    if (enabled) this.clearScrollWriteTrace();
+  }
+
+  clearScrollWriteTrace(): void {
+    this.scrollWriteTrace.length = 0;
+    this.scrollWriteSequence = 0;
+  }
+
+  getScrollWriteTrace(): readonly TranscriptScrollWriteTrace[] {
+    return this.scrollWriteTrace.map((entry) => ({ ...entry }));
+  }
+
+  private writeScrollPosition(
+    reason: TranscriptScrollWriteReason,
+    requestedOffset: number | null,
+    targetMessageId: string | null,
+    write: () => void,
+  ): void {
+    if (!this.scrollDiagnosticsEnabled) {
+      write();
+      return;
+    }
+
+    const host = this.viewport().elementRef.nativeElement;
+    const offsetBefore = host.scrollTop;
+    const timestampMs =
+      typeof performance === 'undefined' ? Date.now() : performance.now();
+    if (!this.scrollWriteFrameOpen) {
+      this.scrollWriteFrame += 1;
+      this.scrollWriteFrameOpen = true;
+      requestAnimationFrame(() => {
+        this.scrollWriteFrameOpen = false;
+      });
+    }
+
+    write();
+
+    const offsetAfter = host.scrollTop;
+    const bottomOffset = Math.max(
+      0,
+      host.scrollHeight - offsetAfter - host.clientHeight,
+    );
+    this.scrollWriteTrace.push({
+      sequence: ++this.scrollWriteSequence,
+      frame: this.scrollWriteFrame,
+      timestampMs,
+      reason,
+      requestedOffset,
+      targetMessageId,
+      offsetBefore,
+      offsetAfter,
+      scrollHeight: host.scrollHeight,
+      clientHeight: host.clientHeight,
+      followingTail: this.followingTail(),
+      atBottom: bottomOffset <= TranscriptViewportComponent.BOTTOM_THRESHOLD_PX,
+      transcriptKey: this.transcriptKey() ?? null,
+      authority: 'application',
+    });
+    if (
+      this.scrollWriteTrace.length >
+      TranscriptViewportComponent.MAX_SCROLL_TRACE_ENTRIES
+    ) {
+      this.scrollWriteTrace.splice(
+        0,
+        this.scrollWriteTrace.length -
+          TranscriptViewportComponent.MAX_SCROLL_TRACE_ENTRIES,
+      );
+    }
+  }
+
   /** Scroll to the bottom of the transcript (latest message). */
   scrollToBottom(): void {
+    this.scrollToBottomFor('explicit-latest');
+  }
+
+  private scrollToBottomFor(reason: TranscriptScrollWriteReason): void {
     this.cancelPendingSeeks();
     this.isAtBottom.set(true);
     this.resumeTailFollow();
     const generation = this.tailFollowGeneration;
-    this.scrollToBottomOffset();
+    this.scrollToBottomOffset(reason);
     this.settleScrollToBottom(0, generation);
   }
 
@@ -697,12 +816,12 @@ export class TranscriptViewportComponent {
       // browser never paints a bottom-pinned blank frame in between.
       if (this.tailIsStreaming()) {
         if (this.isTailMaterialized()) {
-          this.followMaterializedTailGeometryNow();
+          this.followMaterializedTailGeometryNow('tail-follow-render');
         }
         this.scheduleMaterializedTailGeometryFollow();
       }
       if (this.viewport().measureScrollOffset('bottom') > 2) {
-        this.scrollToBottomOffset();
+        this.scrollToBottomOffset('tail-follow-render');
       }
       this.settleScrollToBottom(0, generation);
     });
@@ -725,7 +844,7 @@ export class TranscriptViewportComponent {
     const strategy = this.autoSize()._scrollStrategy;
     strategy.attach(this.viewport());
     this.noteTailGeometryChange();
-    this.scrollToBottomOffset();
+    this.scrollToBottomOffset('estimator-reset');
   }
 
   private finishTranscriptTransitionWhenRendered(attempt = 0): void {
@@ -756,7 +875,7 @@ export class TranscriptViewportComponent {
     this.renderedContentHeight = height;
     this.noteTailGeometryChange();
     if (this.viewportReady && this.tailFollow() && this.followingTail()) {
-      this.followMaterializedTailGeometryNow();
+      this.followMaterializedTailGeometryNow('tail-geometry-rendered-resize');
       this.scheduleMaterializedTailGeometryFollow();
       this.requestTailFollow();
     }
@@ -772,7 +891,7 @@ export class TranscriptViewportComponent {
     this.estimatedTotalHeight = height;
     this.noteTailGeometryChange();
     if (this.viewportReady && this.tailFollow() && this.followingTail()) {
-      this.followMaterializedTailGeometryNow();
+      this.followMaterializedTailGeometryNow('tail-geometry-estimated-resize');
       this.scheduleMaterializedTailGeometryFollow();
       this.requestTailFollow();
     }
@@ -783,8 +902,10 @@ export class TranscriptViewportComponent {
    * that same frame instead of exposing CDK's intermediate spacer/wrapper
    * disagreement until the next Angular render and settlement timer.
    */
-  private followMaterializedTailGeometryNow(): void {
-    this.scrollToBottomOffset();
+  private followMaterializedTailGeometryNow(
+    reason: TranscriptScrollWriteReason,
+  ): void {
+    this.scrollToBottomOffset(reason);
     if (this.isTailMaterialized()) {
       this.reconcileMaterializedTailGeometry(false);
     }
@@ -814,7 +935,7 @@ export class TranscriptViewportComponent {
         this.scheduleMaterializedTailGeometryFollow(attempt + 1);
         return;
       }
-      this.followMaterializedTailGeometryNow();
+      this.followMaterializedTailGeometryNow('tail-geometry-frame');
     });
   }
 
@@ -854,7 +975,9 @@ export class TranscriptViewportComponent {
         }
         const viewport = this.viewport();
         if (Math.abs(viewport.measureScrollOffset('top') - offset) > 0.5) {
-          viewport.scrollToOffset(offset);
+          this.writeScrollPosition('paused-offset-hold', offset, null, () => {
+            viewport.scrollToOffset(offset);
+          });
         }
         if (
           Date.now() - startedAt >=
@@ -889,11 +1012,13 @@ export class TranscriptViewportComponent {
     }
   }
 
-  private scrollToBottomOffset(): void {
+  private scrollToBottomOffset(reason: TranscriptScrollWriteReason): void {
     const vp = this.viewport();
     // Scroll to a very large offset — CDK clamps to the maximum scrollable
     // distance. This works with both fixed-size and autosize strategies.
-    vp.scrollToOffset(Number.MAX_SAFE_INTEGER);
+    this.writeScrollPosition(reason, Number.MAX_SAFE_INTEGER, null, () => {
+      vp.scrollToOffset(Number.MAX_SAFE_INTEGER);
+    });
   }
 
   scrollToMessageId(messageId: string): void {
@@ -1006,7 +1131,9 @@ export class TranscriptViewportComponent {
 
     const rendered = this.findRenderedMessageElement(messageId);
     if (rendered !== null) {
-      rendered.scrollIntoView({ block: 'nearest' });
+      this.writeScrollPosition('seek-rendered-message', null, messageId, () =>
+        rendered.scrollIntoView({ block: 'nearest' }),
+      );
       return;
     }
 
@@ -1031,12 +1158,14 @@ export class TranscriptViewportComponent {
 
     const clampedIndex = Math.max(0, Math.min(index, rows.length - 1));
     if (clampedIndex === 0) {
-      vp.scrollToOffset(0);
+      this.writeScrollPosition('seek-first-row', 0, null, () => {
+        vp.scrollToOffset(0);
+      });
       return;
     }
 
     if (clampedIndex >= rows.length - 1) {
-      this.scrollToBottom();
+      this.scrollToBottomFor('seek-tail');
       return;
     }
 
@@ -1055,7 +1184,15 @@ export class TranscriptViewportComponent {
       nextOffset = clampedIndex * averageItemSize;
     }
 
-    vp.scrollToOffset(Math.max(0, nextOffset));
+    const requestedOffset = Math.max(0, nextOffset);
+    this.writeScrollPosition(
+      'seek-estimated-row',
+      requestedOffset,
+      null,
+      () => {
+        vp.scrollToOffset(requestedOffset);
+      },
+    );
   }
 
   private virtualRowIndexForMessage(messageId: string): number {
@@ -1134,7 +1271,7 @@ export class TranscriptViewportComponent {
           // until the active row stops changing. A later settlement attempt
           // performs the stale-spacer repair against stable measurements.
           if (bottomOffset > TranscriptViewportComponent.BOTTOM_THRESHOLD_PX) {
-            this.scrollToBottomOffset();
+            this.scrollToBottomOffset('tail-follow-settle');
           }
           this.settleScrollToBottom(attempt + 1, generation, startedAt);
           return;
@@ -1163,7 +1300,7 @@ export class TranscriptViewportComponent {
         if (attempt >= 3 && !this.isTailMaterialized()) {
           this.materializeTailRange();
         } else {
-          this.scrollToBottomOffset();
+          this.scrollToBottomOffset('tail-follow-settle');
         }
         this.settleScrollToBottom(attempt + 1, generation, startedAt);
       });
@@ -1218,7 +1355,12 @@ export class TranscriptViewportComponent {
         // Preserve the visible wrapper and make the scroll extent meet its real
         // end, then pin the viewport to that corrected bottom.
         viewport.setTotalContentSize(assessment.renderedContentEnd);
-        viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
+        this.writeScrollPosition(
+          'geometry-reconcile-streaming',
+          Number.MAX_SAFE_INTEGER,
+          null,
+          () => viewport.scrollToOffset(Number.MAX_SAFE_INTEGER),
+        );
         return true;
       }
       // For settled content, correct only the independently positioned wrapper.
@@ -1227,7 +1369,12 @@ export class TranscriptViewportComponent {
       viewport.setRenderedContentOffset(
         assessment.correctedRenderedContentOffset,
       );
-      viewport.scrollToOffset(Number.MAX_SAFE_INTEGER);
+      this.writeScrollPosition(
+        'geometry-reconcile-settled',
+        Number.MAX_SAFE_INTEGER,
+        null,
+        () => viewport.scrollToOffset(Number.MAX_SAFE_INTEGER),
+      );
       return true;
     }
 
@@ -1313,7 +1460,12 @@ export class TranscriptViewportComponent {
 
     // With autosize, just restore the pixel offset — the strategy has already
     // remeasured and repositioned items after the data change.
-    vp.scrollToOffset(scrollOffsetFromTop);
+    this.writeScrollPosition(
+      'prepend-anchor-restore',
+      scrollOffsetFromTop,
+      null,
+      () => vp.scrollToOffset(scrollOffsetFromTop),
+    );
   }
 }
 

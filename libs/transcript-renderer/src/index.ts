@@ -10,6 +10,10 @@
  */
 
 export { TranscriptViewportComponent } from './lib/transcript-viewport';
+export type {
+  TranscriptScrollWriteReason,
+  TranscriptScrollWriteTrace,
+} from './lib/transcript-viewport';
 export { MessageItemComponent } from './lib/message-item';
 export { MessageBlockComponent } from './lib/message-block';
 export {

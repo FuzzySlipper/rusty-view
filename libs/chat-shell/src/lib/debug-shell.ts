@@ -29,6 +29,7 @@ import {
   type MessageBlockDetail,
   type MessageRevisionAction,
   type MessageRevisionCapabilities,
+  type TranscriptScrollWriteTrace,
 } from '@rusty-view/transcript-renderer';
 import { EventInspectorComponent } from './event-inspector';
 import { ProfilePanelComponent } from './profile-panel';
@@ -693,6 +694,21 @@ export class DebugShellComponent {
       scrollToMessageId: (messageId: string) => {
         this.transcriptViewport()?.scrollToMessageId(messageId);
       },
+      scrollTranscriptToLatest: () => {
+        this.transcriptViewport()?.scrollToBottom();
+      },
+      setTranscriptScrollDiagnosticsEnabled: (enabled: boolean) => {
+        this.transcriptViewport()?.setScrollDiagnosticsEnabled(enabled);
+      },
+      clearTranscriptScrollWriteTrace: () => {
+        this.transcriptViewport()?.clearScrollWriteTrace();
+      },
+      getTranscriptScrollWriteTrace: () =>
+        this.transcriptViewport()?.getScrollWriteTrace() ?? [],
+      refreshActiveSession: async () => {
+        const sessionId = this.store.activeSessionId();
+        if (sessionId !== null) await this.store.selectSession(sessionId);
+      },
     };
 
     const testWindow = window as RustyViewTestWindow;
@@ -812,6 +828,11 @@ interface RustyViewTestApi {
     readonly text: string;
   }[];
   scrollToMessageId(messageId: string): void;
+  scrollTranscriptToLatest(): void;
+  setTranscriptScrollDiagnosticsEnabled(enabled: boolean): void;
+  clearTranscriptScrollWriteTrace(): void;
+  getTranscriptScrollWriteTrace(): readonly TranscriptScrollWriteTrace[];
+  refreshActiveSession(): Promise<void>;
 }
 
 type RustyViewTestWindow = Window &
