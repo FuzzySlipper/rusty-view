@@ -198,6 +198,8 @@
           ><strong>{{ item.delivery.sequence ?? '-' }}</strong> <span>wake</span
           ><strong>{{ trafficWakeLabel(item) }}</strong> <span>phase</span
           ><strong>{{ item.externalTurnPhase ?? '-' }}</strong>
+          <span>activation</span
+          ><strong>{{ trafficActivationLabel(item) }}</strong>
           <span>queued</span><strong>{{ item.queuedMessageId ?? '-' }}</strong>
           <span>terminal</span
           ><strong>{{ item.terminalReasonCode ?? '-' }}</strong>

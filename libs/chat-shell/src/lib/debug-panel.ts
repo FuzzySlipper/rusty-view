@@ -249,6 +249,17 @@ export class DebugPanelComponent {
     );
   }
 
+  protected trafficActivationLabel(item: AgentMessageTrafficItem): string {
+    const activation = item.delivery.activation;
+    if (activation === null || activation === undefined) return '-';
+    const type = readRecordString(activation, 'type');
+    const sessionId = readRecordString(activation, 'sessionId');
+    return (
+      [type, sessionId].filter((value) => value !== undefined).join(' / ') ||
+      'observed'
+    );
+  }
+
   protected trafficRoutingLabel(item: AgentMessageTrafficItem): string {
     const routing = item.delivery.request.routing;
     if (routing === null || routing === undefined) return '-';
