@@ -201,6 +201,22 @@
         </small>
       </label>
       <label>
+        <span>Prompt Caching</span>
+        <select
+          data-testid="provider-prompt-caching"
+          [value]="form().promptCaching"
+          (change)="updatePromptCaching($event)"
+        >
+          @for (option of promptCachingOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+        <small>
+          Automatic caching requires chat_completions, provider kind openrouter,
+          and an anthropic/* model. Crew validates unsupported combinations.
+        </small>
+      </label>
+      <label>
         <span>Thinking Mode</span>
         <select
           data-testid="provider-thinking-mode"
@@ -520,6 +536,7 @@
           <span>{{ provider.protocol }}</span>
           <span>{{ provider.providerKind }}</span>
           <span>{{ provider.modelId }}</span>
+          <span>prompt caching {{ provider.promptCaching ?? 'disabled' }}</span>
           <span>{{ provider.credentialId ?? 'no shared credential' }}</span>
           <span>{{ credentialLabel(provider) }}</span>
           <span>{{ credentialKindLabel(provider) }}</span>

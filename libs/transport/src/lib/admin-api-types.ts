@@ -2,10 +2,13 @@ import type {
   AgentCorrelatedRound,
   AgentDirectoryEntry,
   AgentMessageDeliveryReceipt,
+  AgentMessageInboxQuery,
+  AgentMessageTrafficItem,
   AgentRouteRecord,
   AgentRouteResolution,
   AgentRouteWrite,
   ChatCompletionsDialect,
+  ChatCompletionsPromptCaching,
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
   MemorySurfaceAvailability,
@@ -40,6 +43,7 @@ export type {
   RuntimeActivityRecord,
   RuntimeActivityStatus,
   RuntimeActivityView,
+  ChatCompletionsPromptCaching,
   ResponsesProviderDialect,
 };
 
@@ -48,6 +52,14 @@ export type CoordinationDeploymentRole = 'production' | 'debug';
 export interface CoordinationAgentDirectory {
   readonly deploymentRole: CoordinationDeploymentRole;
   readonly agents: readonly AgentDirectoryEntry[];
+}
+
+/** Read-only coordination traffic filters and response used by the inspector. */
+export type CoordinationMessageTrafficQuery = AgentMessageInboxQuery;
+
+export interface CoordinationMessageTrafficResult {
+  readonly deploymentRole: CoordinationDeploymentRole;
+  readonly items: readonly AgentMessageTrafficItem[];
 }
 
 export interface CoordinationRouteList {
@@ -1438,6 +1450,8 @@ export interface ModelProviderRecord {
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
   readonly responsesDialect?: ProviderAdminModelProviderRecord['responsesDialect'];
+  /** Explicit Crew policy; older service responses may omit it and mean disabled. */
+  readonly promptCaching?: ChatCompletionsPromptCaching;
   readonly chatCompletionsDialect: ProviderAdminModelProviderRecord['chatCompletionsDialect'];
   readonly thinkingMode: ProviderAdminModelProviderRecord['thinkingMode'];
   readonly reasoningHistory: ProviderAdminModelProviderRecord['reasoningHistory'];
@@ -1480,6 +1494,7 @@ export interface ModelProviderWriteRequest {
   readonly reasoningEffort?: string;
   readonly reasoningFormat?: string;
   readonly responsesDialect?: ProviderAdminModelProviderWrite['responsesDialect'];
+  readonly promptCaching?: ChatCompletionsPromptCaching;
   readonly chatCompletionsDialect?: ProviderAdminModelProviderWrite['chatCompletionsDialect'];
   readonly thinkingMode?: ProviderAdminModelProviderWrite['thinkingMode'];
   readonly reasoningHistory?: ProviderAdminModelProviderWrite['reasoningHistory'];

@@ -120,6 +120,114 @@
     </div>
     }
   </section>
+  } @else if (activeTab() === 'traffic') {
+  <section class="rv-debug-panel__body" data-testid="coordination-traffic">
+    <p class="rv-debug-panel__note">
+      Read-only Rusty Crew message traffic. Each row is one durable delivery
+      leg, including routed replies and the exact model-facing text.
+    </p>
+    <div class="rv-debug-panel__storage-toolbar">
+      <button
+        type="button"
+        class="rv-debug-panel__button"
+        data-testid="coordination-traffic-refresh"
+        (click)="loadTrafficAll()"
+        [disabled]="admin.coordinationMessageTrafficLoading()"
+      >
+        Refresh All Traffic
+      </button>
+      <button
+        type="button"
+        class="rv-debug-panel__button"
+        data-testid="coordination-traffic-current-session"
+        (click)="loadTrafficForCurrentSession()"
+        [disabled]="admin.coordinationMessageTrafficLoading() || store.activeSessionId() === null"
+      >
+        Current Session ({{ store.activeSessionId() ?? 'none' }})
+      </button>
+    </div>
+    @if (admin.coordinationMessageTrafficError(); as error) {
+    <div
+      class="rv-debug-panel__error"
+      data-testid="coordination-traffic-error"
+      role="alert"
+    >
+      Message traffic request failed: {{ error }}
+    </div>
+    } @if (admin.coordinationMessageTrafficLoading()) {
+    <div class="rv-debug-panel__empty">Loading message traffic…</div>
+    } @else if (admin.coordinationMessageTraffic(); as traffic) { @if
+    (trafficEntries().length === 0) {
+    <div class="rv-debug-panel__empty" data-testid="coordination-traffic-empty">
+      No message traffic matched this query.
+    </div>
+    } @else {
+    <div class="rv-debug-panel__traffic-list">
+      @for (item of trafficEntries(); track trafficItemKey(item)) {
+      <article
+        class="rv-debug-panel__traffic-item"
+        data-testid="coordination-traffic-item"
+      >
+        <div class="rv-debug-panel__meta">
+          <span>created</span
+          ><strong>{{ item.delivery.request.createdAt }}</strong>
+          <span>status</span><strong>{{ item.delivery.status }}</strong>
+          <span>from</span
+          ><strong
+            >{{ item.delivery.request.fromAgentId }} / {{
+            item.delivery.request.fromSessionId ?? '-' }}</strong
+          >
+          <span>requested</span
+          ><strong>{{ item.delivery.request.requestedAddress }}</strong>
+          <span>to</span
+          ><strong
+            >{{ item.delivery.request.toAgentId }} / {{
+            item.delivery.request.toSessionId ?? '-' }}</strong
+          >
+          <span>message</span
+          ><strong>{{ item.delivery.request.messageId }}</strong>
+          <span>delivery</span
+          ><strong>{{ item.delivery.request.deliveryId }}</strong>
+          <span>correlation</span
+          ><strong>{{ item.delivery.request.correlationId ?? '-' }}</strong>
+          <span>reply to</span
+          ><strong>{{ item.delivery.request.replyToMessageId ?? '-' }}</strong>
+          <span>round</span
+          ><strong>{{ item.delivery.resolvedRoundId ?? '-' }}</strong>
+          <span>sequence</span
+          ><strong>{{ item.delivery.sequence ?? '-' }}</strong> <span>wake</span
+          ><strong>{{ trafficWakeLabel(item) }}</strong> <span>phase</span
+          ><strong>{{ item.externalTurnPhase ?? '-' }}</strong>
+          <span>queued</span><strong>{{ item.queuedMessageId ?? '-' }}</strong>
+          <span>terminal</span
+          ><strong>{{ item.terminalReasonCode ?? '-' }}</strong>
+          <span>routing</span><strong>{{ trafficRoutingLabel(item) }}</strong>
+        </div>
+        <div class="rv-debug-panel__traffic-copy">
+          <div>
+            <span class="rv-debug-panel__traffic-label">Original payload</span>
+            <pre>{{ item.delivery.request.body }}</pre>
+          </div>
+          <div>
+            <span class="rv-debug-panel__traffic-label"
+              >Exact delivered model text</span
+            >
+            <pre>{{ item.deliveredModelText }}</pre>
+          </div>
+        </div>
+        <details class="rv-debug-panel__traffic-raw">
+          <summary>Raw traffic item</summary>
+          <pre>{{ trafficJson(item) }}</pre>
+        </details>
+      </article>
+      }
+    </div>
+    } } @else {
+    <div class="rv-debug-panel__empty">
+      Choose Refresh All Traffic or Current Session to load messages.
+    </div>
+    }
+  </section>
   } @else if (activeTab() === 'storage') {
   <section class="rv-debug-panel__body">
     <p class="rv-debug-panel__note">

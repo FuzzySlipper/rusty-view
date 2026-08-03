@@ -20,6 +20,8 @@ import type {
   AdminPage,
   ContextStrategyCatalog,
   CoordinationAgentDirectory,
+  CoordinationMessageTrafficQuery,
+  CoordinationMessageTrafficResult,
   CoordinationDeliveryResult,
   CoordinationDeploymentRole,
   CoordinationResolveResult,
@@ -259,6 +261,25 @@ export class AdminHttpTransport {
       });
     }
     return directory;
+  }
+
+  /** Read durable coordination delivery legs from this deployment role. */
+  async coordinationMessageTraffic(
+    query: CoordinationMessageTrafficQuery = {},
+  ): Promise<CoordinationMessageTrafficResult> {
+    const expectedRole = coordinationRole(this.config);
+    const result = await this.request<CoordinationMessageTrafficResult>(
+      'GET',
+      `${coordinationPrefix(expectedRole)}/messages`,
+      { query: compactRecord(query) },
+    );
+    if (result.deploymentRole !== expectedRole) {
+      throw new ChatTransportError({
+        code: 'envelope_error',
+        message: `Crew coordination endpoint expected ${expectedRole} but reported ${result.deploymentRole}`,
+      });
+    }
+    return result;
   }
 
   coordinationRoutes(
@@ -1090,6 +1111,9 @@ function providerWriteBody(
     request.responsesDialect !== undefined
   ) {
     body['responsesDialect'] = request.responsesDialect;
+  }
+  if (request.promptCaching !== undefined) {
+    body['promptCaching'] = request.promptCaching;
   }
   if (request.chatCompletionsDialect !== undefined) {
     body['chatCompletionsDialect'] = request.chatCompletionsDialect;

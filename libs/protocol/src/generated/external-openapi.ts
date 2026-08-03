@@ -519,6 +519,10 @@ export interface components {
             runtimeId: string;
             /** @constant */
             type: "external_agent";
+        } | {
+            submissionId: string;
+            /** @constant */
+            type: "review_submission";
         };
         AgentCorrelatedRound: {
             correlationId: string;
@@ -2115,6 +2119,94 @@ export interface components {
             /** Format: uint32 */
             max_duration_ms?: number | null;
             workdir?: string | null;
+        };
+        /** @enum {string} */
+        ReviewSubmissionPhase: "submitted" | "den_handoff_recorded" | "gate_pending" | "gate_failed" | "reviewer_dispatch_pending" | "reviewer_dispatched" | "review_terminal" | "superseded";
+        ReviewSubmissionQuery: {
+            pendingOnly: boolean;
+            submissionId?: string | null;
+            submitterSessionId?: string | null;
+            taskId?: string | null;
+        };
+        ReviewSubmissionRecord: {
+            baseCommit?: string | null;
+            caller: components["schemas"]["AgentCoordinationCaller"];
+            commitSha: string;
+            createdAt: string;
+            dispatchDeliveryId?: string | null;
+            dispatchMessageId?: string | null;
+            /** Format: uint64 */
+            gateId?: number | null;
+            gateStatus?: string | null;
+            gitRef: string;
+            lastAdapterError?: string | null;
+            phase: components["schemas"]["ReviewSubmissionPhase"];
+            projectId: string;
+            repository: string;
+            requiredChecks: string[];
+            /** Format: uint64 */
+            reviewRoundId?: number | null;
+            reviewSummaryMd: string;
+            reviewer: string;
+            reviewerSessionId?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            submissionId: string;
+            submitterAgentId: string;
+            submitterSessionId: string;
+            taskId: string;
+            terminalReason?: string | null;
+            updatedAt: string;
+        };
+        ReviewSubmissionRequest: {
+            baseCommit?: string | null;
+            caller: components["schemas"]["AgentCoordinationCaller"];
+            commitSha: string;
+            gitRef: string;
+            now: string;
+            projectId: string;
+            repository: string;
+            requiredChecks: string[];
+            reviewSummaryMd: string;
+            reviewer: string;
+            taskId: string;
+        };
+        ReviewSubmissionTransition: {
+            /** Format: uint64 */
+            reviewRoundId: number;
+            /** @constant */
+            type: "den_handoff_recorded";
+        } | {
+            /** Format: uint64 */
+            gateId: number;
+            /** @constant */
+            type: "gate_registered";
+        } | {
+            reasonCode: string;
+            summary: string;
+            /** @constant */
+            type: "adapter_failed";
+        } | {
+            dispatchDeliveryId: string;
+            dispatchMessageId: string;
+            reviewerSessionId: string;
+            /** @constant */
+            type: "reviewer_dispatched";
+        } | {
+            terminalReason: string;
+            /** @constant */
+            type: "gate_failure_settled";
+        } | {
+            terminalReason: string;
+            /** @constant */
+            type: "review_terminal";
+        };
+        ReviewSubmissionTransitionRequest: {
+            /** Format: uint64 */
+            expectedRevision: number;
+            now: string;
+            submissionId: string;
+            transition: components["schemas"]["ReviewSubmissionTransition"];
         };
         RuntimeActivityBegin: {
             activityId: string;

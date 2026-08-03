@@ -20,6 +20,8 @@ import {
   type ContextStrategyCatalog,
   type ContextStrategyDescriptor,
   type ContextStrategyPolicy,
+  type CoordinationMessageTrafficQuery,
+  type CoordinationMessageTrafficResult,
   type CreateAdminProfileRequest,
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
@@ -129,6 +131,11 @@ export class AdminStore {
   );
   private readonly _storageQueryError = signal<StoreErrorDetail | null>(null);
   private readonly _storageQueryLoading = signal(false);
+  private readonly _coordinationMessageTraffic =
+    signal<CoordinationMessageTrafficResult | null>(null);
+  private readonly _coordinationMessageTrafficError =
+    signal<StoreErrorDetail | null>(null);
+  private readonly _coordinationMessageTrafficLoading = signal(false);
   private readonly _activityCensus = signal<RuntimeActivityCensus | null>(null);
   private readonly _activityLoading = signal(false);
   private readonly _activityError = signal<StoreErrorDetail | null>(null);
@@ -237,6 +244,16 @@ export class AdminStore {
     const error = this._storageQueryError();
     return error === null ? null : storeErrorDetailMessage(error);
   });
+  readonly coordinationMessageTraffic =
+    this._coordinationMessageTraffic.asReadonly();
+  readonly coordinationMessageTrafficErrorDetail =
+    this._coordinationMessageTrafficError.asReadonly();
+  readonly coordinationMessageTrafficError = computed(() => {
+    const error = this._coordinationMessageTrafficError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
+  readonly coordinationMessageTrafficLoading =
+    this._coordinationMessageTrafficLoading.asReadonly();
   readonly activityCensus = this._activityCensus.asReadonly();
   readonly activityLoading = this._activityLoading.asReadonly();
   readonly activityErrorDetail = this._activityError.asReadonly();
@@ -500,6 +517,25 @@ export class AdminStore {
       this._storageQueryError.set(storeErrorDetail(error));
     } finally {
       this._storageQueryLoading.set(false);
+    }
+  }
+
+  /** Load read-only routed coordination delivery legs for Debug inspection. */
+  async loadCoordinationMessageTraffic(
+    query: CoordinationMessageTrafficQuery = {},
+  ): Promise<boolean> {
+    this._coordinationMessageTrafficLoading.set(true);
+    this._coordinationMessageTrafficError.set(null);
+    try {
+      this._coordinationMessageTraffic.set(
+        await this.transport.coordinationMessageTraffic(query),
+      );
+      return true;
+    } catch (error) {
+      this._coordinationMessageTrafficError.set(storeErrorDetail(error));
+      return false;
+    } finally {
+      this._coordinationMessageTrafficLoading.set(false);
     }
   }
 

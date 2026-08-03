@@ -142,6 +142,55 @@ describe('AdminHttpTransport', () => {
     });
   });
 
+  it('reads role-bound coordination message traffic with exact session filters', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return jsonOk({ deploymentRole: 'debug', items: [] });
+    };
+    const transport = new AdminHttpTransport(
+      makeConfig(fetch, {
+        baseUrl: 'http://localhost:9348',
+        coordinationRole: 'debug',
+      }),
+    );
+
+    const result = await transport.coordinationMessageTraffic({
+      toSessionId: 'session-exact',
+      correlationId: 'corr-1',
+      limit: 100,
+    });
+
+    expect(result).toEqual({ deploymentRole: 'debug', items: [] });
+    const url = new URL(requests[0]?.url ?? '');
+    expect(requests[0]?.method).toBe('GET');
+    expect(url.pathname).toBe('/v1/debug/coordination/messages');
+    expect(url.searchParams.get('toSessionId')).toBe('session-exact');
+    expect(url.searchParams.get('correlationId')).toBe('corr-1');
+    expect(url.searchParams.get('limit')).toBe('100');
+    expect(url.searchParams.has('toAgentId')).toBe(false);
+  });
+
+  it('rejects message traffic when the configured coordination role is not returned', async () => {
+    const transport = new AdminHttpTransport(
+      makeConfig(
+        async () => jsonOk({ deploymentRole: 'production', items: [] }),
+        {
+          coordinationRole: 'debug',
+        },
+      ),
+    );
+
+    await expect(transport.coordinationMessageTraffic()).rejects.toMatchObject({
+      code: 'envelope_error',
+    });
+  });
+
   it('uses generated route, resolve, delivery, and round payloads on one role-bound prefix', async () => {
     const requests: CapturedRequest[] = [];
     const fetch: FetchImpl = async (input, init) => {
@@ -1378,6 +1427,7 @@ describe('AdminHttpTransport', () => {
       protocol: 'responses',
       responsesDialect: 'deepseek',
       modelId: 'deepseek-reasoner',
+      promptCaching: 'disabled',
     });
 
     expect(JSON.parse(createCapture.lastRequest().body ?? '{}')).toMatchObject({
@@ -1401,6 +1451,7 @@ describe('AdminHttpTransport', () => {
       protocol: 'responses',
       responsesDialect: 'openai_stateless',
       modelId: 'gpt-5',
+      promptCaching: 'disabled',
     });
 
     expect(JSON.parse(updateCapture.lastRequest().body ?? '{}')).toMatchObject({
@@ -1429,6 +1480,32 @@ describe('AdminHttpTransport', () => {
     expect(JSON.parse(lastRequest().body ?? '{}')).not.toHaveProperty(
       'responsesDialect',
     );
+  });
+
+  it('serializes each explicit Chat Completions prompt-caching policy', async () => {
+    for (const promptCaching of [
+      'disabled',
+      'automatic_5m',
+      'automatic_1h',
+    ] as const) {
+      const { fetch, lastRequest } = capturingFetch(
+        jsonOk({
+          provider: { alias: 'anthropic', credential: { hasSecret: false } },
+          refresh: { mode: 'apply', affectedProfiles: [], outcomes: [] },
+        }),
+      );
+      const transport = new AdminHttpTransport(makeConfig(fetch));
+      await transport.createModelProvider({
+        alias: 'anthropic',
+        protocol: 'chat_completions',
+        providerKind: 'openrouter',
+        modelId: 'anthropic/claude-sonnet',
+        promptCaching,
+      });
+      expect(JSON.parse(lastRequest().body ?? '{}')).toMatchObject({
+        promptCaching,
+      });
+    }
   });
 
   it('updates a model provider by alias via PATCH', async () => {

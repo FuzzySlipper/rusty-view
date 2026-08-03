@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type {
+  AgentMessageTrafficItem,
   ChatEvent,
   ProviderRequestDebugDetail,
 } from '@rusty-view/protocol';
@@ -103,6 +104,35 @@ function storageCatalog(): StorageQueryCatalog {
   };
 }
 
+function trafficItem(): AgentMessageTrafficItem {
+  return {
+    deliveredModelText:
+      '[Rusty Crew routed message: begin]\nexact model-facing text',
+    delivery: {
+      request: {
+        body: 'original payload',
+        createdAt: '2026-07-28T09:00:00Z',
+        deliveryId: 'delivery-1',
+        expiresAt: '2026-07-28T09:05:00Z',
+        fromAgentId: 'sender-agent',
+        fromSessionId: 'sender-session',
+        idempotencyKey: 'idempotency-1',
+        inputKind: 'routed_agent_message',
+        messageId: 'message-1',
+        requestedAddress: '@reviewer',
+        requireWake: true,
+        toAgentId: 'reviewer-agent',
+        toSessionId: 'sess_1',
+      },
+      status: 'accepted',
+      revision: 1,
+      resolvedRoundId: 'round-1',
+      sequence: 2,
+      terminalAt: '2026-07-28T09:00:01Z',
+    },
+  };
+}
+
 async function createPanel(extraProviders: Provider[] = []) {
   const storageResult = signal<StorageQueryResult | null>(null);
   const loadStorageQueryCatalog = vi.fn(async () => undefined);
@@ -117,6 +147,17 @@ async function createPanel(extraProviders: Provider[] = []) {
     return true;
   });
   const loadProvider = vi.fn(async () => providerDetail());
+  const trafficResult = signal<{
+    deploymentRole: 'production' | 'debug';
+    items: readonly AgentMessageTrafficItem[];
+  } | null>(null);
+  const trafficError = signal<string | null>(null);
+  const loadCoordinationMessageTraffic = vi.fn(async () => {
+    const item = trafficItem();
+    trafficResult.set({ deploymentRole: 'debug', items: [item, item] });
+    trafficError.set(null);
+    return true;
+  });
 
   await TestBed.configureTestingModule({
     imports: [DebugPanelComponent],
@@ -140,6 +181,10 @@ async function createPanel(extraProviders: Provider[] = []) {
           storageQueryResult: storageResult.asReadonly(),
           storageQueryLoading: () => false,
           storageQueryError: () => null,
+          coordinationMessageTraffic: trafficResult.asReadonly(),
+          coordinationMessageTrafficError: trafficError.asReadonly(),
+          coordinationMessageTrafficLoading: () => false,
+          loadCoordinationMessageTraffic,
         } as unknown as AdminStore,
       },
       {
@@ -156,7 +201,14 @@ async function createPanel(extraProviders: Provider[] = []) {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, loadProvider, executeStorageQuery };
+  return {
+    fixture,
+    loadProvider,
+    executeStorageQuery,
+    loadCoordinationMessageTraffic,
+    trafficResult,
+    trafficError,
+  };
 }
 
 describe('DebugPanelComponent', () => {
@@ -260,5 +312,73 @@ describe('DebugPanelComponent', () => {
     });
     expect(host.textContent).toContain('message');
     expect(host.textContent).toContain('hello');
+  });
+
+  it('filters traffic by exact current session and renders one deduplicated receipt', async () => {
+    const { fixture, loadCoordinationMessageTraffic } = await createPanel();
+    const host = fixture.nativeElement as HTMLElement;
+    (
+      Array.from(host.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Message Traffic'),
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    (
+      host.querySelector(
+        '[data-testid="coordination-traffic-current-session"]',
+      ) as HTMLButtonElement
+    ).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(loadCoordinationMessageTraffic).toHaveBeenCalledWith({
+      toSessionId: 'sess_1',
+      limit: 100,
+    });
+    expect(
+      host.querySelectorAll('[data-testid="coordination-traffic-item"]'),
+    ).toHaveLength(1);
+    expect(host.textContent).toContain('sender-agent');
+    expect(host.textContent).toContain('@reviewer');
+    expect(host.textContent).toContain('original payload');
+    expect(host.textContent).toContain('exact model-facing text');
+    expect(host.textContent).toContain('round-1');
+  });
+
+  it('distinguishes a successful empty traffic query from a request failure', async () => {
+    const {
+      fixture,
+      trafficResult,
+      trafficError,
+      loadCoordinationMessageTraffic,
+    } = await createPanel();
+    const host = fixture.nativeElement as HTMLElement;
+    (
+      Array.from(host.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Message Traffic'),
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    (
+      host.querySelector(
+        '[data-testid="coordination-traffic-refresh"]',
+      ) as HTMLButtonElement
+    ).click();
+    await fixture.whenStable();
+    trafficResult.set({ deploymentRole: 'debug', items: [] });
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="coordination-traffic-empty"]'),
+    ).not.toBeNull();
+
+    trafficResult.set(null);
+    trafficError.set('debug coordination unavailable');
+    fixture.detectChanges();
+    expect(
+      host.querySelector('[data-testid="coordination-traffic-error"]')
+        ?.textContent,
+    ).toContain('debug coordination unavailable');
+    expect(loadCoordinationMessageTraffic).toHaveBeenCalledWith({ limit: 100 });
   });
 });

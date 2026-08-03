@@ -58,6 +58,8 @@ import type {
   AdminPage,
   ContextStrategyCatalog,
   CoordinationAgentDirectory,
+  CoordinationMessageTrafficQuery,
+  CoordinationMessageTrafficResult,
   CoordinationDeliveryResult,
   CoordinationDeploymentRole,
   CoordinationResolveResult,
@@ -414,6 +416,12 @@ export class ChatTransport {
 
   coordinationAgentDirectory(): Promise<CoordinationAgentDirectory> {
     return this.adminHttp.coordinationAgentDirectory();
+  }
+
+  coordinationMessageTraffic(
+    query: CoordinationMessageTrafficQuery = {},
+  ): Promise<CoordinationMessageTrafficResult> {
+    return this.adminHttp.coordinationMessageTraffic(query);
   }
 
   coordinationRoutes(

@@ -69,6 +69,8 @@ export type ResponsesProviderDialect =
   ProviderAdminSchemas['ResponsesProviderDialect'];
 export type ChatCompletionsThinkingMode =
   ProviderAdminSchemas['ChatCompletionsThinkingMode'];
+export type ChatCompletionsPromptCaching =
+  ProviderAdminSchemas['ChatCompletionsPromptCaching'];
 export type ChatCompletionsReasoningHistory =
   ProviderAdminSchemas['ChatCompletionsReasoningHistory'];
 export type ProviderAdminModelProviderRecord =
@@ -107,6 +109,9 @@ export type ExternalThreadReadRequest =
   ExternalSchemas['ExternalThreadReadRequest'];
 export type ExternalThreadReadResult =
   ExternalSchemas['ExternalThreadReadResult'];
+export type AgentMessageInboxQuery = ExternalSchemas['AgentMessageInboxQuery'];
+export type AgentMessageTrafficItem =
+  ExternalSchemas['AgentMessageTrafficItem'];
 export type ExternalThreadLifecycleReceipt =
   ExternalSchemas['ExternalThreadLifecycleReceipt'];
 export type ExternalThreadDeleteReceipt =

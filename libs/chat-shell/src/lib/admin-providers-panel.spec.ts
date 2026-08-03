@@ -26,6 +26,7 @@ function makeProvider(alias: string, hasSecret = false): ModelProviderRecord {
     protocol: 'chat_completions',
     providerKind: 'local',
     modelId: 'deterministic',
+    promptCaching: 'disabled',
     chatCompletionsDialect: 'standard',
     thinkingMode: 'provider_default',
     reasoningHistory: 'provider_default',
@@ -314,6 +315,7 @@ function makeTransport(
           ...(request.responsesDialect === undefined
             ? {}
             : { responsesDialect: request.responsesDialect }),
+          promptCaching: request.promptCaching ?? 'disabled',
           chatCompletionsDialect: request.chatCompletionsDialect ?? 'standard',
           thinkingMode: request.thinkingMode ?? 'provider_default',
           reasoningHistory: request.reasoningHistory ?? 'provider_default',
@@ -344,6 +346,7 @@ function makeTransport(
           ...(request.responsesDialect === undefined
             ? { responsesDialect: undefined }
             : { responsesDialect: request.responsesDialect }),
+          promptCaching: request.promptCaching ?? 'disabled',
           chatCompletionsDialect: request.chatCompletionsDialect ?? 'standard',
           thinkingMode: request.thinkingMode ?? 'provider_default',
           reasoningHistory: request.reasoningHistory ?? 'provider_default',
@@ -1088,6 +1091,89 @@ describe('AdminProvidersPanelComponent', () => {
     expect(readback).toContain('thinking enabled');
     expect(readback).toContain('history preserve_all');
     expect(readback).toContain('budget 8192');
+  });
+
+  it('defaults prompt caching to disabled and round-trips each typed policy', async () => {
+    const fixture = await createPanel([]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mock: { calls: [ModelProviderWriteRequest, string][] };
+      };
+      updateAdminModelProvider: {
+        mock: { calls: [string, ModelProviderWriteRequest, string][] };
+      };
+    };
+    const component = fixture.componentInstance as unknown as {
+      form(): { promptCaching: string };
+      updateText(
+        field: 'alias' | 'modelId' | 'providerKind',
+        event: { target: { value: string } },
+      ): void;
+      updatePromptCaching(event: { target: { value: string } }): void;
+      saveProvider(): Promise<void>;
+    };
+
+    expect(component.form().promptCaching).toBe('disabled');
+    component.updateText('alias', { target: { value: 'anthropic-cache' } });
+    component.updateText('modelId', {
+      target: { value: 'anthropic/claude-sonnet' },
+    });
+    component.updateText('providerKind', { target: { value: 'openrouter' } });
+
+    for (const promptCaching of ['disabled', 'automatic_5m', 'automatic_1h']) {
+      component.updatePromptCaching({ target: { value: promptCaching } });
+      await component.saveProvider();
+    }
+
+    expect(transport.createAdminModelProvider.mock.calls[0]?.[0]).toMatchObject(
+      { promptCaching: 'disabled' },
+    );
+    expect(
+      transport.updateAdminModelProvider.mock.calls.map(
+        (call) => call[1].promptCaching,
+      ),
+    ).toEqual(['automatic_5m', 'automatic_1h']);
+    expect(textContent(fixture)).toContain('prompt caching automatic_1h');
+  });
+
+  it('leaves unsupported prompt caching validation to Crew and preserves the typed form', async () => {
+    const fixture = await createPanel([]);
+    const store = TestBed.inject(AdminStore);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      createAdminModelProvider: {
+        mockImplementationOnce(fn: () => Promise<never>): void;
+      };
+    };
+    transport.createAdminModelProvider.mockImplementationOnce(async () => {
+      throw new ChatTransportError({
+        code: 'http_error',
+        message: 'automatic_5m requires an OpenRouter Anthropic model',
+        statusCode: 400,
+        apiError: {
+          code: 'invalid_input',
+          reason_code: 'invalid_model_provider',
+          message: 'automatic_5m requires an OpenRouter Anthropic model',
+          retryable: false,
+        },
+      });
+    });
+    const component = fixture.componentInstance as unknown as {
+      form(): { promptCaching: string };
+      updateText(
+        field: 'alias' | 'modelId',
+        event: { target: { value: string } },
+      ): void;
+      updatePromptCaching(event: { target: { value: string } }): void;
+      saveProvider(): Promise<void>;
+    };
+    component.updateText('alias', { target: { value: 'invalid-cache' } });
+    component.updateText('modelId', { target: { value: 'deterministic' } });
+    component.updatePromptCaching({ target: { value: 'automatic_5m' } });
+    await component.saveProvider();
+    fixture.detectChanges();
+
+    expect(store.error()).toContain('OpenRouter Anthropic');
+    expect(component.form().promptCaching).toBe('automatic_5m');
   });
 
   it('preserves pending reasoning values across reversible control transitions', async () => {

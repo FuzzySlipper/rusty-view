@@ -10,6 +10,7 @@ import { NgComponentOutlet } from '@angular/common';
 import { JsonInspectorComponent } from '@rusty-view/chat-components';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
 import type {
+  AgentMessageTrafficItem,
   ProviderRequestDebugDetail,
   ToolCallDebugDetail,
 } from '@rusty-view/protocol';
@@ -29,6 +30,7 @@ const BUILT_IN_DEBUG_TABS = [
   { id: 'activities', label: 'Active Agents', order: 5 },
   { id: 'providers', label: 'Provider Requests', order: 10 },
   { id: 'tools', label: 'Tool Calls', order: 20 },
+  { id: 'traffic', label: 'Message Traffic', order: 25 },
   { id: 'storage', label: 'Storage Queries', order: 30 },
 ] as const;
 const BUILT_IN_DEBUG_TAB_IDS = new Set<string>(
@@ -200,12 +202,65 @@ export class DebugPanelComponent {
     return [...columns].slice(0, 8);
   });
 
+  /**
+   * The backend returns one durable item per delivery leg. Keep the UI
+   * idempotent as refresh/replay paths converge on the same receipt.
+   */
+  protected readonly trafficEntries = computed<
+    readonly AgentMessageTrafficItem[]
+  >(() => dedupeTrafficItems(this.admin.coordinationMessageTraffic()?.items));
+
   constructor() {
     void this.admin.loadStorageQueryCatalog();
   }
 
   protected selectTab(tab: string): void {
     this.activeTab.set(tab);
+  }
+
+  protected loadTrafficAll(): void {
+    void this.admin.loadCoordinationMessageTraffic({ limit: 100 });
+  }
+
+  protected loadTrafficForCurrentSession(): void {
+    const sessionId = this.store.activeSessionId();
+    if (sessionId === null) return;
+    // Deliberately filter only by recipient session. Do not infer a profile or
+    // agent filter, because replies can target a different root address while
+    // still being delivered to this exact session.
+    void this.admin.loadCoordinationMessageTraffic({
+      toSessionId: sessionId,
+      limit: 100,
+    });
+  }
+
+  protected trafficItemKey(item: AgentMessageTrafficItem): string {
+    return item.delivery.request.deliveryId;
+  }
+
+  protected trafficWakeLabel(item: AgentMessageTrafficItem): string {
+    const settlement = item.wakeSettlement;
+    if (settlement === null || settlement === undefined) return 'not observed';
+    const status = readRecordString(settlement, 'status');
+    const summary = readRecordString(settlement, 'summary');
+    return (
+      [status, summary].filter((value) => value !== undefined).join(' — ') ||
+      'observed'
+    );
+  }
+
+  protected trafficRoutingLabel(item: AgentMessageTrafficItem): string {
+    const routing = item.delivery.request.routing;
+    if (routing === null || routing === undefined) return '-';
+    return JSON.stringify(routing);
+  }
+
+  protected trafficJson(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2) ?? String(value);
+    } catch {
+      return String(value);
+    }
   }
 
   protected async loadProviderDetail(
@@ -395,4 +450,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function dedupeTrafficItems(
+  items: readonly AgentMessageTrafficItem[] | undefined,
+): readonly AgentMessageTrafficItem[] {
+  if (items === undefined) return [];
+  const seen = new Set<string>();
+  const result: AgentMessageTrafficItem[] = [];
+  for (const item of items) {
+    const key = item.delivery.request.deliveryId;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+function readRecordString(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const entry = value[key];
+  return typeof entry === 'string' ? entry : undefined;
 }

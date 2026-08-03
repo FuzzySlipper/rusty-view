@@ -11,6 +11,7 @@ import {
 import { AdminStore } from '@rusty-view/chat-store';
 import type {
   ChatCompletionsDialect,
+  ChatCompletionsPromptCaching,
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
   ModelProviderProtocol,
@@ -45,6 +46,7 @@ interface ProviderFormState {
   /** Probe/readback diagnostic only; Crew does not map this as configuration. */
   readonly reasoningFormat: string;
   readonly responsesDialect: ResponsesProviderDialect | '';
+  readonly promptCaching: ChatCompletionsPromptCaching;
   readonly chatCompletionsDialect: ChatCompletionsDialect;
   readonly thinkingMode: ChatCompletionsThinkingMode;
   readonly reasoningHistory: ChatCompletionsReasoningHistory;
@@ -72,6 +74,7 @@ function initialForm(): ProviderFormState {
     reasoningEffort: '',
     reasoningFormat: '',
     responsesDialect: '',
+    promptCaching: 'disabled',
     chatCompletionsDialect: 'standard',
     thinkingMode: 'provider_default',
     reasoningHistory: 'provider_default',
@@ -105,6 +108,15 @@ const CHAT_COMPLETIONS_DIALECTS: readonly ChatCompletionsDialect[] = [
   'glm',
   'qwen',
   'deepseek',
+];
+
+const PROMPT_CACHING_OPTIONS: readonly {
+  value: ChatCompletionsPromptCaching;
+  label: string;
+}[] = [
+  { value: 'disabled', label: 'Disabled (default)' },
+  { value: 'automatic_5m', label: 'Automatic (5 minutes)' },
+  { value: 'automatic_1h', label: 'Automatic (1 hour)' },
 ];
 
 const RESPONSES_DIALECT_OPTIONS: readonly {
@@ -154,6 +166,7 @@ export class AdminProvidersPanelComponent {
   protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
   protected readonly responsesDialectOptions = RESPONSES_DIALECT_OPTIONS;
   protected readonly chatCompletionsDialects = CHAT_COMPLETIONS_DIALECTS;
+  protected readonly promptCachingOptions = PROMPT_CACHING_OPTIONS;
   protected readonly thinkingModes = THINKING_MODES;
   protected readonly reasoningHistoryOptions = REASONING_HISTORY_OPTIONS;
   protected readonly form = signal<ProviderFormState>(initialForm());
@@ -268,6 +281,7 @@ export class AdminProvidersPanelComponent {
       | 'status'
       | 'credentialMode'
       | 'responsesDialect'
+      | 'promptCaching'
       | 'chatCompletionsDialect'
       | 'thinkingMode'
       | 'reasoningHistory'
@@ -356,6 +370,7 @@ export class AdminProvidersPanelComponent {
         ...current,
         protocol: value,
         responsesDialect: '',
+        promptCaching: 'disabled',
       }));
     }
   }
@@ -376,6 +391,12 @@ export class AdminProvidersPanelComponent {
       ...current,
       chatCompletionsDialect: value,
     }));
+  }
+
+  protected updatePromptCaching(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (!isPromptCaching(value)) return;
+    this.form.update((current) => ({ ...current, promptCaching: value }));
   }
 
   protected updateThinkingMode(event: Event): void {
@@ -533,6 +554,7 @@ export class AdminProvidersPanelComponent {
       reasoningEffort: provider.reasoningEffort ?? '',
       reasoningFormat: provider.reasoningFormat ?? '',
       responsesDialect: provider.responsesDialect ?? '',
+      promptCaching: provider.promptCaching ?? 'disabled',
       chatCompletionsDialect: provider.chatCompletionsDialect,
       thinkingMode: provider.thinkingMode,
       reasoningHistory: provider.reasoningHistory,
@@ -780,6 +802,7 @@ function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
     ...optionalNumberField('contextWindowTokens', form.contextWindowTokens),
     ...optionalNumberField('maxOutputTokens', form.maxOutputTokens),
     ...optionalTemperatureMilli(form.temperature),
+    promptCaching: form.promptCaching,
     ...(form.protocol === 'chat_completions'
       ? {
           chatCompletionsDialect: form.chatCompletionsDialect,
@@ -805,6 +828,10 @@ function isChatCompletionsDialect(
   value: string,
 ): value is ChatCompletionsDialect {
   return CHAT_COMPLETIONS_DIALECTS.some((candidate) => candidate === value);
+}
+
+function isPromptCaching(value: string): value is ChatCompletionsPromptCaching {
+  return PROMPT_CACHING_OPTIONS.some((candidate) => candidate.value === value);
 }
 
 function isResponsesProviderDialect(
