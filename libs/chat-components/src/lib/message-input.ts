@@ -224,19 +224,19 @@ export class MessageInputComponent {
     if (start !== end) return { kind: 'native' };
 
     if (event.key === 'ArrowUp') {
-      if (start === 0) return { kind: 'navigate', target };
-      if (!target.value.slice(0, start).includes('\n')) {
+      if (!hasVisualLineAbove(target, start)) {
+        if (start === 0) return { kind: 'navigate', target };
         return { kind: 'move-to-edge', target, position: 0 };
       }
       return { kind: 'native' };
     }
 
-    if (end === target.value.length) {
-      return this.historyIndex() === null
-        ? { kind: 'native' }
-        : { kind: 'navigate', target };
-    }
-    if (!target.value.slice(end).includes('\n')) {
+    if (!hasVisualLineBelow(target, end)) {
+      if (end === target.value.length) {
+        return this.historyIndex() === null
+          ? { kind: 'native' }
+          : { kind: 'navigate', target };
+      }
       return {
         kind: 'move-to-edge',
         target,
@@ -443,6 +443,111 @@ export class MessageInputComponent {
       },
     };
   }
+}
+
+/**
+ * Determine whether a caret is on the first/last visual line, including lines
+ * introduced by soft wrapping. A textarea does not expose caret rectangles, so
+ * a hidden mirror with the same typography and width is used for the browser
+ * path. Test/SSR environments without layout fall back to hard-newline lines.
+ */
+function hasVisualLineAbove(
+  target: HTMLTextAreaElement,
+  position: number,
+): boolean {
+  const current = visualLineOffset(target, position);
+  const first = visualLineOffset(target, 0);
+  if (current === undefined || first === undefined) {
+    return fallbackLineIndex(target.value, position) > 0;
+  }
+  return current > first + 0.5;
+}
+
+function hasVisualLineBelow(
+  target: HTMLTextAreaElement,
+  position: number,
+): boolean {
+  const current = visualLineOffset(target, position);
+  const last = visualLineOffset(target, target.value.length);
+  if (current === undefined || last === undefined) {
+    return (
+      fallbackLineIndex(target.value, position) <
+      fallbackLineIndex(target.value, target.value.length)
+    );
+  }
+  return current < last - 0.5;
+}
+
+function fallbackLineIndex(value: string, position: number): number {
+  return value.slice(0, position).split('\n').length - 1;
+}
+
+function visualLineOffset(
+  target: HTMLTextAreaElement,
+  position: number,
+): number | undefined {
+  if (
+    typeof document === 'undefined' ||
+    typeof getComputedStyle !== 'function'
+  ) {
+    return undefined;
+  }
+
+  const width = target.clientWidth || target.getBoundingClientRect().width;
+  if (width <= 0) return undefined;
+
+  const computed = getComputedStyle(target);
+  const mirror = document.createElement('div');
+  mirror.style.position = 'absolute';
+  mirror.style.left = '-100000px';
+  mirror.style.top = '0';
+  mirror.style.visibility = 'hidden';
+  mirror.style.pointerEvents = 'none';
+  mirror.style.display = 'block';
+  mirror.style.boxSizing = computed.boxSizing;
+  mirror.style.width = `${width}px`;
+  mirror.style.height = 'auto';
+  mirror.style.minHeight = '0';
+  mirror.style.maxHeight = 'none';
+  mirror.style.padding = computed.padding;
+  mirror.style.border = computed.border;
+  mirror.style.fontFamily = computed.fontFamily;
+  mirror.style.fontSize = computed.fontSize;
+  mirror.style.fontWeight = computed.fontWeight;
+  mirror.style.fontStyle = computed.fontStyle;
+  mirror.style.fontVariant = computed.fontVariant;
+  mirror.style.lineHeight = computed.lineHeight;
+  mirror.style.letterSpacing = computed.letterSpacing;
+  mirror.style.wordSpacing = computed.wordSpacing;
+  mirror.style.textIndent = computed.textIndent;
+  mirror.style.textAlign = computed.textAlign;
+  mirror.style.direction = computed.direction;
+  mirror.style.tabSize = computed.tabSize;
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.wordBreak = computed.wordBreak;
+  mirror.style.overflowWrap = computed.overflowWrap;
+
+  const prefix = target.value.slice(0, position);
+  const marker = document.createElement('span');
+  marker.style.display = 'inline-block';
+  marker.style.width = '0';
+  marker.style.height = '1px';
+  marker.style.padding = '0';
+  marker.style.margin = '0';
+  marker.textContent = '\u200b';
+  mirror.append(document.createTextNode(prefix), marker);
+  document.body.appendChild(mirror);
+
+  const mirrorRect = mirror.getBoundingClientRect();
+  const markerRect = marker.getBoundingClientRect();
+  const offset = markerRect.top - mirrorRect.top;
+  const fallbackOffset = marker.offsetTop;
+  mirror.remove();
+
+  if (Number.isFinite(offset) && (offset !== 0 || fallbackOffset === 0)) {
+    return offset;
+  }
+  return Number.isFinite(fallbackOffset) ? fallbackOffset : undefined;
 }
 
 function attachmentId(file: File): string {

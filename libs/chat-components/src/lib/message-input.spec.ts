@@ -683,6 +683,105 @@ describe('MessageInputComponent', () => {
       expect(component['historyIndex']()).toBeNull();
     });
 
+    it('keeps arrows inside soft-wrapped visual lines before using history boundaries', () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      fixture.componentRef.setInput('submissionHistory', ['previous prompt']);
+      fixture.detectChanges();
+
+      const textarea = fixture.nativeElement.querySelector(
+        'textarea',
+      ) as HTMLTextAreaElement;
+      textarea.value = 'abcdefghi';
+      textarea.dispatchEvent(new Event('input'));
+
+      const originalClientWidth = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(textarea, 'clientWidth', {
+        configurable: true,
+        value: 100,
+      });
+      const rectSpy = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: HTMLElement) {
+          if (this.tagName === 'SPAN') {
+            const prefix = (this.parentElement?.textContent ?? '').replace(
+              /\u200b$/,
+              '',
+            );
+            return {
+              top: Math.floor(prefix.length / 5) * 20,
+              bottom: Math.floor(prefix.length / 5) * 20 + 1,
+              left: 0,
+              right: 0,
+              width: 0,
+              height: 1,
+              x: 0,
+              y: Math.floor(prefix.length / 5) * 20,
+              toJSON: () => ({}),
+            };
+          }
+          return {
+            top: 0,
+            bottom: 20,
+            left: 0,
+            right: 100,
+            width: 100,
+            height: 20,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          };
+        });
+
+      try {
+        // The second visual line still has a line above it, so ArrowUp stays
+        // native and does not enter history.
+        textarea.setSelectionRange(6, 6);
+        const nativeUp = new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+          cancelable: true,
+        });
+        textarea.dispatchEvent(nativeUp);
+        expect(nativeUp.defaultPrevented).toBe(false);
+        expect(component['historyIndex']()).toBeNull();
+
+        // A caret on the first visual line moves to the absolute start first.
+        textarea.setSelectionRange(2, 2);
+        const edgeUp = new KeyboardEvent('keydown', {
+          key: 'ArrowUp',
+          bubbles: true,
+          cancelable: true,
+        });
+        textarea.dispatchEvent(edgeUp);
+        expect(edgeUp.defaultPrevented).toBe(true);
+        expect(textarea.selectionStart).toBe(0);
+
+        // Only a second Up from the absolute start enters history.
+        textarea.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'ArrowUp',
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        expect(component['text']()).toBe('previous prompt');
+        expect(component['historyIndex']()).toBe(0);
+      } finally {
+        rectSpy.mockRestore();
+        if (originalClientWidth) {
+          Object.defineProperty(
+            HTMLTextAreaElement.prototype,
+            'clientWidth',
+            originalClientWidth,
+          );
+        }
+      }
+    });
+
     it('moves to the start before navigating history from the first line', () => {
       const fixture = TestBed.createComponent(MessageInputComponent);
       const component = fixture.componentInstance;
