@@ -377,7 +377,15 @@ describe('ChatHttpTransport', () => {
         session_id: 'sess_1',
         agent_id: 'agent_1',
         profile_id: 'prof_1',
-        provider: { alias: 'main', status: 'active', model_id: 'm1' },
+        provider: {
+          alias: 'main',
+          status: 'active',
+          model_id: 'm1',
+          reasoning_effort: 'high',
+          reasoning_effort_source: 'session_override',
+          provider_reasoning_effort: 'medium',
+          session_reasoning_effort_override: 'high',
+        },
         brain: { backend: 'openai' },
         context_strategy: {
           strategy_id: 'sliding-window',
@@ -405,6 +413,10 @@ describe('ChatHttpTransport', () => {
 
       const result = await transport.sessionContext('sess_1');
       expect(result.provider.alias).toBe('main');
+      expect(result.provider.reasoning_effort).toBe('high');
+      expect(result.provider.reasoning_effort_source).toBe('session_override');
+      expect(result.provider.provider_reasoning_effort).toBe('medium');
+      expect(result.provider.session_reasoning_effort_override).toBe('high');
       expect(result.context_strategy.strategy_id).toBe('sliding-window');
       expect(lastRequest().url).toContain('/v1/chat/sessions/sess_1/context');
       expect(lastRequest().method).toBe('GET');

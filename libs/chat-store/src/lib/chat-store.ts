@@ -1284,6 +1284,9 @@ export class ChatStore implements OnDestroy {
             commandSessionProfileId,
           );
         }
+        if (normalizeCommandName(result.command_name) === 'effort') {
+          await this.loadContextUsage();
+        }
       }
     } catch (error) {
       this._pendingCommands.update((cmds) =>
@@ -1372,6 +1375,7 @@ export class ChatStore implements OnDestroy {
     if (sessionId === null) return;
     this.closeStream();
     await this.startStream(sessionId, this.selectionRevision);
+    await this.loadContextUsage();
   }
 
   // ---- event ingestion (called by stream consumer + tests) ----
@@ -1438,6 +1442,15 @@ export class ChatStore implements OnDestroy {
       orderedNewEvents.some((event) => event.kind.startsWith('logical_turn_'))
     ) {
       void this.loadLogicalTurns();
+    }
+    if (
+      orderedNewEvents.some(
+        (event) =>
+          event.kind === 'command_completed' &&
+          commandNameFromEvent(event) === 'effort',
+      )
+    ) {
+      void this.loadContextUsage();
     }
 
     // Persist (fire and forget — storage failures are non-fatal).
@@ -1752,6 +1765,22 @@ function crewCreationSessionId(
 
 function isArchiveCommandName(commandName: string): boolean {
   return commandName.replace(/^\/+/, '') === 'archive';
+}
+
+function normalizeCommandName(commandName: string): string {
+  return commandName.trim().replace(/^\/+/, '').split(/\s+/, 1)[0] ?? '';
+}
+
+function commandNameFromEvent(event: ChatEvent): string | undefined {
+  if (typeof event.payload !== 'object' || event.payload === null) {
+    return undefined;
+  }
+  const commandName = (event.payload as Record<string, unknown>)[
+    'command_name'
+  ];
+  return typeof commandName === 'string'
+    ? normalizeCommandName(commandName)
+    : undefined;
 }
 
 function compareChatEventSequence(left: ChatEvent, right: ChatEvent): number {

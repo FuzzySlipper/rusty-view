@@ -47,6 +47,7 @@ import {
   pluginCommandDescriptor,
 } from './slash-commands/slash-command-runtime';
 import { externalCommandComposerDescriptors } from './external-command-composer';
+import { formatNativeReasoningEffort } from './native-reasoning-effort';
 
 /**
  * Debug chat shell — the composition layer that wires everything together.
@@ -277,6 +278,10 @@ export class DebugShellComponent {
     this.externalSelected()
       ? (this.external.selectedThread()?.effectiveModel ?? 'Unavailable')
       : (this.store.contextUsage()?.provider.model_id ?? 'Unavailable'),
+  );
+
+  protected readonly nativeReasoningEffort = computed(() =>
+    formatNativeReasoningEffort(this.store.contextUsage()?.provider),
   );
 
   protected readonly inputCommands = computed<

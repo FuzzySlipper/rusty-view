@@ -81,6 +81,9 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
   }> = [];
   let sessionListReads = 0;
   let coordinationGate: Deferred<void> | undefined;
+  let directReasoningEffort = 'high';
+  let directReasoningEffortSource: 'session_override' | 'profile' =
+    'session_override';
 
   await page.route('http://crew.test/v1/**', async (route) => {
     const request = route.request();
@@ -173,6 +176,71 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     }
     if (pathname === '/v1/chat/commands') {
       return ok({ commands: [] });
+    }
+    if (pathname === '/v1/chat/sessions/direct-session/context') {
+      return ok({
+        session_id: 'direct-session',
+        agent_id: 'software-engineer',
+        profile_id: 'software-engineer',
+        provider: {
+          alias: 'main',
+          status: 'active',
+          model_id: 'deepseek-chat',
+          reasoning_effort: directReasoningEffort,
+          reasoning_effort_source: directReasoningEffortSource,
+          provider_reasoning_effort: 'medium',
+          session_reasoning_effort_override:
+            directReasoningEffortSource === 'session_override'
+              ? directReasoningEffort
+              : undefined,
+        },
+        brain: { backend: 'chat_completions' },
+        context_strategy: {
+          strategy_id: 'sliding-window',
+          enabled: true,
+          auto_compaction_enabled: true,
+          compact_at_percent: 80,
+          target_percent_after_compaction: 40,
+          max_context_percent_for_wake: 90,
+          debug_visibility: 'status',
+          include_debug_events_in_model_context: false,
+        },
+        tools: { tool_count: 0, mcp_binding_count: 0, mcp_active_count: 0 },
+        context: {
+          estimate_quality: 'approximate',
+          estimate_method: 'sampled',
+          estimator_id: 'test',
+          sampled_event_count: 0,
+          sampled_message_count: 0,
+        },
+        degraded: false,
+        diagnostics: [],
+      });
+    }
+    if (pathname === '/v1/chat/sessions/direct-session/commands') {
+      const command = String(request.postDataJSON()?.command ?? '');
+      if (command.startsWith('/effort')) {
+        if (command.trim() === '/effort default') {
+          directReasoningEffort = 'medium';
+          directReasoningEffortSource = 'profile';
+        } else {
+          directReasoningEffort =
+            command.trim().split(/\s+/, 2)[1] ?? directReasoningEffort;
+          directReasoningEffortSource = 'session_override';
+        }
+        return ok({
+          status: 'completed',
+          command_name: 'effort',
+          summary: 'Reasoning effort updated.',
+          latest_cursor: 'direct-cursor-1',
+        });
+      }
+      return ok({
+        status: 'completed',
+        command_name: 'status',
+        summary: 'OK',
+        latest_cursor: 'direct-cursor-1',
+      });
     }
     if (/^\/v1\/chat\/sessions\/[^/]+\/messages$/.test(pathname)) {
       chatMessageRequests.push({
@@ -376,6 +444,19 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
   await expect(page.getByTestId('session-status-bar')).toHaveAttribute(
     'data-surface',
     'profile',
+  );
+  await expect(page.getByTestId('native-current-effort')).toHaveText(
+    'Effort: high · session override',
+  );
+  await page.getByTestId('message-input-field').fill('/effort low');
+  await page.getByTestId('send-message').click();
+  await expect(page.getByTestId('native-current-effort')).toHaveText(
+    'Effort: low · session override',
+  );
+  await page.getByTestId('message-input-field').fill('/effort default');
+  await page.getByTestId('send-message').click();
+  await expect(page.getByTestId('native-current-effort')).toHaveText(
+    'Effort: medium · profile default',
   );
   await page.getByTestId('message-input-field').fill('DIRECT_SEND_PROOF');
   await page.getByTestId('send-message').click();

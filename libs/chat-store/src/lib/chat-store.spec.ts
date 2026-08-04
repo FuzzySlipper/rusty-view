@@ -1913,14 +1913,34 @@ describe('ChatStore', () => {
   });
 
   it('reconnect closes and reopens the stream', async () => {
-    const transport = createMockTransport({});
+    const initial = defaultContextUsage();
+    const refreshed = {
+      ...initial,
+      provider: {
+        ...initial.provider,
+        reasoning_effort: 'low',
+        reasoning_effort_source: 'provider_default' as const,
+      },
+    };
+    const transport = createMockTransport({ contextUsage: initial });
+    const contextMock = (
+      transport as unknown as {
+        sessionContext: ReturnType<typeof vi.fn>;
+      }
+    ).sessionContext;
     const store = setupStore(transport, new InMemoryChatStorage());
 
     await store.selectSession('sess_test');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    contextMock.mockResolvedValueOnce(refreshed);
     await store.reconnect();
 
     // streamEvents called twice: initial + reconnect
     expect(transport.streamEvents).toHaveBeenCalledTimes(2);
+    expect(store.contextUsage()?.provider.reasoning_effort).toBe('low');
+    expect(store.contextUsage()?.provider.reasoning_effort_source).toBe(
+      'provider_default',
+    );
   });
 
   it('connectionState updates from the stream', async () => {
@@ -2767,6 +2787,103 @@ describe('ChatStore context diagnostics', () => {
     expect(store.contextUsage()?.context_strategy.strategy_id).toBe(
       'sliding-window',
     );
+  });
+
+  it('refreshes effort context after an effort command and reset', async () => {
+    const initial = defaultContextUsage();
+    const afterOverride = {
+      ...initial,
+      provider: {
+        ...initial.provider,
+        reasoning_effort: 'high',
+        reasoning_effort_source: 'session_override' as const,
+        provider_reasoning_effort: 'medium',
+        session_reasoning_effort_override: 'high',
+      },
+    };
+    const afterReset = {
+      ...initial,
+      provider: {
+        ...initial.provider,
+        reasoning_effort: 'medium',
+        reasoning_effort_source: 'profile' as const,
+        provider_reasoning_effort: 'medium',
+        session_reasoning_effort_override: undefined,
+      },
+    };
+    const transport = createMockTransport({
+      contextUsage: initial,
+      commandResult: {
+        status: 'completed',
+        command_name: 'effort',
+        summary: 'Reasoning effort updated.',
+        latest_cursor: 'cur_1',
+      },
+    });
+    const contextMock = (
+      transport as unknown as {
+        sessionContext: ReturnType<typeof vi.fn>;
+      }
+    ).sessionContext;
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    contextMock
+      .mockResolvedValueOnce(afterOverride)
+      .mockResolvedValueOnce(afterReset);
+    await store.submit('/effort high');
+    expect(store.contextUsage()?.provider.reasoning_effort).toBe('high');
+    expect(store.contextUsage()?.provider.reasoning_effort_source).toBe(
+      'session_override',
+    );
+
+    await store.submit('/effort default');
+    expect(store.contextUsage()?.provider.reasoning_effort).toBe('medium');
+    expect(store.contextUsage()?.provider.reasoning_effort_source).toBe(
+      'profile',
+    );
+    expect(contextMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('refreshes effort context when the command completion arrives on SSE', async () => {
+    const initial = defaultContextUsage();
+    const refreshed = {
+      ...initial,
+      provider: {
+        ...initial.provider,
+        reasoning_effort: 'xhigh',
+        reasoning_effort_source: 'session_override' as const,
+      },
+    };
+    const transport = createMockTransport({ contextUsage: initial });
+    const contextMock = (
+      transport as unknown as {
+        sessionContext: ReturnType<typeof vi.fn>;
+      }
+    ).sessionContext;
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    contextMock.mockResolvedValueOnce(refreshed);
+    store.ingestEvents([
+      {
+        event_id: 'effort-completed',
+        session_id: 'sess_test',
+        sequence_id: 10,
+        created_at: '2026-06-30T10:00:00Z',
+        kind: 'command_completed',
+        payload: {
+          command_name: '/effort',
+          summary: 'updated',
+          status: 'completed',
+        },
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(store.contextUsage()?.provider.reasoning_effort).toBe('xhigh');
   });
 
   it('leaves context usage null when the route is unavailable', async () => {

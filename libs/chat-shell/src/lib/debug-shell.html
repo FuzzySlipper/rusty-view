@@ -240,7 +240,11 @@
           turn.progress.committedProviderOperations }} · tools {{
           turn.progress.committedToolOperations }}</span
         >
-        } }
+        } } @if (!externalSelected()) {
+        <span data-testid="native-current-effort"
+          >Effort: {{ nativeReasoningEffort() }}</span
+        >
+        }
       </div>
       } @if (!externalSelected() && store.activeLogicalTurn()) {
       <div

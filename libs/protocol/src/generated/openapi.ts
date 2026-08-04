@@ -727,6 +727,10 @@ export interface components {
                 max_output_tokens?: number;
                 temperature?: number;
                 reasoning_effort?: string;
+                /** @enum {string} */
+                reasoning_effort_source?: "session_override" | "profile" | "provider_default";
+                provider_reasoning_effort?: string;
+                session_reasoning_effort_override?: string;
                 reasoning_format?: string;
                 /** @enum {string} */
                 chat_completions_dialect?: "standard" | "kimi" | "glm" | "qwen" | "deepseek";
