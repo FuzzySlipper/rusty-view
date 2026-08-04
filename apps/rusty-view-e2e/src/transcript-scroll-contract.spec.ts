@@ -205,6 +205,27 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
   });
 }
 
+async function viewportLayoutMetrics(page: Page): Promise<Record<string, unknown>> {
+  return page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-testid="transcript-viewport"]',
+    );
+    const status = document.querySelector<HTMLElement>(
+      '[data-testid="session-status-bar"]',
+    );
+    const rect = viewport?.getBoundingClientRect();
+    const statusRect = status?.getBoundingClientRect();
+    return {
+      clientHeight: viewport?.clientHeight ?? null,
+      scrollHeight: viewport?.scrollHeight ?? null,
+      viewportTop: rect?.top ?? null,
+      viewportBottom: rect?.bottom ?? null,
+      statusHeight: statusRect?.height ?? null,
+      statusText: status?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+    };
+  });
+}
+
 async function requireOwnedWindowEndAtBottom(viewport: Locator): Promise<void> {
   await expect
     .poll(async () => (await semanticFrame(viewport)).bottomError)
@@ -752,8 +773,10 @@ test('scores following, idle, navigation, and session replacement semantically',
 
   await testApi(page, 'clear');
   const idleBefore = await semanticFrame(viewport);
+  const idleLayoutBefore = await viewportLayoutMetrics(page);
   await testApi(page, 'refresh');
   const idleAfter = await semanticFrame(viewport);
+  const idleLayoutAfter = await viewportLayoutMetrics(page);
   const idleWrites = await applicationWrites(page);
 
   const navigation: Record<string, unknown>[] = [];
@@ -837,6 +860,8 @@ test('scores following, idle, navigation, and session replacement semantically',
         applicationWrites: idleWrites.length,
         scrollTopBefore: idleBefore.scrollTop,
         scrollTopAfter: idleAfter.scrollTop,
+        layoutBefore: idleLayoutBefore,
+        layoutAfter: idleLayoutAfter,
       },
     },
     {
