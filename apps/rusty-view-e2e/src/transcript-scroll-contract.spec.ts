@@ -512,6 +512,19 @@ async function installScrollContractFixture(
       events: sessionB ? eventsB : eventsA,
     });
   });
+  // Keep the shell's optional context diagnostics out of this geometry
+  // contract. The broad session route above also matches /context; allowing
+  // that response to be interpreted as context usage can add a wrapped status
+  // bar line at an arbitrary time and resize the transcript by 13px without
+  // any transcript projection change. A stable unavailable response makes the
+  // idle-refresh assertion measure the renderer rather than fixture leakage.
+  await page.route('**/v1/chat/sessions/*/context', (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: false, error: { code: 'not_found' } }),
+    }),
+  );
   await page.route('**/v1/chat/sessions/*/events*', (route) =>
     fulfillJson(route, { items: [], latest_cursor: null, has_more: false }),
   );
