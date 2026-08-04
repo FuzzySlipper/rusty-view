@@ -998,27 +998,39 @@ export class TranscriptViewportComponent {
     );
     if (content === null || typeof ResizeObserver === 'undefined') return;
     this.pausedAnchorObserver = new ResizeObserver(() => {
-      if (
-        this.viewportState() !== 'paused' ||
-        this.pausedAnchor === undefined
-      ) {
+      if (this.viewportState() === 'paused') {
+        if (this.pausedAnchor !== undefined) {
+          this.requestPausedAnchorCompensation();
+        }
         return;
       }
-      this.requestPausedAnchorCompensation();
+      // Following content can settle after Angular has completed its render
+      // (markdown/code layout, late font metrics, or a streamed block's final
+      // measurement). Keep those browser-owned geometry changes from leaving
+      // the tail stranded; the coalesced tail writer remains the sole
+      // application scroll authority.
+      if (this.followingTail() && this.bottomOffset() > 1) {
+        this.requestTailPlacement('tail-follow-render');
+      }
     });
     this.pausedAnchorObserver.observe(content);
     this.pausedAnchorMutationObserver = new MutationObserver(() => {
-      if (
-        this.viewportState() !== 'paused' ||
-        this.pausedAnchor === undefined
-      ) {
+      if (this.viewportState() === 'paused') {
+        if (this.pausedAnchor === undefined) return;
+        // Mutation delivery precedes the next animation-frame callback. Force
+        // the new layout here so the semantic anchor is corrected before any
+        // frame can observe the intermediate geometry. ResizeObserver remains
+        // the fallback for media/font layout changes without a DOM mutation.
+        this.compensatePausedAnchor();
         return;
       }
-      // Mutation delivery precedes the next animation-frame callback. Force
-      // the new layout here so the semantic anchor is corrected before any
-      // frame can observe the intermediate geometry. ResizeObserver remains
-      // the fallback for media/font layout changes without a DOM mutation.
-      this.compensatePausedAnchor();
+      // The same early mutation delivery closes the following-mode gap for
+      // streamed markdown/tool rows whose final height is committed after the
+      // parent render. Coalescing through requestTailPlacement prevents a
+      // second independent scroll writer.
+      if (this.followingTail() && this.bottomOffset() > 1) {
+        this.requestTailPlacement('tail-follow-render');
+      }
     });
     this.pausedAnchorMutationObserver.observe(content, {
       attributes: true,
