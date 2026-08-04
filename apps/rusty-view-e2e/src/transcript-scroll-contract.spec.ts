@@ -217,6 +217,21 @@ async function viewportLayoutMetrics(
     );
     const rect = viewport?.getBoundingClientRect();
     const statusRect = status?.getBoundingClientRect();
+    const content = viewport?.querySelector<HTMLElement>(
+      '.rv-transcript__owned-window-content',
+    );
+    const spacers = Array.from(
+      viewport?.querySelectorAll<HTMLElement>(
+        '.rv-transcript__window-spacer',
+      ) ?? [],
+    );
+    const rows = Array.from(
+      viewport?.querySelectorAll<HTMLElement>(
+        '[data-testid="transcript-virtual-row"]',
+      ) ?? [],
+    );
+    const firstRow = rows[0]?.getBoundingClientRect();
+    const lastRow = rows.at(-1)?.getBoundingClientRect();
     return {
       clientHeight: viewport?.clientHeight ?? null,
       scrollHeight: viewport?.scrollHeight ?? null,
@@ -224,6 +239,15 @@ async function viewportLayoutMetrics(
       viewportBottom: rect?.bottom ?? null,
       statusHeight: statusRect?.height ?? null,
       statusText: status?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+      contentHeight: content?.getBoundingClientRect().height ?? null,
+      spacerHeights: spacers.map(
+        (spacer) => spacer.getBoundingClientRect().height,
+      ),
+      virtualRowCount: rows.length,
+      firstVirtualRowId: rows[0]?.dataset['virtualRowId'] ?? null,
+      lastVirtualRowId: rows.at(-1)?.dataset['virtualRowId'] ?? null,
+      firstVirtualRowTop: firstRow?.top ?? null,
+      lastVirtualRowBottom: lastRow?.bottom ?? null,
     };
   });
 }
