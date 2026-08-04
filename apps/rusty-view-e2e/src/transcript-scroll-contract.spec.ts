@@ -21,6 +21,13 @@ type ScrollTestApi = {
   refreshActiveSession(): Promise<void>;
   scrollToMessageId(messageId: string): void;
   scrollTranscriptToLatest(): void;
+  getMessages(): readonly {
+    id: string;
+    role: string;
+    status: string;
+    blockKinds: readonly string[];
+    text: string;
+  }[];
 };
 
 type SemanticFrame = {
@@ -151,6 +158,16 @@ async function applicationWrites(page: Page): Promise<readonly ScrollTrace[]> {
         window as Window & { __RUSTY_VIEW_TEST__?: ScrollTestApi }
       ).__RUSTY_VIEW_TEST__?.getTranscriptScrollWriteTrace() ?? []
     ).filter((entry) => entry.authority !== 'user-input');
+  });
+}
+
+async function renderedMessageSnapshot(
+  page: Page,
+): Promise<readonly unknown[]> {
+  return page.evaluate(() => {
+    const api = (window as Window & { __RUSTY_VIEW_TEST__?: ScrollTestApi })
+      .__RUSTY_VIEW_TEST__;
+    return api?.getMessages() ?? [];
   });
 }
 
@@ -800,9 +817,11 @@ test('scores following, idle, navigation, and session replacement semantically',
   await testApi(page, 'clear');
   const idleBefore = await semanticFrame(viewport);
   const idleLayoutBefore = await viewportLayoutMetrics(page);
+  const idleMessagesBefore = await renderedMessageSnapshot(page);
   await testApi(page, 'refresh');
   const idleAfter = await semanticFrame(viewport);
   const idleLayoutAfter = await viewportLayoutMetrics(page);
+  const idleMessagesAfter = await renderedMessageSnapshot(page);
   const idleWrites = await applicationWrites(page);
 
   const navigation: Record<string, unknown>[] = [];
@@ -888,6 +907,11 @@ test('scores following, idle, navigation, and session replacement semantically',
         scrollTopAfter: idleAfter.scrollTop,
         layoutBefore: idleLayoutBefore,
         layoutAfter: idleLayoutAfter,
+        messageSnapshotChanged:
+          JSON.stringify(idleMessagesBefore) !==
+          JSON.stringify(idleMessagesAfter),
+        messageSnapshotBefore: idleMessagesBefore,
+        messageSnapshotAfter: idleMessagesAfter,
       },
     },
     {
