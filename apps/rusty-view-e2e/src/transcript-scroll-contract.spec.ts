@@ -205,7 +205,9 @@ async function semanticFrame(viewport: Locator): Promise<SemanticFrame> {
   });
 }
 
-async function viewportLayoutMetrics(page: Page): Promise<Record<string, unknown>> {
+async function viewportLayoutMetrics(
+  page: Page,
+): Promise<Record<string, unknown>> {
   return page.evaluate(() => {
     const viewport = document.querySelector<HTMLElement>(
       '[data-testid="transcript-viewport"]',
