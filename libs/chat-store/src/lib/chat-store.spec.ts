@@ -2886,6 +2886,61 @@ describe('ChatStore context diagnostics', () => {
     expect(store.contextUsage()?.provider.reasoning_effort).toBe('xhigh');
   });
 
+  it('ignores an older same-session context response', async () => {
+    const initial = defaultContextUsage();
+    const stale = {
+      ...initial,
+      provider: {
+        ...initial.provider,
+        reasoning_effort: 'low',
+        reasoning_effort_source: 'session_override' as const,
+      },
+    };
+    const fresh = {
+      ...initial,
+      provider: {
+        ...initial.provider,
+        reasoning_effort: 'high',
+        reasoning_effort_source: 'profile' as const,
+      },
+    };
+    const transport = createMockTransport({ contextUsage: initial });
+    const contextMock = (
+      transport as unknown as {
+        sessionContext: ReturnType<typeof vi.fn>;
+      }
+    ).sessionContext;
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    let resolveStale!: (value: SessionContextUsageResult) => void;
+    let resolveFresh!: (value: SessionContextUsageResult) => void;
+    const staleResponse = new Promise<SessionContextUsageResult>((resolve) => {
+      resolveStale = resolve;
+    });
+    const freshResponse = new Promise<SessionContextUsageResult>((resolve) => {
+      resolveFresh = resolve;
+    });
+    contextMock
+      .mockReturnValueOnce(staleResponse)
+      .mockReturnValueOnce(freshResponse);
+
+    const staleLoad = store.loadContextUsage();
+    const freshLoad = store.loadContextUsage();
+    resolveFresh(fresh);
+    await freshLoad;
+    expect(store.contextUsage()?.provider.reasoning_effort).toBe('high');
+    resolveStale(stale);
+    await staleLoad;
+
+    expect(store.contextUsage()?.provider.reasoning_effort).toBe('high');
+    expect(store.contextUsage()?.provider.reasoning_effort_source).toBe(
+      'profile',
+    );
+  });
+
   it('leaves context usage null when the route is unavailable', async () => {
     const transport = createMockTransport({ contextUsageError: true });
     const store = setupStore(transport, new InMemoryChatStorage());

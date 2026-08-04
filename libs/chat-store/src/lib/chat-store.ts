@@ -144,6 +144,8 @@ export class ChatStore implements OnDestroy {
   private activeStream: ChatEventStream | null = null;
   private readonly seenEventIds = new Set<string>();
   private selectionRevision = 0;
+  /** Monotonic authority for same-session context reads. */
+  private contextUsageRequestSequence = 0;
   private sessionDirectoryRefresh: Promise<void> | undefined;
   private sessionExecutionRefresh: Promise<void> | undefined;
   private readonly sessionExecutionPollTimer: ReturnType<typeof setInterval>;
@@ -838,6 +840,7 @@ export class ChatStore implements OnDestroy {
    */
   private resetProfileNavigation(preserveTranscriptCache: boolean): void {
     this.selectionRevision += 1;
+    this.contextUsageRequestSequence += 1;
     if (preserveTranscriptCache) {
       this.cacheActiveTranscript();
     }
@@ -869,6 +872,7 @@ export class ChatStore implements OnDestroy {
    */
   async selectSession(sessionId: string): Promise<void> {
     const revision = ++this.selectionRevision;
+    this.contextUsageRequestSequence += 1;
     this.cacheActiveTranscript();
     this.closeStream();
     this.seenEventIds.clear();
@@ -965,10 +969,14 @@ export class ChatStore implements OnDestroy {
     sessionId = this._activeSessionId(),
   ): Promise<void> {
     if (sessionId === null) return;
+    const requestSequence = ++this.contextUsageRequestSequence;
     try {
       const usage = await this.transport.sessionContext(sessionId);
       // Guard against a late response after the user switched sessions.
-      if (this.isCurrentSelection(revision, sessionId)) {
+      if (
+        requestSequence === this.contextUsageRequestSequence &&
+        this.isCurrentSelection(revision, sessionId)
+      ) {
         this._contextUsage.set(usage);
         this.cacheActiveTranscript();
       }
