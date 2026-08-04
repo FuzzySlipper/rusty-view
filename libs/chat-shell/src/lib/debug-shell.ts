@@ -711,8 +711,7 @@ export class DebugShellComponent {
       getTranscriptScrollWriteTrace: () =>
         this.transcriptViewport()?.getScrollWriteTrace() ?? [],
       refreshActiveSession: async () => {
-        const sessionId = this.store.activeSessionId();
-        if (sessionId !== null) await this.store.selectSession(sessionId);
+        await this.store.refreshActiveSession();
       },
     };
 

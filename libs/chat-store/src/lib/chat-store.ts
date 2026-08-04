@@ -146,6 +146,8 @@ export class ChatStore implements OnDestroy {
   private selectionRevision = 0;
   /** Monotonic authority for same-session context reads. */
   private contextUsageRequestSequence = 0;
+  /** Monotonic authority for in-place active-session refreshes. */
+  private sessionRefreshSequence = 0;
   private sessionDirectoryRefresh: Promise<void> | undefined;
   private sessionExecutionRefresh: Promise<void> | undefined;
   private readonly sessionExecutionPollTimer: ReturnType<typeof setInterval>;
@@ -957,6 +959,51 @@ export class ChatStore implements OnDestroy {
         this._sessionLoading.set(false);
       }
     }
+  }
+
+  /**
+   * Refresh the selected session without tearing down its projection or live
+   * stream. Re-selecting the same session used to recreate the resident DOM
+   * window and let the browser apply scroll anchoring to a transient layout;
+   * an in-place read keeps idle refreshes geometry-neutral.
+   */
+  async refreshActiveSession(): Promise<void> {
+    const sessionId = this._activeSessionId();
+    if (sessionId === null) return;
+    const revision = this.selectionRevision;
+    const request = ++this.sessionRefreshSequence;
+    const opened = await this.transport.openSession(sessionId);
+    if (
+      request !== this.sessionRefreshSequence ||
+      !this.isCurrentSelection(revision, sessionId)
+    ) {
+      return;
+    }
+
+    const reconciledSession = this.reconcileSessionSummary(opened.session);
+    this._activeSessionStatus.set(reconciledSession.status);
+    let initialEvents = opened.events;
+    if (opened.has_more_before) {
+      const originCursor =
+        opened.events.find((event) => event.sequence_id === 0)?.event_id ??
+        `${sessionId}:0`;
+      const replayedEvents = await this.transport.replayAllEvents(sessionId, {
+        cursor: originCursor,
+        limit: 500,
+      });
+      if (
+        request !== this.sessionRefreshSequence ||
+        !this.isCurrentSelection(revision, sessionId)
+      ) {
+        return;
+      }
+      initialEvents = [...opened.events, ...replayedEvents];
+    }
+    this.ingestEvents(initialEvents);
+    if (opened.session.status !== 'active') this.clearStaleActiveTurn();
+    this.cacheActiveTranscript();
+    void this.loadContextUsage(revision, sessionId);
+    void this.loadLogicalTurns(revision, sessionId);
   }
 
   /**
