@@ -1250,6 +1250,7 @@ describe('AdminHttpTransport', () => {
       nextWrite: {},
       runtimeConfig: {
         providerAlias: 'default',
+        externalMessageDeliveryPolicy: 'immediate_steer',
         localToolProfileId: 'planner-tools',
         mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
       },
@@ -1261,6 +1262,7 @@ describe('AdminHttpTransport', () => {
         configReloadRequired: true,
         runtimeRebuildRecommended: true,
         mcpRefreshRecommended: false,
+        externalBindingRebuildRecommended: false,
       },
     };
     const { fetch, lastRequest } = capturingFetch(jsonOk(planResponse));
@@ -1268,6 +1270,7 @@ describe('AdminHttpTransport', () => {
 
     const plan = await transport.planProfileRegistryRuntimeConfig('rt-prime', {
       expectedRevision: 5,
+      externalMessageDeliveryPolicy: 'immediate_steer',
       providerAlias: 'default',
       localToolProfileId: 'planner-tools',
       mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
@@ -1296,6 +1299,7 @@ describe('AdminHttpTransport', () => {
       nextWrite: {},
       runtimeConfig: {
         providerAlias: 'default',
+        externalMessageDeliveryPolicy: 'immediate_steer',
         mcpBindings: [],
       },
       applied: true,
@@ -1304,6 +1308,7 @@ describe('AdminHttpTransport', () => {
         profilePath: '/profiles/rt-prime/profile.json',
         runtimeConfigPath: '/service.json',
         mcpBindings: { removed: 0, added: 0 },
+        externalBindingRebuildRecommended: false,
         applyResult: {},
       },
       diagnostics: [],
@@ -1314,6 +1319,7 @@ describe('AdminHttpTransport', () => {
         configReloadRequired: true,
         runtimeRebuildRecommended: true,
         mcpRefreshRecommended: false,
+        externalBindingRebuildRecommended: false,
       },
     };
     const { fetch, lastRequest } = capturingFetch(jsonOk(applyResponse));
@@ -1323,6 +1329,7 @@ describe('AdminHttpTransport', () => {
       'rt-prime',
       {
         expectedRevision: 5,
+        externalMessageDeliveryPolicy: 'immediate_steer',
         localToolProfileId: null,
         toolPolicy: { requestedToolsets: ['local_code_read'] },
       },

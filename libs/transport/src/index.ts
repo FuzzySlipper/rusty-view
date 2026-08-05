@@ -78,6 +78,7 @@ export type {
   ChatCompletionsPromptCaching,
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
+  ExternalMessageDeliveryPolicy,
   CreateAdminProfileRequest,
   CreateProfileMcpBinding,
   CreateProfileToolPolicy,

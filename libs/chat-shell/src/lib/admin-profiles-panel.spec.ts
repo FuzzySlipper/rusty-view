@@ -84,6 +84,7 @@ describe('AdminProfilesPanelComponent (list coordinator)', () => {
             sourceAssetStatuses: [],
             diagnostics: [],
             fallbackStatus: 'file_backed_fallback',
+            externalMessageDeliveryPolicy: 'immediate_steer',
           },
         ],
         registryCount: 0,

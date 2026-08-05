@@ -1,9 +1,18 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
-import { AdminStore } from '@rusty-view/chat-store';
-import { CHAT_STORAGE_ADAPTER, ChatStore } from '@rusty-view/chat-store';
+import {
+  AdminStore,
+  CHAT_STORAGE_ADAPTER,
+  ChatStore,
+  ExternalAgentStore,
+} from '@rusty-view/chat-store';
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
+import type {
+  ExternalAgentBinding,
+  ExternalMessageDeliveryPolicy,
+} from '@rusty-view/protocol';
 import {
   ChatTransport,
   type AdminProfileRegistryRecord,
@@ -54,12 +63,21 @@ import {
   type TransportOptions,
 } from './admin-profiles.testing';
 
-async function editWindow(profileId: string, options: TransportOptions = {}) {
+async function editWindow(
+  profileId: string,
+  options: TransportOptions = {},
+  externalBindings: readonly ExternalAgentBinding[] = [],
+) {
+  const externalAgentStore = {
+    bindings: signal<readonly ExternalAgentBinding[]>(externalBindings),
+    refresh: async (): Promise<void> => undefined,
+  };
   await TestBed.configureTestingModule({
     imports: [AdminProfileEditComponent],
     providers: [
       AdminStore,
       ChatStore,
+      { provide: ExternalAgentStore, useValue: externalAgentStore },
       { provide: CHAT_STORAGE_ADAPTER, useClass: InMemStorage },
       { provide: ChatTransport, useValue: makeTransport(options) },
     ],
@@ -75,6 +93,9 @@ async function editWindow(profileId: string, options: TransportOptions = {}) {
 interface EditComponentApi {
   showSection(section: 'fields' | 'lifecycle' | 'prompts' | 'runtime'): void;
   updateRuntimeProviderAlias(event: { target: { value: string } }): void;
+  updateRuntimeExternalMessageDeliveryPolicy(event: {
+    target: { value: string };
+  }): void;
   updateRuntimeLocalToolProfile(event: { target: { value: string } }): void;
   toggleRuntimeCustomTools(): void;
   toggleRuntimeToolset(
@@ -86,6 +107,7 @@ interface EditComponentApi {
     event: { target: { checked: boolean } },
   ): void;
   runtimeLocalToolProfileId(): string;
+  runtimeExternalMessageDeliveryPolicy(): ExternalMessageDeliveryPolicy;
   runtimeToolsetSelections(): readonly string[];
   planRuntimeConfig(record: AdminProfileRegistryRecord): void;
   applyRuntimeConfig(record: AdminProfileRegistryRecord): void;
@@ -521,12 +543,78 @@ describe('AdminProfileEditComponent', () => {
     return { fixture, component };
   }
 
+  function bindingForProfile(profileId: string): ExternalAgentBinding {
+    return {
+      bindingId: `${profileId}-binding`,
+      runtimeId: `${profileId}-runtime`,
+      nativeThreadId: `${profileId}-thread`,
+      sessionId: `${profileId}-session`,
+      agentId: profileId,
+      purpose: 'crew_agent',
+      status: 'active',
+      cwd: '/home/dev/rusty-view',
+      effectiveConfigFingerprint: 'config',
+      messageDeliveryPolicy: 'immediate_steer',
+      profileId,
+      profilePromptHash: null,
+      profilePromptSnapshot: null,
+      profileRevision: 5,
+      revision: 1,
+      createdAt: '2026-07-11T00:00:00Z',
+      updatedAt: '2026-07-11T00:00:00Z',
+    };
+  }
+
   it('seeds the runtime-config form from the record (#3742)', async () => {
     const { fixture, component } = await runtimeWindow();
     const html = (fixture.nativeElement as HTMLElement).innerHTML;
     // Provider and local tool profile are seeded as selected values.
     expect(html).toContain('Provider &amp; Tools');
     expect(component.runtimeLocalToolProfileId()).toBe('planner-tools');
+  });
+
+  it('edits profile delivery policy and shows existing binding mismatch (#6652)', async () => {
+    const profileId = 'rt-prime';
+    const fixture = await editWindow(
+      profileId,
+      {
+        profileDiagnostics: registryDiagnostics({
+          profileId,
+          revision: 5,
+          externalMessageDeliveryPolicy: 'immediate_steer',
+        }),
+      },
+      [bindingForProfile(profileId)],
+    );
+    const component = fixture.componentInstance as unknown as EditComponentApi;
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
+
+    component.showSection('runtime');
+    component.updateRuntimeExternalMessageDeliveryPolicy({
+      target: { value: 'serial_next_turn' },
+    });
+    fixture.detectChanges();
+
+    expect(component.runtimeExternalMessageDeliveryPolicy()).toBe(
+      'serial_next_turn',
+    );
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('effective immediate_steer');
+    expect(text).toContain('differs from profile policy');
+
+    component.planRuntimeConfig(recordFor(profileId));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const request = lastRuntimeConfigRequest(
+      transport.planAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.externalMessageDeliveryPolicy).toBe('serial_next_turn');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'external binding replacement recommended true',
+    );
   });
 
   it('prefers a selected local tool profile and omits inline toolPolicy (#3742)', async () => {

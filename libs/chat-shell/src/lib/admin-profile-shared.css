@@ -157,6 +157,10 @@
   border-color: var(--rv-color-danger);
 }
 
+.rv-admin-profiles__result--warning {
+  border-color: var(--rv-color-warning);
+}
+
 .rv-admin-profiles__confirm-box {
   display: grid;
   gap: var(--rv-space-sm);

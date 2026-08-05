@@ -11,6 +11,7 @@ import type {
   ChatCompletionsPromptCaching,
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
+  ExternalMessageDeliveryPolicy,
   MemorySurfaceAvailability,
   MemorySurfaceCatalogItem,
   MemorySurfaceCatalogProjection,
@@ -45,6 +46,7 @@ export type {
   RuntimeActivityView,
   ChatCompletionsPromptCaching,
   ResponsesProviderDialect,
+  ExternalMessageDeliveryPolicy,
 };
 
 export type CoordinationDeploymentRole = 'production' | 'debug';
@@ -946,6 +948,11 @@ export interface AdminProfileRegistryRecord {
    */
   readonly providerAlias?: string;
   /**
+   * Profile policy used when Crew creates a managed external binding. Existing
+   * bindings retain their concrete policy until explicitly replaced.
+   */
+  readonly externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
+  /**
    * Current reusable local tool profile id the profile references (task #3742),
    * when its built-in tool policy comes from a named local tool profile rather
    * than inline toolsets/tools. Seeds the Edit window's tool control.
@@ -1140,6 +1147,11 @@ export interface ContextStrategyCatalog {
  */
 export interface ProfileRegistryRuntimeConfigRequest {
   readonly expectedRevision: number;
+  /**
+   * Policy for new managed external bindings. A runtime-config write always
+   * sends the effective value so omission cannot silently reset it.
+   */
+  readonly externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
   readonly providerAlias?: string | null;
   readonly localToolProfileId?: string | null;
   readonly toolPolicy?: CreateProfileToolPolicy;
@@ -1159,6 +1171,7 @@ export interface ProfileRegistryRuntimeConfigRequest {
  */
 export interface EditableProfileRuntimeConfig {
   readonly providerAlias: string;
+  readonly externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
   readonly brain?: { readonly module?: string; readonly strategy?: string };
   readonly localToolProfileId?: string;
   readonly toolPolicy?: ProfileRuntimeToolPolicy;
@@ -1179,6 +1192,8 @@ export interface ProfileRegistryRuntimeConfigImplications {
   readonly configReloadRequired: true;
   readonly runtimeRebuildRecommended: boolean;
   readonly mcpRefreshRecommended: boolean;
+  /** True when an existing external binding must be explicitly replaced. */
+  readonly externalBindingRebuildRecommended: boolean;
 }
 
 /**
@@ -1206,6 +1221,7 @@ export interface ProfileRegistryRuntimeConfigEffects {
   readonly profilePath: string;
   readonly runtimeConfigPath: string;
   readonly mcpBindings: { readonly removed: number; readonly added: number };
+  readonly externalBindingRebuildRecommended: boolean;
   readonly applyResult: unknown;
 }
 

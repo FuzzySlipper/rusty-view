@@ -541,6 +541,61 @@
         the existing provider/model untouched.
       </p>
 
+      <div class="rv-admin-profiles__delivery-policy">
+        <span class="rv-admin-profiles__group-label"
+          >External message delivery</span
+        >
+        <p class="rv-admin-profiles__hint">
+          This profile policy is used when Crew creates a managed external
+          binding. Changing it does not mutate an existing binding; an existing
+          binding keeps its effective policy until it is explicitly replaced.
+        </p>
+        <label>
+          <span>Profile policy</span>
+          <select
+            data-testid="profile-external-message-delivery-policy"
+            [value]="runtimeExternalMessageDeliveryPolicy()"
+            (change)="updateRuntimeExternalMessageDeliveryPolicy($event)"
+          >
+            <option value="immediate_steer">Immediate steer</option>
+            <option value="serial_next_turn">Serial next turn</option>
+          </select>
+        </label>
+        @if (externalBindingsForProfile().length === 0) {
+        <div class="rv-admin-profiles__empty">
+          No external binding is currently reported for this profile.
+        </div>
+        } @else {
+        <div class="rv-admin-profiles__binding-policy-list">
+          <span class="rv-admin-profiles__group-sublabel"
+            >Current binding policies</span
+          >
+          @for (binding of externalBindingsForProfile(); track
+          binding.bindingId) {
+          <div
+            class="rv-admin-profiles__result"
+            [class.rv-admin-profiles__result--warning]="
+              !externalBindingPolicyMatchesProfile(binding)
+            "
+          >
+            <span>binding {{ binding.bindingId }}</span>
+            <span>effective {{ binding.messageDeliveryPolicy }}</span>
+            <span>status {{ binding.status }}</span>
+            <span>revision {{ binding.revision }}</span>
+            @if (externalBindingPolicyMatchesProfile(binding)) {
+            <span>matches profile policy</span>
+            } @else {
+            <span>
+              differs from profile policy; explicitly replace this binding to
+              change delivery behavior
+            </span>
+            }
+          </div>
+          }
+        </div>
+        }
+      </div>
+
       <div class="rv-admin-profiles__tool-policy">
         <span class="rv-admin-profiles__group-label">Built-in tools</span>
         @if (localToolProfiles().length === 0) {
@@ -804,6 +859,10 @@
           >rebuild recommended {{ plan.implications.runtimeRebuildRecommended
           }}</span
         >
+        <span
+          >external binding replacement recommended {{
+          plan.implications.externalBindingRebuildRecommended }}</span
+        >
         <span>mcp refresh {{ plan.implications.mcpRefreshRecommended }}</span>
         @for (diag of plan.diagnostics; track diag.code) {
         <span
@@ -821,6 +880,10 @@
         <span
           >rebuild recommended {{ result.implications.runtimeRebuildRecommended
           }}</span
+        >
+        <span
+          >external binding replacement recommended {{
+          result.implications.externalBindingRebuildRecommended }}</span
         >
         @if (result.effects; as effects) {
         <span

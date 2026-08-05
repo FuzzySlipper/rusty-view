@@ -493,6 +493,8 @@ function runtimeConfigPlan(
           },
         ]
       : [];
+  const externalBindingRebuildRecommended =
+    request?.externalMessageDeliveryPolicy === 'serial_next_turn';
   const base = {
     ok: contextDiagnostics.length === 0,
     profileId: 'rt-prime',
@@ -503,6 +505,8 @@ function runtimeConfigPlan(
     nextWrite: {},
     runtimeConfig: {
       providerAlias: 'default',
+      externalMessageDeliveryPolicy:
+        request?.externalMessageDeliveryPolicy ?? 'immediate_steer',
       localToolProfileId: 'planner-tools',
       mcpBindings: [],
       ...(request?.contextPolicy !== undefined
@@ -517,6 +521,7 @@ function runtimeConfigPlan(
       configReloadRequired: true as const,
       runtimeRebuildRecommended: true,
       mcpRefreshRecommended: false,
+      externalBindingRebuildRecommended,
     },
   };
   // A non-ok plan (e.g. unknown strategy) is returned as a plain plan even on
@@ -530,6 +535,7 @@ function runtimeConfigPlan(
           profilePath: '/profiles/rt-prime/profile.json',
           runtimeConfigPath: '/service.json',
           mcpBindings: { removed: 0, added: 0 },
+          externalBindingRebuildRecommended,
           applyResult: {},
         },
       }
@@ -754,6 +760,7 @@ export function registryDiagnostics(
         sourceAssetStatuses: [],
         diagnostics: [],
         fallbackStatus: 'registry_authoritative',
+        externalMessageDeliveryPolicy: 'immediate_steer',
         ...record,
       },
     ],

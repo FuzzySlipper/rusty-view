@@ -8,7 +8,15 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { AdminStore, ChatStore } from '@rusty-view/chat-store';
+import {
+  AdminStore,
+  ChatStore,
+  ExternalAgentStore,
+} from '@rusty-view/chat-store';
+import type {
+  ExternalAgentBinding,
+  ExternalMessageDeliveryPolicy,
+} from '@rusty-view/protocol';
 import type {
   AdminControlResponse,
   AdminLocalToolProfile,
@@ -150,6 +158,7 @@ const FALLBACK_CONTEXT_POLICY: ContextPolicyDraft = {
 export class AdminProfileEditComponent {
   protected readonly admin = inject(AdminStore);
   private readonly chat = inject(ChatStore);
+  private readonly external = inject(ExternalAgentStore, { optional: true });
 
   /** The profile this window edits. */
   readonly profileId = input.required<string>();
@@ -176,6 +185,9 @@ export class AdminProfileEditComponent {
 
   /** Selected provider alias; '' keeps the profile's current provider/model. */
   protected readonly runtimeProviderAlias = signal<string>('');
+  /** Policy used for new managed external bindings for this profile. */
+  protected readonly runtimeExternalMessageDeliveryPolicy =
+    signal<ExternalMessageDeliveryPolicy>('immediate_steer');
   /** Selected reusable local tool profile id; '' = use inline toolsets/tools. */
   protected readonly runtimeLocalToolProfileId = signal<string>('');
   /** Whether the advanced inline "custom built-in tools" disclosure is open. */
@@ -576,6 +588,9 @@ export class AdminProfileEditComponent {
   /** Seed the runtime-config form from the record's current provider/tools/MCP. */
   private seedRuntimeConfig(record: AdminProfileRegistryRecord): void {
     this.runtimeProviderAlias.set(record.providerAlias ?? '');
+    this.runtimeExternalMessageDeliveryPolicy.set(
+      record.externalMessageDeliveryPolicy ?? 'immediate_steer',
+    );
     this.runtimeLocalToolProfileId.set(record.localToolProfileId ?? '');
     const toolsets = record.toolPolicy?.requestedToolsets ?? [];
     const tools = record.toolPolicy?.requestedTools ?? [];
@@ -598,6 +613,7 @@ export class AdminProfileEditComponent {
     );
     this.runtimeMcpDirty.set(false);
     this.seedContextPolicy(record);
+    void this.external?.refresh();
   }
 
   /**
@@ -642,6 +658,30 @@ export class AdminProfileEditComponent {
 
   protected updateRuntimeProviderAlias(event: Event): void {
     this.runtimeProviderAlias.set((event.target as HTMLSelectElement).value);
+  }
+
+  protected updateRuntimeExternalMessageDeliveryPolicy(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === 'immediate_steer' || value === 'serial_next_turn') {
+      this.runtimeExternalMessageDeliveryPolicy.set(value);
+    }
+  }
+
+  protected externalBindingsForProfile(): readonly ExternalAgentBinding[] {
+    return (
+      this.external
+        ?.bindings()
+        .filter((binding) => binding.profileId === this.profileId()) ?? []
+    );
+  }
+
+  protected externalBindingPolicyMatchesProfile(
+    binding: ExternalAgentBinding,
+  ): boolean {
+    return (
+      binding.messageDeliveryPolicy ===
+      this.runtimeExternalMessageDeliveryPolicy()
+    );
   }
 
   /** Reusable local tool profiles for the dropdown (#3689). */
@@ -814,6 +854,7 @@ export class AdminProfileEditComponent {
   ): ProfileRegistryRuntimeConfigRequest {
     const request: {
       expectedRevision: number;
+      externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
       providerAlias?: string;
       localToolProfileId?: string | null;
       toolPolicy?: {
@@ -822,7 +863,11 @@ export class AdminProfileEditComponent {
       };
       mcpBindings?: readonly CreateProfileMcpBinding[];
       contextPolicy?: ContextStrategyPolicy;
-    } = { expectedRevision: record.revision ?? 0 };
+    } = {
+      expectedRevision: record.revision ?? 0,
+      externalMessageDeliveryPolicy:
+        this.runtimeExternalMessageDeliveryPolicy(),
+    };
 
     // Provider: only set an alias (never auto-clear to avoid wiping inline
     // model config). Empty selection leaves the current provider untouched.
