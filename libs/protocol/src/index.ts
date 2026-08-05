@@ -118,6 +118,8 @@ export type ExternalThreadDeleteReceipt =
   ExternalSchemas['ExternalThreadDeleteReceipt'];
 export type ExternalRuntimeEventPage =
   ExternalSchemas['ExternalRuntimeEventPage'];
+export type ExternalRuntimeEventHead =
+  ExternalSchemas['ExternalRuntimeEventHead'];
 export type NormalizedExternalRuntimeEvent =
   ExternalSchemas['NormalizedExternalRuntimeEvent'];
 export type ExternalRuntimeEventPayload =
@@ -209,6 +211,8 @@ export type DeleteExternalRuntimeThreadResponse =
   externalOperations['deleteExternalRuntimeThread']['responses'][200]['content']['application/json'];
 export type ListExternalRuntimeEventsResponse =
   externalOperations['listExternalRuntimeEvents']['responses'][200]['content']['application/json'];
+export type ReadExternalRuntimeEventHeadResponse =
+  externalOperations['readExternalRuntimeEventHead']['responses'][200]['content']['application/json'];
 export type ListExternalInteractionsResponse =
   externalOperations['listExternalInteractions']['responses'][200]['content']['application/json'];
 export type SubmitExternalBindingControlResponse =

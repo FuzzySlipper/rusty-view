@@ -1722,7 +1722,7 @@ describe('ExternalAgentStore', () => {
     expect(store.eventHistoryLoaded()).toBe(false);
   });
 
-  it('converges on a high-water cursor across the safe-integer sequence range', async () => {
+  it('seeds a large event cursor from one indexed tail read', async () => {
     const runtime = registration('runtime-1');
     const snapshot = { ...thread('thread-1', 10), status: 'active' as const };
     const latestSequence = 1_000_000_000_000_000;
@@ -1730,24 +1730,13 @@ describe('ExternalAgentStore', () => {
       ...event(index + 1, 'old-turn', 'completed'),
       nativeThreadId: 'other-thread',
     }));
-    const listEvents = vi.fn(
-      async (
-        _runtimeId: string,
-        query?: { readonly after?: number; readonly limit?: number },
-      ) => {
-        if (query?.after === undefined) return { events: firstPage };
-        if (query.after >= latestSequence) return { events: [] };
-        const sequenceId = query.after + 1;
-        return {
-          events: [
-            {
-              ...event(sequenceId, 'old-turn', 'completed'),
-              nativeThreadId: 'other-thread',
-            },
-          ],
-        };
+    const listEvents = vi.fn(async () => ({ events: firstPage }));
+    const readEventHead = vi.fn(async () => ({
+      event: {
+        ...event(latestSequence, 'latest-turn', 'completed'),
+        nativeThreadId: 'other-thread',
       },
-    );
+    }));
     const streamExternalRuntimeEvents = vi.fn(() => ({
       close: vi.fn(),
       async *events() {
@@ -1758,6 +1747,7 @@ describe('ExternalAgentStore', () => {
       runtimes: [runtime],
       listThreads: vi.fn(async () => page([snapshot], null)),
       listEvents,
+      readEventHead,
       readThread: vi.fn(async () => ({ thread: snapshot })),
       streamExternalRuntimeEvents,
     });
@@ -1771,76 +1761,8 @@ describe('ExternalAgentStore', () => {
       'runtime-1',
       latestSequence,
     );
-    expect(listEvents.mock.calls.length).toBeLessThanOrEqual(110);
-    expect(
-      listEvents.mock.calls.some(
-        ([, query]) =>
-          (query as { readonly after?: number } | undefined)?.after !==
-          undefined,
-      ),
-    ).toBe(true);
-    expect(store.events()).toEqual([]);
-  });
-
-  it('bounds high-water probing when sparse growth repeatedly invalidates brackets', async () => {
-    const runtime = registration('runtime-1');
-    const snapshot = { ...thread('thread-1', 10), status: 'active' as const };
-    const firstPage = Array.from({ length: 1_000 }, (_, index) => ({
-      ...event(index + 1, 'old-turn', 'completed'),
-      nativeThreadId: 'other-thread',
-    }));
-    let probe = 0;
-    let highestObservedSequence = 1_000;
-    const listEvents = vi.fn(
-      async (
-        _runtimeId: string,
-        query?: { readonly after?: number; readonly limit?: number },
-      ) => {
-        if (query?.after === undefined) return { events: firstPage };
-
-        const phase = probe++ % 3;
-        if (phase === 1) return { events: [] };
-
-        // Observe lower + 1, establish an empty upper bracket, then make that
-        // bracket stale with a sparse event immediately beyond it. Repeating
-        // this cycle used to keep selection probing indefinitely.
-        const sequenceId = query.after + (phase === 0 ? 1 : 2);
-        highestObservedSequence = Math.max(highestObservedSequence, sequenceId);
-        return {
-          events: [
-            {
-              ...event(sequenceId, 'old-turn', 'completed'),
-              nativeThreadId: 'other-thread',
-            },
-          ],
-        };
-      },
-    );
-    const streamExternalRuntimeEvents = vi.fn(() => ({
-      close: vi.fn(),
-      async *events() {
-        yield* [];
-      },
-    }));
-    const store = setupStore({
-      runtimes: [runtime],
-      listThreads: vi.fn(async () => page([snapshot], null)),
-      listEvents,
-      readThread: vi.fn(async () => ({ thread: snapshot })),
-      streamExternalRuntimeEvents,
-    });
-
-    await store.refresh();
-    const session = store.sessions()[0];
-    if (session === undefined) throw new Error('expected active session');
-    await store.selectSession(session);
-
-    expect(listEvents).toHaveBeenCalledTimes(129);
-    expect(streamExternalRuntimeEvents).toHaveBeenCalledWith(
-      'runtime-1',
-      highestObservedSequence,
-    );
-    expect(highestObservedSequence).toBeGreaterThan(1_000);
+    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(readEventHead).toHaveBeenCalledWith('runtime-1');
     expect(store.events()).toEqual([]);
   });
 
@@ -1993,6 +1915,7 @@ function setupStore(options: {
   sendMessage?: ReturnType<typeof vi.fn>;
   submitControl?: ReturnType<typeof vi.fn>;
   listEvents?: ReturnType<typeof vi.fn>;
+  readEventHead?: ReturnType<typeof vi.fn>;
   readThread?: ReturnType<typeof vi.fn>;
   createAgentSession?: ReturnType<typeof vi.fn>;
   archiveThread?: ReturnType<typeof vi.fn>;
@@ -2016,6 +1939,8 @@ function setupStore(options: {
     listInteractions: vi.fn(async () => ({ interactions: [] })),
     listThreads: options.listThreads,
     listEvents: options.listEvents ?? vi.fn(async () => ({ events: [] })),
+    readEventHead:
+      options.readEventHead ?? vi.fn(async () => ({ event: undefined })),
     readThread: options.readThread ?? vi.fn(),
     createAgentSession: options.createAgentSession ?? vi.fn(),
     sendMessage:

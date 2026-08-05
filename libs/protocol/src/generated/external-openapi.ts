@@ -228,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/external-runtimes/{runtime_id}/events/head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readExternalRuntimeEventHead"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/external-runtimes/{runtime_id}/stream": {
         parameters: {
             query?: never;
@@ -2110,7 +2126,7 @@ export interface components {
         /** @enum {string} */
         ProviderStateAbsenceReason: "not_configured" | "missing" | "expired" | "invalidated" | "module_does_not_use_state" | "load_failed";
         /** @enum {string} */
-        ProviderStateClearReason: "brain_requested_clear";
+        ProviderStateClearReason: "brain_requested_clear" | "operator_requested_clear";
         /** @enum {string} */
         ProviderStateMode: "unused" | "optional" | "required";
         ResourceLimits: {
@@ -2802,6 +2818,9 @@ export interface components {
         ExternalRuntimeEventPage: {
             events: components["schemas"]["NormalizedExternalRuntimeEvent"][];
         };
+        ExternalRuntimeEventHead: {
+            event: components["schemas"]["NormalizedExternalRuntimeEvent"] | null;
+        };
         ExternalRuntimeRawDetail: {
             detailId: string;
             runtimeId: string;
@@ -3486,6 +3505,42 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ExternalRuntimeEventPage"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readExternalRuntimeEventHead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runtime_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ExternalRuntimeEventHead"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };

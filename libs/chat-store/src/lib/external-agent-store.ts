@@ -102,10 +102,6 @@ export interface ExternalPromptFailureDetail {
 const EXTERNAL_TRANSCRIPT_CACHE_CAPACITY = 8;
 const EXTERNAL_TRANSCRIPT_CACHE_WEIGHT = 60_000;
 const EXTERNAL_EVENT_PAGE_SIZE = 1_000;
-// A stable search needs at most 53 exponential probes plus 53 binary probes
-// across JavaScript's safe-integer sequence domain. The remaining probes let
-// us absorb concurrent growth without allowing selection to wait forever.
-const EXTERNAL_EVENT_CURSOR_PROBE_LIMIT = 128;
 
 @Injectable({ providedIn: 'root' })
 export class ExternalAgentStore {
@@ -1656,9 +1652,10 @@ export class ExternalAgentStore {
    *
    * Small runtimes retain their complete first page so lifecycle badges keep
    * their historical context. A full first page means history may be much
-   * larger, so discover its real high-water sequence with bounded one-event
-   * probes. This avoids stranding the selected SSE stream behind the former
-   * 100-page replay ceiling once a long-lived runtime exceeds 100k events.
+   * larger, so read the indexed event head once instead of probing sequence
+   * numbers across the entire history. This avoids stranding the selected SSE
+   * stream behind the former 100-page replay ceiling once a long-lived runtime
+   * exceeds 100k events.
    */
   private async loadFleetEventBootstrap(runtimeId: string): Promise<{
     readonly events: readonly NormalizedExternalRuntimeEvent[];
@@ -1687,63 +1684,11 @@ export class ExternalAgentStore {
       };
     }
 
+    const head = await this.transport.external.readEventHead(runtimeId);
     return {
       events: [],
-      cursor: await this.findExternalEventHighWater(runtimeId, firstCursor),
+      cursor: head.event?.sequenceId ?? firstCursor,
     };
-  }
-
-  private async findExternalEventHighWater(
-    runtimeId: string,
-    knownSequence: number,
-  ): Promise<number> {
-    let lower = knownSequence;
-    let upper: number | undefined;
-    let stride = 1;
-
-    // Every probe advances `lower`, lowers `upper`, or invalidates a stale
-    // bracket after observing an event that arrived during the search. A
-    // stable event set converges within 106 probes across the full safe-integer
-    // domain. If concurrent growth keeps invalidating brackets, stop at the
-    // explicit request budget and resume SSE from the highest observed cursor.
-    for (
-      let probe = 0;
-      probe < EXTERNAL_EVENT_CURSOR_PROBE_LIMIT &&
-      lower < Number.MAX_SAFE_INTEGER;
-      probe++
-    ) {
-      const target =
-        upper === undefined
-          ? Math.min(Number.MAX_SAFE_INTEGER, lower + stride)
-          : lower + Math.ceil((upper - lower) / 2);
-      if (target <= lower) return lower;
-
-      const page = await this.transport.external.listEvents(runtimeId, {
-        after: target - 1,
-        limit: 1,
-      });
-      const next = page.events.find(
-        (event) => event.sequenceId >= target,
-      )?.sequenceId;
-      if (next !== undefined) {
-        lower = Math.max(lower, next);
-        if (upper !== undefined && lower > upper) {
-          // Events can arrive while the probes run. The observed sequence is a
-          // safe resume cursor; continue expanding from it for the remaining
-          // bounded probes instead of trusting the now-stale upper bound.
-          upper = undefined;
-          stride = 1;
-        } else if (upper === undefined) {
-          stride = Math.min(Number.MAX_SAFE_INTEGER - lower, stride * 2);
-        }
-        continue;
-      }
-
-      upper = target - 1;
-      if (upper <= lower) return lower;
-    }
-
-    return lower;
   }
 }
 

@@ -226,6 +226,26 @@ describe('ExternalRuntimeHttpTransport', () => {
     expect(String(fetchImpl.mock.calls[1]?.[0])).toContain('archived=true');
   });
 
+  it('reads the external runtime event head without replaying history', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-runtimes/runtime%2Fa/events/head',
+        );
+        return json({
+          ok: true,
+          data: { event: externalEvent(1_000_000) },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(transport.readEventHead('runtime/a')).resolves.toMatchObject({
+      event: { sequenceId: 1_000_000 },
+    });
+  });
+
   it('uses the generated native thread lifecycle routes', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

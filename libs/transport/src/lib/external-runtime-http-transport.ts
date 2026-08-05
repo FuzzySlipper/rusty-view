@@ -16,6 +16,7 @@ import type {
   ExternalInteractionRecord,
   ExternalInteractionResolutionWrite,
   ExternalRuntimeEventPage,
+  ExternalRuntimeEventHead,
   ExternalRuntimeFleet,
   ExternalRuntimeRawDetail,
   ExternalRuntimeCommandCatalog,
@@ -28,6 +29,7 @@ import type {
   ListExternalInteractionsResponse,
   ListExternalBindingCommandsResponse,
   ListExternalRuntimeEventsResponse,
+  ReadExternalRuntimeEventHeadResponse,
   ListExternalRuntimeThreadsResponse,
   ListExternalRuntimesResponse,
   ReadExternalRuntimeRawDetailResponse,
@@ -186,6 +188,15 @@ export class ExternalRuntimeHttpTransport {
         `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/events`,
         undefined,
         query,
+      ),
+    );
+  }
+
+  async readEventHead(runtimeId: string): Promise<ExternalRuntimeEventHead> {
+    return unwrap(
+      await this.request<ReadExternalRuntimeEventHeadResponse>(
+        'GET',
+        `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/events/head`,
       ),
     );
   }
