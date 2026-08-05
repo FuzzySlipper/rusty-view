@@ -883,6 +883,17 @@ test('renders a delayed live event from a runtime beyond 100k events without use
         backwardsCursor: null,
       });
     }
+    if (url.pathname.endsWith('/events/head')) {
+      return ok({
+        event: {
+          ...externalEvent(String(highWater), 'runtime_status', {
+            nativeMethod: 'remoteControl/status/changed',
+          }),
+          nativeThreadId: null,
+          nativeTurnId: null,
+        },
+      });
+    }
     if (url.pathname.endsWith('/events')) {
       const after = url.searchParams.get('after');
       if (after === null) return ok({ events: firstPage });
