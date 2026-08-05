@@ -174,6 +174,8 @@ export class ExternalRuntimeHttpTransport {
         'POST',
         `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/threads/read`,
         request,
+        undefined,
+        this.config.timeoutMs,
       ),
     );
   }
@@ -312,7 +314,14 @@ export class ExternalRuntimeHttpTransport {
     path: string,
     body?: unknown,
     query?: Readonly<Record<string, unknown>>,
+    timeoutMs = method === 'GET'
+      ? this.config.timeoutMs
+      : this.config.writeTimeoutMs,
   ): Promise<T> {
+    // External JSON reads, including event bootstrap and session reads, are
+    // bounded by the short read deadline. Agent-waking writes use the
+    // deliberately longer write deadline; a zero write timeout preserves the
+    // configured unbounded-write behavior without weakening read safety.
     const url = new URL(path, this.config.baseUrl);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -322,31 +331,55 @@ export class ExternalRuntimeHttpTransport {
     if (this.config.bearerToken !== undefined) {
       headers.set('Authorization', `Bearer ${this.config.bearerToken}`);
     }
-    let response: Response;
+    const controller = timeoutMs > 0 ? new AbortController() : undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout =
+      controller === undefined
+        ? undefined
+        : new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              const error = new Error('Request timed out');
+              error.name = 'TimeoutError';
+              controller.abort(error);
+              reject(error);
+            }, timeoutMs);
+          });
+
     try {
-      response = await this.fetchImpl(url, {
+      const request = this.fetchImpl(url, {
         method,
         headers,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(controller === undefined ? {} : { signal: controller.signal }),
       });
+      const response =
+        timeout === undefined
+          ? await request
+          : await Promise.race([request, timeout]);
+      const responseBody = response.json();
+      const parsed =
+        timeout === undefined
+          ? await responseBody
+          : await Promise.race([responseBody, timeout]);
+      if (!response.ok || !isSuccessEnvelope(parsed)) {
+        const apiError = apiErrorFromEnvelope(parsed);
+        throw new ChatTransportError({
+          code:
+            response.status === 401 || response.status === 403
+              ? 'auth_error'
+              : 'http_error',
+          message: apiError?.message ?? errorMessage(parsed, response),
+          statusCode: response.status,
+          endpoint: path,
+          ...(apiError === undefined ? {} : { apiError }),
+        });
+      }
+      return parsed as T;
     } catch (error) {
       throw classifyFetchError(error);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     }
-    const parsed = (await response.json()) as unknown;
-    if (!response.ok || !isSuccessEnvelope(parsed)) {
-      const apiError = apiErrorFromEnvelope(parsed);
-      throw new ChatTransportError({
-        code:
-          response.status === 401 || response.status === 403
-            ? 'auth_error'
-            : 'http_error',
-        message: apiError?.message ?? errorMessage(parsed, response),
-        statusCode: response.status,
-        endpoint: path,
-        ...(apiError === undefined ? {} : { apiError }),
-      });
-    }
-    return parsed as T;
   }
 }
 

@@ -1766,6 +1766,35 @@ describe('ExternalAgentStore', () => {
     expect(store.events()).toEqual([]);
   });
 
+  it('surfaces a timed-out bootstrap and recovers on a later refresh', async () => {
+    const snapshot = { ...thread('thread-1', 10), status: 'active' as const };
+    const listEvents = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ChatTransportError({
+          code: 'network_error',
+          message: 'Request timed out',
+        }),
+      )
+      .mockResolvedValue({ events: [] });
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listThreads: vi.fn(async () => page([snapshot], null)),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: snapshot })),
+    });
+
+    await store.refresh();
+    expect(store.error()).toContain('Request timed out');
+
+    await store.refresh();
+    expect(store.error()).toBeUndefined();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected active session');
+    await expect(store.selectSession(session)).resolves.toBe(true);
+    expect(store.error()).toBeUndefined();
+  });
+
   it('derives the active turn from a native snapshot before live events arrive', () => {
     const store = setupStore({ runtimes: [], listThreads: vi.fn() });
     store.selectedThread.set({

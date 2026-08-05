@@ -246,6 +246,45 @@ describe('ExternalRuntimeHttpTransport', () => {
     });
   });
 
+  it('bounds a never-settling bootstrap request and reports a timeout', async () => {
+    const { fetch, lastSignal } = signalHonoringFetch(
+      50,
+      json({ event: externalEvent(1_000_000) }),
+    );
+    const transport = new ExternalRuntimeHttpTransport(
+      config(fetch, { timeoutMs: 5 }),
+    );
+
+    await expect(transport.readEventHead('runtime/a')).rejects.toMatchObject({
+      code: 'network_error',
+      message: 'Request timed out',
+    });
+    expect(lastSignal()?.aborted).toBe(true);
+  });
+
+  it('bounds a response body that never completes', async () => {
+    let signal: AbortSignal | undefined;
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation((_input, init) => {
+        signal = init?.signal;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => new Promise<unknown>(() => undefined),
+        } as Response);
+      });
+    const transport = new ExternalRuntimeHttpTransport(
+      config(fetchImpl, { timeoutMs: 5 }),
+    );
+
+    await expect(transport.readEventHead('runtime/a')).rejects.toMatchObject({
+      code: 'network_error',
+      message: 'Request timed out',
+    });
+    expect(signal?.aborted).toBe(true);
+  });
+
   it('uses the generated native thread lifecycle routes', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -348,16 +387,46 @@ describe('ExternalRuntimeHttpTransport', () => {
   });
 });
 
-function config(fetchImpl: typeof fetch) {
+function config(
+  fetchImpl: typeof fetch,
+  overrides: {
+    readonly timeoutMs?: number;
+    readonly writeTimeoutMs?: number;
+  } = {},
+) {
   return {
     baseUrl: 'http://crew.test',
-    timeoutMs: 1_000,
-    writeTimeoutMs: 1_000,
+    timeoutMs: overrides.timeoutMs ?? 1_000,
+    writeTimeoutMs: overrides.writeTimeoutMs ?? 1_000,
     reconnectInitialMs: 0,
     reconnectMaxMs: 0,
     reconnectMaxAttempts: 1,
     fetchImpl,
   };
+}
+
+function signalHonoringFetch(
+  delayMs: number,
+  response: Response,
+): { fetch: typeof fetch; lastSignal: () => AbortSignal | undefined } {
+  let signal: AbortSignal | undefined;
+  const fetchImpl = ((_input: RequestInfo | URL, init?: RequestInit) => {
+    signal = init?.signal;
+    return new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(response), delayMs);
+      if (signal === undefined) return;
+      if (signal.aborted) {
+        clearTimeout(timer);
+        reject(signal.reason);
+        return;
+      }
+      signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(signal?.reason);
+      });
+    });
+  }) as typeof fetch;
+  return { fetch: fetchImpl, lastSignal: () => signal };
 }
 function meta() {
   return { request_id: 'req', schema_version: 1 };
