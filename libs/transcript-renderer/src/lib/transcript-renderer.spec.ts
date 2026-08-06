@@ -490,6 +490,24 @@ describe('MessageBlockComponent', () => {
     expect(sheet).toContain('var(--rv-font-size-md)');
   });
 
+  it('keeps blank-line-separated ordered items in one rendered list', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'text',
+        content: '1. first\n\n2. second\n\n3. third',
+      }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const lists = host.querySelectorAll('.rv-block__markdown ol');
+    expect(lists).toHaveLength(1);
+    expect(lists[0]?.querySelectorAll('li')).toHaveLength(3);
+    expect(lists[0]?.textContent).toBe('firstsecondthird');
+  });
+
   it('renders fenced code with semantic syntax spans bound to palette tokens', async () => {
     const fixture = await createBlock(
       makeBlock({

@@ -175,6 +175,37 @@ describe('processRequestInline (inline worker fallback)', () => {
       }
     });
 
+    it('keeps blank-line-separated ordered items in one list', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 91,
+        content: '1. first\n\n2. second\n\n3. third',
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).toBe(
+          '<ol><li>first</li><li>second</li><li>third</li></ol>',
+        );
+      }
+    });
+
+    it('preserves ordered-list start values and nested numbering', () => {
+      const response = processRequestInline({
+        kind: 'parse-markdown',
+        id: 92,
+        content: [
+          '3. outer item',
+          '   2. nested item two',
+          '   3. nested item three',
+          '4. next outer item',
+        ].join('\n'),
+      });
+      if (response.kind === 'parse-markdown') {
+        expect(response.html).toBe(
+          '<ol start="3"><li>outer item<ol start="2"><li>nested item two</li><li>nested item three</li></ol></li><li>next outer item</li></ol>',
+        );
+      }
+    });
+
     it('renders safe links in an isolated new window', () => {
       const response = processRequestInline({
         kind: 'parse-markdown',

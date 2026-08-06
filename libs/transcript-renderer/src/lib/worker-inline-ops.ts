@@ -75,13 +75,33 @@ function unescapeHtml(text: string): string {
     .replaceAll('&amp;', '&');
 }
 
+interface OrderedListItemMatch {
+  readonly indent: number;
+  readonly number: string;
+  readonly content: string;
+}
+
+/** Match one ordered-list marker while retaining its indentation and number. */
+function matchOrderedListItem(line: string): OrderedListItemMatch | null {
+  const match = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
+  if (match === null) return null;
+
+  const indentation = match[1] ?? '';
+  return {
+    indent: indentation.replaceAll('\t', '    ').length,
+    number: match[2] ?? '1',
+    content: match[3] ?? '',
+  };
+}
+
 /**
  * Minimal markdown → HTML conversion.
  *
  * Supports: paragraphs, headings (H1-H6), bold (**text**), italic (*text*),
  * inline code (`code`), code blocks (```lang\ncode```), unordered/ordered
  * lists, links [text](url), blockquotes (>), horizontal rules (---), tables,
- * and line breaks.
+ * and line breaks. Ordered lists retain blank-line-separated items, nested
+ * ordered lists, and non-default starting numbers.
  *
  * **Safety model**: all content is HTML-escaped *before* any markdown
  * processing. Link URLs are validated to allow only http(s)/mailto/relative
@@ -106,6 +126,76 @@ function parseMarkdown(
     const formatted = formatInline(text);
     htmlParts.push(`<p>${formatted}</p>`);
     paragraphLines = [];
+  }
+
+  function renderOrderedList(startIndex: number): {
+    readonly html: string;
+    readonly nextIndex: number;
+  } {
+    const firstItem = matchOrderedListItem(lines[startIndex] ?? '');
+    if (firstItem === null) {
+      return { html: '', nextIndex: startIndex };
+    }
+
+    const baseIndent = firstItem.indent;
+    const startNumber = Number.parseInt(firstItem.number, 10);
+    const startAttribute =
+      startNumber === 1 ? '' : ` start="${firstItem.number}"`;
+    const items: string[] = [];
+    let index = startIndex;
+
+    while (index < lines.length) {
+      const item = matchOrderedListItem(lines[index] ?? '');
+      if (item === null || item.indent !== baseIndent) break;
+
+      let itemHtml = formatInline(item.content);
+      index++;
+
+      // A deeper ordered marker belongs to the current item. Rendering it
+      // recursively gives each nested list its own numbering sequence.
+      while (index < lines.length) {
+        const nextLine = lines[index] ?? '';
+        const nestedItem = matchOrderedListItem(nextLine);
+        if (nestedItem !== null && nestedItem.indent > baseIndent) {
+          const nestedList = renderOrderedList(index);
+          if (nestedList.nextIndex === index) break;
+          itemHtml += nestedList.html;
+          index = nestedList.nextIndex;
+          continue;
+        }
+
+        if (nextLine.trim() === '') {
+          // Blank lines are part of this list only when the next non-blank
+          // line is another item at this level or a nested item. Leaving
+          // unrelated blank lines untouched preserves paragraph boundaries.
+          let lookahead = index + 1;
+          while (
+            lookahead < lines.length &&
+            (lines[lookahead] ?? '').trim() === ''
+          ) {
+            lookahead++;
+          }
+          const afterBlank = matchOrderedListItem(lines[lookahead] ?? '');
+          if (afterBlank !== null && afterBlank.indent >= baseIndent) {
+            index = lookahead;
+            if (afterBlank.indent > baseIndent) continue;
+          }
+        }
+
+        // A same-level marker starts the next item. A shallower marker or a
+        // non-list line ends this list and is handled by the outer parser.
+        const nextItem = matchOrderedListItem(nextLine);
+        if (nextItem === null || nextItem.indent <= baseIndent) break;
+        break;
+      }
+
+      items.push(`<li>${itemHtml}</li>`);
+    }
+
+    return {
+      html: `<ol${startAttribute}>${items.join('')}</ol>`,
+      nextIndex: index,
+    };
   }
 
   while (i < lines.length) {
@@ -201,21 +291,11 @@ function parseMarkdown(
     }
 
     // ---- Ordered list ----
-    if (line.match(/^\s*\d+\.\s+/)) {
+    if (matchOrderedListItem(line) !== null) {
       flushParagraph();
-      const items: string[] = [];
-      let liLine = lines[i];
-      while (
-        i < lines.length &&
-        liLine !== undefined &&
-        liLine.match(/^\s*\d+\.\s+/)
-      ) {
-        const item = liLine.replace(/^\s*\d+\.\s+/, '');
-        items.push(`<li>${formatInline(item)}</li>`);
-        i++;
-        liLine = lines[i];
-      }
-      htmlParts.push(`<ol>${items.join('')}</ol>`);
+      const orderedList = renderOrderedList(i);
+      htmlParts.push(orderedList.html);
+      i = orderedList.nextIndex;
       continue;
     }
 
