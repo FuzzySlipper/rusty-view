@@ -86,6 +86,25 @@ describe('parseChatEvent', () => {
     }
   });
 
+  it('recognizes runtime rebuild transitions as known lifecycle events', () => {
+    const event = parseChatEvent(
+      chatEventJson('runtime_rebuild_transition', {
+        action: 'reconstruct',
+        outcome: 'reconstructed',
+        profileId: 'system-architect',
+        sessionId: 'sess_1',
+        transition: 'reconstructed',
+        transitionId: 'transition_1',
+      }),
+    );
+
+    expect(event.kind).toBe('runtime_rebuild_transition');
+    expect(event.payload).toMatchObject({
+      outcome: 'reconstructed',
+      transitionId: 'transition_1',
+    });
+  });
+
   it('recognizes phase_change and provider_status events as known events', () => {
     const phase = parseChatEvent(
       chatEventJson('phase_change', {

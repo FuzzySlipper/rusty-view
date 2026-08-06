@@ -63,7 +63,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read model/provider/brain and approximate context usage diagnostics */
+        /** Read model/provider/brain and Rust-owned context accounting diagnostics */
         get: operations["getChatSessionContextUsage"];
         put?: never;
         post?: never;
@@ -784,6 +784,7 @@ export interface components {
                 sampled_event_count: number;
                 sampled_message_count: number;
             };
+            native_snapshot?: components["schemas"]["NativeContextAccountingSnapshot"];
             latest_compaction_artifact?: {
                 artifact_id: string;
                 strategy_id: string;
@@ -805,6 +806,43 @@ export interface components {
                 message: string;
             }[];
         };
+        NativeContextAccountingSnapshot: {
+            /** @constant */
+            schemaVersion: 1;
+            sessionId?: string | null;
+            wakeId?: string | null;
+            logicalTurnId?: string | null;
+            executionEpochId?: string | null;
+            /** Format: date-time */
+            measuredAt?: string | null;
+            provider: {
+                [key: string]: unknown;
+            };
+            promptProjection: {
+                [key: string]: unknown;
+            };
+            reservedOutput: {
+                [key: string]: unknown;
+            };
+            admission: {
+                [key: string]: unknown;
+            };
+            providerUsage: {
+                [key: string]: unknown;
+            };
+            durableTranscript: {
+                [key: string]: unknown;
+            };
+            providerState: {
+                [key: string]: unknown;
+            };
+            compaction: {
+                [key: string]: unknown;
+            };
+            diagnostics: {
+                [key: string]: unknown;
+            }[];
+        };
         ChatEvent: {
             event_id: string;
             session_id: string;
@@ -815,7 +853,7 @@ export interface components {
             payload: components["schemas"]["ChatEventPayload"];
         };
         /** @enum {string} */
-        ChatEventKind: "session_snapshot" | "session_execution_changed" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "logical_turn_admitted" | "logical_turn_continuing" | "logical_turn_yielding" | "logical_turn_queued_to_continue" | "logical_turn_attention_required" | "logical_turn_cancelling" | "logical_turn_completed" | "logical_turn_cancelled" | "logical_turn_failed" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
+        ChatEventKind: "session_snapshot" | "session_execution_changed" | "message_created" | "assistant_turn_started" | "assistant_text_delta" | "assistant_reasoning_delta" | "phase_change" | "provider_status" | "assistant_message_completed" | "assistant_turn_finished" | "tool_call_started" | "tool_call_completed" | "tool_call_failed" | "command_started" | "command_completed" | "command_failed" | "context_status" | "context_compaction_started" | "context_compaction_completed" | "context_compaction_failed" | "logical_turn_admitted" | "logical_turn_continuing" | "logical_turn_yielding" | "logical_turn_queued_to_continue" | "logical_turn_attention_required" | "logical_turn_cancelling" | "logical_turn_completed" | "logical_turn_cancelled" | "logical_turn_failed" | "runtime_rebuild_transition" | "message_slot_created" | "message_variant_created" | "message_variant_deleted" | "message_variants_reordered" | "message_active_variant_selected" | "conversation_branch_created" | "conversation_active_branch_selected" | "conversation_branch_head_updated" | "conversation_snapshot_created" | "attachment_uploaded" | "attachment_linked" | "attachment_removed" | "attachment_updated" | "data_bank_scope_created" | "data_bank_scope_removed" | "stream_error" | "unknown";
         ChatEventPayload: components["schemas"]["SessionSnapshotPayload"] | components["schemas"]["MessageCreatedPayload"] | components["schemas"]["AssistantTextDeltaPayload"] | components["schemas"]["AssistantReasoningDeltaPayload"] | components["schemas"]["AssistantMessageCompletedPayload"] | components["schemas"]["ToolCallPayload"] | components["schemas"]["CommandPayload"] | components["schemas"]["ContextDebugPayload"] | components["schemas"]["LogicalTurnLifecyclePayload"] | components["schemas"]["SessionExecutionChangedPayload"] | components["schemas"]["MessageSlotPayload"] | components["schemas"]["MessageVariantPayload"] | components["schemas"]["ConversationTreePayload"] | components["schemas"]["AttachmentPayload"] | components["schemas"]["DataBankScopePayload"] | components["schemas"]["StreamErrorPayload"] | components["schemas"]["UnknownEventPayload"];
         SessionSnapshotPayload: {
             session: components["schemas"]["ChatSessionSummary"];

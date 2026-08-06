@@ -651,6 +651,50 @@ describe('ChatStore', () => {
     expect(store.isGenerating()).toBe(false);
   });
 
+  it('opens an idle session whose initial page contains a runtime rebuild transition', async () => {
+    const transition: ChatEvent = {
+      event_id: 'sess_test:1',
+      session_id: 'sess_test',
+      sequence_id: 1,
+      created_at: '2026-08-06T08:10:26.854Z',
+      kind: 'runtime_rebuild_transition',
+      payload: {
+        action: 'reconstruct',
+        outcome: 'reconstructed',
+        profileId: 'system-architect',
+        sessionId: 'sess_test',
+        transition: 'reconstructed',
+        transitionId: 'transition_1',
+      } as unknown as ChatEvent['payload'],
+    };
+    const transport = createMockTransport({
+      openResult: {
+        ...emptyOpenResult(),
+        session: {
+          ...emptyOpenResult().session,
+          status: 'idle',
+          execution: executionState(
+            'sess_test',
+            'idle',
+            '2026-08-06T08:10:26.854Z',
+          ),
+        },
+        events: [transition],
+        latest_cursor: transition.event_id,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+
+    expect(store.sessionLoading()).toBe(false);
+    expect(store.projection()).toBeDefined();
+    expect(store.lastCursor()).toBe(transition.event_id);
+    expect(store.rawEvents()).toEqual([transition]);
+    expect(store.messages()).toHaveLength(0);
+    expect(store.isGenerating()).toBe(false);
+  });
+
   it('does not block the input on an idle session even if the stream re-feeds a turn', async () => {
     // Mirrors the live case: an idle session's open turn is re-replayed by the
     // SSE stream (events the openSession page did not include), so the client's

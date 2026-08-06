@@ -255,6 +255,78 @@ describe('ChatHttpTransport', () => {
       await transport.openSession('sess_1');
       expect(lastRequest().url).toContain('/v1/chat/sessions/sess_1');
     });
+
+    it('normalizes known and future event kinds through the shared event boundary', async () => {
+      const openResult = {
+        session: {
+          session_id: 'sess_1',
+          agent_id: 'agent_1',
+          profile_id: 'prof_1',
+          kind: 'full',
+          status: 'idle',
+          latest_cursor: 'sess_1:1',
+          updated_at: '2026-06-22T10:00:00Z',
+        },
+        events: [
+          {
+            event_id: 'sess_1:0',
+            session_id: 'sess_1',
+            sequence_id: 0,
+            created_at: '2026-06-22T10:00:00Z',
+            kind: 'runtime_rebuild_transition',
+            payload: { outcome: 'reconstructed', transitionId: 'transition_1' },
+          },
+          {
+            event_id: 'sess_1:1',
+            session_id: 'sess_1',
+            sequence_id: 1,
+            created_at: '2026-06-22T10:00:01Z',
+            kind: 'future_runtime_event',
+            payload: { detail: 'preserve me' },
+          },
+        ],
+        latest_cursor: 'sess_1:1',
+        has_more_before: false,
+      };
+      const { fetch } = capturingFetch(jsonOk(openResult));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const result = await transport.openSession('sess_1');
+
+      expect(result.events[0]?.kind).toBe('runtime_rebuild_transition');
+      expect(result.events[1]?.kind).toBe('unknown');
+      expect(result.events[1]?.payload).toMatchObject({
+        raw: { original_kind: 'future_runtime_event' },
+      });
+    });
+  });
+
+  describe('replayEventsPage', () => {
+    it('normalizes replayed events before returning them to the store', async () => {
+      const page = {
+        items: [
+          {
+            event_id: 'sess_1:4',
+            session_id: 'sess_1',
+            sequence_id: 4,
+            created_at: '2026-06-22T10:00:04Z',
+            kind: 'runtime_rebuild_transition',
+            payload: { outcome: 'preserved', transitionId: 'transition_2' },
+          },
+        ],
+        latest_cursor: 'sess_1:4',
+        has_more: false,
+      };
+      const { fetch } = capturingFetch(jsonOk(page));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      const result = await transport.replayEventsPage('sess_1');
+
+      expect(result.items[0]?.kind).toBe('runtime_rebuild_transition');
+      expect(result.items[0]?.payload).toMatchObject({
+        outcome: 'preserved',
+      });
+    });
   });
 
   describe('sendMessage', () => {

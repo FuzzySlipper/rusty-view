@@ -394,6 +394,77 @@ test('selecting a session renders message rows in the transcript', async ({
   await expect(debugPanel).toContainText('"query": "amber lantern"');
 });
 
+test('runtime rebuild transition does not wedge an idle Crew transcript', async ({
+  page,
+}) => {
+  const sessionId = 'runtime-rebuild-fixture-session';
+  const session = {
+    ...SESSION_SUMMARY,
+    session_id: sessionId,
+    agent_id: 'system-architect',
+    profile_id: 'system-architect',
+    title: 'Runtime Rebuild Fixture',
+    latest_cursor: `${sessionId}:1`,
+    message_count: 0,
+  };
+  const transition = {
+    event_id: `${sessionId}:1`,
+    session_id: sessionId,
+    sequence_id: 1,
+    created_at: '2026-08-06T08:10:26.854Z',
+    kind: 'runtime_rebuild_transition',
+    payload: {
+      action: 'reconstruct',
+      outcome: 'reconstructed',
+      profileId: 'system-architect',
+      sessionId,
+      transition: 'reconstructed',
+      transitionId: 'transition_1',
+    },
+  };
+
+  await page.route('**/v1/chat/commands', (route) =>
+    fulfillJson(route, { commands: [] }),
+  );
+  await page.route('**/v1/chat/sessions*', (route) =>
+    fulfillSessionPage(route, session),
+  );
+  await page.route('**/v1/chat/sessions/*/events*', (route) =>
+    fulfillJson(route, { items: [] }),
+  );
+  await page.route('**/v1/chat/sessions/*/stream*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: ':\n\n',
+    }),
+  );
+  await page.route(`**/v1/chat/sessions/${sessionId}`, (route) =>
+    fulfillJson(route, {
+      session,
+      events: [transition],
+      latest_cursor: `${sessionId}:1`,
+      has_more_before: false,
+    }),
+  );
+
+  await page.goto('/');
+  const sessionRow = page.locator(
+    `[data-testid="profile-session-row"][data-session-id="${sessionId}"]`,
+  );
+  await expect(sessionRow).toBeVisible({ timeout: 10_000 });
+  await sessionRow.click();
+
+  await expect(page.getByTestId('session-transcript-loading')).toHaveCount(0);
+  await expect(page.getByTestId('message-input-field')).toBeEnabled({
+    timeout: 10_000,
+  });
+  await expect(page.getByTestId('event-row')).toHaveCount(1);
+  await expect(page.getByTestId('event-row')).toContainText(
+    'runtime_rebuild_transition',
+  );
+});
+
 test('scrollToMessageId materializes a live assistant row beyond the bounded window', async ({
   page,
 }) => {

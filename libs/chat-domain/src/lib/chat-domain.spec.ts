@@ -676,6 +676,42 @@ describe('projectConversation', () => {
     expect(projection.unknownEvents).toHaveLength(1);
     expect(projection.unknownEvents[0]?.event_id).toBe('e1');
   });
+
+  it('keeps runtime rebuild transitions transcript-neutral while advancing the cursor', () => {
+    const transition = makeEvent(
+      'runtime_rebuild_transition',
+      {
+        action: 'reconstruct',
+        outcome: 'reconstructed',
+        profileId: 'system-architect',
+        sessionId: 'sess_1',
+        transition: 'reconstructed',
+        transitionId: 'transition_1',
+      } as unknown as ChatEvent['payload'],
+      { event_id: 'rebuild_1', sequence_id: 1 },
+    );
+
+    const projection = projectConversation([transition]);
+
+    expect(projection.latestCursor).toBe('rebuild_1');
+    expect(projection.messages).toHaveLength(0);
+    expect(projection.unknownEvents).toHaveLength(0);
+  });
+
+  it('defensively preserves a newer reducer event kind instead of returning undefined', () => {
+    const futureEvent = {
+      ...makeEvent('unknown', {
+        summary: 'future event',
+        raw: { detail: 'keep me' },
+      }),
+      kind: 'future_runtime_event',
+    } as unknown as ChatEvent;
+
+    const projection = projectConversation([futureEvent]);
+
+    expect(projection.latestCursor).toBe(futureEvent.event_id);
+    expect(projection.unknownEvents[0]).toBe(futureEvent);
+  });
 });
 
 describe('attachment lifecycle projection', () => {

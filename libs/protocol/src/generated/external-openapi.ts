@@ -536,6 +536,11 @@ export interface components {
             /** @constant */
             type: "external_agent";
         } | {
+            clientId: string;
+            idempotencyKey: string;
+            /** @constant */
+            type: "external_cli";
+        } | {
             submissionId: string;
             /** @constant */
             type: "review_submission";
@@ -1239,6 +1244,13 @@ export interface components {
             bindingId: string;
             createdAt: string;
             cwd?: string | null;
+            /**
+             * @description Fingerprint of the exact dynamic-tool catalog applied at native thread start.
+             *     Missing values are an explicit stale/unknown state for bindings created
+             *     before catalog reconciliation was introduced.
+             * @default null
+             */
+            dynamicToolCatalogFingerprint: string | null;
             effectiveConfigFingerprint: string;
             label?: string | null;
             /** @default immediate_steer */
@@ -2136,10 +2148,16 @@ export interface components {
             max_duration_ms?: number | null;
             workdir?: string | null;
         };
+        ReviewFindingStatus: {
+            /** Format: uint64 */
+            findingId: number;
+            status: string;
+        };
         /** @enum {string} */
-        ReviewSubmissionPhase: "submitted" | "den_handoff_recorded" | "gate_pending" | "gate_failed" | "reviewer_dispatch_pending" | "reviewer_dispatched" | "review_terminal" | "superseded";
+        ReviewSubmissionPhase: "submitted" | "den_handoff_recorded" | "gate_pending" | "gate_failed" | "reviewer_dispatch_pending" | "reviewer_dispatched" | "den_finalization_pending" | "den_finalized" | "reply_pending" | "replied" | "reply_terminal" | "review_terminal" | "superseded";
         ReviewSubmissionQuery: {
             pendingOnly: boolean;
+            reviewerSessionId?: string | null;
             submissionId?: string | null;
             submitterSessionId?: string | null;
             taskId?: string | null;
@@ -2158,18 +2176,36 @@ export interface components {
             lastAdapterError?: string | null;
             phase: components["schemas"]["ReviewSubmissionPhase"];
             projectId: string;
+            replyDeliveryId?: string | null;
+            replyMessageId?: string | null;
+            replyReasonCode?: string | null;
+            replyStatus?: string | null;
             repository: string;
             requiredChecks: string[];
+            reviewExactHeadCommit?: string | null;
+            /** Format: uint64 */
+            reviewFinalizationId?: number | null;
+            /** @default [] */
+            reviewFindingStatuses: components["schemas"]["ReviewFindingStatus"][];
+            reviewMaterialDigest?: string | null;
+            /** Format: uint64 */
+            reviewPacketId?: number | null;
+            /** Format: uint64 */
+            reviewPacketMessageId?: number | null;
+            reviewResultDigest?: string | null;
+            reviewResultJson?: string | null;
             /** Format: uint64 */
             reviewRoundId?: number | null;
             reviewSummaryMd: string;
+            reviewTaskStatus?: string | null;
+            reviewVerdict?: string | null;
             reviewer: string;
             reviewerSessionId?: string | null;
             /** Format: uint64 */
             revision: number;
             submissionId: string;
             submitterAgentId: string;
-            submitterSessionId: string;
+            submitterSessionId?: string | null;
             taskId: string;
             terminalReason?: string | null;
             updatedAt: string;
@@ -2198,6 +2234,11 @@ export interface components {
             /** @constant */
             type: "gate_registered";
         } | {
+            gateStatus: string;
+            terminalReason: string;
+            /** @constant */
+            type: "gate_terminal";
+        } | {
             reasonCode: string;
             summary: string;
             /** @constant */
@@ -2208,6 +2249,38 @@ export interface components {
             reviewerSessionId: string;
             /** @constant */
             type: "reviewer_dispatched";
+        } | {
+            resultDigest: string;
+            resultJson: string;
+            /** @constant */
+            type: "den_finalization_pending";
+        } | {
+            exactHeadCommit: string;
+            /** Format: uint64 */
+            finalizationId: number;
+            findingStatuses: components["schemas"]["ReviewFindingStatus"][];
+            materialDigest?: string | null;
+            /** Format: uint64 */
+            packetId: number;
+            /** Format: uint64 */
+            packetMessageId: number;
+            taskStatus: string;
+            /** @constant */
+            type: "den_finalized";
+            verdict: string;
+        } | {
+            /** @constant */
+            type: "reply_pending";
+        } | {
+            replyDeliveryId: string;
+            replyMessageId: string;
+            replyStatus: string;
+            /** @constant */
+            type: "reply_sent";
+        } | {
+            reasonCode: string;
+            /** @constant */
+            type: "reply_terminal";
         } | {
             terminalReason: string;
             /** @constant */

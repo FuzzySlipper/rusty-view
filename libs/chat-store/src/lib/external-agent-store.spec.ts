@@ -2109,6 +2109,7 @@ function externalBinding(): ExternalAgentBinding {
     purpose: 'crew_agent',
     status: 'active',
     cwd: '/home/dev/rusty-view',
+    dynamicToolCatalogFingerprint: null,
     effectiveConfigFingerprint: 'config',
     messageDeliveryPolicy: 'immediate_steer',
     profileId: null,

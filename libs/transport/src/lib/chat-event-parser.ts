@@ -45,6 +45,7 @@ const KNOWN_EVENT_KINDS: Record<ChatEventKind, true> = {
   logical_turn_completed: true,
   logical_turn_cancelled: true,
   logical_turn_failed: true,
+  runtime_rebuild_transition: true,
   message_slot_created: true,
   message_variant_created: true,
   message_variant_deleted: true,
@@ -119,10 +120,25 @@ export function parseChatEvent(data: string): ChatEvent {
     });
   }
 
+  return parseChatEventObject(parsed);
+}
+
+/**
+ * Normalize an already-decoded ChatEvent from an HTTP response into the same
+ * forward-compatible boundary used by SSE.
+ *
+ * HTTP open/replay responses are typed from the current contract, but the
+ * server can be newer than the generated client. Keeping this normalization
+ * at the transport boundary means a future event kind is coerced to `unknown`
+ * instead of reaching the reducer as an unhandled value.
+ */
+export function parseChatEventObject(value: unknown): ChatEvent {
+  const parsed = value;
+
   if (!isRecord(parsed)) {
     throw new ChatTransportError({
       code: 'sse_parse_error',
-      message: 'SSE data is not a JSON object',
+      message: 'ChatEvent is not a JSON object',
     });
   }
 

@@ -205,6 +205,7 @@ function managedBinding(
     purpose: 'crew_agent',
     status: 'active',
     messageDeliveryPolicy: policy,
+    dynamicToolCatalogFingerprint: null,
     effectiveConfigFingerprint: 'fingerprint',
     revision: 4,
     createdAt: '2026-07-21T00:00:00Z',

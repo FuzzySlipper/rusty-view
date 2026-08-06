@@ -48,13 +48,11 @@ export function projectConversation(
 /**
  * Apply a single event to a projection, returning a new immutable projection.
  *
- * The switch is deliberately exhaustive: every known ChatEventKind has a case.
- * If the contract adds a new kind, TypeScript errors (not all code paths return
- * a ConversationProjection), making unhandled kinds obvious in debug builds.
- *
- * Transport coerces unrecognized backend kinds to 'unknown' before they reach
- * here, so the 'unknown' case is the safe fallback for future/unrecognized
- * events.
+ * Known event kinds that do not create transcript messages still advance the
+ * cursor and remain available in the store's raw event inspector. Transport
+ * coerces unrecognized backend kinds to `unknown`, and the defensive default
+ * below keeps a newer generated contract from wedging the projection if a new
+ * kind reaches this reducer before its dedicated case is added.
  */
 function applyEvent(
   projection: ConversationProjection,
@@ -113,6 +111,10 @@ function applyEvent(
     case 'logical_turn_cancelled':
     case 'logical_turn_failed':
       return applyLogicalTurnEvent(withCursor, event);
+    case 'runtime_rebuild_transition':
+      // Runtime rebuilds are lifecycle diagnostics, not chat content. The
+      // complete event and payload remain in rawEvents for the event inspector.
+      return withCursor;
     // Known kinds the conversation model does not yet project (message slots /
     // variants, branches, snapshots, attachments, data-bank scopes). They are
     // tracked by their own tasks; here they only advance the cursor so replay
@@ -141,9 +143,11 @@ function applyEvent(
       return applyStreamError(withCursor, event);
     case 'unknown':
       return applyUnknown(withCursor, event);
+    default:
+      // Keep forward compatibility even when generated types and the backend
+      // briefly disagree about a newly introduced event kind.
+      return applyUnknown(withCursor, event);
   }
-  // No default: if ChatEventKind gains a member, the switch is no longer
-  // exhaustive and TypeScript errors because not all paths return.
 }
 
 // ---- session snapshot ----

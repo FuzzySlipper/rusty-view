@@ -78,6 +78,7 @@ import {
 import type { ChatTransportErrorInit } from './chat-transport-error';
 import type { ChatTransportConfig } from './chat-transport-config';
 import type { FetchImpl } from './chat-transport-config';
+import { parseChatEventObject } from './chat-event-parser';
 
 /** Query parameters for listing sessions (snake_case matches the wire format). */
 export type ListSessionsQuery = {
@@ -180,7 +181,11 @@ export class ChatHttpTransport {
         ...(query !== undefined ? { query } : {}),
       },
     );
-    return unwrapEnvelope(body);
+    const result = unwrapEnvelope(body);
+    return {
+      ...result,
+      events: result.events.map((event) => parseChatEventObject(event)),
+    };
   }
 
   /**
@@ -200,7 +205,11 @@ export class ChatHttpTransport {
         ...(query !== undefined ? { query } : {}),
       },
     );
-    return unwrapEnvelope(body);
+    const result = unwrapEnvelope(body);
+    return {
+      ...result,
+      items: result.items.map((event) => parseChatEventObject(event)),
+    };
   }
 
   /** Replay one page of historical events after a cursor (items only). */
