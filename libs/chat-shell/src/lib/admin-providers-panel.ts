@@ -127,6 +127,7 @@ const RESPONSES_DIALECT_OPTIONS: readonly {
   { value: 'openai_stateless', label: 'OpenAI stateless' },
   { value: 'generic_stateless', label: 'Generic stateless' },
   { value: 'deepseek', label: 'DeepSeek (direct)' },
+  { value: 'meta', label: 'Meta Responses' },
 ];
 
 const THINKING_MODES: readonly ChatCompletionsThinkingMode[] = [

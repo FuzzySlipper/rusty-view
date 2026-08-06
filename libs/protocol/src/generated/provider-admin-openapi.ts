@@ -344,7 +344,7 @@ export interface components {
          * @description Required when protocol is responses. Selects an explicit provider-owned wire dialect; Crew does not infer it from aliases, URLs, model IDs, or providerKind.
          * @enum {string}
          */
-        ResponsesProviderDialect: "openai_stateful" | "openai_stateless" | "generic_stateless" | "deepseek";
+        ResponsesProviderDialect: "openai_stateful" | "openai_stateless" | "generic_stateless" | "deepseek" | "meta";
         /** @enum {string} */
         ChatCompletionsDialect: "standard" | "kimi" | "glm" | "qwen" | "deepseek";
         /** @enum {string} */

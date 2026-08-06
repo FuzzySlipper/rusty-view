@@ -656,9 +656,9 @@ describe('AdminProvidersPanelComponent', () => {
       saveProvider(): Promise<void>;
     };
 
-    component.updateText('alias', { target: { value: 'deepseek-direct' } });
+    component.updateText('alias', { target: { value: 'meta-muse' } });
     component.updateText('modelId', {
-      target: { value: 'deepseek-reasoner' },
+      target: { value: 'muse-spark-1.2' },
     });
     component.updateProtocol({ target: { value: 'responses' } });
     fixture.detectChanges();
@@ -676,6 +676,7 @@ describe('AdminProvidersPanelComponent', () => {
       'openai_stateless',
       'generic_stateless',
       'deepseek',
+      'meta',
     ]);
     expect(component.saveDisabled()).toBe(true);
 
@@ -684,6 +685,7 @@ describe('AdminProvidersPanelComponent', () => {
       'openai_stateless',
       'generic_stateless',
       'deepseek',
+      'meta',
     ]) {
       component.updateResponsesDialect({ target: { value: dialect } });
       expect(component.form().responsesDialect).toBe(dialect);
@@ -694,11 +696,11 @@ describe('AdminProvidersPanelComponent', () => {
     expect(transport.createAdminModelProvider.mock.calls[0]?.[0]).toMatchObject(
       {
         protocol: 'responses',
-        responsesDialect: 'deepseek',
-        modelId: 'deepseek-reasoner',
+        responsesDialect: 'meta',
+        modelId: 'muse-spark-1.2',
       },
     );
-    expect(textContent(fixture)).toContain('DeepSeek (direct)');
+    expect(textContent(fixture)).toContain('Meta Responses');
   });
 
   it('clears the hidden dialect on protocol switches and omits it for Chat Completions', async () => {
