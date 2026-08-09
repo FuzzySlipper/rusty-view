@@ -815,6 +815,127 @@ describe('projectExternalAgentTranscript', () => {
     expect(messages).toEqual([]);
   });
 
+  it('coalesces a dynamic tool start and failed result into one readable block', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/workspace',
+        cliVersion: '0.146.0',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'commentary',
+                kind: 'agentMessage',
+                text: 'Calling the tool.',
+                messagePhase: 'commentary',
+              },
+              {
+                itemId: 'final',
+                kind: 'agentMessage',
+                text: 'The failure was intentional.',
+                messagePhase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+      [
+        {
+          ...event('1', 'dynamic_tool_activity', {
+            nativeMethod: 'item/started',
+            status: 'inProgress',
+            tool: 'complete_routed_review',
+          }),
+          itemId: 'tool-1',
+        },
+        {
+          ...event('2', 'dynamic_tool_activity', {
+            nativeMethod: 'item/completed',
+            status: 'failed',
+            tool: 'complete_routed_review',
+            success: false,
+            text: 'No managed review submission exists for this message.',
+          }),
+          itemId: 'tool-1',
+        },
+      ],
+    );
+
+    const blocks = messages
+      .flatMap((message) => message.blocks)
+      .filter((block) => block.kind === 'tool_call');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual(
+      expect.objectContaining({
+        id: 'block:tool-1',
+        kind: 'tool_call',
+        content: 'No managed review submission exists for this message.',
+        tool: expect.objectContaining({
+          name: 'complete_routed_review',
+          status: 'failed',
+        }),
+      }),
+    );
+    expect(messages[0]?.blocks.map((block) => block.kind)).toEqual([
+      'text',
+      'tool_call',
+      'text',
+    ]);
+  });
+
+  it('coalesces a successful dynamic tool lifecycle and shows its result', () => {
+    const messages = projectExternalAgentTranscript(undefined, [
+      {
+        ...event('1', 'dynamic_tool_activity', {
+          nativeMethod: 'item/started',
+          status: 'inProgress',
+          tool: 'send_agent_message',
+        }),
+        itemId: 'tool-2',
+      },
+      {
+        ...event('2', 'dynamic_tool_activity', {
+          nativeMethod: 'item/completed',
+          status: 'completed',
+          tool: 'send_agent_message',
+          success: true,
+          text: 'Message delivered.',
+        }),
+        itemId: 'tool-2',
+      },
+    ]);
+
+    const blocks = messages.flatMap((message) => message.blocks);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual(
+      expect.objectContaining({
+        id: 'block:tool-2',
+        content: 'Message delivered.',
+        tool: expect.objectContaining({
+          name: 'send_agent_message',
+          status: 'completed',
+        }),
+      }),
+    );
+  });
+
   it('preserves commentary and final-answer phases from completed snapshots', () => {
     const messages = projectExternalAgentTranscript(
       {

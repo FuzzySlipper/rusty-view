@@ -162,8 +162,12 @@ export function projectExternalAgentTranscript(
     const snapshotCoverage = snapshotCoverageByTurn.get(
       first.nativeTurnId ?? '',
     );
+    const preservesOmittedDynamicTool = group.some(
+      (event) => event.kind === 'dynamic_tool_activity',
+    );
     if (
       snapshotCoverage?.terminal &&
+      !preservesOmittedDynamicTool &&
       !(
         snapshotCoverage.error === null &&
         group.some((event) => event.payload.error !== undefined)
@@ -563,6 +567,28 @@ function blocksForGroup(
   if (latestErrorEvent !== undefined) {
     return [blockForTurnErrorEvent(latestErrorEvent)];
   }
+  const externalToolActivity = projectExternalToolActivity(events);
+  if (externalToolActivity !== undefined) {
+    const content =
+      externalToolActivity.text ??
+      (externalToolActivity.status === 'failed'
+        ? 'Tool call failed.'
+        : externalToolActivity.status === 'completed'
+          ? 'Tool call completed.'
+          : 'Tool call is running.');
+    return [
+      withExternalDetailHistory(
+        toolBlockValues(
+          externalToolActivity.itemId ?? externalToolActivity.first.eventId,
+          'tool_call',
+          externalToolActivity.name,
+          content,
+          externalToolActivity.status,
+        ),
+        events,
+      ),
+    ];
+  }
   const commandActivity = projectCommandActivity(events);
   if (commandActivity !== undefined) {
     const content =
@@ -602,6 +628,52 @@ function blocksForGroup(
   return events
     .map((event) => eventBlock(event, messageStatus))
     .filter((block): block is MessageBlock => block !== undefined);
+}
+
+interface ProjectedExternalToolActivity {
+  readonly first: NormalizedExternalRuntimeEvent;
+  readonly itemId: string | undefined;
+  readonly name: string;
+  readonly text: string | undefined;
+  readonly status: ToolBlockStatus;
+}
+
+function projectExternalToolActivity(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): ProjectedExternalToolActivity | undefined {
+  const toolEvents = events.filter(
+    (event) =>
+      event.kind === 'mcp_activity' || event.kind === 'dynamic_tool_activity',
+  );
+  const first = toolEvents[0];
+  if (first === undefined) return undefined;
+
+  const success = latestDefined(toolEvents, (event) => event.payload.success);
+  const nativeStatus = latestDefined(
+    toolEvents,
+    (event) => event.payload.status,
+  );
+  const status =
+    success === false
+      ? 'failed'
+      : success === true
+        ? 'completed'
+        : toolStatus(nativeStatus);
+
+  return {
+    first,
+    itemId: latestDefined(toolEvents, (event) => event.itemId),
+    name:
+      latestDefined(
+        toolEvents,
+        (event) => event.payload.tool ?? event.payload.server,
+      ) ?? 'Tool',
+    text: latestDefined(
+      toolEvents,
+      (event) => event.payload.text ?? event.payload.message,
+    ),
+    status,
+  };
 }
 
 interface ProjectedCommandActivity {
@@ -1003,7 +1075,19 @@ function appendExternalTurnBlocks(
     ...block,
     messageId: message.id,
   }));
-  const nextBlocks = [...message.blocks, ...appendedBlocks];
+  const firstFinalAnswer = message.blocks.findIndex(
+    (block) => block.metadata?.['messagePhase'] === 'final_answer',
+  );
+  const insertBeforeFinalAnswer =
+    firstFinalAnswer >= 0 &&
+    appendedBlocks.some((block) => block.kind === 'tool_call');
+  const nextBlocks = insertBeforeFinalAnswer
+    ? [
+        ...message.blocks.slice(0, firstFinalAnswer),
+        ...appendedBlocks,
+        ...message.blocks.slice(firstFinalAnswer),
+      ]
+    : [...message.blocks, ...appendedBlocks];
   const messagePhase = messagePhaseForBlocks(nextBlocks) ?? eventPhase;
   messages[messageIndex] = {
     ...message,

@@ -192,6 +192,35 @@ describe('MessageBlockComponent', () => {
     expect(host.textContent).toContain('tool_call');
   });
 
+  it('renders an external dynamic-tool failure name, status, and reason', async () => {
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'tool_call',
+        content: 'No managed review submission exists for this message.',
+        renderPolicy: 'collapsed',
+        tool: {
+          name: 'complete_routed_review',
+          status: 'failed',
+          summary: 'No managed review submission exists for this message.',
+          reasonCode: undefined,
+          debugDetailId: undefined,
+        },
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(
+      host
+        .querySelector('[data-testid="tool-call-block"]')
+        ?.getAttribute('data-status'),
+    ).toBe('failed');
+    expect(host.textContent).toContain('complete_routed_review');
+    expect(host.textContent).toContain('failed');
+    expect(host.textContent).toContain(
+      'No managed review submission exists for this message.',
+    );
+  });
+
   it('auto-expands reasoning without overriding a manual streaming collapse', async () => {
     const block = makeBlock({
       id: 'reasoning-1',
