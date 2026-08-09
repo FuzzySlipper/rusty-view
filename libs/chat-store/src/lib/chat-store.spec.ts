@@ -1090,6 +1090,88 @@ describe('ChatStore', () => {
     expect(store.pendingSends()).toEqual([]);
   });
 
+  it('does not acknowledge changed attachment submissions as an earlier duplicate', async () => {
+    const transport = createMockTransport({});
+    const durableRequests = new Map<
+      string,
+      { body: string; attachment_ids?: readonly string[] }
+    >();
+    let wakes = 0;
+    (
+      transport as unknown as {
+        sendMessage: ReturnType<typeof vi.fn>;
+        replayAllEvents: ReturnType<typeof vi.fn>;
+      }
+    ).sendMessage = vi.fn(
+      async (
+        _sessionId: string,
+        request: { body: string; attachment_ids?: readonly string[] },
+        idempotencyKey: string,
+      ) => {
+        if (!durableRequests.has(idempotencyKey)) {
+          durableRequests.set(idempotencyKey, request);
+          wakes += 1;
+        }
+        return acceptedResult();
+      },
+    );
+    (
+      transport as unknown as {
+        replayAllEvents: ReturnType<typeof vi.fn>;
+      }
+    ).replayAllEvents = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('catch-up failed after commit'))
+      .mockResolvedValue([]);
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.selectSession('sess_test');
+
+    expect(
+      await store.sendMessageWithAttachments(
+        'original',
+        ['attachment-1'],
+        'identity-original',
+      ),
+    ).toBe(false);
+    expect(
+      await store.sendMessageWithAttachments(
+        'original',
+        ['attachment-1'],
+        'identity-original',
+      ),
+    ).toBe(true);
+    expect(
+      await store.sendMessageWithAttachments(
+        'edited text',
+        ['attachment-1'],
+        'identity-edited-text',
+      ),
+    ).toBe(true);
+    expect(
+      await store.sendMessageWithAttachments(
+        'edited text',
+        ['attachment-1', 'attachment-2'],
+        'identity-edited-attachments',
+      ),
+    ).toBe(true);
+
+    expect(transport.sendMessage).toHaveBeenCalledTimes(4);
+    expect(durableRequests.size).toBe(3);
+    expect(wakes).toBe(3);
+    expect(durableRequests.get('identity-original')).toMatchObject({
+      body: 'original',
+      attachment_ids: ['attachment-1'],
+    });
+    expect(durableRequests.get('identity-edited-text')).toMatchObject({
+      body: 'edited text',
+      attachment_ids: ['attachment-1'],
+    });
+    expect(durableRequests.get('identity-edited-attachments')).toMatchObject({
+      body: 'edited text',
+      attachment_ids: ['attachment-1', 'attachment-2'],
+    });
+  });
+
   it('sendMessage shows an immediate assistant typing placeholder while the send is in flight', async () => {
     const transport = createMockTransport({});
     let resolveSend!: (value: SendChatMessageResult) => void;

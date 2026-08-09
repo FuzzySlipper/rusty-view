@@ -58,6 +58,10 @@ import {
 } from './slash-commands/slash-command-runtime';
 import { externalCommandComposerDescriptors } from './external-command-composer';
 import { formatNativeReasoningEffort } from './native-reasoning-effort';
+import {
+  attachmentMessageIdentity,
+  type AttachmentMessageIdentity,
+} from './attachment-message-identity';
 
 interface ComposerAttachmentUpload {
   readonly selection: MessageInputAttachmentSelection;
@@ -166,7 +170,7 @@ export class DebugShellComponent {
     undefined,
   );
   private composerSessionId: string | null = null;
-  private attachmentMessageIdempotencyKey: string | undefined;
+  private attachmentMessageIdentity: AttachmentMessageIdentity | undefined;
 
   protected readonly showInspector = computed(
     () => this.theme.settings().showInspector,
@@ -682,12 +686,16 @@ export class DebugShellComponent {
       uploads.map((upload) => upload.selection.attachment.id),
       'sending',
     );
-    this.attachmentMessageIdempotencyKey ??=
-      newAttachmentMessageIdempotencyKey();
+    this.attachmentMessageIdentity = attachmentMessageIdentity(
+      this.attachmentMessageIdentity,
+      submission.text,
+      uploads.map((upload) => upload.attachmentId as string),
+      newAttachmentMessageIdempotencyKey,
+    );
     const accepted = await this.store.sendMessageWithAttachments(
       submission.text,
       uploads.map((upload) => upload.attachmentId as string),
-      this.attachmentMessageIdempotencyKey,
+      this.attachmentMessageIdentity.idempotencyKey,
     );
     if (!accepted) {
       this.updateComposerAttachmentStatus(
@@ -708,7 +716,7 @@ export class DebugShellComponent {
         (attachment) => !completedIds.has(attachment.selection.attachment.id),
       ),
     );
-    this.attachmentMessageIdempotencyKey = undefined;
+    this.attachmentMessageIdentity = undefined;
     this.messageInput()?.completeAttachmentSubmission();
   }
 
@@ -788,7 +796,7 @@ export class DebugShellComponent {
     const attachments = this.composerAttachments();
     this.composerAttachments.set([]);
     this.composerAttachmentError.set(undefined);
-    this.attachmentMessageIdempotencyKey = undefined;
+    this.attachmentMessageIdentity = undefined;
     for (const attachment of attachments) {
       if (attachment.attachmentId !== undefined) {
         void this.removeUploadedAttachment(attachment);
