@@ -246,11 +246,21 @@
         >
         }
       </div>
-      } @if (!externalSelected() && store.activeLogicalTurn()) {
+      } @if (!externalSelected()) {
       <div
         class="rv-debug__composer-controls"
         data-testid="logical-turn-controls"
       >
+        <button
+          type="button"
+          class="rv-debug__composer-attachment"
+          data-testid="native-attachment-picker"
+          [disabled]="inputDisabled() || !attachmentsEnabled()"
+          (click)="openAttachmentPicker()"
+        >
+          Attach chat image
+        </button>
+        @if (store.activeLogicalTurn()) {
         <button
           type="button"
           data-testid="cancel-logical-turn"
@@ -265,7 +275,7 @@
           >Paused for attention: {{
           store.activeLogicalTurnDiagnostic()?.reasonCode }}</span
         >
-        }
+        } }
       </div>
       } @if (externalSelected()) {
       <div
@@ -277,7 +287,7 @@
           class="rv-debug__composer-attachment"
           data-testid="external-attachment-picker"
           [disabled]="inputDisabled() || !attachmentsEnabled()"
-          (click)="openExternalAttachmentPicker()"
+          (click)="openAttachmentPicker()"
         >
           Attach chat image
         </button>
@@ -307,7 +317,7 @@
         [submissionHistory]="inputSubmissionHistory()"
         [erasePreviousWordHotkey]="hotkeys.binding('erasePreviousWord')"
         [attachmentsEnabled]="attachmentsEnabled()"
-        [attachmentControlsVisible]="!externalSelected()"
+        [attachmentControlsVisible]="false"
         [attachmentScopes]="attachmentScopes"
         [attachmentStates]="composerAttachmentStates()"
         (send)="onSendMessage($event)"

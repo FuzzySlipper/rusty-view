@@ -40,6 +40,11 @@ test('profile sidebar, active session, and sessions menu historical flow', async
   await expect(page.locator('rv-transcript-viewport')).toBeVisible({
     timeout: 10_000,
   });
+  await expect(page.getByTestId('logical-turn-controls')).toBeVisible();
+  await expect(page.getByTestId('native-attachment-picker')).toBeVisible();
+  await expect(
+    page.locator('rv-message-input .rv-input__attachments'),
+  ).toHaveCount(0);
 
   // 3. Top-menu Sessions entry opens the sessions panel.
   await expect(

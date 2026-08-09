@@ -45,12 +45,7 @@
 }
 
 .rv-message--commentary {
-  border-left: 3px solid var(--rv-color-border-strong);
   background: var(--rv-color-surface);
-}
-
-.rv-message--final-answer {
-  border-left: 3px solid var(--rv-color-accent);
 }
 
 .rv-message--system,

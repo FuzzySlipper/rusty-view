@@ -625,7 +625,7 @@ export class DebugShellComponent {
     }
   }
 
-  protected openExternalAttachmentPicker(): void {
+  protected openAttachmentPicker(): void {
     this.messageInput()?.openAttachmentPicker();
   }
 
