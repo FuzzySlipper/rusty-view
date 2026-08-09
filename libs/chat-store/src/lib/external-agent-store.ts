@@ -1938,12 +1938,12 @@ function externalSessionRelationship(
       candidate.lineage.predecessorNativeThreadId === thread.threadId,
   );
   if (isPredecessor) return 'lineage_predecessor';
-  if (binding.lineage !== null) {
-    return binding.status === 'active' && !thread.nativeMaterialized
+  if (binding.lineage != null) {
+    return binding.status === 'active' && thread.nativeMaterialized === false
       ? 'lineage_successor_recovery_required'
       : 'lineage_successor';
   }
-  if (binding.status === 'active' && !thread.nativeMaterialized) {
+  if (binding.status === 'active' && thread.nativeMaterialized === false) {
     return 'recovery_required';
   }
   return 'bound';
@@ -2010,7 +2010,7 @@ function bindingsNeedingDirectThreadRead(
 ): string[] {
   const predecessorBindingIds = new Set(
     bindings.flatMap((binding) =>
-      binding.runtimeId === runtimeId && binding.lineage !== null
+      binding.runtimeId === runtimeId && binding.lineage != null
         ? [binding.lineage.predecessorBindingId]
         : [],
     ),

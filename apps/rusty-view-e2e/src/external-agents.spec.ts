@@ -249,34 +249,40 @@ test('external agent fleet, transcript activity, interactions, and controls are 
           updatedAt: 1783756900,
           turns: [],
         };
-        listedThreads = [
-          ...listedThreads.filter(
-            (candidate) => candidate.threadId !== 'thread-1',
-          ),
-          replacementThread,
+        listedThreads = [...listedThreads, replacementThread];
+        listedBindings = [
+          ...listedBindings,
+          {
+            ...currentBinding,
+            bindingId: 'binding-replacement',
+            nativeThreadId: replacementThread.threadId,
+            sessionId: 'session-replacement',
+            lineage: {
+              predecessorBindingId: currentBinding.bindingId,
+              predecessorSessionId: currentBinding.sessionId,
+              predecessorNativeThreadId: 'thread-1',
+              transitionId: commandId,
+              reasonCode: 'external_command_new_session',
+              createdAt: currentBinding.updatedAt,
+            },
+            revision: 6,
+          },
         ];
-        listedBindings = listedBindings.map((candidate) =>
-          candidate.bindingId === 'binding-1'
-            ? {
-                ...candidate,
-                nativeThreadId: replacementThread.threadId,
-                revision: 6,
-              }
-            : candidate,
-        );
         threadReplacement = {
-          bindingId: 'binding-1',
+          bindingId: 'binding-replacement',
           bindingRevision: 6,
-          sessionId: 'session-1',
+          sessionId: 'session-replacement',
           profileId: null,
           cwd: '/home/dev/rusty-view',
           label: 'Replacement Codex thread',
           taskRef: { project_id: 'rusty-view', task_id: '5888' },
+          previousBindingId: 'binding-1',
+          previousSessionId: 'session-1',
           previousNativeThreadId: 'thread-1',
           nativeThreadId: replacementThread.threadId,
-          previousNativeThreadArchived: true,
+          previousNativeThreadArchived: false,
           settingsPreserved: true,
-          settings: commandCatalog('binding-1').settings,
+          settings: commandCatalog('binding-replacement').settings,
         };
       }
       listedEvents = [
@@ -665,7 +671,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   messageBindingId = undefined;
   await composer.fill('Immediate replacement prompt');
   await page.getByTestId('send-message').click();
-  expect(messageBindingId).toBe('binding-1');
+  expect(messageBindingId).toBe('binding-replacement');
   await expect(page.getByTestId('transcript-shell')).toContainText(
     'Immediate replacement prompt',
   );
