@@ -19,6 +19,7 @@ import type {
 } from '@rusty-view/chat-domain';
 
 import { AttachmentBlockComponent } from './attachment-block';
+import { DocumentAttachmentGroupComponent } from './document-attachment-group';
 import { MediaAttachmentGroupComponent } from './media-attachment-group';
 import { WorkerManager } from './worker-manager';
 import {
@@ -124,6 +125,7 @@ const AUTO_HTML_TAGS = new Set([
   imports: [
     NgComponentOutlet,
     AttachmentBlockComponent,
+    DocumentAttachmentGroupComponent,
     MediaAttachmentGroupComponent,
   ],
   templateUrl: './message-block.html',
@@ -291,6 +293,11 @@ export class MessageBlockComponent {
   /** Attachment metadata, when this block represents an inline uploaded file. */
   protected readonly attachment = computed(() => this.block().attachment);
   protected readonly attachments = computed(() => this.block().attachments);
+  protected readonly documentAttachments = computed(() =>
+    this.block().metadata?.['externalDocuments'] === true
+      ? this.block().attachments
+      : undefined,
+  );
 
   /** Whether the tool block has expandable detail (result / reason). */
   protected readonly hasDetail = computed(

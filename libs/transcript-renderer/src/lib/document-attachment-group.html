@@ -1,0 +1,9 @@
+<section
+  class="rv-document-group"
+  [attr.aria-label]="attachments().length + ' document checkpoint(s)'"
+  data-testid="external-document-group"
+>
+  @for (attachment of attachments(); track attachment.id) {
+  <rv-document-attachment [attachment]="attachment" />
+  }
+</section>

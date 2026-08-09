@@ -1,0 +1,194 @@
+.rv-document {
+  min-width: 0;
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+}
+
+.rv-document[data-status='removed'] {
+  opacity: 0.72;
+}
+
+.rv-document__open {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--rv-space-sm);
+  width: 100%;
+  min-height: 3.5rem;
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--rv-color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rv-document__open:hover:not(:disabled) {
+  background: var(--rv-color-surface-raised);
+}
+
+.rv-document__open:disabled {
+  color: var(--rv-color-text-muted);
+  cursor: default;
+}
+
+.rv-document__icon {
+  color: var(--rv-color-accent);
+  font-size: 1.25rem;
+}
+
+.rv-document__summary {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.rv-document__name {
+  overflow: hidden;
+  font-weight: var(--rv-font-weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-document__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-document__state {
+  color: var(--rv-color-text-secondary);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-document-viewer {
+  position: fixed;
+  z-index: var(--rv-z-overlay);
+  inset: var(--rv-space-lg);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--rv-color-border-strong);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  box-shadow: var(--rv-shadow-overlay);
+}
+
+.rv-document-viewer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rv-space-md);
+  padding: var(--rv-space-sm) var(--rv-space-md);
+  border-bottom: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface);
+}
+
+.rv-document-viewer__identity,
+.rv-document-viewer__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rv-space-sm);
+}
+
+.rv-document-viewer__identity {
+  min-width: 0;
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-document-viewer__identity strong {
+  overflow: hidden;
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-ui);
+  font-size: var(--rv-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-document-viewer__actions button,
+.rv-document-viewer__actions a,
+.rv-document-viewer__status button {
+  min-height: var(--rv-density-control-sm);
+  padding: 0 var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.rv-document-viewer__status {
+  display: grid;
+  place-items: center;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-xl);
+  color: var(--rv-color-text-secondary);
+}
+
+.rv-document-viewer__markdown,
+.rv-document-viewer__source {
+  min-height: 0;
+  margin: 0;
+  padding: var(--rv-space-lg);
+  overflow: auto;
+}
+
+.rv-document-viewer__source {
+  list-style-position: outside;
+  padding-left: 4.5rem;
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-sm);
+  line-height: 1.55;
+}
+
+.rv-document-viewer__source li {
+  min-height: 1.55em;
+  padding-left: var(--rv-space-sm);
+  border-left: 1px solid var(--rv-color-border);
+  color: var(--rv-color-text-muted);
+}
+
+.rv-document-viewer__source code {
+  color: var(--rv-color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rv-document-viewer__truncated {
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border-top: 1px solid var(--rv-color-border);
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-xs);
+}
+
+@media (max-width: 48rem) {
+  .rv-document__open {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rv-document__state {
+    grid-column: 2;
+  }
+
+  .rv-document-viewer {
+    inset: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .rv-document-viewer__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

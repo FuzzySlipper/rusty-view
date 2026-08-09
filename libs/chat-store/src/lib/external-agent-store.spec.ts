@@ -1318,6 +1318,77 @@ describe('ExternalAgentStore', () => {
     });
   });
 
+  it('projects replayed document checkpoints once and retains later same-path revisions', async () => {
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(thread('thread-1', 10));
+
+    const documentEvent = (
+      sequenceId: number,
+      itemId: string,
+      attachmentId: string,
+      sha256: string,
+    ): NormalizedExternalRuntimeEvent => ({
+      eventId: `document-${sequenceId}`,
+      runtimeId: 'runtime-1',
+      sequenceId,
+      createdAt: `2026-07-11T00:00:${sequenceId}Z`,
+      kind: 'item_lifecycle',
+      nativeThreadId: 'thread-1',
+      nativeTurnId: 'turn-live',
+      itemId,
+      payload: {
+        nativeMethod: 'item/completed',
+        documents: [
+          {
+            documentIndex: 0,
+            captureSource: 'agent_message_file_link',
+            captureState: 'available',
+            attachmentId,
+            filename: 'checkpoint.md',
+            mimeType: 'text/markdown',
+            languageHint: 'markdown',
+            byteSize: 55,
+            sha256,
+            contentUrl: `/content/${attachmentId}`,
+          },
+        ],
+      },
+    });
+    const first = documentEvent(
+      2,
+      'checkpoint-v1',
+      'attachment:v1',
+      'a'.repeat(64),
+    );
+    const second = documentEvent(
+      3,
+      'checkpoint-v2',
+      'attachment:v2',
+      'b'.repeat(64),
+    );
+    store.events.set([first, first, second]);
+
+    const documentBlocks = store
+      .messages()
+      .flatMap((message) => message.blocks)
+      .filter((block) => block.metadata?.['externalDocuments'] === true);
+    expect(documentBlocks).toHaveLength(2);
+    expect(documentBlocks.map((block) => block.attachments?.[0]?.id)).toEqual([
+      'attachment:v1',
+      'attachment:v2',
+    ]);
+    expect(
+      documentBlocks.map((block) => block.attachments?.[0]?.contentSha256),
+    ).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+  });
+
   it('reconciles repeated optimistic prompts against native user messages without duplicates', async () => {
     const store = setupStore({
       runtimes: [registration('runtime-1')],
@@ -1909,6 +1980,55 @@ describe('ExternalAgentStore', () => {
 
     expect(readThread).toHaveBeenCalledTimes(2);
     expect(store.selectedThread()?.updatedAt).toBe(20);
+  });
+
+  it('does not treat a snapshot-only inactive cache as complete history', async () => {
+    const runtime = registration('runtime-1');
+    const selectedThread = { ...thread('thread-1', 10), status: 'idle' };
+    const selectedEvent = event(90, 'turn-1', 'completed');
+    const snapshotTail = event(95, 'turn-1', 'completed');
+    const fleetTail = {
+      ...event(100, 'other-turn', 'completed'),
+      nativeThreadId: 'other-thread',
+    };
+    const listEvents = vi
+      .fn()
+      .mockResolvedValueOnce({ events: [fleetTail] })
+      .mockResolvedValueOnce({ events: [] })
+      .mockResolvedValueOnce({ events: [snapshotTail] })
+      .mockResolvedValueOnce({ events: [selectedEvent, snapshotTail] })
+      .mockResolvedValue({ events: [] });
+    const readThread = vi.fn(async () => ({ thread: selectedThread }));
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([selectedThread], null)),
+      listEvents,
+      readThread,
+    });
+
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected inactive session');
+    store.selectedRuntimeId.set(runtime.runtimeId);
+    store.selectedThreadId.set(selectedThread.threadId);
+    store.selectedThread.set(selectedThread);
+    await store.refresh();
+
+    expect(store.eventHistoryLoaded()).toBe(false);
+    await store.selectSession(session);
+
+    expect(listEvents).toHaveBeenLastCalledWith('runtime-1', {
+      limit: 1_000,
+      nativeThreadId: 'thread-1',
+    });
+    expect(store.events()).toEqual([selectedEvent, snapshotTail]);
+    expect(store.eventHistoryLoaded()).toBe(true);
+    expect(readThread).toHaveBeenCalledTimes(1);
+
+    await store.selectSession(session);
+
+    expect(listEvents).toHaveBeenCalledTimes(4);
+    expect(readThread).toHaveBeenCalledTimes(1);
   });
 
   it('paints a cached active thread immediately while revalidating it', async () => {

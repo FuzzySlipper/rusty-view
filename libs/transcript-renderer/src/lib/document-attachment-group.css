@@ -1,0 +1,10 @@
+:host {
+  display: block;
+}
+
+.rv-document-group {
+  display: grid;
+  gap: var(--rv-space-xs);
+  width: min(100%, 48rem);
+  margin: var(--rv-space-xs) 0;
+}

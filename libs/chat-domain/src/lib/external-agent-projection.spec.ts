@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  ExternalRuntimeDocumentReference,
   ExternalRuntimeMediaReference,
   NormalizedExternalRuntimeEvent,
 } from '@rusty-view/protocol';
@@ -1111,6 +1112,188 @@ describe('projectExternalAgentTranscript', () => {
       contentState: 'unavailable',
       url: undefined,
       metadata: { reasonCode: 'external_media_source_unavailable' },
+    });
+  });
+
+  it('projects ordered document checkpoints, deduplicates replay, and keeps later revisions distinct', () => {
+    const documents: readonly ExternalRuntimeDocumentReference[] = [
+      {
+        documentIndex: 0,
+        captureSource: 'agent_message_file_link',
+        captureState: 'available',
+        attachmentId: 'attachment:markdown-v1',
+        filename: 'checkpoint.md',
+        mimeType: 'text/markdown',
+        languageHint: 'markdown',
+        byteSize: 55,
+        sha256: 'a'.repeat(64),
+        contentUrl: '/content/markdown-v1',
+      },
+      {
+        documentIndex: 1,
+        captureSource: 'agent_message_file_link',
+        captureState: 'available',
+        attachmentId: 'attachment:rust-v1',
+        filename: 'checkpoint.rs',
+        mimeType: 'text/x-rust',
+        languageHint: 'rust',
+        byteSize: 50,
+        sha256: 'b'.repeat(64),
+        contentUrl: '/content/rust-v1',
+      },
+    ];
+    const first = {
+      ...event('20', 'item_lifecycle', {
+        nativeMethod: 'item/completed',
+        text: 'Markdown checkpoint\nRust checkpoint',
+        documents,
+      }),
+      itemId: 'checkpoint-v1',
+    };
+    const second = {
+      ...event('21', 'item_lifecycle', {
+        nativeMethod: 'item/completed',
+        text: 'Markdown checkpoint V2',
+        documents: [
+          {
+            ...documents[0],
+            attachmentId: 'attachment:markdown-v2',
+            sha256: 'c'.repeat(64),
+            contentUrl: '/content/markdown-v2',
+          },
+        ],
+      }),
+      itemId: 'checkpoint-v2',
+    };
+    const missing = {
+      ...event('22', 'item_lifecycle', {
+        nativeMethod: 'item/completed',
+        documents: [
+          {
+            documentIndex: 0,
+            captureSource: 'agent_message_file_link' as const,
+            captureState: 'missing' as const,
+            reasonCode: 'external_document_missing',
+          },
+        ],
+      }),
+      itemId: 'checkpoint-missing',
+    };
+
+    const blocks = projectExternalAgentTranscript(undefined, [
+      first,
+      first,
+      second,
+      missing,
+    ]).flatMap((message) => message.blocks);
+    expect(blocks).toHaveLength(3);
+    expect(
+      blocks.map((block) => block.metadata?.['externalDocuments']),
+    ).toEqual([true, true, true]);
+    expect(blocks[0]?.attachments).toEqual([
+      expect.objectContaining({
+        id: 'attachment:markdown-v1',
+        kind: 'file',
+        contentState: 'available',
+        contentLoadPolicy: 'authenticated_lazy',
+        contentSha256: 'a'.repeat(64),
+        metadata: expect.objectContaining({
+          documentIndex: 0,
+          languageHint: 'markdown',
+          externalSequenceId: 20,
+        }),
+      }),
+      expect.objectContaining({
+        id: 'attachment:rust-v1',
+        metadata: expect.objectContaining({ documentIndex: 1 }),
+      }),
+    ]);
+    expect(blocks[1]?.attachments?.[0]).toMatchObject({
+      id: 'attachment:markdown-v2',
+      contentSha256: 'c'.repeat(64),
+    });
+    expect(blocks[2]?.attachments?.[0]).toMatchObject({
+      contentState: 'missing',
+      url: undefined,
+      metadata: { reasonCode: 'external_document_missing' },
+    });
+  });
+
+  it('preserves document checkpoints when a terminal snapshot covers their text', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'prompt',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'checkpoint',
+                kind: 'agentMessage',
+                text: 'Markdown checkpoint',
+                messagePhase: 'commentary',
+              },
+              {
+                itemId: 'final',
+                kind: 'agentMessage',
+                text: 'Done.',
+                messagePhase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+      [
+        {
+          ...event('20', 'item_lifecycle', {
+            nativeMethod: 'item/completed',
+            text: 'Markdown checkpoint',
+            messagePhase: 'commentary',
+            documents: [
+              {
+                documentIndex: 0,
+                captureSource: 'agent_message_file_link',
+                captureState: 'available',
+                attachmentId: 'attachment:markdown-v1',
+                filename: 'checkpoint.md',
+                mimeType: 'text/markdown',
+                byteSize: 55,
+                sha256: 'a'.repeat(64),
+                contentUrl: '/content/markdown-v1',
+              },
+            ],
+          }),
+          itemId: 'checkpoint',
+        },
+      ],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks.map((block) => block.kind)).toEqual([
+      'text',
+      'text',
+      'attachment',
+    ]);
+    expect(messages[0]?.blocks[2]).toMatchObject({
+      metadata: expect.objectContaining({ externalDocuments: true }),
+      attachments: [expect.objectContaining({ id: 'attachment:markdown-v1' })],
     });
   });
 

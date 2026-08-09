@@ -97,9 +97,12 @@ export type AttachmentLifecycleStatus = 'active' | 'removed';
 export type AttachmentContentState =
   | 'available'
   | 'unavailable'
+  | 'missing'
+  | 'binary'
   | 'unsupported'
   | 'empty'
   | 'oversized'
+  | 'changed'
   | 'failed';
 export type AttachmentContentLoadPolicy = 'direct' | 'authenticated_lazy';
 

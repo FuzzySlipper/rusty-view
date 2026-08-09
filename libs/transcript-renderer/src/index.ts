@@ -29,6 +29,8 @@ export type {
 } from './lib/message-revision-controls';
 export { AttachmentBlockComponent } from './lib/attachment-block';
 export { MediaAttachmentGroupComponent } from './lib/media-attachment-group';
+export { DocumentAttachmentComponent } from './lib/document-attachment';
+export { DocumentAttachmentGroupComponent } from './lib/document-attachment-group';
 export { CHAT_MESSAGE_DECORATORS } from './lib/transcript-decorators';
 export type {
   ChatMessageDecorator,

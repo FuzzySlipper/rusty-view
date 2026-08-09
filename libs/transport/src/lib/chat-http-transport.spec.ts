@@ -186,6 +186,32 @@ describe('ChatHttpTransport', () => {
       );
     });
 
+    it('returns exact Crew-served Markdown content without interpreting its path', async () => {
+      const checkpoint = '# Snapshot\n\nCaptured revision A.\n';
+      const { fetch, lastRequest } = capturingFetch(
+        new Response(checkpoint, {
+          status: 200,
+          headers: { 'content-type': 'text/markdown' },
+        }),
+      );
+      const transport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: fetch, bearerToken: 'document-token' }),
+      );
+
+      const blob = await transport.readAttachmentContent(
+        '/v1/chat/sessions/session-1/attachments/document%3Arevision-a/content',
+      );
+
+      expect(lastRequest().url).toBe(
+        'http://localhost:9347/v1/chat/sessions/session-1/attachments/document%3Arevision-a/content',
+      );
+      expect(lastRequest().headers.get('Authorization')).toBe(
+        'Bearer document-token',
+      );
+      expect(blob.type).toBe('text/markdown');
+      expect(await blob.text()).toBe(checkpoint);
+    });
+
     it.each([
       'https://attacker.invalid/capture',
       'http://attacker.invalid/capture',

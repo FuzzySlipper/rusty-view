@@ -690,7 +690,9 @@ export class ExternalAgentStore {
       const runtimeId = session.runtime.runtimeId;
       const fleetCursor = this.fleetCursors.get(runtimeId);
       const cachedIsAuthoritativeInactive =
-        !active && cached?.updatedAt === session.thread.updatedAt;
+        !active &&
+        cached?.updatedAt === session.thread.updatedAt &&
+        cached.eventHistoryLoaded;
       if (cached !== undefined) {
         this.selectedRuntimeEventCursor = latestDefinedCursor(
           cached.cursor,
@@ -705,7 +707,7 @@ export class ExternalAgentStore {
         return true;
       }
 
-      const replayHistory = cached === undefined;
+      const replayHistory = cached?.eventHistoryLoaded !== true;
       const [read, page] = await Promise.all([
         this.transport.external.readThread(runtimeId, {
           threadId: session.thread.threadId,
@@ -717,7 +719,7 @@ export class ExternalAgentStore {
       ]);
       if (!this.isCurrentSelection(revision, session.key)) return false;
       this.selectedThread.set(read.thread);
-      if (cached === undefined) {
+      if (replayHistory) {
         const events = page.filter(
           (event) => event.nativeThreadId === session.thread.threadId,
         );
@@ -726,7 +728,7 @@ export class ExternalAgentStore {
           fleetCursor,
         );
         this.events.set(events);
-        this.eventHistoryLoaded.set(replayHistory);
+        this.eventHistoryLoaded.set(true);
       }
       this.cacheSelectedTranscript();
       if (cached === undefined) {

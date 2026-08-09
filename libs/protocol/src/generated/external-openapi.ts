@@ -3026,6 +3026,21 @@ export interface components {
             height?: number;
             contentUrl?: string;
         };
+        ExternalRuntimeDocumentReference: {
+            documentIndex: number;
+            /** @enum {string} */
+            captureSource: "agent_message_file_link";
+            /** @enum {string} */
+            captureState: "available" | "missing" | "binary" | "empty" | "oversized" | "changed" | "unsupported" | "failed";
+            reasonCode?: string;
+            attachmentId?: string;
+            filename?: string;
+            mimeType?: string;
+            languageHint?: string;
+            byteSize?: number;
+            sha256?: string;
+            contentUrl?: string;
+        };
         ExternalRuntimeEventPayload: {
             nativeMethod: string;
             status?: string;
@@ -3053,6 +3068,7 @@ export interface components {
             tool?: string;
             success?: boolean;
             media?: components["schemas"]["ExternalRuntimeMediaReference"][];
+            documents?: components["schemas"]["ExternalRuntimeDocumentReference"][];
             summary?: string[];
             /** @enum {string} */
             messagePhase?: "commentary" | "final_answer" | "unknown";

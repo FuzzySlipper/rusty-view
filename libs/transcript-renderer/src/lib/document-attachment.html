@@ -1,0 +1,97 @@
+<article
+  class="rv-document"
+  [attr.data-attachment-id]="attachment().id"
+  [attr.data-status]="attachment().status ?? 'active'"
+  [attr.data-content-state]="attachment().contentState ?? 'pending'"
+  [attr.data-document-index]="
+    attachment().metadata?.['documentIndex'] ?? null
+  "
+  [attr.data-external-sequence-id]="
+    attachment().metadata?.['externalSequenceId'] ?? null
+  "
+  data-testid="external-document-card"
+>
+  <button
+    type="button"
+    class="rv-document__open"
+    [disabled]="!canOpen()"
+    [attr.aria-label]="'Open checkpoint: ' + attachment().name"
+    (click)="openPreview()"
+  >
+    <span class="rv-document__icon" aria-hidden="true">▤</span>
+    <span class="rv-document__summary">
+      <span class="rv-document__name">{{ attachment().name }}</span>
+      <span class="rv-document__details">
+        @if (languageLabel(); as language) {
+        <span>{{ language }}</span>
+        } @else if (attachment().mimeType; as mimeType) {
+        <span>{{ mimeType }}</span>
+        } @if (fileSizeLabel()) {
+        <span>{{ fileSizeLabel() }}</span>
+        } @if (shortRevision(); as revision) {
+        <span [title]="attachment().contentSha256">rev {{ revision }}</span>
+        }
+      </span>
+    </span>
+    <span class="rv-document__state">{{ stateLabel() }}</span>
+  </button>
+</article>
+
+@if (previewOpen()) {
+<section
+  class="rv-document-viewer"
+  role="dialog"
+  aria-modal="true"
+  [attr.aria-label]="'Checkpoint: ' + attachment().name"
+  data-testid="external-document-viewer"
+>
+  <header class="rv-document-viewer__header">
+    <div class="rv-document-viewer__identity">
+      <strong>{{ attachment().name }}</strong>
+      @if (languageLabel(); as language) { <span>{{ language }}</span> } @if
+      (shortRevision(); as revision) {
+      <span [title]="attachment().contentSha256">rev {{ revision }}</span>
+      }
+    </div>
+    <div class="rv-document-viewer__actions">
+      @if (loadState(); as state) { @if (state.status === 'available') {
+      <button type="button" (click)="copyDocument()">
+        {{ copied() ? 'Copied' : 'Copy' }}
+      </button>
+      <a [href]="state.downloadUrl" [download]="attachment().name">Download</a>
+      } }
+      <button type="button" (click)="closePreview()">Close</button>
+    </div>
+  </header>
+
+  @switch (loadState().status) { @case ('idle') {
+  <div class="rv-document-viewer__status" role="status">Preparing…</div>
+  } @case ('loading') {
+  <div class="rv-document-viewer__status" role="status">
+    Loading checkpoint…
+  </div>
+  } @case ('failed') {
+  <div class="rv-document-viewer__status" role="alert">
+    Checkpoint failed to load.
+    <button type="button" (click)="retryLoad()">Retry</button>
+  </div>
+  } @case ('available') { @if (loadState(); as state) { @if (state.status ===
+  'available') { @if (state.renderedMarkdown !== undefined) {
+  <div
+    class="rv-block__markdown rv-document-viewer__markdown"
+    data-testid="external-document-markdown"
+    [innerHTML]="state.renderedMarkdown"
+  ></div>
+  } @else {
+  <ol class="rv-document-viewer__source" data-testid="external-document-source">
+    @for (line of sourceLines(); track $index) {
+    <li><code>{{ line }}</code></li>
+    }
+  </ol>
+  } @if (state.truncated || sourceLines().length >= 5000) {
+  <div class="rv-document-viewer__truncated" role="status">
+    Preview is bounded. Download retains the exact captured revision.
+  </div>
+  } } } } }
+</section>
+}

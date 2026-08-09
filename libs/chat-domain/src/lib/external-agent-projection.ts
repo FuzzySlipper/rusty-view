@@ -2,6 +2,7 @@ import type {
   ExternalThreadProjection,
   ExternalThreadTurnErrorProjection,
   ExternalThreadTurnProjection,
+  ExternalRuntimeDocumentReference,
   ExternalRuntimeMediaReference,
   NormalizedExternalRuntimeEvent,
 } from '@rusty-view/protocol';
@@ -153,6 +154,23 @@ export function projectExternalAgentTranscript(
           assistantTurnStatus,
         );
       }
+      const documentBlocks = blocksForExternalDocuments(group).map((block) =>
+        withExternalItemMetadata(
+          block,
+          first.itemId ?? key,
+          first.kind,
+          messagePhaseForEvents(group),
+        ),
+      );
+      if (documentBlocks.length > 0) {
+        appendExternalTurnBlocks(
+          messages,
+          first,
+          documentBlocks,
+          assistantTurnStatus,
+          messagePhaseForEvents(group),
+        );
+      }
       continue;
     }
     // A terminal native thread snapshot is the canonical transcript for that
@@ -170,10 +188,14 @@ export function projectExternalAgentTranscript(
     const preservesMediaCheckpoint = group.some(
       (event) => (event.payload.media?.length ?? 0) > 0,
     );
+    const preservesDocumentCheckpoint = group.some(
+      (event) => (event.payload.documents?.length ?? 0) > 0,
+    );
     if (
       snapshotCoverage?.terminal &&
       !preservesOmittedDynamicTool &&
       !preservesMediaCheckpoint &&
+      !preservesDocumentCheckpoint &&
       !(
         snapshotCoverage.error === null &&
         group.some((event) => event.payload.error !== undefined)
@@ -466,6 +488,7 @@ function blocksForGroup(
   return [
     ...blocksForGroupWithoutMedia(events, messageStatus),
     ...blocksForExternalMedia(events),
+    ...blocksForExternalDocuments(events),
   ];
 }
 
@@ -747,6 +770,112 @@ function projectExternalMediaAttachment(
       reasonCode: reference.reasonCode,
       mediaIndex: reference.mediaIndex,
       externalSequenceId: media.firstSequenceId,
+      externalEventId: event.eventId,
+      externalRuntimeId: event.runtimeId,
+      externalThreadId: event.nativeThreadId,
+      externalTurnId: event.nativeTurnId,
+      externalItemId: event.itemId,
+    },
+  };
+}
+
+interface ProjectedExternalDocument {
+  readonly firstSequenceId: number;
+  readonly event: NormalizedExternalRuntimeEvent;
+  readonly reference: ExternalRuntimeDocumentReference;
+}
+
+function blocksForExternalDocuments(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): MessageBlock[] {
+  const documentsByIndex = new Map<number, ProjectedExternalDocument>();
+  for (const event of events) {
+    for (const reference of event.payload.documents ?? []) {
+      const existing = documentsByIndex.get(reference.documentIndex);
+      documentsByIndex.set(reference.documentIndex, {
+        firstSequenceId: existing?.firstSequenceId ?? event.sequenceId,
+        event,
+        reference,
+      });
+    }
+  }
+  const orderedDocuments = [...documentsByIndex.values()].sort(
+    (left, right) =>
+      left.firstSequenceId - right.firstSequenceId ||
+      left.reference.documentIndex - right.reference.documentIndex,
+  );
+  const first = orderedDocuments[0];
+  if (first === undefined) return [];
+  const itemIdentity =
+    first.event.itemId ??
+    `${first.event.eventId}:${first.reference.documentIndex}`;
+  const blockId = [
+    'block:external-documents',
+    first.event.runtimeId,
+    first.event.nativeThreadId ?? 'thread',
+    first.event.nativeTurnId ?? 'turn',
+    itemIdentity,
+  ].join(':');
+  const attachments = orderedDocuments.map(projectExternalDocumentAttachment);
+  return [
+    {
+      id: blockId,
+      messageId: '',
+      kind: 'attachment',
+      content: attachments.map((attachment) => attachment.name).join('\n'),
+      estimatedHeight: undefined,
+      renderPolicy: 'full',
+      attachments,
+      metadata: {
+        externalDocuments: true,
+        externalRuntimeId: first.event.runtimeId,
+        externalThreadId: first.event.nativeThreadId,
+        externalTurnId: first.event.nativeTurnId,
+        externalItemId: first.event.itemId,
+        firstExternalSequenceId: first.firstSequenceId,
+      },
+    },
+  ];
+}
+
+function projectExternalDocumentAttachment(
+  document: ProjectedExternalDocument,
+): ChatAttachment {
+  const reference = document.reference;
+  const event = document.event;
+  const stableFallbackId = [
+    'external-document',
+    event.runtimeId,
+    event.nativeThreadId ?? 'thread',
+    event.nativeTurnId ?? 'turn',
+    event.itemId ?? event.eventId,
+    reference.documentIndex,
+  ].join(':');
+  return {
+    id: reference.attachmentId ?? stableFallbackId,
+    status: 'active',
+    kind: 'file',
+    name: reference.filename ?? `Checkpoint ${reference.documentIndex + 1}`,
+    mimeType: reference.mimeType,
+    sizeBytes: reference.byteSize,
+    url:
+      reference.captureState === 'available' ? reference.contentUrl : undefined,
+    thumbnailUrl: undefined,
+    contentState: reference.captureState,
+    contentLoadPolicy: 'authenticated_lazy',
+    ...(reference.sha256 === undefined
+      ? {}
+      : { contentSha256: reference.sha256 }),
+    textPreview: undefined,
+    scopeId: undefined,
+    metadata: {
+      externalRuntimeDocument: true,
+      captureSource: reference.captureSource,
+      captureState: reference.captureState,
+      reasonCode: reference.reasonCode,
+      languageHint: reference.languageHint,
+      documentIndex: reference.documentIndex,
+      externalSequenceId: document.firstSequenceId,
       externalEventId: event.eventId,
       externalRuntimeId: event.runtimeId,
       externalThreadId: event.nativeThreadId,

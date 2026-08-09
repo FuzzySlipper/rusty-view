@@ -802,6 +802,150 @@ describe('MessageBlockComponent', () => {
     revokeObjectUrl.mockRestore();
   });
 
+  it('opens ordered Markdown and source checkpoints lazily through the Crew content loader', async () => {
+    const load = vi.fn(async (attachment: ChatAttachment) =>
+      attachment.id === 'markdown'
+        ? new Blob(['# Snapshot\n\nCaptured **exactly**.'], {
+            type: 'text/markdown',
+          })
+        : new Blob(['fn main() {\n    println!("safe");\n}'], {
+            type: 'text/x-rust',
+          }),
+    );
+    const createObjectUrl = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValueOnce('blob:markdown-checkpoint')
+      .mockReturnValueOnce('blob:source-checkpoint');
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined);
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: 'checkpoint.md\ncheckpoint.rs',
+        metadata: { externalDocuments: true },
+        attachments: [
+          makeAttachment({
+            id: 'markdown',
+            name: 'checkpoint.md',
+            mimeType: 'text/markdown',
+            sizeBytes: 32,
+            url: '/content/markdown',
+            contentState: 'available',
+            contentLoadPolicy: 'authenticated_lazy',
+            contentSha256: 'a'.repeat(64),
+            metadata: { languageHint: 'markdown', documentIndex: 0 },
+          }),
+          makeAttachment({
+            id: 'source',
+            name: 'checkpoint.rs',
+            mimeType: 'text/x-rust',
+            sizeBytes: 38,
+            url: '/content/source',
+            contentState: 'available',
+            contentLoadPolicy: 'authenticated_lazy',
+            contentSha256: 'b'.repeat(64),
+            metadata: { languageHint: 'rust', documentIndex: 1 },
+          }),
+        ],
+      }),
+      [{ provide: ATTACHMENT_CONTENT_LOADER, useValue: load }],
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    const cards =
+      host.querySelectorAll<HTMLButtonElement>('.rv-document__open');
+    expect(cards).toHaveLength(2);
+    expect(load).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('rev aaaaaaaaaaaa');
+    expect(host.textContent).toContain('rev bbbbbbbbbbbb');
+
+    cards[0]?.click();
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        host.querySelector('[data-testid="external-document-markdown"]'),
+      ).not.toBeNull();
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0]?.[0].id).toBe('markdown');
+    expect(
+      host.querySelector('[data-testid="external-document-markdown"]')
+        ?.textContent,
+    ).toContain('Captured exactly.');
+    expect(
+      host
+        .querySelector<HTMLAnchorElement>('.rv-document-viewer__actions a')
+        ?.getAttribute('href'),
+    ).toBe('blob:markdown-checkpoint');
+
+    host
+      .querySelectorAll<HTMLButtonElement>(
+        '.rv-document-viewer__actions button',
+      )
+      .item(1)
+      .click();
+    fixture.detectChanges();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:markdown-checkpoint');
+
+    cards[1]?.click();
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(
+        host.querySelector('[data-testid="external-document-source"]'),
+      ).not.toBeNull();
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+    const lines = Array.from(
+      host.querySelectorAll('[data-testid="external-document-source"] li'),
+      (line) => line.textContent,
+    );
+    expect(lines).toEqual(['fn main() {', '    println!("safe");', '}']);
+
+    fixture.destroy();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:source-checkpoint');
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
+  });
+
+  it('renders typed document checkpoint states without exposing a host path', async () => {
+    const states = [
+      ['missing', 'File was missing when captured'],
+      ['binary', 'Binary content cannot be previewed'],
+      ['oversized', 'File exceeded the capture limit'],
+      ['changed', 'File changed before capture completed'],
+      ['failed', 'File capture failed'],
+    ] as const;
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: 'checkpoints',
+        metadata: { externalDocuments: true },
+        attachments: states.map(([state], index) =>
+          makeAttachment({
+            id: `state-${state}`,
+            name: `checkpoint-${index}.txt`,
+            url: undefined,
+            contentState: state,
+            contentLoadPolicy: 'authenticated_lazy',
+            metadata: { documentIndex: index },
+          }),
+        ),
+      }),
+    );
+    const host: HTMLElement = fixture.nativeElement;
+    for (const [, label] of states) {
+      expect(host.textContent).toContain(label);
+    }
+    expect(host.textContent).not.toContain('/home/');
+    expect(
+      Array.from(
+        host.querySelectorAll<HTMLButtonElement>('.rv-document__open'),
+      ).every((button) => button.disabled),
+    ).toBe(true);
+  });
+
   it('does not fetch offscreen media before the intersection boundary', async () => {
     let triggerIntersection:
       | ((entry: IntersectionObserverEntry) => void)
