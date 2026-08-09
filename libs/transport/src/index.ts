@@ -178,6 +178,8 @@ export type {
   RuntimeWakeTimeoutConfig,
   RuntimeWakeTimeoutPatchRequest,
   RuntimeWakeTimeoutPatchResult,
+  SessionWorkspaceChangeRequest,
+  SessionWorkspaceChangeResult,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimePauseDiagnostics,

@@ -163,6 +163,9 @@ export type ExternalRuntimeCommandExecutionResult =
 export type AgentDirectoryEntry = ExternalSchemas['AgentDirectoryEntry'];
 export type AgentDirectoryRuntimeKind =
   ExternalSchemas['AgentDirectoryRuntimeKind'];
+export type SessionWorkspace = ExternalSchemas['SessionWorkspace'];
+export type SessionWorkspaceUpdateRecord =
+  ExternalSchemas['SessionWorkspaceUpdateRecord'];
 export type AgentMessageDeliveryReceipt =
   ExternalSchemas['AgentMessageDeliveryReceipt'];
 export type AgentMessageDeliveryStatus =

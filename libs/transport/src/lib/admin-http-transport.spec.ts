@@ -529,6 +529,54 @@ describe('AdminHttpTransport', () => {
     });
   });
 
+  it('switches one session workspace with an exact revision guard', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({
+        command: {
+          name: 'switch_session_workspace',
+          target: { sessionId: 'session alpha' },
+          requestId: 'req',
+        },
+        outcome: {
+          status: 'completed',
+          summary: 'workspace changed',
+          result: {
+            previous: {
+              cwd: '/home/dev/rusty-view',
+              revision: 2,
+              updated_at: '2026-08-09T00:00:00Z',
+            },
+            current: {
+              cwd: '/home/dev/rusty-crew',
+              revision: 3,
+              updated_at: '2026-08-09T00:01:00Z',
+            },
+            session: {},
+          },
+        },
+        audit: { started: true, terminal: true },
+        observation: {},
+      }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const response = await transport.switchSessionWorkspace('session alpha', {
+      cwd: '/home/dev/rusty-crew',
+      expectedRevision: 2,
+    });
+
+    expect(response.outcome.result?.current.revision).toBe(3);
+    const req = lastRequest();
+    expect(req.method).toBe('POST');
+    expect(req.url).toContain(
+      '/v1/admin/control/sessions/session%20alpha/workspace',
+    );
+    expect(JSON.parse(req.body ?? '{}')).toEqual({
+      cwd: '/home/dev/rusty-crew',
+      expectedRevision: 2,
+    });
+  });
+
   it('plans and applies a profile brain rebuild through the guarded control route', async () => {
     let captured: CapturedRequest | undefined;
     const fetch = (async (

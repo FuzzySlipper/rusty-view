@@ -580,6 +580,7 @@ export interface components {
             sessionKind: components["schemas"]["SessionKind"];
             sessionStatus: components["schemas"]["SessionStatus"];
             taskRef?: components["schemas"]["DenRuntimeReference"] | null;
+            workspace?: components["schemas"]["SessionWorkspace"] | null;
             workdir?: string | null;
         };
         /** @enum {string} */

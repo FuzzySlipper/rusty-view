@@ -28,6 +28,7 @@ import type {
   RuntimeActivityRecord,
   RuntimeActivityStatus,
   RuntimeActivityView,
+  SessionWorkspaceUpdateRecord,
 } from '@rusty-view/protocol';
 
 export type {
@@ -757,6 +758,13 @@ export interface AdminControlResponse<TResult = unknown> {
     readonly terminal?: string;
   };
 }
+
+export interface SessionWorkspaceChangeRequest {
+  readonly cwd: string;
+  readonly expectedRevision: number;
+}
+
+export type SessionWorkspaceChangeResult = SessionWorkspaceUpdateRecord;
 
 export interface ProfileBrainRebuildRequest {
   readonly reason?: string;

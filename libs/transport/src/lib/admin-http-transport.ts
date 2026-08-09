@@ -88,6 +88,8 @@ import type {
   RuntimeConfigValidationReport,
   RuntimeWakeTimeoutPatchRequest,
   RuntimeWakeTimeoutPatchResult,
+  SessionWorkspaceChangeRequest,
+  SessionWorkspaceChangeResult,
   RuntimePauseScope,
   RuntimeActivityCensus,
   RuntimeSessionDiagnostics,
@@ -789,6 +791,17 @@ export class AdminHttpTransport {
     return this.request('POST', '/v1/admin/control/profiles', {
       body: compactRecord(request),
     });
+  }
+
+  switchSessionWorkspace(
+    sessionId: string,
+    request: SessionWorkspaceChangeRequest,
+  ): Promise<AdminControlResponse<SessionWorkspaceChangeResult>> {
+    return this.request(
+      'POST',
+      `/v1/admin/control/sessions/${encodeURIComponent(sessionId)}/workspace`,
+      { body: compactRecord(request) },
+    );
   }
 
   planProfileBrainRebuild(

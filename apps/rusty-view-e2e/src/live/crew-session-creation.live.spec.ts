@@ -8,6 +8,7 @@ const providerTurn =
   process.env['RV_CREW_SESSION_PROVIDER_TURN']?.trim() !== '0';
 const markerA = `CREW_SESSION_WORKSPACE_A_6695_${Date.now()}`;
 const markerB = `CREW_SESSION_WORKSPACE_B_6695_${Date.now()}`;
+const markerAfterSwitch = `CREW_SESSION_WORKSPACE_SWITCH_6696_${Date.now()}`;
 
 test.describe('Crew brain session creation and archive @live-agent', () => {
   test.skip(
@@ -94,7 +95,9 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
       if (providerTurn) {
         await page
           .getByTestId('message-input-field')
-          .fill(`Reply with exactly ${markerA} and nothing else.`);
+          .fill(
+            `Use the terminal tool to run pwd. Then reply with exactly ${markerA}:/home/dev/rusty-view and nothing else.`,
+          );
         await page.getByTestId('send-message').click();
         await expect(
           page
@@ -179,6 +182,65 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
         '/home/dev/rusty-crew',
       );
       await firstRow.click();
+
+      const firstOptions = firstRow
+        .locator('xpath=..')
+        .getByTestId('profile-session-options');
+      await firstOptions.click();
+      const workspacePanel = page.getByTestId('session-workspace');
+      await expect(workspacePanel).toContainText('/home/dev/rusty-view');
+      await expect(workspacePanel).toContainText(/revision \d+/);
+      await page.getByTestId('session-workspace-change').click();
+      await page
+        .getByLabel('New working directory')
+        .fill('/home/dev/rusty-engine');
+      await page.getByTestId('session-workspace-apply').click();
+      await expect(firstRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-engine',
+        { timeout: 30_000 },
+      );
+      await expect(secondRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-crew',
+      );
+      await expect(firstRow).toHaveClass(/rv-profile-session--selected/);
+      if (providerTurn) {
+        await expect(
+          page
+            .locator('[data-message-role="assistant"]')
+            .filter({ hasText: markerA })
+            .last(),
+        ).toBeVisible();
+        await page
+          .getByTestId('message-input-field')
+          .fill(
+            `Use the terminal tool to run pwd. Then reply with exactly ${markerAfterSwitch}:/home/dev/rusty-engine and nothing else.`,
+          );
+        await page.getByTestId('send-message').click();
+        await expect(
+          page
+            .locator('[data-message-role="assistant"]')
+            .filter({ hasText: markerAfterSwitch })
+            .last(),
+        ).toBeVisible({ timeout: 7 * 60_000 });
+      }
+
+      await page.reload();
+      await expect(firstRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-engine',
+        { timeout: 30_000 },
+      );
+      await firstRow.click();
+      if (providerTurn) {
+        await expect(
+          page
+            .locator('[data-message-role="assistant"]')
+            .filter({ hasText: markerAfterSwitch })
+            .last(),
+        ).toBeVisible({ timeout: 30_000 });
+      }
       await page.screenshot({
         path: testInfo.outputPath(
           providerTurn
@@ -269,6 +331,11 @@ async function createProfile(
   await profileDialog.getByLabel('Display Name').fill(displayName);
   await profileDialog.getByLabel('Session kind').selectOption('full');
   await profileDialog.getByLabel('Provider alias').selectOption(provider);
+  const localToolProfile = profileDialog.getByLabel('Local tool profile');
+  if ((await localToolProfile.count()) > 0) {
+    const options = await localToolProfile.locator('option').count();
+    if (options > 1) await localToolProfile.selectOption({ index: 1 });
+  }
   await profileDialog
     .getByRole('button', { name: 'Create Profile', exact: true })
     .click();

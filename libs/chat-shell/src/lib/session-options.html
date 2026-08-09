@@ -55,11 +55,63 @@
     This is a native Crew brain session. Its profile remains the configuration
     authority.
   </div>
+  } @if (workspace(); as currentWorkspace) {
+  <div class="rv-session-options__workspace" data-testid="session-workspace">
+    <div class="rv-session-options__workspace-heading">
+      <strong>Working context</strong>
+      <span>revision {{ currentWorkspace.revision }}</span>
+    </div>
+    <code data-testid="session-workspace-current"
+      >{{ currentWorkspace.cwd }}</code
+    >
+    @if (workspaceEditing()) {
+    <label>
+      New working directory
+      <input
+        type="text"
+        autocomplete="off"
+        placeholder="/home/dev/project"
+        [value]="workspaceDraft()"
+        (input)="updateDraft(workspaceDraft, $event)"
+      />
+    </label>
+    <div class="rv-session-options__workspace-change">
+      <span>{{ currentWorkspace.cwd }} → {{ workspaceDraft() }}</span>
+      <button type="button" (click)="cancelWorkspaceEdit()">Cancel</button>
+      <button
+        type="button"
+        data-testid="session-workspace-apply"
+        [disabled]="workspaceValidationError() !== undefined || workspaceDisabledReason() !== undefined"
+        [title]="workspaceValidationError() ?? workspaceDisabledReason() ?? 'Apply working directory change'"
+        (click)="changeWorkspace()"
+      >
+        {{ chat.workspaceUpdatePendingIds().has(chatSession()?.session_id ?? '')
+        ? 'Changing…' : 'Apply' }}
+      </button>
+    </div>
+    @if (workspaceValidationError(); as validationError) {
+    <div class="rv-session-options__error">{{ validationError }}</div>
+    } } @else {
+    <button
+      type="button"
+      data-testid="session-workspace-change"
+      [disabled]="workspaceDisabledReason() !== undefined"
+      [title]="workspaceDisabledReason() ?? 'Change this session working directory'"
+      (click)="startWorkspaceEdit()"
+    >
+      Change working directory
+    </button>
+    }
+  </div>
+  } @if (chat.workspaceUpdateNotice()) {
+  <div class="rv-session-options__notice" role="status">
+    {{ chat.workspaceUpdateNotice() }}
+  </div>
   } @if (actionError() || external.metadataError() ||
-  chat.sessionLifecycleError()) {
+  chat.sessionLifecycleError() || chat.workspaceUpdateError()) {
   <div class="rv-session-options__error" role="alert">
     {{ actionError() ?? external.metadataError() ?? chat.sessionLifecycleError()
-    }}
+    ?? chat.workspaceUpdateError() }}
   </div>
   }
 

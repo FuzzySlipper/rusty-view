@@ -52,6 +52,24 @@ async function createOptions() {
     sessionLifecyclePendingIds: signal(new Set<string>()),
     sessionLifecycleError: signal<string | null>(null),
     clearSessionLifecycleError: vi.fn(),
+    workspaceUpdatePendingIds: signal(new Set<string>()),
+    workspaceUpdateError: signal<string | null>(null),
+    workspaceUpdateNotice: signal<string | null>(null),
+    clearWorkspaceUpdateFeedback: vi.fn(),
+    sessionDirectoryEntry: vi.fn((sessionId: string) =>
+      sessionId === 'native-session'
+        ? {
+            sessionId,
+            runtimeKind: 'direct_brain',
+            workspace: {
+              cwd: '/home/dev/rusty-view',
+              revision: 3,
+              updated_at: '2026-08-09T00:00:00Z',
+            },
+          }
+        : undefined,
+    ),
+    switchCrewSessionWorkspace: vi.fn(async () => true),
     archiveSession: vi.fn(async () => true),
     reconcileSessionsAfterLifecycleMutation: vi.fn(async () => undefined),
   };
@@ -122,5 +140,67 @@ describe('SessionOptionsComponent', () => {
 
     expect(external.archiveThread).toHaveBeenCalledWith(session);
     expect(chat.reconcileSessionsAfterLifecycleMutation).toHaveBeenCalledOnce();
+  });
+
+  it('shows authoritative workspace revision and submits an in-place change', async () => {
+    const { fixture, chat } = await createOptions();
+    fixture.componentRef.setInput('chatSession', nativeSession());
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(
+      host.querySelector('[data-testid="session-workspace"]')?.textContent,
+    ).toContain('revision 3');
+    expect(
+      host.querySelector('[data-testid="session-workspace-current"]')
+        ?.textContent,
+    ).toContain('/home/dev/rusty-view');
+
+    host
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="session-workspace-change"]',
+      )
+      ?.click();
+    fixture.detectChanges();
+    const input = host.querySelector<HTMLInputElement>(
+      'input[placeholder="/home/dev/project"]',
+    );
+    if (input === null) throw new Error('workspace input missing');
+    input.value = '/home/dev/rusty-crew';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    host
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="session-workspace-apply"]',
+      )
+      ?.click();
+    await fixture.whenStable();
+
+    expect(chat.switchCrewSessionWorkspace).toHaveBeenCalledWith(
+      'native-session',
+      3,
+      '/home/dev/rusty-crew',
+    );
+  });
+
+  it('disables workspace changes while the exact session is busy', async () => {
+    const { fixture } = await createOptions();
+    fixture.componentRef.setInput('chatSession', {
+      ...nativeSession(),
+      execution: {
+        sessionId: 'native-session',
+        lifecycleStatus: 'live',
+        phase: 'active',
+        source: 'logical_turn',
+        updatedAt: '2026-08-09T00:00:00Z',
+      },
+    });
+    fixture.detectChanges();
+
+    const change = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="session-workspace-change"]',
+    ) as HTMLButtonElement;
+    expect(change.disabled).toBe(true);
+    expect(change.title).toContain('Finish or interrupt');
   });
 });

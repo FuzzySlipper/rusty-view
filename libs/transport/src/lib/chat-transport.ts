@@ -124,6 +124,8 @@ import type {
   RuntimeConfigValidationReport,
   RuntimeWakeTimeoutPatchRequest,
   RuntimeWakeTimeoutPatchResult,
+  SessionWorkspaceChangeRequest,
+  SessionWorkspaceChangeResult,
   RuntimePauseControlRequest,
   RuntimePauseControlResult,
   RuntimePauseScope,
@@ -416,6 +418,13 @@ export class ChatTransport {
 
   coordinationAgentDirectory(): Promise<CoordinationAgentDirectory> {
     return this.adminHttp.coordinationAgentDirectory();
+  }
+
+  switchSessionWorkspace(
+    sessionId: string,
+    request: SessionWorkspaceChangeRequest,
+  ): Promise<AdminControlResponse<SessionWorkspaceChangeResult>> {
+    return this.adminHttp.switchSessionWorkspace(sessionId, request);
   }
 
   coordinationMessageTraffic(

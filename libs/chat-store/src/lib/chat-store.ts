@@ -139,6 +139,11 @@ export class ChatStore implements OnDestroy {
     new Set(),
   );
   private readonly _sessionLifecycleError = signal<string | null>(null);
+  private readonly _workspaceUpdatePendingIds = signal<ReadonlySet<string>>(
+    new Set(),
+  );
+  private readonly _workspaceUpdateError = signal<string | null>(null);
+  private readonly _workspaceUpdateNotice = signal<string | null>(null);
 
   // ---- stream management ----
   private activeStream: ChatEventStream | null = null;
@@ -193,6 +198,10 @@ export class ChatStore implements OnDestroy {
   readonly sessionLifecyclePendingIds =
     this._sessionLifecyclePendingIds.asReadonly();
   readonly sessionLifecycleError = this._sessionLifecycleError.asReadonly();
+  readonly workspaceUpdatePendingIds =
+    this._workspaceUpdatePendingIds.asReadonly();
+  readonly workspaceUpdateError = this._workspaceUpdateError.asReadonly();
+  readonly workspaceUpdateNotice = this._workspaceUpdateNotice.asReadonly();
   /** True when a message or command is currently in flight. */
   readonly isSubmitting = computed(() => {
     const sessionId = this._activeSessionId();
@@ -589,6 +598,89 @@ export class ChatStore implements OnDestroy {
   clearCrewSessionCreationFeedback(): void {
     this._crewSessionCreationError.set(null);
     this._crewSessionCreationNotice.set(null);
+  }
+
+  async switchCrewSessionWorkspace(
+    sessionId: string,
+    expectedRevision: number,
+    cwd: string,
+  ): Promise<boolean> {
+    const session = this._sessions().find(
+      (candidate) => candidate.session_id === sessionId,
+    );
+    if (session === undefined || session.status === 'archived') {
+      this._workspaceUpdateError.set(
+        'The selected Crew session is no longer available.',
+      );
+      return false;
+    }
+    const directoryExecution = this.sessionDirectoryEntry(sessionId)?.execution;
+    if (
+      sessionExecutionIsWorking(
+        directoryExecution == null
+          ? session
+          : { ...session, execution: directoryExecution },
+      )
+    ) {
+      this._workspaceUpdateError.set(
+        'Finish or interrupt the active turn before changing the working directory.',
+      );
+      return false;
+    }
+    if (this._workspaceUpdatePendingIds().has(sessionId)) return false;
+
+    this._workspaceUpdatePendingIds.update(
+      (current) => new Set([...current, sessionId]),
+    );
+    this._workspaceUpdateError.set(null);
+    this._workspaceUpdateNotice.set(null);
+    try {
+      const response = await this.transport.switchSessionWorkspace(sessionId, {
+        cwd,
+        expectedRevision,
+      });
+      if (response.outcome.status !== 'completed') {
+        await this.refreshSessionDirectory().catch(() => undefined);
+        const reason = response.outcome.reasonCode ?? '';
+        this._workspaceUpdateError.set(
+          /revision|stale|conflict/.test(reason)
+            ? 'The working directory changed elsewhere. Current Crew state was reloaded; review it and try again.'
+            : /busy|active/.test(reason)
+              ? 'Crew rejected the change because this session is busy. Finish or interrupt the active turn and try again.'
+              : `Working directory change failed: ${response.outcome.summary}${reason === '' ? '' : ` (${reason})`}`,
+        );
+        return false;
+      }
+      await this.refreshSessionDirectory();
+      const current = response.outcome.result?.current;
+      this._workspaceUpdateNotice.set(
+        `Working directory changed to ${current?.cwd ?? cwd}${current === undefined ? '' : ` (revision ${current.revision})`}.`,
+      );
+      return true;
+    } catch (error) {
+      const detail = storeErrorDetail(error);
+      const reason = detail.apiError?.reasonCode ?? '';
+      await this.refreshSessionDirectory().catch(() => undefined);
+      this._workspaceUpdateError.set(
+        /revision|stale|conflict/.test(reason)
+          ? 'The working directory changed elsewhere. Current Crew state was reloaded; review it and try again.'
+          : /busy|active/.test(reason)
+            ? 'Crew rejected the change because this session is busy. Finish or interrupt the active turn and try again.'
+            : `Working directory change failed: ${detail.message}`,
+      );
+      return false;
+    } finally {
+      this._workspaceUpdatePendingIds.update((current) => {
+        const next = new Set(current);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  }
+
+  clearWorkspaceUpdateFeedback(): void {
+    this._workspaceUpdateError.set(null);
+    this._workspaceUpdateNotice.set(null);
   }
 
   /** Load persisted UI state (selected profile) and apply it if still valid. */

@@ -1,4 +1,5 @@
 import type {
+  AgentDirectoryEntry,
   ChatCommandRegistry,
   ChatEvent,
   ChatSessionOpenResult,
@@ -17,7 +18,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatStorageAdapter, ChatUiState } from '@rusty-view/chat-domain';
 import { ChatTransport, ChatTransportError } from '@rusty-view/transport';
-import type { ChatEventStream } from '@rusty-view/transport';
+import type {
+  AdminControlResponse,
+  ChatEventStream,
+  SessionWorkspaceChangeResult,
+} from '@rusty-view/transport';
 import type { ChatConnectionState } from '@rusty-view/transport';
 
 import { CHAT_STORE_VERSION } from '../index';
@@ -79,6 +84,9 @@ function createMockTransport(opts: {
   toolCallDebugDetailError?: unknown;
   logicalTurns?: LogicalTurnDiagnosticPage;
   logicalTurnControlError?: unknown;
+  directoryAgents?: readonly AgentDirectoryEntry[];
+  workspaceChangeResponse?: unknown;
+  workspaceChangeError?: unknown;
 }): ChatTransport {
   const mock = {
     getConfig: () => ({ baseUrl: 'http://test', timeoutMs: 5000 }),
@@ -101,8 +109,41 @@ function createMockTransport(opts: {
     }),
     coordinationAgentDirectory: vi.fn(async () => ({
       deploymentRole: 'production' as const,
-      agents: [],
+      agents: opts.directoryAgents ?? [],
     })),
+    switchSessionWorkspace: vi.fn(async () => {
+      if (opts.workspaceChangeError !== undefined) {
+        throw opts.workspaceChangeError;
+      }
+      return (
+        opts.workspaceChangeResponse ?? {
+          command: {
+            name: 'switch_session_workspace',
+            target: { sessionId: 'native-session' },
+            requestId: 'request-1',
+          },
+          outcome: {
+            status: 'completed',
+            summary: 'workspace changed',
+            result: {
+              previous: {
+                cwd: '/home/dev/rusty-view',
+                revision: 1,
+                updated_at: '2026-08-09T00:00:00Z',
+              },
+              current: {
+                cwd: '/home/dev/rusty-crew',
+                revision: 2,
+                updated_at: '2026-08-09T00:01:00Z',
+              },
+              session: {},
+            },
+          },
+          audit: { started: true, terminal: true },
+          observation: {},
+        }
+      );
+    }),
     openSession: vi.fn(async () => opts.openResult ?? emptyOpenResult()),
     replayEvents: vi.fn(async () => opts.replayEvents ?? []),
     replayAllEvents: vi.fn(async () => opts.replayEvents ?? []),
@@ -193,6 +234,55 @@ function createMockStream(events: ChatEvent[]): ChatEventStream {
 
 function emptySessionPage(): ChatSessionPage {
   return { items: [], total: 0, limit: 100, offset: 0 };
+}
+
+function directoryEntry(
+  sessionId: string,
+  workspace: NonNullable<AgentDirectoryEntry['workspace']>,
+): AgentDirectoryEntry {
+  return {
+    agentId: `agent-${sessionId}`,
+    displayLabel: sessionId,
+    profileId: 'shared-profile',
+    routable: true,
+    runtimeKind: 'direct_brain',
+    sessionId,
+    sessionKind: 'full',
+    sessionStatus: 'idle',
+    workspace,
+    workdir: workspace.cwd,
+  };
+}
+
+function workspaceChangeResponse(
+  status: 'completed' | 'blocked' | 'failed',
+  result?: Pick<SessionWorkspaceChangeResult, 'previous' | 'current'>,
+  detail: { readonly reasonCode?: string; readonly summary?: string } = {},
+): AdminControlResponse<SessionWorkspaceChangeResult> {
+  return {
+    command: {
+      name: 'switch_session_workspace',
+      target: { sessionId: 'workspace-a' },
+      requestId: 'request-1',
+    },
+    outcome: {
+      status,
+      summary: detail.summary ?? 'workspace changed',
+      ...(detail.reasonCode === undefined
+        ? {}
+        : { reasonCode: detail.reasonCode }),
+      ...(result === undefined
+        ? {}
+        : {
+            result: {
+              ...result,
+              session: {},
+            } as SessionWorkspaceChangeResult,
+          }),
+    },
+    audit: { started: true, terminal: true },
+    observation: {},
+  };
 }
 
 function executionState(
@@ -1453,6 +1543,200 @@ describe('ChatStore', () => {
     expect(store.crewSessionCreationError()).toContain(
       'profile changed before creation',
     );
+  });
+
+  it('switches one idle same-profile workspace without changing selection or its sibling', async () => {
+    const first = makeSession({
+      session_id: 'workspace-a',
+      profile_id: 'shared-profile',
+      latest_cursor: 'cursor-a',
+    });
+    const sibling = makeSession({
+      session_id: 'workspace-sibling',
+      profile_id: 'shared-profile',
+      latest_cursor: 'cursor-b',
+    });
+    let firstWorkspace = {
+      cwd: '/home/dev/rusty-view',
+      revision: 4,
+      updated_at: '2026-08-09T00:00:00Z',
+    };
+    const directory = () => [
+      directoryEntry('workspace-a', firstWorkspace),
+      directoryEntry('workspace-sibling', {
+        cwd: '/home/dev/rusty-engine',
+        revision: 2,
+        updated_at: '2026-08-09T00:00:00Z',
+      }),
+    ];
+    const transport = createMockTransport({
+      sessions: {
+        items: [first, sibling],
+        total: 2,
+        limit: 100,
+        offset: 0,
+      },
+      directoryAgents: directory(),
+    });
+    vi.mocked(transport.coordinationAgentDirectory).mockImplementation(
+      async () => ({ deploymentRole: 'production', agents: directory() }),
+    );
+    vi.mocked(transport.switchSessionWorkspace).mockImplementation(async () => {
+      const previous = firstWorkspace;
+      firstWorkspace = {
+        cwd: '/home/dev/rusty-crew',
+        revision: 5,
+        updated_at: '2026-08-09T00:01:00Z',
+      };
+      return workspaceChangeResponse('completed', {
+        previous,
+        current: firstWorkspace,
+      });
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.refreshSessionDirectory();
+    await store.selectProfileSession('workspace-a');
+    const cursorBefore = store.lastCursor();
+
+    await expect(
+      store.switchCrewSessionWorkspace(
+        'workspace-a',
+        4,
+        '/home/dev/rusty-crew',
+      ),
+    ).resolves.toBe(true);
+
+    expect(transport.switchSessionWorkspace).toHaveBeenCalledWith(
+      'workspace-a',
+      { cwd: '/home/dev/rusty-crew', expectedRevision: 4 },
+    );
+    expect(store.activeSessionId()).toBe('workspace-a');
+    expect(store.lastCursor()).toBe(cursorBefore);
+    expect(store.sessionDirectoryEntry('workspace-a')?.workspace).toMatchObject(
+      { cwd: '/home/dev/rusty-crew', revision: 5 },
+    );
+    expect(
+      store.sessionDirectoryEntry('workspace-sibling')?.workspace,
+    ).toMatchObject({ cwd: '/home/dev/rusty-engine', revision: 2 });
+    expect(store.workspaceUpdateNotice()).toContain('revision 5');
+  });
+
+  it('reloads authoritative workspace state after a stale revision conflict', async () => {
+    let readCount = 0;
+    const transport = createMockTransport({
+      sessions: {
+        items: [makeSession({ session_id: 'workspace-a' })],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+      workspaceChangeResponse: workspaceChangeResponse('failed', undefined, {
+        reasonCode: 'session_workspace_revision_conflict',
+        summary: 'workspace revision changed',
+      }),
+    });
+    vi.mocked(transport.coordinationAgentDirectory).mockImplementation(
+      async () => ({
+        deploymentRole: 'production',
+        agents: [
+          directoryEntry('workspace-a', {
+            cwd:
+              readCount++ === 0
+                ? '/home/dev/rusty-view'
+                : '/home/dev/out-of-band',
+            revision: readCount === 1 ? 3 : 4,
+            updated_at: '2026-08-09T00:00:00Z',
+          }),
+        ],
+      }),
+    );
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.refreshSessionDirectory();
+
+    await expect(
+      store.switchCrewSessionWorkspace(
+        'workspace-a',
+        3,
+        '/home/dev/rusty-crew',
+      ),
+    ).resolves.toBe(false);
+
+    expect(store.workspaceUpdateError()).toContain('changed elsewhere');
+    expect(store.sessionDirectoryEntry('workspace-a')?.workspace).toMatchObject(
+      { cwd: '/home/dev/out-of-band', revision: 4 },
+    );
+  });
+
+  it('rejects a busy workspace change locally without issuing a mutation', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [
+          makeSession({
+            session_id: 'workspace-busy',
+            execution: executionState(
+              'workspace-busy',
+              'active',
+              '2026-08-09T00:00:00Z',
+            ),
+          }),
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+
+    await expect(
+      store.switchCrewSessionWorkspace(
+        'workspace-busy',
+        1,
+        '/home/dev/rusty-crew',
+      ),
+    ).resolves.toBe(false);
+
+    expect(transport.switchSessionWorkspace).not.toHaveBeenCalled();
+    expect(store.workspaceUpdateError()).toContain('active turn');
+  });
+
+  it('keeps authoritative readback and reports a failed workspace mutation', async () => {
+    const transport = createMockTransport({
+      sessions: {
+        items: [makeSession({ session_id: 'workspace-failed' })],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+      directoryAgents: [
+        directoryEntry('workspace-failed', {
+          cwd: '/home/dev/rusty-view',
+          revision: 1,
+          updated_at: '2026-08-09T00:00:00Z',
+        }),
+      ],
+      workspaceChangeError: new Error('control service unavailable'),
+    });
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.refreshSessions();
+    await store.refreshSessionDirectory();
+
+    await expect(
+      store.switchCrewSessionWorkspace(
+        'workspace-failed',
+        1,
+        '/home/dev/rusty-crew',
+      ),
+    ).resolves.toBe(false);
+
+    expect(store.workspaceUpdateError()).toContain(
+      'control service unavailable',
+    );
+    expect(
+      store.sessionDirectoryEntry('workspace-failed')?.workspace,
+    ).toMatchObject({ cwd: '/home/dev/rusty-view', revision: 1 });
   });
 
   it('prefers another live member of the archived profile after /archive', async () => {

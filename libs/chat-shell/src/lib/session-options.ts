@@ -36,10 +36,21 @@ export class SessionOptionsComponent {
   protected readonly metadataProjectId = signal('');
   protected readonly metadataTaskId = signal('');
   protected readonly actionError = signal<string | undefined>(undefined);
+  protected readonly workspaceEditing = signal(false);
+  protected readonly workspaceDraft = signal('');
 
   protected readonly binding = computed(() => this.externalSession()?.binding);
   protected readonly isCodex = computed(
     () => this.externalSession() !== undefined,
+  );
+  protected readonly directoryEntry = computed(() => {
+    const sessionId = this.chatSession()?.session_id;
+    return sessionId === undefined
+      ? undefined
+      : this.chat.sessionDirectoryEntry(sessionId);
+  });
+  protected readonly workspace = computed(
+    () => this.directoryEntry()?.workspace ?? undefined,
   );
 
   constructor() {
@@ -50,8 +61,11 @@ export class SessionOptionsComponent {
         this.metadataLabel.set(binding?.label ?? '');
         this.metadataProjectId.set(binding?.taskRef?.project_id ?? '');
         this.metadataTaskId.set(binding?.taskRef?.task_id ?? '');
+        this.workspaceDraft.set(this.workspace()?.cwd ?? '');
+        this.workspaceEditing.set(false);
         this.actionError.set(undefined);
         this.chat.clearSessionLifecycleError();
+        this.chat.clearWorkspaceUpdateFeedback();
         this.external.metadataError.set(undefined);
       });
     });
@@ -67,6 +81,70 @@ export class SessionOptionsComponent {
       bindingId !== undefined &&
       this.external.metadataPendingBindingIds().has(bindingId)
     );
+  }
+
+  protected workspaceValidationError(): string | undefined {
+    const cwd = this.workspaceDraft().trim();
+    if (cwd === '') return 'Enter a working directory.';
+    if (!cwd.startsWith('/')) return 'Working directory must be absolute.';
+    if (cwd === this.workspace()?.cwd) {
+      return 'Enter a different working directory.';
+    }
+    return undefined;
+  }
+
+  protected workspaceDisabledReason(): string | undefined {
+    const chatSession = this.chatSession();
+    if (chatSession === undefined) return 'Session details are unavailable.';
+    if (this.directoryEntry()?.runtimeKind !== 'direct_brain') {
+      return 'Working-directory changes are available for native Crew brain sessions.';
+    }
+    if (this.workspace() === undefined) {
+      return 'Crew did not expose authoritative workspace state for this session.';
+    }
+    if (this.chat.workspaceUpdatePendingIds().has(chatSession.session_id)) {
+      return 'A working-directory change is already running.';
+    }
+    const execution = this.directoryEntry()?.execution;
+    return sessionExecutionIsWorking(
+      execution == null ? chatSession : { ...chatSession, execution },
+    )
+      ? 'Finish or interrupt the active turn first.'
+      : undefined;
+  }
+
+  protected startWorkspaceEdit(): void {
+    if (this.workspaceDisabledReason() !== undefined) return;
+    this.workspaceDraft.set(this.workspace()?.cwd ?? '');
+    this.chat.clearWorkspaceUpdateFeedback();
+    this.workspaceEditing.set(true);
+  }
+
+  protected cancelWorkspaceEdit(): void {
+    this.workspaceDraft.set(this.workspace()?.cwd ?? '');
+    this.workspaceEditing.set(false);
+  }
+
+  protected async changeWorkspace(): Promise<void> {
+    const chatSession = this.chatSession();
+    const workspace = this.workspace();
+    if (
+      chatSession === undefined ||
+      workspace === undefined ||
+      this.workspaceDisabledReason() !== undefined ||
+      this.workspaceValidationError() !== undefined
+    ) {
+      return;
+    }
+    if (
+      await this.chat.switchCrewSessionWorkspace(
+        chatSession.session_id,
+        workspace.revision,
+        this.workspaceDraft().trim(),
+      )
+    ) {
+      this.workspaceEditing.set(false);
+    }
   }
 
   protected archiveDisabledReason(): string | undefined {

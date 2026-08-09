@@ -89,6 +89,12 @@ async function createPanel(
     sessionLifecyclePendingIds: signal(new Set<string>()),
     sessionLifecycleError: signal<string | null>(null),
     clearSessionLifecycleError: vi.fn(),
+    workspaceUpdatePendingIds: signal(new Set<string>()),
+    workspaceUpdateError: signal<string | null>(null),
+    workspaceUpdateNotice: signal<string | null>(null),
+    clearWorkspaceUpdateFeedback: vi.fn(),
+    sessionDirectoryEntry: vi.fn(() => undefined),
+    switchCrewSessionWorkspace: vi.fn(async () => true),
   };
   await TestBed.configureTestingModule({
     imports: [ExternalAgentPanelComponent],
