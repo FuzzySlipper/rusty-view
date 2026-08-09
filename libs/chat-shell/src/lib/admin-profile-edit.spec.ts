@@ -555,6 +555,7 @@ describe('AdminProfileEditComponent', () => {
       cwd: '/home/dev/rusty-view',
       dynamicToolCatalogFingerprint: null,
       effectiveConfigFingerprint: 'config',
+      lineage: null,
       messageDeliveryPolicy: 'immediate_steer',
       profileId,
       profilePromptHash: null,

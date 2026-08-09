@@ -22,6 +22,7 @@ interface PanelApi {
   sessionStateLabel(session: ExternalAgentSession): string;
   sessionStateTone(session: ExternalAgentSession): string;
   bindingStateLabel(session: ExternalAgentSession): string | undefined;
+  recoveryStateLabel(session: ExternalAgentSession): string | undefined;
   openCreator(): void;
   openOptions(session: ExternalAgentSession): void;
   closeCreator(): void;
@@ -403,6 +404,68 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     expect(fixture.nativeElement.textContent).toContain('Crew Paused');
   });
 
+  it('labels populated predecessors and empty replacements from Crew lineage', async () => {
+    const predecessorBase = inventorySession(1, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    if (predecessorBase.binding === undefined) {
+      throw new Error('expected predecessor binding');
+    }
+    const archivedPredecessor: ExternalAgentSession = {
+      ...predecessorBase,
+      relationship: 'lineage_predecessor',
+      binding: { ...predecessorBase.binding, status: 'archived' },
+      thread: {
+        ...predecessorBase.thread,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            statusSource: 'native',
+            terminalReasonCode: null,
+            error: null,
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [],
+          },
+        ],
+      },
+    };
+    const replacement: ExternalAgentSession = {
+      ...inventorySession(2, {
+        bound: true,
+        attention: false,
+        active: false,
+      }),
+      relationship: 'lineage_successor_recovery_required',
+    };
+    const { fixture, panel } = await createPanel(
+      async () => undefined,
+      [archivedPredecessor, replacement],
+    );
+
+    fixture.detectChanges();
+
+    expect(panel.recoveryStateLabel(archivedPredecessor)).toBe(
+      'Recovered predecessor · history available · Crew archived',
+    );
+    expect(panel.recoveryStateLabel(replacement)).toBe(
+      'New replacement · empty · native recovery required · predecessor history preserved',
+    );
+    const lineageLabels = Array.from(
+      fixture.nativeElement.querySelectorAll(
+        '[data-testid="external-agent-lineage-state"]',
+      ),
+    ).map((element) => (element as HTMLElement).textContent?.trim());
+    expect(lineageLabels).toEqual([
+      'Recovered predecessor · history available · Crew archived',
+      'New replacement · empty · native recovery required · predecessor history preserved',
+    ]);
+  });
+
   it('offers exact Crew-session restore separately from native history', async () => {
     const base = inventorySession(1, {
       bound: true,
@@ -580,6 +643,10 @@ function inventorySession(
     thread: {
       threadId,
       sessionId: `session-${index}`,
+      bindingId: options.bound ? `binding-${index}` : null,
+      crewSessionId: options.bound ? `session-${index}` : null,
+      lineage: null,
+      nativeMaterialized: true,
       parentThreadId: null,
       preview: threadId,
       ephemeral: false,
@@ -608,6 +675,7 @@ function inventorySession(
             cwd: '/home/dev/rusty-view',
             dynamicToolCatalogFingerprint: null,
             effectiveConfigFingerprint: 'config',
+            lineage: null,
             messageDeliveryPolicy: 'immediate_steer',
             profileId: null,
             profilePromptHash: null,
@@ -621,5 +689,6 @@ function inventorySession(
       : {}),
     unread: false,
     needsAttention: options.attention,
+    relationship: options.bound ? 'bound' : 'unbound',
   };
 }

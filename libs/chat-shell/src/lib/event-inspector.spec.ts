@@ -84,6 +84,10 @@ describe('EventInspectorComponent', () => {
     const thread: ExternalThreadProjection = {
       threadId: 'thread-1',
       sessionId: 'session-1',
+      bindingId: null,
+      crewSessionId: null,
+      lineage: null,
+      nativeMaterialized: true,
       parentThreadId: null,
       preview: 'failed prompt',
       ephemeral: false,

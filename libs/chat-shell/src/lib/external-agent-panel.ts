@@ -171,6 +171,29 @@ export class ExternalAgentPanelComponent {
     return `Crew ${sessionStatusLabel(session.binding.status)}`;
   }
 
+  protected recoveryStateLabel(
+    session: ExternalAgentSession,
+  ): string | undefined {
+    if (session.relationship === 'lineage_predecessor') {
+      return `Recovered predecessor · ${session.thread.turns.length === 0 ? 'empty' : 'history available'}${session.binding?.status === 'archived' ? ' · Crew archived' : ''}`;
+    }
+    if (session.relationship === 'lineage_successor') {
+      return session.thread.turns.length === 0
+        ? 'New replacement · empty · predecessor history preserved'
+        : 'Replacement session · predecessor history preserved';
+    }
+    if (session.relationship === 'lineage_successor_recovery_required') {
+      return 'New replacement · empty · native recovery required · predecessor history preserved';
+    }
+    if (session.relationship === 'recovery_required') {
+      return 'Crew binding requires native-thread recovery';
+    }
+    if (session.relationship === 'unbound') {
+      return 'Native-only history · no Crew binding';
+    }
+    return undefined;
+  }
+
   protected updateQuery(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
   }

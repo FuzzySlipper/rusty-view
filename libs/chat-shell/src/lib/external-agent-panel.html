@@ -268,6 +268,13 @@
         <span class="rv-agent__recovery">
           Preserved Codex history · Crew session restore available
         </span>
+        } @if (recoveryStateLabel(session); as recoveryLabel) {
+        <span
+          class="rv-agent__recovery"
+          data-testid="external-agent-lineage-state"
+        >
+          {{ recoveryLabel }}
+        </span>
         }
       </button>
       <div class="rv-agent__actions">

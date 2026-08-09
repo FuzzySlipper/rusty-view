@@ -640,6 +640,115 @@ describe('ExternalAgentStore', () => {
     ]);
   });
 
+  it('retains a populated lineaged predecessor beside its empty replacement across refresh and selection', async () => {
+    const predecessorBinding: ExternalAgentBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-predecessor',
+      nativeThreadId: 'thread-predecessor',
+      sessionId: 'session-predecessor',
+      status: 'archived',
+    };
+    const successorBinding: ExternalAgentBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-successor',
+      nativeThreadId: 'thread-successor',
+      sessionId: 'session-successor',
+      lineage: {
+        predecessorBindingId: predecessorBinding.bindingId,
+        predecessorSessionId: 'session-predecessor',
+        predecessorNativeThreadId: 'thread-predecessor',
+        transitionId: 'transition-1',
+        reasonCode: 'dynamic_tool_catalog_refresh',
+        createdAt: '2026-08-06T00:00:00Z',
+      },
+    };
+    const replacement = {
+      ...thread('thread-successor', 20),
+      bindingId: successorBinding.bindingId,
+      crewSessionId: successorBinding.sessionId ?? null,
+      lineage: successorBinding.lineage,
+      nativeMaterialized: false,
+      status: 'unmaterialized',
+    };
+    const predecessor = {
+      ...threadWithUserPrompts('preserved predecessor context'),
+      threadId: 'thread-predecessor',
+      sessionId: 'session-thread-predecessor',
+      bindingId: predecessorBinding.bindingId,
+      crewSessionId: predecessorBinding.sessionId ?? null,
+      status: 'archived',
+    };
+    const readThread = vi.fn(
+      async (
+        _runtimeId: string,
+        request: { threadId: string; includeTurns: boolean },
+      ) => ({
+        thread:
+          request.threadId === predecessor.threadId
+            ? request.includeTurns
+              ? predecessor
+              : { ...predecessor, turns: [] }
+            : replacement,
+      }),
+    );
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [predecessorBinding, successorBinding],
+      listThreads: vi.fn(async () => page([replacement], null)),
+      readThread,
+    });
+
+    await store.refresh();
+    await store.refresh();
+
+    expect(
+      store
+        .sessions()
+        .map((session) => [session.thread.threadId, session.relationship]),
+    ).toEqual([
+      ['thread-successor', 'lineage_successor_recovery_required'],
+      ['thread-predecessor', 'lineage_predecessor'],
+    ]);
+    expect(store.sessions()[0]?.needsAttention).toBe(true);
+    const recovered = store
+      .sessions()
+      .find((session) => session.relationship === 'lineage_predecessor');
+    if (recovered === undefined) {
+      throw new Error('expected recovered predecessor');
+    }
+
+    await expect(store.selectSession(recovered)).resolves.toBe(true);
+
+    expect(store.loading()).toBe(false);
+    expect(store.selectedThread()?.turns).toHaveLength(1);
+    expect(store.messages()[0]?.blocks[0]?.content).toBe(
+      'preserved predecessor context',
+    );
+  });
+
+  it('keeps an ordinary archived binding out of managed lineage recovery', async () => {
+    const ordinaryArchived: ExternalAgentBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-ordinary-archived',
+      nativeThreadId: 'thread-ordinary-archived',
+      status: 'archived',
+    };
+    const readThread = vi.fn();
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding(), ordinaryArchived],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread,
+    });
+
+    await store.refresh();
+
+    expect(readThread).not.toHaveBeenCalled();
+    expect(store.sessions().map((session) => session.thread.threadId)).toEqual([
+      'thread-1',
+    ]);
+  });
+
   it('does not retry a binding thread with a controller resume failure', async () => {
     const staleBinding = {
       ...externalBinding(),
@@ -1490,6 +1599,7 @@ describe('ExternalAgentStore', () => {
       runtime,
       thread: selectedThread,
       binding,
+      relationship: 'bound',
       unread: false,
       needsAttention: false,
     });
@@ -1570,6 +1680,7 @@ describe('ExternalAgentStore', () => {
       key: 'runtime-1:thread-1',
       runtime,
       thread: firstThread,
+      relationship: 'unbound',
       unread: false,
       needsAttention: false,
     };
@@ -1577,6 +1688,7 @@ describe('ExternalAgentStore', () => {
       key: 'runtime-1:thread-2',
       runtime,
       thread: secondThread,
+      relationship: 'unbound',
       unread: false,
       needsAttention: false,
     };
@@ -2056,6 +2168,10 @@ function thread(threadId: string, updatedAt: number): ExternalThreadProjection {
   return {
     threadId,
     sessionId: `session-${threadId}`,
+    bindingId: null,
+    crewSessionId: null,
+    lineage: null,
+    nativeMaterialized: true,
     parentThreadId: null,
     preview: threadId,
     ephemeral: false,
@@ -2111,6 +2227,7 @@ function externalBinding(): ExternalAgentBinding {
     cwd: '/home/dev/rusty-view',
     dynamicToolCatalogFingerprint: null,
     effectiveConfigFingerprint: 'config',
+    lineage: null,
     messageDeliveryPolicy: 'immediate_steer',
     profileId: null,
     profilePromptHash: null,

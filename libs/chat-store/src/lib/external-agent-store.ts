@@ -49,12 +49,21 @@ export type ExternalAgentInventoryMode =
   | 'all'
   | 'archived';
 
+export type ExternalAgentSessionRelationship =
+  | 'bound'
+  | 'lineage_predecessor'
+  | 'lineage_successor'
+  | 'lineage_successor_recovery_required'
+  | 'recovery_required'
+  | 'unbound';
+
 export interface ExternalAgentSession {
   readonly key: string;
   readonly runtime: ExternalRuntimeRegistration;
   readonly controller?: ExternalRuntimeControllerStatus;
   readonly thread: ExternalThreadProjection;
   readonly binding?: ExternalAgentBinding;
+  readonly relationship: ExternalAgentSessionRelationship;
   readonly phase?: ExternalTurnPhase;
   readonly unread: boolean;
   readonly needsAttention: boolean;
@@ -215,10 +224,11 @@ export class ExternalAgentStore {
         (item) => item.runtimeId === runtimeId,
       );
       if (runtime === undefined) return [];
-      const binding = bindings.find(
-        (item) =>
-          item.runtimeId === runtime.runtimeId &&
-          item.nativeThreadId === thread.threadId,
+      const binding = bindingForThread(bindings, runtime.runtimeId, thread);
+      const relationship = externalSessionRelationship(
+        bindings,
+        thread,
+        binding,
       );
       const controller = controllers.get(runtime.runtimeId);
       const key = sessionKey(runtime.runtimeId, thread.threadId);
@@ -236,12 +246,15 @@ export class ExternalAgentStore {
             item.status === 'pending',
         ) ||
         phase === 'failed' ||
+        relationship === 'recovery_required' ||
+        relationship === 'lineage_successor_recovery_required' ||
         (unread && (phase === 'completed' || phase === 'interrupted'));
       return [
         {
           key,
           runtime,
           thread,
+          relationship,
           ...(phase === undefined ? {} : { phase }),
           unread,
           needsAttention,
@@ -421,17 +434,12 @@ export class ExternalAgentStore {
           );
           const missingBoundIds = archivedInventory
             ? []
-            : refreshedBindings
-                .filter(
-                  (binding) =>
-                    binding.runtimeId === runtime.runtimeId &&
-                    binding.status === 'active' &&
-                    binding.nativeThreadId != null &&
-                    !known.has(binding.nativeThreadId) &&
-                    !failedResumeBindingIds.has(binding.bindingId),
-                )
-                .map((binding) => binding.nativeThreadId)
-                .filter((threadId): threadId is string => threadId != null);
+            : bindingsNeedingDirectThreadRead(
+                refreshedBindings,
+                runtime.runtimeId,
+                known,
+                failedResumeBindingIds,
+              );
           const recoveredReads = await Promise.allSettled(
             [...new Set(missingBoundIds)].map(async (threadId) =>
               this.transport.external.readThread(runtime.runtimeId, {
@@ -1831,6 +1839,87 @@ export function filterExternalAgentSessions(
   });
 }
 
+function bindingForThread(
+  bindings: readonly ExternalAgentBinding[],
+  runtimeId: string,
+  thread: ExternalThreadProjection,
+): ExternalAgentBinding | undefined {
+  const exact =
+    thread.bindingId === null
+      ? undefined
+      : bindings.find(
+          (binding) =>
+            binding.runtimeId === runtimeId &&
+            binding.bindingId === thread.bindingId,
+        );
+  return (
+    exact ??
+    bindings.find(
+      (binding) =>
+        binding.runtimeId === runtimeId &&
+        binding.nativeThreadId === thread.threadId,
+    )
+  );
+}
+
+function externalSessionRelationship(
+  bindings: readonly ExternalAgentBinding[],
+  thread: ExternalThreadProjection,
+  binding: ExternalAgentBinding | undefined,
+): ExternalAgentSessionRelationship {
+  if (binding === undefined) return 'unbound';
+  const isPredecessor = bindings.some(
+    (candidate) =>
+      candidate.runtimeId === binding.runtimeId &&
+      candidate.lineage?.predecessorBindingId === binding.bindingId &&
+      candidate.lineage.predecessorNativeThreadId === thread.threadId,
+  );
+  if (isPredecessor) return 'lineage_predecessor';
+  if (binding.lineage !== null) {
+    return binding.status === 'active' && !thread.nativeMaterialized
+      ? 'lineage_successor_recovery_required'
+      : 'lineage_successor';
+  }
+  if (binding.status === 'active' && !thread.nativeMaterialized) {
+    return 'recovery_required';
+  }
+  return 'bound';
+}
+
+function bindingsNeedingDirectThreadRead(
+  bindings: readonly ExternalAgentBinding[],
+  runtimeId: string,
+  knownThreadIds: ReadonlySet<string>,
+  failedResumeBindingIds: ReadonlySet<string>,
+): string[] {
+  const predecessorBindingIds = new Set(
+    bindings.flatMap((binding) =>
+      binding.runtimeId === runtimeId && binding.lineage !== null
+        ? [binding.lineage.predecessorBindingId]
+        : [],
+    ),
+  );
+  return bindings.flatMap((binding) => {
+    const nativeThreadId = binding.nativeThreadId;
+    if (
+      binding.runtimeId !== runtimeId ||
+      nativeThreadId == null ||
+      knownThreadIds.has(nativeThreadId)
+    ) {
+      return [];
+    }
+    const isRecoverablePredecessor = predecessorBindingIds.has(
+      binding.bindingId,
+    );
+    const isHealthyActiveBinding =
+      binding.status === 'active' &&
+      !failedResumeBindingIds.has(binding.bindingId);
+    return isRecoverablePredecessor || isHealthyActiveBinding
+      ? [nativeThreadId]
+      : [];
+  });
+}
+
 export function isActiveExternalSession(
   session: ExternalAgentSession,
 ): boolean {
@@ -1893,6 +1982,10 @@ function bindingFallbackThreads(
       {
         threadId: binding.nativeThreadId,
         sessionId: binding.sessionId ?? `binding:${binding.bindingId}`,
+        bindingId: binding.bindingId,
+        crewSessionId: binding.sessionId ?? null,
+        lineage: binding.lineage,
+        nativeMaterialized: false,
         parentThreadId: null,
         preview: label,
         ephemeral: false,

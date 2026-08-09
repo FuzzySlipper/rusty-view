@@ -588,8 +588,10 @@ export interface components {
             body: string;
             correlation_id?: string | null;
             from: string;
+            from_session_id?: string | null;
             projection?: components["schemas"]["AgentMessageProjectionHint"] | null;
             to: string;
+            to_session_id?: string | null;
         };
         AgentMessageCommand: {
             body: string;
@@ -837,6 +839,7 @@ export interface components {
             timeout_ms?: number | null;
             /** @constant */
             type: "request_delegation";
+            workspace_constraint?: components["schemas"]["DelegatedWorkspaceConstraint"] | null;
         } | {
             packet: components["schemas"]["CompletionPacket"];
             /** @constant */
@@ -899,6 +902,7 @@ export interface components {
         /** @enum {string} */
         BrainPhase: "idle" | "exploring" | "composing" | "reviewing";
         BrainProviderStateScope: {
+            compatibility?: components["schemas"]["ProviderStateCompatibilityFacts"] | null;
             profile_fingerprint: string;
             provider_fingerprint: string;
         };
@@ -929,6 +933,16 @@ export interface components {
             retryUnchangedSafe: boolean;
             summary: string;
         };
+        BrainWakeCompactionIntent: {
+            intentKey: string;
+            kind: components["schemas"]["BrainWakeCompactionIntentKind"];
+            sourceProjectionFingerprint?: string | null;
+            strategyId?: string | null;
+            strategyRevision?: string | null;
+            trigger?: string | null;
+        };
+        /** @enum {string} */
+        BrainWakeCompactionIntentKind: "manual" | "auto";
         BrainWakeFailure: {
             kind: components["schemas"]["CoreErrorKind"];
             message: string;
@@ -980,6 +994,7 @@ export interface components {
             body_state: number;
             /** Format: uint64 */
             brain: number;
+            compaction_intent?: components["schemas"]["BrainWakeCompactionIntent"] | null;
             continuation_state?: components["schemas"]["BrainContinuationPayload"] | null;
             provider_state?: components["schemas"]["BrainWakeProviderStateInput"] | null;
             provider_state_absence?: components["schemas"]["ProviderStateAbsenceReason"] | null;
@@ -1031,19 +1046,35 @@ export interface components {
          *     history intact.
          */
         ContextCompactionArtifact: {
+            /** Format: uint64 */
+            after_tokens?: number | null;
             artifact_id: string;
+            /** Format: uint64 */
+            before_tokens?: number | null;
             branch_id?: string | null;
             context_policy: string;
             created_at: string;
             enters_future_context: boolean;
             estimate_after_json?: unknown;
             estimate_before_json: unknown;
+            /** Format: uint64 */
+            excised_item_count?: number | null;
+            execution_epoch_id?: string | null;
+            intent_key?: string | null;
+            logical_turn_id?: string | null;
             metadata_json: unknown;
+            /** Format: uint64 */
+            preserved_item_count?: number | null;
+            provider_chain_action?: string | null;
             provider_metadata_json: unknown;
             session_id: string;
+            source_projection_fingerprint?: string | null;
             source_refs_json: unknown;
             strategy_id: string;
+            strategy_revision?: string | null;
             summary_text: string;
+            terminal_status?: string | null;
+            trigger?: string | null;
             updated_at: string;
         };
         ContextCompactionArtifactQuery: {
@@ -1056,6 +1087,7 @@ export interface components {
             offset?: number | null;
             session_id?: string | null;
             strategy_id?: string | null;
+            terminal_status?: string | null;
         };
         /** @enum {string} */
         ContinuationYieldReason: "initial_admission" | "work_quantum_reached" | "scheduler_fairness" | "provider_retry" | "buffer_pressure" | "restart_recovery" | "operator_requested";
@@ -1069,6 +1101,12 @@ export interface components {
             state: components["schemas"]["SessionState"];
             /** @constant */
             type: "session_created";
+        } | {
+            current: components["schemas"]["SessionWorkspace"];
+            previous: components["schemas"]["SessionWorkspace"];
+            session_id: string;
+            /** @constant */
+            type: "session_workspace_changed";
         } | {
             session_id: string;
             /** @constant */
@@ -1127,7 +1165,7 @@ export interface components {
             type: "completion_packet_delivered";
         };
         /** @enum {string} */
-        CoreEventKind: "session_created" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "session_execution_observed" | "logical_turn_lifecycle_observed" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
+        CoreEventKind: "session_created" | "session_workspace_changed" | "session_archived" | "agent_message_routed" | "agent_message_delivery_observed" | "agent_round_observed" | "delegation_lifecycle_observed" | "external_event_injected" | "den_data_updated" | "brain_wake_requested" | "session_execution_observed" | "logical_turn_lifecycle_observed" | "brain_event_observed" | "brain_actions_accepted" | "completion_packet_delivered";
         /** @enum {string} */
         CrewAgentSessionCreationOutcome: "created" | "replayed" | "recovered";
         CrewAgentSessionCreationRecord: {
@@ -1144,6 +1182,7 @@ export interface components {
             idempotencyKey: string;
             profileId: string;
             requestedAt: string;
+            workspaceCwd: string;
         };
         DelegatedCompletion: {
             child_session_id: string;
@@ -1196,6 +1235,16 @@ export interface components {
             session: components["schemas"]["SessionState"];
             terminal: boolean;
         };
+        /**
+         * @description An opt-in filesystem constraint for one explicit delegated invocation.
+         *
+         *     This is deliberately not a profile or ordinary-session policy. It is
+         *     persisted only with delegation lineage so a child cannot acquire it from a
+         *     reusable profile or infer it from its parent's execution cwd.
+         */
+        DelegatedWorkspaceConstraint: {
+            cwd: string;
+        };
         DelegationLifecycleEvent: {
             delegated_session_id: string;
             detail?: string | null;
@@ -1213,6 +1262,7 @@ export interface components {
             /** Format: uint32 */
             source_action_index: number;
             source_wake_id: string;
+            workspace_constraint?: components["schemas"]["DelegatedWorkspaceConstraint"] | null;
         };
         /** @enum {string} */
         DelegationPriority: "low" | "normal" | "high";
@@ -1253,6 +1303,8 @@ export interface components {
             dynamicToolCatalogFingerprint: string | null;
             effectiveConfigFingerprint: string;
             label?: string | null;
+            /** @default null */
+            lineage: components["schemas"]["ExternalAgentBindingLineage"] | null;
             /** @default immediate_steer */
             messageDeliveryPolicy: components["schemas"]["ExternalMessageDeliveryPolicy"];
             nativeThreadId?: string | null;
@@ -1275,6 +1327,14 @@ export interface components {
             status: components["schemas"]["ExternalBindingStatus"];
             taskRef?: components["schemas"]["DenRuntimeReference"] | null;
             updatedAt: string;
+        };
+        ExternalAgentBindingLineage: {
+            createdAt: string;
+            predecessorBindingId: string;
+            predecessorNativeThreadId: string;
+            predecessorSessionId: string;
+            reasonCode: string;
+            transitionId: string;
         };
         ExternalAgentBindingMetadataWrite: {
             bindingId: string;
@@ -1903,6 +1963,22 @@ export interface components {
             logicalTurnId: string;
             now: string;
         };
+        ManualContextCompactionRequest: {
+            /** Format: uint64 */
+            expect_revision?: number | null;
+            intent_key?: string | null;
+            session_id: string;
+            source_projection_fingerprint?: string | null;
+            strategy_id?: string | null;
+            strategy_revision?: string | null;
+        };
+        ManualContextCompactionResponse: {
+            artifact: components["schemas"]["ContextCompactionArtifact"];
+            idempotent: boolean;
+            /** Format: uint64 */
+            revision: number;
+            terminal_status: string;
+        };
         /** @enum {string} */
         MemoryConflictPolicy: "expected_revision" | "supersession" | "merge" | "immutable" | "domain_specific";
         MemoryDiagnosticsPolicy: {
@@ -2140,13 +2216,57 @@ export interface components {
         /** @enum {string} */
         ProviderStateClearReason: "brain_requested_clear" | "operator_requested_clear";
         /** @enum {string} */
+        ProviderStateCompatibilityAction: "preserve_lineage" | "reconstruct_from_durable_projection";
+        ProviderStateCompatibilityChange: {
+            current_fingerprint: string;
+            dimension: string;
+            prior_fingerprint: string;
+        };
+        /** @enum {string} */
+        ProviderStateCompatibilityClass: "identical" | "compatible" | "incompatible";
+        /**
+         * @description Versioned component fingerprints used by Rust to decide whether provider
+         *     continuation state can be retained. These are hashes of source facts, not
+         *     policy decisions: callers may assemble and hash the facts, while Rust owns
+         *     their compatibility meaning.
+         */
+        ProviderStateCompatibilityFacts: {
+            brain_module: string;
+            brain_strategy: string;
+            dialect: string;
+            display_metadata: string;
+            model: string;
+            profile_identity: string;
+            prompt: string;
+            protocol: string;
+            provider_endpoint: string;
+            provider_state_schema: string;
+            reasoning_semantics: string;
+            skills: string;
+            tool_catalog: string;
+            version: string;
+        };
+        /** @enum {string} */
+        ProviderStateCompatibilityOutcome: "preserved" | "reconstruction_required";
+        ProviderStateCompatibilityPlan: {
+            action: components["schemas"]["ProviderStateCompatibilityAction"];
+            changes: components["schemas"]["ProviderStateCompatibilityChange"][];
+            class: components["schemas"]["ProviderStateCompatibilityClass"];
+            outcome: components["schemas"]["ProviderStateCompatibilityOutcome"];
+            version: string;
+        };
+        ProviderStateCompatibilitySnapshot: {
+            facts: components["schemas"]["ProviderStateCompatibilityFacts"];
+            session_effort: string;
+            session_workspace: string;
+        };
+        /** @enum {string} */
         ProviderStateMode: "unused" | "optional" | "required";
         ResourceLimits: {
             /** Format: uint32 */
             max_delegation_depth?: number | null;
             /** Format: uint32 */
             max_duration_ms?: number | null;
-            workdir?: string | null;
         };
         ReviewFindingStatus: {
             /** Format: uint64 */
@@ -2267,6 +2387,14 @@ export interface components {
             taskStatus: string;
             /** @constant */
             type: "den_finalized";
+            verdict: string;
+        } | {
+            exactHeadCommit: string;
+            /** Format: uint64 */
+            reviewRoundId: number;
+            terminalReason: string;
+            /** @constant */
+            type: "den_already_finalized";
             verdict: string;
         } | {
             /** @constant */
@@ -2469,6 +2597,7 @@ export interface components {
             resource_limits: components["schemas"]["ResourceLimits"];
             session_id: string;
             tool_profile: components["schemas"]["ToolProfile"];
+            workspace?: components["schemas"]["SessionWorkspace"] | null;
         };
         /** @enum {string} */
         SessionExecutionOutcome: "completed" | "failed" | "cancelled" | "interrupted";
@@ -2518,6 +2647,7 @@ export interface components {
             session_id: string;
             status: components["schemas"]["SessionStatus"];
             tool_profile: components["schemas"]["ToolProfile"];
+            workspace?: components["schemas"]["SessionWorkspace"] | null;
         };
         /** @enum {string} */
         SessionStatus: "active" | "idle" | "archived";
@@ -2532,6 +2662,31 @@ export interface components {
             requestId: string;
             runId?: string | null;
             sessionId: string;
+        };
+        /**
+         * @description The canonical execution context for one logical session.
+         *
+         *     This is deliberately not a filesystem permission boundary. Ordinary full
+         *     agents may still address absolute paths outside `cwd`; optional delegated
+         *     confinement is represented separately on explicit delegation lineage.
+         */
+        SessionWorkspace: {
+            cwd: string;
+            /** Format: uint64 */
+            revision: number;
+            updated_at: string;
+        };
+        SessionWorkspaceUpdate: {
+            cwd: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            requestedAt: string;
+            sessionId: string;
+        };
+        SessionWorkspaceUpdateRecord: {
+            current: components["schemas"]["SessionWorkspace"];
+            previous: components["schemas"]["SessionWorkspace"];
+            session: components["schemas"]["SessionState"];
         };
         ToolCallMetadata: {
             adapter_id?: string | null;
@@ -2817,6 +2972,8 @@ export interface components {
             cwd: string;
             label: string | null;
             taskRef: components["schemas"]["DenRuntimeReference"] | null;
+            previousBindingId: string;
+            previousSessionId: string | null;
             previousNativeThreadId: string;
             nativeThreadId: string;
             previousNativeThreadArchived: boolean;
@@ -2937,6 +3094,10 @@ export interface components {
         ExternalThreadProjection: {
             threadId: string;
             sessionId: string;
+            bindingId: string | null;
+            crewSessionId: string | null;
+            lineage: components["schemas"]["ExternalAgentBindingLineage"] | null;
+            nativeMaterialized: boolean;
             parentThreadId: string | null;
             preview: string;
             ephemeral: boolean;
