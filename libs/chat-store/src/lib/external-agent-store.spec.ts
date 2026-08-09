@@ -1496,6 +1496,40 @@ describe('ExternalAgentStore', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('routes image feedback through durable binding delivery with retry identity', async () => {
+    const sendMessage = vi.fn(async () => deliveryReceipt());
+    const submitControl = vi.fn(async () => controlReceipt());
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      sendMessage,
+      submitControl,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.composerMode.set('steer');
+
+    await expect(
+      store.sendWithAttachments(
+        'the torch is upside down',
+        ['attachment:image'],
+        'external-image-send-1',
+      ),
+    ).resolves.toBe(true);
+
+    expect(sendMessage).toHaveBeenCalledWith('binding-1', {
+      body: 'the torch is upside down',
+      ttlMs: 60_000,
+      attachmentIds: ['attachment:image'],
+      deliveryId: 'rusty-view:external-image-send-1',
+      idempotencyKey: 'external-image-send-1',
+      messageId: 'rusty-view:external-image-send-1',
+    });
+    expect(submitControl).not.toHaveBeenCalled();
+  });
+
   it('attaches a successful-envelope delivery rejection to the optimistic prompt', async () => {
     const store = setupStore({
       runtimes: [registration('runtime-1')],

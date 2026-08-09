@@ -603,6 +603,7 @@ export interface components {
             deliveryId: string;
             expiresAt: string;
             idempotencyKey: string;
+            imageAttachmentIds?: string[];
             inputKind: components["schemas"]["AgentMessageInputKind"];
             messageId: string;
             requireWake: boolean;
@@ -638,6 +639,7 @@ export interface components {
             fromAgentId: string;
             fromSessionId?: string | null;
             idempotencyKey: string;
+            imageAttachmentIds?: string[];
             inputKind: components["schemas"]["AgentMessageInputKind"];
             messageId: string;
             replyToMessageId?: string | null;
@@ -2999,6 +3001,7 @@ export interface components {
             messageId?: string;
             correlationId?: string;
             collaborationMode?: components["schemas"]["ExternalCollaborationMode"];
+            attachmentIds?: string[];
             /** @default 5000 */
             ttlMs: number;
         };
@@ -3115,6 +3118,15 @@ export interface components {
             summary?: string[];
             /** @enum {string} */
             messagePhase?: "commentary" | "final_answer" | "unknown";
+            inputImages?: components["schemas"]["ExternalInputImageReference"][];
+        };
+        ExternalInputImageReference: {
+            attachmentId: string;
+            filename: string;
+            mimeType: string;
+            byteSize: number;
+            sha256: string | null;
+            contentUrl: string;
         };
         ExternalThreadTurnProjection: {
             turnId: string;

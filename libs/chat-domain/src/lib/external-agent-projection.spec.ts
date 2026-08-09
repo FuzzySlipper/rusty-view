@@ -60,6 +60,72 @@ describe('projectExternalAgentTranscript', () => {
     ]);
   });
 
+  it('projects immutable external input images on historical user rows', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread',
+        sessionId: 'session',
+        parentThreadId: null,
+        preview: 'image feedback',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/workspace',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'user',
+                kind: 'userMessage',
+                text: 'Inspect this image.',
+                inputImages: [
+                  {
+                    attachmentId: 'attachment:image',
+                    filename: 'clipboard.png',
+                    mimeType: 'image/png',
+                    byteSize: 128,
+                    sha256:
+                      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                    contentUrl:
+                      '/v1/chat/sessions/session/attachments/attachment%3Aimage/content',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(messages[0]?.blocks).toEqual([
+      expect.objectContaining({ kind: 'text', content: 'Inspect this image.' }),
+      expect.objectContaining({
+        kind: 'attachment',
+        attachments: [
+          expect.objectContaining({
+            id: 'attachment:image',
+            url: '/v1/chat/sessions/session/attachments/attachment%3Aimage/content',
+            contentSha256:
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('projects one native turn as one user prompt and one stable assistant card', () => {
     const messages = projectExternalAgentTranscript(
       {

@@ -1086,21 +1086,39 @@ export class ExternalAgentStore {
   }
 
   async send(text: string): Promise<void> {
+    await this.sendInternal(text, []);
+  }
+
+  async sendWithAttachments(
+    text: string,
+    attachmentIds: readonly string[],
+    idempotencyKey?: string,
+  ): Promise<boolean> {
+    return this.sendInternal(text, attachmentIds, idempotencyKey);
+  }
+
+  private async sendInternal(
+    text: string,
+    attachmentIds: readonly string[],
+    idempotencyKey?: string,
+  ): Promise<boolean> {
     const binding = this.selectedBinding();
     if (binding === undefined) {
       this.error.set(
         'Send failed: selected external thread has no Crew binding.',
       );
-      return;
+      return false;
     }
     const optimisticId = this.addOptimisticUserMessage(text);
     const mode = this.composerMode();
     const operation: ExternalPromptFailureDetail['operation'] =
-      mode === 'steer' ? 'steer_turn' : 'binding_message';
+      mode === 'steer' && attachmentIds.length === 0
+        ? 'steer_turn'
+        : 'binding_message';
     this.pending.set(true);
     try {
       this.error.set(undefined);
-      if (mode === 'steer') {
+      if (mode === 'steer' && attachmentIds.length === 0) {
         const activeTurnId = this.activeTurnId();
         if (activeTurnId === undefined || binding.nativeThreadId == null) {
           throw new Error('No active turn is available to steer');
@@ -1126,6 +1144,16 @@ export class ExternalAgentStore {
         const request: ExternalBindingMessageWrite = {
           body: text,
           ttlMs: 60_000,
+          ...(attachmentIds.length === 0
+            ? {}
+            : { attachmentIds: [...attachmentIds] }),
+          ...(idempotencyKey === undefined
+            ? {}
+            : {
+                deliveryId: `rusty-view:${idempotencyKey}`,
+                idempotencyKey,
+                messageId: `rusty-view:${idempotencyKey}`,
+              }),
           ...(mode === 'plan' ? { collaborationMode: 'plan' } : {}),
         };
         const receipt = await this.transport.external.sendMessage(
@@ -1140,6 +1168,7 @@ export class ExternalAgentStore {
       }
       this.updateOptimisticUserMessage(optimisticId, 'accepted');
       await this.refreshSelectedEvents();
+      return true;
     } catch (error) {
       const failure =
         error instanceof ExternalPromptSubmissionError
@@ -1150,6 +1179,7 @@ export class ExternalAgentStore {
         await this.refreshSelectedProjection().catch(() => undefined);
       }
       this.error.set(`Send failed: ${promptFailureMessage(failure)}`);
+      return false;
     } finally {
       this.pending.set(false);
     }

@@ -1,5 +1,6 @@
 import type {
   ExternalThreadProjection,
+  ExternalInputImageReference,
   ExternalThreadTurnErrorProjection,
   ExternalThreadTurnProjection,
   ExternalRuntimeDocumentReference,
@@ -49,6 +50,10 @@ export function projectExternalAgentTranscript(
           item.messagePhase,
         );
         if (roleForItem(item.kind) === 'user') {
+          const userBlocks = [
+            block,
+            ...blocksForExternalInputImages(item.inputImages),
+          ];
           const messageIndex = messages.length;
           coverage.items.push({
             itemId: item.itemId,
@@ -63,7 +68,7 @@ export function projectExternalAgentTranscript(
               thread.sessionId,
               'user',
               unixDate(turn.startedAt ?? thread.updatedAt),
-              [block],
+              userBlocks,
               messageStatus(status),
               {
                 nativeThreadId: thread.threadId,
@@ -255,6 +260,40 @@ export function projectExternalAgentTranscript(
     );
   }
   return messages;
+}
+
+function blocksForExternalInputImages(
+  references: readonly ExternalInputImageReference[] | undefined,
+): MessageBlock[] {
+  if (references === undefined || references.length === 0) return [];
+  const attachments: ChatAttachment[] = references.map((reference) => ({
+    id: reference.attachmentId,
+    status: 'active',
+    kind: 'image',
+    name: reference.filename,
+    mimeType: reference.mimeType,
+    sizeBytes: reference.byteSize,
+    url: reference.contentUrl,
+    thumbnailUrl: undefined,
+    contentState: 'available',
+    contentLoadPolicy: 'authenticated_lazy',
+    ...(reference.sha256 === null ? {} : { contentSha256: reference.sha256 }),
+    textPreview: undefined,
+    scopeId: undefined,
+    metadata: { externalInputImage: true },
+  }));
+  return [
+    {
+      id: `block:external-input-images:${attachments.map((attachment) => attachment.id).join(':')}`,
+      messageId: '',
+      kind: 'attachment',
+      content: attachments.map((attachment) => attachment.name).join('\n'),
+      estimatedHeight: undefined,
+      renderPolicy: 'full',
+      attachments,
+      metadata: { externalInputImages: true },
+    },
+  ];
 }
 
 interface SnapshotItemCoverage {

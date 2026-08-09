@@ -234,7 +234,7 @@ export class DebugShellComponent {
       ),
   );
   protected readonly attachmentsEnabled = computed(
-    () => !this.externalSelected() && this.store.activeSessionId() !== null,
+    () => this.unifiedSelectedSessionId() !== null,
   );
   protected readonly attachmentScopes = [
     {
@@ -609,8 +609,8 @@ export class DebugShellComponent {
   protected onAttachmentsSelected(
     selections: readonly MessageInputAttachmentSelection[],
   ): void {
-    const sessionId = this.store.activeSessionId();
-    if (sessionId === null || this.externalSelected()) return;
+    const sessionId = this.unifiedSelectedSessionId();
+    if (sessionId === null) return;
     this.composerAttachmentError.set(undefined);
     this.composerAttachments.update((attachments) => [
       ...attachments,
@@ -692,11 +692,20 @@ export class DebugShellComponent {
       uploads.map((upload) => upload.attachmentId as string),
       newAttachmentMessageIdempotencyKey,
     );
-    const accepted = await this.store.sendMessageWithAttachments(
-      submission.text,
-      uploads.map((upload) => upload.attachmentId as string),
-      this.attachmentMessageIdentity.idempotencyKey,
+    const attachmentIds = uploads.map(
+      (upload) => upload.attachmentId as string,
     );
+    const accepted = this.externalSelected()
+      ? await this.external.sendWithAttachments(
+          submission.text,
+          attachmentIds,
+          this.attachmentMessageIdentity.idempotencyKey,
+        )
+      : await this.store.sendMessageWithAttachments(
+          submission.text,
+          attachmentIds,
+          this.attachmentMessageIdentity.idempotencyKey,
+        );
     if (!accepted) {
       this.updateComposerAttachmentStatus(
         uploads.map((upload) => upload.selection.attachment.id),

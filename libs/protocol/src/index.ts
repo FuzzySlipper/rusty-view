@@ -101,6 +101,8 @@ export type ExternalAgentSessionCreateResult =
 export type ExternalThreadPage = ExternalSchemas['ExternalThreadPage'];
 export type ExternalThreadProjection =
   ExternalSchemas['ExternalThreadProjection'];
+export type ExternalInputImageReference =
+  ExternalSchemas['ExternalInputImageReference'];
 export type ExternalThreadTurnProjection =
   ExternalSchemas['ExternalThreadTurnProjection'];
 export type ExternalThreadTurnErrorProjection =
