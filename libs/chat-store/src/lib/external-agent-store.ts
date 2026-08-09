@@ -1168,6 +1168,9 @@ export class ExternalAgentStore {
       }
       this.updateOptimisticUserMessage(optimisticId, 'accepted');
       await this.refreshSelectedEvents();
+      if (attachmentIds.length > 0) {
+        await this.refreshSelectedProjection().catch(() => undefined);
+      }
       return true;
     } catch (error) {
       const failure =
@@ -1628,6 +1631,9 @@ export class ExternalAgentStore {
             )
           ) {
             void this.refresh();
+            if (event.nativeThreadId === this.selectedThreadId()) {
+              void this.refreshSelectedProjection();
+            }
           }
           if (
             event.kind === 'thread_lifecycle' &&
