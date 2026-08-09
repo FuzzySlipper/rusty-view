@@ -27,6 +27,10 @@ test('profile sidebar, active session, and sessions menu historical flow', async
   await expect(page.locator('rv-session-list')).toHaveCount(0);
 
   // Wait for profiles to load.
+  const firstProfile = page.locator('.rv-profile').first();
+  await firstProfile
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .catch(() => undefined);
   const profileCount = await page.locator('.rv-profile').count();
   test.skip(
     profileCount === 0,
@@ -34,7 +38,6 @@ test('profile sidebar, active session, and sessions menu historical flow', async
   );
 
   // 2. Click the first profile — it should become selected and open its active session.
-  const firstProfile = page.locator('.rv-profile').first();
   await firstProfile.click();
   await expect(firstProfile).toHaveClass(/rv-profile--selected/);
   await expect(page.locator('rv-transcript-viewport')).toBeVisible({
