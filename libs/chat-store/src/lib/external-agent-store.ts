@@ -831,12 +831,15 @@ export class ExternalAgentStore {
     const binding = session.binding;
     if (binding === undefined) return undefined;
     const peerBindingId =
-      binding.lineage?.predecessorBindingId ??
-      this.bindings().find(
-        (candidate) =>
-          candidate.runtimeId === binding.runtimeId &&
-          candidate.lineage?.predecessorBindingId === binding.bindingId,
-      )?.bindingId;
+      session.relationship === 'lineage_predecessor'
+        ? this.bindings().find(
+            (candidate) =>
+              candidate.runtimeId === binding.runtimeId &&
+              candidate.lineage?.predecessorBindingId === binding.bindingId &&
+              candidate.lineage.predecessorNativeThreadId ===
+                session.thread.threadId,
+          )?.bindingId
+        : binding.lineage?.predecessorBindingId;
     if (peerBindingId === undefined) return undefined;
     return this.sessions().find(
       (candidate) => candidate.binding?.bindingId === peerBindingId,

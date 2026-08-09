@@ -806,6 +806,98 @@ describe('ExternalAgentStore', () => {
     ]);
   });
 
+  it('resolves an intermediate lineage session toward its advertised replacement', async () => {
+    const predecessorBinding: ExternalAgentBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-a',
+      nativeThreadId: 'thread-a',
+      sessionId: 'session-a',
+      status: 'archived',
+    };
+    const intermediateBinding: ExternalAgentBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-b',
+      nativeThreadId: 'thread-b',
+      sessionId: 'session-b',
+      status: 'archived',
+      lineage: {
+        predecessorBindingId: 'binding-a',
+        predecessorSessionId: 'session-a',
+        predecessorNativeThreadId: 'thread-a',
+        transitionId: 'transition-a-b',
+        reasonCode: 'dynamic_tool_catalog_refresh',
+        createdAt: '2026-08-08T00:00:01Z',
+      },
+    };
+    const successorBinding: ExternalAgentBinding = {
+      ...externalBinding(),
+      bindingId: 'binding-c',
+      nativeThreadId: 'thread-c',
+      sessionId: 'session-c',
+      lineage: {
+        predecessorBindingId: 'binding-b',
+        predecessorSessionId: 'session-b',
+        predecessorNativeThreadId: 'thread-b',
+        transitionId: 'transition-b-c',
+        reasonCode: 'dynamic_tool_catalog_refresh',
+        createdAt: '2026-08-08T00:00:02Z',
+      },
+    };
+    const threads = [
+      { ...thread('thread-a', 10), bindingId: 'binding-a' },
+      { ...thread('thread-b', 20), bindingId: 'binding-b' },
+      { ...thread('thread-c', 30), bindingId: 'binding-c' },
+    ];
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [predecessorBinding, intermediateBinding, successorBinding],
+      listThreads: vi.fn(async () => page(threads, null)),
+      readThread: vi.fn(async (_runtimeId: string, request) => ({
+        thread: threads.find(
+          (candidate) => candidate.threadId === request.threadId,
+        ),
+      })),
+    });
+
+    await store.refresh();
+
+    const [predecessor, intermediate, successor] = [
+      'binding-a',
+      'binding-b',
+      'binding-c',
+    ].map((bindingId) =>
+      store
+        .sessions()
+        .find((session) => session.binding?.bindingId === bindingId),
+    );
+    if (
+      predecessor === undefined ||
+      intermediate === undefined ||
+      successor === undefined
+    ) {
+      throw new Error('expected complete A to B to C lineage chain');
+    }
+    expect(
+      [predecessor, intermediate, successor].map(
+        (session) => session.relationship,
+      ),
+    ).toEqual([
+      'lineage_predecessor',
+      'lineage_predecessor',
+      'lineage_successor',
+    ]);
+    expect(store.lineagePeer(predecessor)?.binding?.bindingId).toBe(
+      'binding-b',
+    );
+    expect(store.lineagePeer(intermediate)?.binding?.bindingId).toBe(
+      'binding-c',
+    );
+    expect(store.lineagePeer(successor)?.binding?.bindingId).toBe('binding-b');
+
+    await expect(store.switchToLineagePeer(intermediate)).resolves.toBe(true);
+    expect(store.selectedBinding()?.bindingId).toBe('binding-c');
+  });
+
   it('does not retry a binding thread with a controller resume failure', async () => {
     const staleBinding = {
       ...externalBinding(),
