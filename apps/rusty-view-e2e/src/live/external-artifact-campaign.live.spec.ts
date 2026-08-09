@@ -104,7 +104,8 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
       await expect(
         page
           .locator('rv-message-block ol[start="7"]')
-          .filter({ hasText: 'Screenshot checked' }),
+          .filter({ hasText: 'Screenshot checked' })
+          .last(),
       ).toContainText('Documents ready');
       await openCheckpoint(page, 0, 'RV_CAMPAIGN_MARKDOWN_6659');
       await openCheckpoint(page, 1, 'RV_CAMPAIGN_RUST_6659');
@@ -125,8 +126,11 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
 
       const answer = page
         .locator('[data-message-role="assistant"]')
-        .filter({ hasText: 'RV_CAMPAIGN_FEEDBACK_6659' })
-        .last();
+        .last()
+        .locator('[data-block-message-phase="final_answer"]');
+      await expect(answer).toContainText('RV_CAMPAIGN_FEEDBACK_6659', {
+        timeout: 3 * 60_000,
+      });
       await expect(answer).toContainText('MAGENTA', { timeout: 3 * 60_000 });
       await expect(answer).toContainText('47');
       await expect(turnStatus).toHaveAttribute('data-turn-phase', 'completed', {
@@ -137,13 +141,23 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
         .locator('[data-message-role="user"]')
         .filter({ hasText: marker })
         .last();
-      await expectLoadedImage(steeredUser.locator('.rv-attachment__image'));
       const thread = await readThread(request, target);
       const inputImage = thread.turns
         .flatMap((turn) => turn.items)
         .flatMap((item) => item.inputImages ?? [])
         .find((image) => image.attachmentId === feedbackAttachmentId);
       expect(inputImage?.sha256).toBe(feedbackSha256);
+      const contentResponse = await request.get(
+        `${backend}${inputImage?.contentUrl ?? '/missing-feedback-content'}`,
+      );
+      expect(contentResponse.ok()).toBe(true);
+      expect(
+        createHash('sha256')
+          .update(Buffer.from(await contentResponse.body()))
+          .digest('hex'),
+      ).toBe(feedbackSha256);
+      await steeredUser.getByRole('figure').scrollIntoViewIfNeeded();
+      await expectLoadedImage(steeredUser.locator('.rv-attachment__image'));
 
       const evidence = await artifactEvidence(request, target);
       expect(evidence.media).toHaveLength(1);
@@ -151,7 +165,7 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
       console.log(
         JSON.stringify({
           marker,
-          crewHead: '179b6266c70406c21052800ad40a896752148477',
+          crewHead: 'b5e93546c58199420046f0158c3c593e4b35e61b',
           viewHead: process.env['RV_VIEW_HEAD'] ?? 'unknown',
           runtimeId: target.runtimeId,
           bindingId: target.bindingId,
@@ -167,15 +181,14 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
 
       await page.reload();
       await selectSession(page, backend, marker);
-      await expect(page.getByTestId('external-media-group')).toHaveCount(1);
+      await expect(page.getByTestId('external-media-group')).toHaveCount(2);
       await expect(page.getByTestId('external-document-card')).toHaveCount(2);
-      await expectLoadedImage(
-        page
-          .locator('[data-message-role="user"]')
-          .filter({ hasText: marker })
-          .last()
-          .locator('.rv-attachment__image'),
-      );
+      const replayedUser = page
+        .locator('[data-message-role="user"]')
+        .filter({ hasText: marker })
+        .last();
+      await replayedUser.getByRole('figure').scrollIntoViewIfNeeded();
+      await expectLoadedImage(replayedUser.locator('.rv-attachment__image'));
 
       await proveLanReplay(browser, marker);
     } finally {
@@ -353,6 +366,7 @@ interface ThreadProjection {
       readonly inputImages?: Array<{
         readonly attachmentId: string;
         readonly sha256: string | null;
+        readonly contentUrl: string;
       }>;
     }>;
   }>;
@@ -406,22 +420,21 @@ async function proveLanReplay(browser: Browser, marker: string): Promise<void> {
     const page = await context.newPage();
     page.setDefaultTimeout(30_000);
     await selectSession(page, lanBackend, marker);
-    await expect(page.getByTestId('external-media-group')).toHaveCount(1);
+    await expect(page.getByTestId('external-media-group')).toHaveCount(2);
     await expect(page.getByTestId('external-document-card')).toHaveCount(2);
     await openCheckpoint(page, 0, 'RV_CAMPAIGN_MARKDOWN_6659');
     await openCheckpoint(page, 1, 'RV_CAMPAIGN_RUST_6659');
-    await expectLoadedImage(
-      page
-        .locator('[data-message-role="user"]')
-        .filter({ hasText: marker })
-        .last()
-        .locator('.rv-attachment__image'),
-    );
+    const replayedUser = page
+      .locator('[data-message-role="user"]')
+      .filter({ hasText: marker })
+      .last();
+    await replayedUser.getByRole('figure').scrollIntoViewIfNeeded();
+    await expectLoadedImage(replayedUser.locator('.rv-attachment__image'));
     await expect(
       page
         .locator('[data-message-role="assistant"]')
-        .filter({ hasText: 'RV_CAMPAIGN_FEEDBACK_6659' })
-        .last(),
+        .last()
+        .locator('[data-block-message-phase="final_answer"]'),
     ).toContainText('MAGENTA');
   } finally {
     await context.close();
