@@ -783,7 +783,24 @@ function applyCommand(
     meta,
   );
 
-  return { ...projection, commands, messages };
+  const settledMessages =
+    status === 'started'
+      ? messages
+      : messages.map((message) =>
+          message.blocks.some(
+            (block) => block.id === `cmd-${entry.commandName}`,
+          )
+            ? {
+                ...message,
+                status:
+                  status === 'failed'
+                    ? ('error' as const)
+                    : ('completed' as const),
+              }
+            : message,
+        );
+
+  return { ...projection, commands, messages: settledMessages };
 }
 
 // ---- stream error ----
@@ -1369,6 +1386,13 @@ function findLastActivityOnlyStreamingAssistantIndex(
 ): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
+    // A user prompt is a hard transcript boundary. Activity emitted before it
+    // belongs to the preceding operation and must not be adopted into the next
+    // assistant wake, even when a malformed or incomplete lifecycle left the
+    // activity-only host marked as streaming.
+    if (message?.author.role === 'user') {
+      return -1;
+    }
     if (
       message !== undefined &&
       message.author.role === 'assistant' &&

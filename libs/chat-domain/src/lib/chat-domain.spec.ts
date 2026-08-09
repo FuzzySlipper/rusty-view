@@ -1163,6 +1163,83 @@ describe('command lifecycle events', () => {
       (b) => b.kind === 'command',
     );
     expect(cmdBlock?.tool?.status).toBe('completed');
+    expect(projection.messages[0]?.status).toBe('completed');
+  });
+
+  it('does not adopt a terminal command row across the next user prompt', () => {
+    const projection = projectConversation([
+      // The live /reload-mcp start event omits the projection fields, while its
+      // terminal event carries the complete command record.
+      makeEvent('command_started', {
+        actor: { id: 'rusty-view', kind: 'human' },
+        command: '/reload-mcp',
+        request_id: 'reload-1',
+      } as never),
+      makeEvent('command_completed', {
+        command_name: 'reload-mcp',
+        summary: 'Reloaded MCP surface',
+        status: 'completed',
+        reason_code: 'mcp_reloaded',
+      }),
+      makeEvent('message_created', {
+        message_id: 'user-after-reload',
+        role: 'user',
+        body: 'Are the tools available now?',
+      }),
+      makeEvent('assistant_turn_started', { wake_id: 'wake-after-reload' }),
+      makeEvent('assistant_text_delta', {
+        wake_id: 'wake-after-reload',
+        text: 'Yes, they are available.',
+      }),
+    ]);
+
+    expect(
+      projection.messages.map((message) => ({
+        role: message.author.role,
+        text: message.blocks
+          .filter((block) => block.kind === 'text')
+          .map((block) => block.content)
+          .join(''),
+        status: message.status,
+      })),
+    ).toEqual([
+      { role: 'assistant', text: '', status: 'completed' },
+      {
+        role: 'user',
+        text: 'Are the tools available now?',
+        status: 'completed',
+      },
+      {
+        role: 'assistant',
+        text: 'Yes, they are available.',
+        status: 'streaming',
+      },
+    ]);
+  });
+
+  it('does not adopt any stale activity-only placeholder across a user prompt', () => {
+    const projection = projectConversation([
+      makeEvent('tool_call_started', {
+        tool_call_id: 'stale-tool',
+        tool_name: 'old_tool',
+        summary: 'Old activity',
+      }),
+      makeEvent('message_created', {
+        message_id: 'new-user',
+        role: 'user',
+        body: 'Start a new turn.',
+      }),
+      makeEvent('assistant_text_delta', {
+        message_id: 'new-assistant',
+        delta: 'New response.',
+      }),
+    ]);
+
+    expect(projection.messages.map((message) => message.id)).toEqual([
+      expect.stringMatching(/^asst:/),
+      'new-user',
+      'new-assistant',
+    ]);
   });
 
   it('marks a command block as failed with reason code', () => {
