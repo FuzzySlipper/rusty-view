@@ -696,6 +696,49 @@ describe('ExternalAgentStore', () => {
       bindings: [predecessorBinding, successorBinding],
       listThreads: vi.fn(async () => page([replacement], null)),
       readThread,
+      listEvents: vi.fn(async () => ({
+        events: [
+          {
+            eventId: 'lineage-event-original',
+            sessionId: 'session-successor',
+            sequenceId: 50,
+            createdAt: '2026-08-06T00:00:01Z',
+            kind: 'thread_lineage_replaced',
+            runtimeId: 'runtime-1',
+            nativeThreadId: 'thread-successor',
+            requestId: 'transition-1',
+            payload: {
+              nativeMethod: 'rustyCrew/threadLineageReplacement',
+              reasonCode: 'dynamic_tool_catalog_refresh',
+              predecessorBindingId: 'binding-predecessor',
+              predecessorSessionId: 'session-predecessor',
+              predecessorNativeThreadId: 'thread-predecessor',
+              successorBindingId: 'binding-successor',
+              successorSessionId: 'session-successor',
+              successorNativeThreadId: 'thread-successor',
+              predecessorLifecycle: 'archived',
+              movedRouteCount: 2,
+            },
+          },
+          {
+            eventId: 'lineage-event-replayed',
+            sessionId: 'session-successor',
+            sequenceId: 51,
+            createdAt: '2026-08-06T00:00:02Z',
+            kind: 'thread_lineage_replaced',
+            runtimeId: 'runtime-1',
+            nativeThreadId: 'thread-successor',
+            requestId: 'transition-1',
+            payload: {
+              nativeMethod: 'rustyCrew/threadLineageReplacement',
+              reasonCode: 'dynamic_tool_catalog_refresh',
+              successorBindingId: 'binding-successor',
+              predecessorLifecycle: 'archived',
+              movedRouteCount: 2,
+            },
+          },
+        ],
+      })),
     });
 
     await store.refresh();
@@ -710,6 +753,12 @@ describe('ExternalAgentStore', () => {
       ['thread-predecessor', 'lineage_predecessor'],
     ]);
     expect(store.sessions()[0]?.needsAttention).toBe(true);
+    expect(store.sessions()[0]?.lineageTransition).toEqual({
+      transitionId: 'transition-1',
+      reasonCode: 'dynamic_tool_catalog_refresh',
+      predecessorLifecycle: 'archived',
+      movedRouteCount: 2,
+    });
     const recovered = store
       .sessions()
       .find((session) => session.relationship === 'lineage_predecessor');
@@ -724,6 +773,14 @@ describe('ExternalAgentStore', () => {
     expect(store.messages()[0]?.blocks[0]?.content).toBe(
       'preserved predecessor context',
     );
+    expect(store.lineagePeer(recovered)?.binding?.bindingId).toBe(
+      'binding-successor',
+    );
+
+    await store.refresh();
+    expect(store.selectedThreadId()).toBe('thread-predecessor');
+    await expect(store.switchToLineagePeer(recovered)).resolves.toBe(true);
+    expect(store.selectedThreadId()).toBe('thread-successor');
   });
 
   it('keeps an ordinary archived binding out of managed lineage recovery', async () => {
@@ -1389,7 +1446,7 @@ describe('ExternalAgentStore', () => {
     expect(listCommands).toHaveBeenCalledTimes(2);
   });
 
-  it('atomically switches an applied /new replacement and sends on the stable binding', async () => {
+  it('atomically switches an applied /new to a distinct retained successor', async () => {
     const originalBinding = externalBinding();
     const replacementThread = thread('thread-replacement', 20);
     const readThread = vi.fn(async () => ({ thread: replacementThread }));
@@ -1399,16 +1456,18 @@ describe('ExternalAgentStore', () => {
       command: 'new',
       result: {
         threadReplacement: {
-          bindingId: originalBinding.bindingId,
+          bindingId: 'binding-replacement',
           bindingRevision: 6,
-          sessionId: originalBinding.sessionId ?? null,
+          sessionId: 'session-replacement',
           profileId: 'reviewer',
           cwd: '/home/dev/rusty-view',
           label: 'Replacement session',
           taskRef: { project_id: 'rusty-view', task_id: '5888' },
+          previousBindingId: originalBinding.bindingId,
+          previousSessionId: originalBinding.sessionId ?? null,
           previousNativeThreadId: 'thread-1',
           nativeThreadId: replacementThread.threadId,
-          previousNativeThreadArchived: true,
+          previousNativeThreadArchived: false,
           settingsPreserved: true,
           settings: {
             model: 'gpt-5.6',
@@ -1442,19 +1501,40 @@ describe('ExternalAgentStore', () => {
     expect(store.selectedThreadId()).toBe('thread-replacement');
     expect(store.selectedThread()).toBe(replacementThread);
     expect(store.selectedBinding()).toMatchObject({
-      bindingId: 'binding-1',
+      bindingId: 'binding-replacement',
       nativeThreadId: 'thread-replacement',
-      sessionId: 'session-1',
+      sessionId: 'session-replacement',
       profileId: 'reviewer',
       revision: 6,
+      lineage: {
+        predecessorBindingId: 'binding-1',
+        predecessorSessionId: 'session-1',
+        predecessorNativeThreadId: 'thread-1',
+        reasonCode: 'external_command_new_session',
+      },
     });
+    expect(store.bindings()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bindingId: 'binding-1',
+          nativeThreadId: 'thread-1',
+        }),
+        expect.objectContaining({
+          bindingId: 'binding-replacement',
+          nativeThreadId: 'thread-replacement',
+        }),
+      ]),
+    );
+    expect(store.threads().map((item) => item.threadId)).toEqual(
+      expect.arrayContaining(['thread-1', 'thread-replacement']),
+    );
     expect(
       store.commandResult()?.result.threadReplacement?.nativeThreadId,
     ).toBe('thread-replacement');
 
     await store.send('immediate replacement prompt');
 
-    expect(sendMessage).toHaveBeenCalledWith('binding-1', {
+    expect(sendMessage).toHaveBeenCalledWith('binding-replacement', {
       body: 'immediate replacement prompt',
       ttlMs: 60_000,
     });
@@ -1483,16 +1563,18 @@ describe('ExternalAgentStore', () => {
         command: 'new',
         result: {
           threadReplacement: {
-            bindingId: 'binding-1',
+            bindingId: 'binding-replacement',
             bindingRevision: 2,
-            sessionId: 'session-1',
+            sessionId: 'session-replacement',
             profileId: null,
             cwd: '/home/dev/rusty-view',
             label: null,
             taskRef: null,
+            previousBindingId: 'binding-1',
+            previousSessionId: 'session-1',
             previousNativeThreadId: 'thread-1',
             nativeThreadId: 'thread-replacement',
-            previousNativeThreadArchived: true,
+            previousNativeThreadArchived: false,
             settingsPreserved: true,
             settings: {
               model: 'gpt-5.6',
@@ -1506,7 +1588,7 @@ describe('ExternalAgentStore', () => {
         throw new ChatTransportError({
           code: 'network_error',
           message: 'Crew debug restarted during delivery',
-          endpoint: '/v1/external-bindings/binding-1/messages',
+          endpoint: '/v1/external-bindings/binding-replacement/messages',
         });
       }),
     });
@@ -1525,7 +1607,7 @@ describe('ExternalAgentStore', () => {
         metadata: expect.objectContaining({
           deliveryStatus: 'failed',
           deliveryFailure: expect.objectContaining({
-            endpoint: '/v1/external-bindings/binding-1/messages',
+            endpoint: '/v1/external-bindings/binding-replacement/messages',
             message: 'Crew debug restarted during delivery',
             retryable: true,
           }),

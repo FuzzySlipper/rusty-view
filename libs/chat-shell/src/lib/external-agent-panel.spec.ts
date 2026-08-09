@@ -23,6 +23,9 @@ interface PanelApi {
   sessionStateTone(session: ExternalAgentSession): string;
   bindingStateLabel(session: ExternalAgentSession): string | undefined;
   recoveryStateLabel(session: ExternalAgentSession): string | undefined;
+  lineageTransitionLabel(session: ExternalAgentSession): string | undefined;
+  lineageSwitchLabel(session: ExternalAgentSession): string;
+  switchLineageSession(session: ExternalAgentSession): void;
   openCreator(): void;
   openOptions(session: ExternalAgentSession): void;
   closeCreator(): void;
@@ -73,6 +76,21 @@ async function createPanel(
     deleteThread: vi.fn(),
     bindingRestoreUnavailableReason: vi.fn(() => undefined),
     restoreBindingSession: vi.fn(async () => true),
+    lineagePeer: vi.fn((session: ExternalAgentSession) => {
+      const lineage = session.binding?.lineage;
+      if (lineage !== null && lineage !== undefined) {
+        return sessions.find(
+          (candidate) =>
+            candidate.binding?.bindingId === lineage.predecessorBindingId,
+        );
+      }
+      return sessions.find(
+        (candidate) =>
+          candidate.binding?.lineage?.predecessorBindingId ===
+          session.binding?.bindingId,
+      );
+    }),
+    switchToLineagePeer: vi.fn(async () => true),
     updateSessionMetadata: vi.fn(async () => true),
     refresh: vi.fn(),
     refreshCreationProfiles: vi.fn(),
@@ -442,15 +460,37 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
         ],
       },
     };
+    const replacementBase = inventorySession(2, {
+      bound: true,
+      attention: false,
+      active: false,
+    });
+    if (replacementBase.binding === undefined) {
+      throw new Error('expected replacement binding');
+    }
     const replacement: ExternalAgentSession = {
-      ...inventorySession(2, {
-        bound: true,
-        attention: false,
-        active: false,
-      }),
+      ...replacementBase,
+      binding: {
+        ...replacementBase.binding,
+        lineage: {
+          predecessorBindingId: predecessorBase.binding.bindingId,
+          predecessorSessionId: predecessorBase.binding.sessionId ?? '',
+          predecessorNativeThreadId:
+            predecessorBase.binding.nativeThreadId ?? '',
+          transitionId: 'transition-1',
+          reasonCode: 'dynamic_tool_catalog_refresh',
+          createdAt: '2026-08-08T00:00:00Z',
+        },
+      },
+      lineageTransition: {
+        transitionId: 'transition-1',
+        reasonCode: 'dynamic_tool_catalog_refresh',
+        predecessorLifecycle: 'archived',
+        movedRouteCount: 2,
+      },
       relationship: 'lineage_successor_recovery_required',
     };
-    const { fixture, panel } = await createPanel(
+    const { fixture, panel, store } = await createPanel(
       async () => undefined,
       [archivedPredecessor, replacement],
     );
@@ -463,6 +503,9 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
     expect(panel.recoveryStateLabel(replacement)).toBe(
       'New replacement · empty · native recovery required · predecessor history preserved',
     );
+    expect(panel.lineageTransitionLabel(replacement)).toBe(
+      'Automatic tool refresh · predecessor archived · 2 routes moved',
+    );
     const lineageLabels = Array.from(
       fixture.nativeElement.querySelectorAll(
         '[data-testid="external-agent-lineage-state"]',
@@ -472,6 +515,27 @@ describe('ExternalAgentPanelComponent inventory modes', () => {
       'Recovered predecessor · history available · Crew archived',
       'New replacement · empty · native recovery required · predecessor history preserved',
     ]);
+    const transitionLabels = Array.from(
+      fixture.nativeElement.querySelectorAll(
+        '[data-testid="external-agent-lineage-transition"]',
+      ),
+    ).map((element) => (element as HTMLElement).textContent?.trim());
+    expect(transitionLabels).toEqual([
+      'Automatic tool refresh · predecessor archived · 2 routes moved',
+      'Automatic tool refresh · predecessor archived · 2 routes moved',
+    ]);
+    const switchButtons = Array.from(
+      fixture.nativeElement.querySelectorAll(
+        '[data-testid="external-agent-lineage-switch"]',
+      ),
+    ) as HTMLButtonElement[];
+    expect(switchButtons.map((button) => button.textContent?.trim())).toEqual([
+      'Open replacement',
+      'Open predecessor',
+    ]);
+    switchButtons[1]?.click();
+    await fixture.whenStable();
+    expect(store.switchToLineagePeer).toHaveBeenCalledWith(replacement);
   });
 
   it('offers exact Crew-session restore separately from native history', async () => {

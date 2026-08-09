@@ -42,6 +42,7 @@ export type {
   ExternalAgentProfileOption,
   ExternalAgentSession,
   ExternalComposerMode,
+  ExternalLineageTransition,
 } from './lib/external-agent-store';
 export type { AdminProfileSummary } from './lib/admin-store';
 export {

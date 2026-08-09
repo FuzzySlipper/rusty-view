@@ -57,6 +57,13 @@ export type ExternalAgentSessionRelationship =
   | 'recovery_required'
   | 'unbound';
 
+export interface ExternalLineageTransition {
+  readonly transitionId: string;
+  readonly reasonCode: string;
+  readonly predecessorLifecycle: 'retained' | 'archived';
+  readonly movedRouteCount?: number;
+}
+
 export interface ExternalAgentSession {
   readonly key: string;
   readonly runtime: ExternalRuntimeRegistration;
@@ -64,6 +71,7 @@ export interface ExternalAgentSession {
   readonly thread: ExternalThreadProjection;
   readonly binding?: ExternalAgentBinding;
   readonly relationship: ExternalAgentSessionRelationship;
+  readonly lineageTransition?: ExternalLineageTransition;
   readonly phase?: ExternalTurnPhase;
   readonly unread: boolean;
   readonly needsAttention: boolean;
@@ -249,12 +257,18 @@ export class ExternalAgentStore {
         relationship === 'recovery_required' ||
         relationship === 'lineage_successor_recovery_required' ||
         (unread && (phase === 'completed' || phase === 'interrupted'));
+      const lineageTransition = lineageTransitionForSession(
+        events,
+        bindings,
+        binding,
+      );
       return [
         {
           key,
           runtime,
           thread,
           relationship,
+          ...(lineageTransition === undefined ? {} : { lineageTransition }),
           ...(phase === undefined ? {} : { phase }),
           unread,
           needsAttention,
@@ -491,22 +505,21 @@ export class ExternalAgentStore {
           ).map((thread) => ({ runtimeId, thread }));
         }),
       );
-      const knownFleetEventIds = new Set(
-        previousFleetEvents.map((event) => event.eventId),
-      );
-      this.fleetEvents.set([
-        ...previousFleetEvents.filter((event) =>
-          activeRuntimeIds.has(event.runtimeId),
-        ),
-        ...runtimeData
-          .flatMap((item) => item.events)
-          .filter(
-            (event) =>
-              !knownFleetEventIds.has(event.eventId) &&
-              event.kind === 'turn_lifecycle' &&
-              phaseValue(event.payload.status) !== undefined,
+      this.fleetEvents.set(
+        mergeFleetEvents(
+          previousFleetEvents.filter((event) =>
+            activeRuntimeIds.has(event.runtimeId),
           ),
-      ]);
+          runtimeData
+            .flatMap((item) => item.events)
+            .filter(
+              (event) =>
+                (event.kind === 'turn_lifecycle' &&
+                  phaseValue(event.payload.status) !== undefined) ||
+                event.kind === 'thread_lineage_replaced',
+            ),
+        ),
+      );
       await this.refreshSelectedEvents();
       const runtimeErrors = runtimeData.flatMap((item) => item.errors);
       this.error.set(
@@ -814,6 +827,31 @@ export class ExternalAgentStore {
     }
   }
 
+  lineagePeer(session: ExternalAgentSession): ExternalAgentSession | undefined {
+    const binding = session.binding;
+    if (binding === undefined) return undefined;
+    const peerBindingId =
+      binding.lineage?.predecessorBindingId ??
+      this.bindings().find(
+        (candidate) =>
+          candidate.runtimeId === binding.runtimeId &&
+          candidate.lineage?.predecessorBindingId === binding.bindingId,
+      )?.bindingId;
+    if (peerBindingId === undefined) return undefined;
+    return this.sessions().find(
+      (candidate) => candidate.binding?.bindingId === peerBindingId,
+    );
+  }
+
+  async switchToLineagePeer(session: ExternalAgentSession): Promise<boolean> {
+    const peer = this.lineagePeer(session);
+    if (peer === undefined) {
+      this.error.set('The related Crew session is not currently available.');
+      return false;
+    }
+    return this.selectSession(peer);
+  }
+
   clearSelection(): void {
     this.cacheSelectedTranscript();
     this.selectionRevision += 1;
@@ -906,6 +944,7 @@ export class ExternalAgentStore {
           await this.applyThreadReplacement(
             binding,
             result.result.threadReplacement,
+            result.commandId,
           );
         } catch (error) {
           this.commandError.set(
@@ -934,10 +973,16 @@ export class ExternalAgentStore {
   private async applyThreadReplacement(
     binding: ExternalAgentBinding,
     replacement: ExternalRuntimeThreadReplacementResult,
+    transitionId: string,
   ): Promise<void> {
-    if (replacement.bindingId !== binding.bindingId) {
+    if (replacement.previousBindingId !== binding.bindingId) {
       throw new Error(
-        `Crew returned replacement binding ${replacement.bindingId} for command binding ${binding.bindingId}`,
+        `Crew returned predecessor binding ${replacement.previousBindingId} for command binding ${binding.bindingId}`,
+      );
+    }
+    if (replacement.bindingId === binding.bindingId) {
+      throw new Error(
+        `Crew returned predecessor binding ${binding.bindingId} as its own replacement`,
       );
     }
 
@@ -957,12 +1002,24 @@ export class ExternalAgentStore {
     const sessionId = replacement.sessionId ?? binding.sessionId;
     const nextBinding: ExternalAgentBinding = {
       ...binding,
+      bindingId: replacement.bindingId,
       nativeThreadId: replacement.nativeThreadId,
       ...(sessionId === undefined ? {} : { sessionId }),
       profileId: replacement.profileId,
       cwd: replacement.cwd,
       label: replacement.label,
       taskRef: replacement.taskRef,
+      lineage:
+        replacement.previousSessionId === null
+          ? null
+          : {
+              predecessorBindingId: replacement.previousBindingId,
+              predecessorSessionId: replacement.previousSessionId,
+              predecessorNativeThreadId: replacement.previousNativeThreadId,
+              transitionId,
+              reasonCode: 'external_command_new_session',
+              createdAt: binding.updatedAt,
+            },
       revision: replacement.bindingRevision,
     };
 
@@ -1510,6 +1567,12 @@ export class ExternalAgentStore {
             this.selectedRuntimeEventCursor ?? event.sequenceId,
             event.sequenceId,
           );
+          if (event.kind === 'thread_lineage_replaced') {
+            this.fleetEvents.update((events) =>
+              mergeFleetEvents(events, [event]),
+            );
+            void this.refresh();
+          }
           if (event.nativeThreadId === this.selectedThreadId()) {
             this.appendEvents([event]);
             const settings = event.payload.settings;
@@ -1884,6 +1947,59 @@ function externalSessionRelationship(
     return 'recovery_required';
   }
   return 'bound';
+}
+
+function lineageTransitionForSession(
+  events: readonly NormalizedExternalRuntimeEvent[],
+  bindings: readonly ExternalAgentBinding[],
+  binding: ExternalAgentBinding | undefined,
+): ExternalLineageTransition | undefined {
+  if (binding?.lineage == null) return undefined;
+  const event = events
+    .filter(
+      (candidate) =>
+        candidate.kind === 'thread_lineage_replaced' &&
+        candidate.payload.successorBindingId === binding.bindingId,
+    )
+    .at(-1);
+  const predecessor = bindings.find(
+    (candidate) =>
+      candidate.bindingId === binding.lineage?.predecessorBindingId,
+  );
+  const eventLifecycle = event?.payload.predecessorLifecycle;
+  return {
+    transitionId: event?.requestId ?? binding.lineage.transitionId,
+    reasonCode: event?.payload.reasonCode ?? binding.lineage.reasonCode,
+    predecessorLifecycle:
+      eventLifecycle === 'retained' || eventLifecycle === 'archived'
+        ? eventLifecycle
+        : predecessor?.status === 'archived'
+          ? 'archived'
+          : 'retained',
+    ...(event?.payload.movedRouteCount === undefined
+      ? {}
+      : { movedRouteCount: event.payload.movedRouteCount }),
+  };
+}
+
+function mergeFleetEvents(
+  existing: readonly NormalizedExternalRuntimeEvent[],
+  incoming: readonly NormalizedExternalRuntimeEvent[],
+): NormalizedExternalRuntimeEvent[] {
+  const merged = new Map<string, NormalizedExternalRuntimeEvent>();
+  for (const event of [...existing, ...incoming]) {
+    const key =
+      event.kind === 'thread_lineage_replaced' && event.requestId != null
+        ? `${event.runtimeId}:${event.kind}:${event.requestId}`
+        : event.eventId;
+    const previous = merged.get(key);
+    if (previous === undefined || event.sequenceId >= previous.sequenceId) {
+      merged.set(key, event);
+    }
+  }
+  return [...merged.values()].sort(
+    (left, right) => left.sequenceId - right.sequenceId,
+  );
 }
 
 function bindingsNeedingDirectThreadRead(

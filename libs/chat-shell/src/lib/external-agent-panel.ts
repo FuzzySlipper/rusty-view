@@ -194,6 +194,37 @@ export class ExternalAgentPanelComponent {
     return undefined;
   }
 
+  protected lineageTransitionLabel(
+    session: ExternalAgentSession,
+  ): string | undefined {
+    const transition =
+      session.lineageTransition ??
+      this.store.lineagePeer(session)?.lineageTransition;
+    if (transition === undefined) return undefined;
+    const reason = lineageReasonLabel(transition.reasonCode);
+    const lifecycle =
+      transition.predecessorLifecycle === 'archived'
+        ? 'predecessor archived'
+        : 'predecessor retained';
+    const routes =
+      transition.movedRouteCount === undefined
+        ? 'route migration not reported'
+        : `${transition.movedRouteCount} route${transition.movedRouteCount === 1 ? '' : 's'} moved`;
+    return `${reason} · ${lifecycle} · ${routes}`;
+  }
+
+  protected lineageSwitchLabel(session: ExternalAgentSession): string {
+    return session.relationship === 'lineage_predecessor'
+      ? 'Open replacement'
+      : 'Open predecessor';
+  }
+
+  protected switchLineageSession(session: ExternalAgentSession): void {
+    void this.store.switchToLineagePeer(session).then((selected) => {
+      if (selected) this.sessionSelected.emit();
+    });
+  }
+
   protected updateQuery(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
   }
@@ -408,6 +439,19 @@ export class ExternalAgentPanelComponent {
   private clearAttemptFeedback(): void {
     this.attempted.set(false);
     this.store.creationError.set(undefined);
+  }
+}
+
+function lineageReasonLabel(reasonCode: string): string {
+  switch (reasonCode) {
+    case 'external_command_new_session':
+      return 'Explicit /new or /restart';
+    case 'profile_prompt_refresh':
+      return 'Automatic profile refresh';
+    case 'dynamic_tool_catalog_refresh':
+      return 'Automatic tool refresh';
+    default:
+      return reasonCode.replaceAll('_', ' ');
   }
 }
 

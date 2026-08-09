@@ -273,10 +273,25 @@
         >
           {{ recoveryLabel }}
         </span>
+        } @if (lineageTransitionLabel(session); as transitionLabel) {
+        <span
+          class="rv-agent__recovery"
+          data-testid="external-agent-lineage-transition"
+        >
+          {{ transitionLabel }}
+        </span>
         }
       </button>
       <div class="rv-agent__actions">
-        @if (store.inventoryMode() === 'archived') { @if
+        @if (store.lineagePeer(session)) {
+        <button
+          type="button"
+          data-testid="external-agent-lineage-switch"
+          (click)="switchLineageSession(session)"
+        >
+          {{ lineageSwitchLabel(session) }}
+        </button>
+        } @if (store.inventoryMode() === 'archived') { @if
         (session.binding?.status === 'archived') {
         <button
           type="button"

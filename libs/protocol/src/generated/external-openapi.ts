@@ -580,8 +580,8 @@ export interface components {
             sessionKind: components["schemas"]["SessionKind"];
             sessionStatus: components["schemas"]["SessionStatus"];
             taskRef?: components["schemas"]["DenRuntimeReference"] | null;
-            workspace?: components["schemas"]["SessionWorkspace"] | null;
             workdir?: string | null;
+            workspace?: components["schemas"]["SessionWorkspace"] | null;
         };
         /** @enum {string} */
         AgentDirectoryRuntimeKind: "direct_brain" | "codex_app_server";
@@ -3020,6 +3020,15 @@ export interface components {
             argument?: string | null;
             controlId?: string;
             reasonCode?: string | null;
+            predecessorBindingId?: string;
+            predecessorSessionId?: string;
+            predecessorNativeThreadId?: string;
+            successorBindingId?: string;
+            successorSessionId?: string;
+            successorNativeThreadId?: string;
+            /** @enum {string} */
+            predecessorLifecycle?: "retained" | "archived";
+            movedRouteCount?: number;
             cwd?: string;
             output?: string;
             exitCode?: number;

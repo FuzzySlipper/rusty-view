@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/context/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger a Rust-owned manual context compaction at a safe provider boundary without transcript or provider call, idempotent via intent_key */
+        post: operations["compactChatSessionContext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/stream": {
         parameters: {
             query?: never;
@@ -625,6 +642,33 @@ export interface components {
             reason_code: string;
             message: string;
             retryable: boolean;
+        };
+        ManualContextCompactionRequest: {
+            intent_key?: string | null;
+            strategy_id?: string | null;
+            strategy_revision?: string | null;
+            source_projection_fingerprint?: string | null;
+            /** Format: uint64 */
+            expect_revision?: number | null;
+        };
+        ManualContextCompactionArtifact: {
+            artifact_id: string;
+            session_id: string;
+            strategy_id: string;
+            terminal_status: string;
+            created_at: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ManualContextCompactionResponse: {
+            /** @constant */
+            ok: true;
+            session_id: string;
+            artifact: components["schemas"]["ManualContextCompactionArtifact"];
+            terminal_status: string;
+            idempotent: boolean;
+            /** Format: uint64 */
+            revision: number;
         };
         /** @enum {string} */
         MemorySurfaceOwner: "crew" | "den" | "filesystem";
@@ -1892,6 +1936,68 @@ export interface operations {
                         data?: components["schemas"]["SessionContextUsageResult"];
                     };
                 };
+            };
+        };
+    };
+    compactChatSessionContext: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ManualContextCompactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Duplicate intent_key returned existing terminal artifact (idempotent) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ManualContextCompactionResponse"];
+                    };
+                };
+            };
+            /** @description Manual compaction created a new terminal artifact */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ManualContextCompactionResponse"];
+                    };
+                };
+            };
+            /** @description The session was not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Revision conflict for expect_revision */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Compaction disabled by policy or unavailable measurement */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
