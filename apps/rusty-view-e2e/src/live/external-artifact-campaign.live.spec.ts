@@ -192,10 +192,18 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
 
       await proveLanReplay(browser, marker);
     } finally {
-      if (target !== undefined && feedbackAttachmentId !== '') {
-        await removeAttachment(request, target.sessionId, feedbackAttachmentId);
+      if (target !== undefined) {
+        const evidence = await artifactEvidence(request, target);
+        const attachmentIds = new Set([
+          ...evidence.media,
+          ...evidence.documents,
+          ...(feedbackAttachmentId === '' ? [] : [feedbackAttachmentId]),
+        ]);
+        for (const attachmentId of attachmentIds) {
+          await removeAttachment(request, target.sessionId, attachmentId);
+        }
+        await deleteThread(request, target);
       }
-      if (target !== undefined) await deleteThread(request, target);
     }
   });
 });
@@ -450,6 +458,10 @@ async function removeAttachment(
     `${backend}/v1/chat/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`,
   );
   expect(response.ok()).toBe(true);
+  const content = await request.get(
+    `${backend}/v1/chat/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}/content`,
+  );
+  expect(content.status()).toBe(410);
 }
 
 async function deleteThread(
