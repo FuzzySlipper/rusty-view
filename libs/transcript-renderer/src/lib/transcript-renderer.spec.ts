@@ -20,6 +20,7 @@ import {
   type TextRenderMode,
 } from './render-mode-token';
 import {
+  ATTACHMENT_CONTENT_LOADER,
   CHAT_CONTENT_RENDERERS,
   MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
@@ -707,23 +708,257 @@ describe('MessageBlockComponent', () => {
     );
 
     const host: HTMLElement = fixture.nativeElement;
-    const image = host.querySelector(
-      '.rv-attachment__image',
-    ) as HTMLImageElement;
+    const image = host.querySelector<HTMLImageElement>('.rv-attachment__image');
     expect(image).not.toBeNull();
-    expect(image.getAttribute('src')).toBe('/thumbs/frame.png');
-    expect(image.getAttribute('alt')).toBe('frame.png');
-    const fullSizeLink = host.querySelector(
-      '.rv-attachment__image-link',
-    ) as HTMLAnchorElement;
-    expect(fullSizeLink.getAttribute('href')).toBe('/files/frame.png');
-    expect(fullSizeLink.getAttribute('target')).toBe('_blank');
-    expect(fullSizeLink.getAttribute('rel')).toContain('noopener');
+    expect(image?.getAttribute('src')).toBe('/thumbs/frame.png');
+    expect(image?.getAttribute('alt')).toBe('frame.png');
+    const previewButton = host.querySelector<HTMLButtonElement>(
+      '.rv-attachment__image-button',
+    );
+    expect(previewButton).not.toBeNull();
     expect(host.textContent).toContain('Loading image');
 
-    image.dispatchEvent(new Event('load'));
+    image?.dispatchEvent(new Event('load'));
     fixture.detectChanges();
     expect(host.textContent).not.toContain('Loading image');
+
+    previewButton?.click();
+    fixture.detectChanges();
+    expect(
+      host
+        .querySelector<HTMLImageElement>('[role="dialog"] img')
+        ?.getAttribute('src'),
+    ).toBe('/files/frame.png');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('renders ordered media groups and loads Crew content through the lazy loader', async () => {
+    const load = vi.fn(
+      async () => new Blob(['image-bytes'], { type: 'image/png' }),
+    );
+    const createObjectUrl = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:crew-media');
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined);
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: 'first.png\nsecond.png',
+        attachments: [
+          makeAttachment({
+            id: 'first',
+            kind: 'image',
+            name: 'first.png',
+            mimeType: 'image/png',
+            sizeBytes: 12,
+            url: '/content/first',
+            contentState: 'available',
+            contentLoadPolicy: 'authenticated_lazy',
+            contentSha256: 'a'.repeat(64),
+            width: 12,
+            height: 10,
+          }),
+          makeAttachment({
+            id: 'second',
+            kind: 'image',
+            name: 'second.png',
+            mimeType: 'image/png',
+            sizeBytes: 24,
+            url: '/content/second',
+            contentState: 'available',
+            contentLoadPolicy: 'authenticated_lazy',
+            contentSha256: 'b'.repeat(64),
+            width: 24,
+            height: 20,
+          }),
+        ],
+      }),
+      [{ provide: ATTACHMENT_CONTENT_LOADER, useValue: load }],
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(
+      host.querySelector('[data-testid="external-media-group"]'),
+    ).not.toBeNull();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(
+      Array.from(
+        host.querySelectorAll<HTMLImageElement>('.rv-attachment__image'),
+        (image) => image.getAttribute('src'),
+      ),
+    ).toEqual(['blob:crew-media', 'blob:crew-media']);
+    expect(host.textContent).toContain('12×10');
+    expect(host.textContent).toContain('24×20');
+
+    fixture.destroy();
+    expect(revokeObjectUrl).toHaveBeenCalledTimes(2);
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
+  });
+
+  it('does not fetch offscreen media before the intersection boundary', async () => {
+    let triggerIntersection:
+      | ((entry: IntersectionObserverEntry) => void)
+      | undefined;
+    class DeferredIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = '240px 0px';
+      readonly thresholds = [0];
+
+      constructor(nextCallback: IntersectionObserverCallback) {
+        triggerIntersection = (entry) => nextCallback([entry], this);
+      }
+
+      disconnect(): void {
+        return;
+      }
+
+      observe(): void {
+        return;
+      }
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+
+      unobserve(): void {
+        return;
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', DeferredIntersectionObserver);
+    const load = vi.fn(async () => new Blob(['proof'], { type: 'image/png' }));
+    const createObjectUrl = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:deferred-media');
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined);
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: 'deferred.png',
+        attachments: [
+          makeAttachment({
+            id: 'deferred',
+            kind: 'image',
+            name: 'deferred.png',
+            mimeType: 'image/png',
+            url: '/content/deferred',
+            contentState: 'available',
+            contentLoadPolicy: 'authenticated_lazy',
+          }),
+        ],
+      }),
+      [{ provide: ATTACHMENT_CONTENT_LOADER, useValue: load }],
+    );
+    expect(load).not.toHaveBeenCalled();
+
+    const target: HTMLElement = fixture.nativeElement;
+    const bounds = new DOMRect(0, 0, 100, 100);
+    const entry: IntersectionObserverEntry = {
+      boundingClientRect: bounds,
+      intersectionRatio: 1,
+      intersectionRect: bounds,
+      isIntersecting: true,
+      rootBounds: bounds,
+      target,
+      time: 1,
+    };
+    if (triggerIntersection === undefined) {
+      throw new Error('intersection observer was not installed');
+    }
+    triggerIntersection(entry);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(
+      target
+        .querySelector<HTMLImageElement>('.rv-attachment__image')
+        ?.getAttribute('src'),
+    ).toBe('blob:deferred-media');
+    fixture.destroy();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:deferred-media');
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('aborts stale media loads and cannot project their later result', async () => {
+    const resolvers = new Map<string, (blob: Blob) => void>();
+    const signals = new Map<string, AbortSignal>();
+    const load = vi.fn(
+      (attachment: ChatAttachment, signal: AbortSignal) =>
+        new Promise<Blob>((resolve) => {
+          resolvers.set(attachment.id, resolve);
+          signals.set(attachment.id, signal);
+        }),
+    );
+    const createObjectUrl = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:new-media');
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined);
+    const lazyImage = (id: string, url: string) =>
+      makeAttachment({
+        id,
+        kind: 'image',
+        name: `${id}.png`,
+        mimeType: 'image/png',
+        url,
+        contentState: 'available',
+        contentLoadPolicy: 'authenticated_lazy',
+      });
+    const fixture = await createBlock(
+      makeBlock({
+        kind: 'attachment',
+        content: 'old.png',
+        attachments: [lazyImage('old', '/content/old')],
+      }),
+      [{ provide: ATTACHMENT_CONTENT_LOADER, useValue: load }],
+    );
+    await Promise.resolve();
+
+    fixture.componentRef.setInput(
+      'block',
+      makeBlock({
+        kind: 'attachment',
+        content: 'new.png',
+        attachments: [lazyImage('new', '/content/new')],
+      }),
+    );
+    fixture.detectChanges();
+    await Promise.resolve();
+    expect(signals.get('old')?.aborted).toBe(true);
+
+    const resolveOld = resolvers.get('old');
+    const resolveNew = resolvers.get('new');
+    if (resolveOld === undefined || resolveNew === undefined) {
+      throw new Error('both media requests must be pending');
+    }
+    resolveOld(new Blob(['old']));
+    resolveNew(new Blob(['new']));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    const host: HTMLElement = fixture.nativeElement;
+    expect(
+      host
+        .querySelector<HTMLImageElement>('.rv-attachment__image')
+        ?.getAttribute('src'),
+    ).toBe('blob:new-media');
+    fixture.destroy();
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
   });
 
   it('shows failed, unavailable, and removed image states', async () => {

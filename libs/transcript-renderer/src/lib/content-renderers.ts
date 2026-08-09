@@ -1,5 +1,6 @@
 import { InjectionToken, type Type } from '@angular/core';
 import type {
+  ChatAttachment,
   ChatMessage,
   MessageBlock,
   ToolCallDebugDetail,
@@ -54,3 +55,11 @@ export type MessageBlockDetailLoader = (
 
 export const MESSAGE_BLOCK_DETAIL_LOADER =
   new InjectionToken<MessageBlockDetailLoader>('MESSAGE_BLOCK_DETAIL_LOADER');
+
+export type AttachmentContentLoader = (
+  attachment: ChatAttachment,
+  signal: AbortSignal,
+) => Promise<Blob>;
+
+export const ATTACHMENT_CONTENT_LOADER =
+  new InjectionToken<AttachmentContentLoader>('ATTACHMENT_CONTENT_LOADER');

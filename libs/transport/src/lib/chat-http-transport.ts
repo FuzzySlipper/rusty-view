@@ -527,6 +527,33 @@ export class ChatHttpTransport {
     return unwrapEnvelope(body);
   }
 
+  /** Fetch opaque Crew-served attachment bytes with configured transport auth. */
+  async readAttachmentContent(
+    contentUrl: string,
+    signal?: AbortSignal,
+  ): Promise<Blob> {
+    const url = new URL(contentUrl, this.config.baseUrl).toString();
+    const timeoutSignal = AbortSignal.timeout(this.config.timeoutMs);
+    const requestSignal =
+      signal === undefined
+        ? timeoutSignal
+        : AbortSignal.any([signal, timeoutSignal]);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: 'GET',
+        headers: this.buildHeaders({}),
+        signal: requestSignal,
+      });
+    } catch (error) {
+      throw withChatTransportEndpoint(classifyFetchError(error), url);
+    }
+    if (!response.ok) {
+      await this.handleHttpError(response, url);
+    }
+    return response.blob();
+  }
+
   // ---- internal request infrastructure ----
 
   private buildUrl(

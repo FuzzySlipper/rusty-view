@@ -28,6 +28,7 @@ export type {
   MessageRevisionCapabilities,
 } from './lib/message-revision-controls';
 export { AttachmentBlockComponent } from './lib/attachment-block';
+export { MediaAttachmentGroupComponent } from './lib/media-attachment-group';
 export { CHAT_MESSAGE_DECORATORS } from './lib/transcript-decorators';
 export type {
   ChatMessageDecorator,
@@ -61,12 +62,14 @@ export {
   CHAT_CONTENT_RENDERERS,
   MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
+  ATTACHMENT_CONTENT_LOADER,
 } from './lib/content-renderers';
 export type {
   ChatContentRenderer,
   ChatContentRenderContext,
   MessageBlockDetail,
   MessageBlockDetailLoader,
+  AttachmentContentLoader,
   ToolCallDebugDetailLoader,
 } from './lib/content-renderers';
 

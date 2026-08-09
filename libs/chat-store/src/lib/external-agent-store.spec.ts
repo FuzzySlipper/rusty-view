@@ -1249,6 +1249,75 @@ describe('ExternalAgentStore', () => {
     await sending;
   });
 
+  it('projects live media once at its authoritative event position', async () => {
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(thread('thread-1', 10));
+
+    const mediaEvent: NormalizedExternalRuntimeEvent = {
+      eventId: 'media-2',
+      runtimeId: 'runtime-1',
+      sequenceId: 2,
+      createdAt: '2026-07-11T00:00:02Z',
+      kind: 'dynamic_tool_activity',
+      nativeThreadId: 'thread-1',
+      nativeTurnId: 'turn-live',
+      itemId: 'view-proof',
+      payload: {
+        nativeMethod: 'item/completed',
+        status: 'completed',
+        tool: 'view_image',
+        media: [
+          {
+            mediaIndex: 0,
+            captureSource: 'image_view_path',
+            captureState: 'available',
+            attachmentId: 'attachment:proof',
+            filename: 'proof.png',
+            mimeType: 'image/png',
+            byteSize: 120,
+            sha256: 'a'.repeat(64),
+            width: 12,
+            height: 10,
+            contentUrl: '/v1/chat/sessions/session-1/attachments/proof/content',
+          },
+        ],
+      },
+    };
+    store.events.set([
+      {
+        ...assistantTextEvent(1, 'Opening the proof.'),
+        itemId: 'commentary-before',
+      },
+      mediaEvent,
+      {
+        ...assistantTextEvent(3, 'The proof is visible.'),
+        itemId: 'commentary-after',
+      },
+      mediaEvent,
+    ]);
+
+    expect(store.messages()[0]?.blocks.map((block) => block.kind)).toEqual([
+      'text',
+      'tool_call',
+      'attachment',
+      'text',
+    ]);
+    expect(store.messages()[0]?.blocks[2]?.attachments?.[0]).toMatchObject({
+      id: 'attachment:proof',
+      contentLoadPolicy: 'authenticated_lazy',
+      contentState: 'available',
+      width: 12,
+      height: 10,
+    });
+  });
+
   it('reconciles repeated optimistic prompts against native user messages without duplicates', async () => {
     const store = setupStore({
       runtimes: [registration('runtime-1')],
@@ -1505,6 +1574,7 @@ describe('ExternalAgentStore', () => {
     await store.send('runtime two prompt');
     expect(listEvents).toHaveBeenLastCalledWith('runtime-2', {
       limit: 1_000,
+      nativeThreadId: sharedThreadId,
     });
   });
 
@@ -1755,38 +1825,40 @@ describe('ExternalAgentStore', () => {
     };
     const freshEvent = event(101, 'fresh-turn', 'inProgress');
     const listEvents = vi.fn(
-      async (_runtimeId: string, query?: { after?: number }) => ({
-        events: query?.after === 100 ? [freshEvent] : [historicalEvent],
+      async (
+        _runtimeId: string,
+        query?: { after?: number; nativeThreadId?: string },
+      ) => ({
+        events:
+          query?.nativeThreadId === 'thread-1'
+            ? query.after === 100
+              ? [freshEvent]
+              : []
+            : [historicalEvent],
       }),
     );
     const store = setupStore({
       runtimes: [runtime],
       bindings: [binding],
-      listThreads: vi.fn(),
+      listThreads: vi.fn(async () => page([selectedThread], null)),
       listEvents,
       readThread: vi.fn(async () => ({ thread: selectedThread })),
     });
-    store.bindings.set([binding]);
-
-    await store.selectSession({
-      key: 'runtime-1:thread-1',
-      runtime,
-      thread: selectedThread,
-      binding,
-      relationship: 'bound',
-      unread: false,
-      needsAttention: false,
-    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected selected session');
+    await store.selectSession(session);
     await store.send('start fresh work');
 
     expect(listEvents).toHaveBeenLastCalledWith('runtime-1', {
       after: 100,
       limit: 1_000,
+      nativeThreadId: 'thread-1',
     });
     expect(store.events()).toEqual([freshEvent]);
   });
 
-  it('loads an inactive thread from its snapshot without replaying runtime history and caches it', async () => {
+  it('hydrates an inactive thread with scoped history and caches it', async () => {
     let updatedAt = 10;
     const runtime = registration('runtime-1');
     const historicalEvent = {
@@ -1794,8 +1866,11 @@ describe('ExternalAgentStore', () => {
       nativeThreadId: 'other-thread',
     };
     const listEvents = vi.fn(
-      async (_runtimeId: string, query?: { after?: number }) => ({
-        events: query?.after === 100 ? [] : [historicalEvent],
+      async (
+        _runtimeId: string,
+        query?: { after?: number; nativeThreadId?: string },
+      ) => ({
+        events: query?.nativeThreadId === undefined ? [historicalEvent] : [],
       }),
     );
     const readThread = vi.fn(async () => ({
@@ -1817,10 +1892,14 @@ describe('ExternalAgentStore', () => {
     await store.selectSession(first);
     await store.selectSession(first);
 
-    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listEvents).toHaveBeenCalledTimes(2);
+    expect(listEvents).toHaveBeenLastCalledWith('runtime-1', {
+      limit: 1_000,
+      nativeThreadId: 'thread-1',
+    });
     expect(readThread).toHaveBeenCalledTimes(1);
     expect(store.selectedThread()?.threadId).toBe('thread-1');
-    expect(store.eventHistoryLoaded()).toBe(false);
+    expect(store.eventHistoryLoaded()).toBe(true);
 
     updatedAt = 20;
     await store.refresh();
@@ -1928,7 +2007,7 @@ describe('ExternalAgentStore', () => {
     expect(store.selectedThread()?.threadId).toBe('thread-2');
   });
 
-  it('loads inactive raw event history only when explicitly requested', async () => {
+  it('hydrates inactive raw event history when the session is selected', async () => {
     const runtime = registration('runtime-1');
     const selectedThread = { ...thread('thread-1', 10), status: 'idle' };
     const selectedEvent = event(90, 'turn-1', 'completed');
@@ -1951,8 +2030,8 @@ describe('ExternalAgentStore', () => {
     if (session === undefined) throw new Error('expected inactive session');
     await store.selectSession(session);
 
-    expect(store.events()).toEqual([]);
-    await expect(store.loadSelectedEventHistory()).resolves.toBe(true);
+    expect(store.events()).toEqual([selectedEvent]);
+    await expect(store.loadSelectedEventHistory()).resolves.toBe(false);
 
     expect(listEvents).toHaveBeenCalledTimes(2);
     expect(store.events()).toEqual([selectedEvent]);
@@ -1981,7 +2060,11 @@ describe('ExternalAgentStore', () => {
       ...event(100, 'old-turn', 'completed'),
       nativeThreadId: 'other-thread',
     };
-    const listEvents = vi.fn(async () => ({ events: [fleetTail] }));
+    const listEvents = vi.fn(
+      async (_runtimeId: string, query?: { nativeThreadId?: string }) => ({
+        events: query?.nativeThreadId === undefined ? [fleetTail] : [],
+      }),
+    );
     const streamExternalRuntimeEvents = vi.fn(() => ({
       close: vi.fn(),
       async *events() {
@@ -2001,11 +2084,11 @@ describe('ExternalAgentStore', () => {
 
     await store.selectSession(session);
 
-    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listEvents).toHaveBeenCalledTimes(2);
     expect(streamExternalRuntimeEvents).toHaveBeenCalledWith('runtime-1', 100);
     expect(store.activeTurnId()).toBe('turn-live');
     expect(store.turnPhase()).toBe('active');
-    expect(store.eventHistoryLoaded()).toBe(false);
+    expect(store.eventHistoryLoaded()).toBe(true);
   });
 
   it('seeds a large event cursor from one indexed tail read', async () => {
@@ -2016,7 +2099,11 @@ describe('ExternalAgentStore', () => {
       ...event(index + 1, 'old-turn', 'completed'),
       nativeThreadId: 'other-thread',
     }));
-    const listEvents = vi.fn(async () => ({ events: firstPage }));
+    const listEvents = vi.fn(
+      async (_runtimeId: string, query?: { nativeThreadId?: string }) => ({
+        events: query?.nativeThreadId === undefined ? firstPage : [],
+      }),
+    );
     const readEventHead = vi.fn(async () => ({
       event: {
         ...event(latestSequence, 'latest-turn', 'completed'),
@@ -2047,7 +2134,7 @@ describe('ExternalAgentStore', () => {
       'runtime-1',
       latestSequence,
     );
-    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(listEvents).toHaveBeenCalledTimes(2);
     expect(readEventHead).toHaveBeenCalledWith('runtime-1');
     expect(store.events()).toEqual([]);
   });

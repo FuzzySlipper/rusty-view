@@ -705,13 +705,15 @@ export class ExternalAgentStore {
         return true;
       }
 
-      const replayHistory = cached === undefined && fleetCursor === undefined;
+      const replayHistory = cached === undefined;
       const [read, page] = await Promise.all([
         this.transport.external.readThread(runtimeId, {
           threadId: session.thread.threadId,
           includeTurns: true,
         }),
-        replayHistory ? this.listAllEvents(runtimeId) : Promise.resolve([]),
+        replayHistory
+          ? this.listAllEvents(runtimeId, undefined, session.thread.threadId)
+          : Promise.resolve([]),
       ]);
       if (!this.isCurrentSelection(revision, session.key)) return false;
       this.selectedThread.set(read.thread);
@@ -719,8 +721,10 @@ export class ExternalAgentStore {
         const events = page.filter(
           (event) => event.nativeThreadId === session.thread.threadId,
         );
-        this.selectedRuntimeEventCursor =
-          page.at(-1)?.sequenceId ?? fleetCursor;
+        this.selectedRuntimeEventCursor = latestDefinedCursor(
+          page.at(-1)?.sequenceId,
+          fleetCursor,
+        );
         this.events.set(events);
         this.eventHistoryLoaded.set(replayHistory);
       }
@@ -799,7 +803,7 @@ export class ExternalAgentStore {
     const revision = this.selectionRevision;
     this.eventHistoryLoading.set(true);
     try {
-      const page = await this.listAllEvents(runtimeId);
+      const page = await this.listAllEvents(runtimeId, undefined, threadId);
       if (!this.isCurrentSelection(revision, key)) return false;
       const selected = page.filter(
         (event) => event.nativeThreadId === threadId,
@@ -1626,6 +1630,7 @@ export class ExternalAgentStore {
     const page = await this.transport.external.listEvents(runtimeId, {
       ...(after === undefined ? {} : { after }),
       limit: 1_000,
+      nativeThreadId: threadId,
     });
     if (
       !this.isCurrentSelection(revision, key) ||
@@ -1704,6 +1709,7 @@ export class ExternalAgentStore {
   private async listAllEvents(
     runtimeId: string,
     initialAfter?: number,
+    nativeThreadId?: string,
   ): Promise<NormalizedExternalRuntimeEvent[]> {
     const events: NormalizedExternalRuntimeEvent[] = [];
     let after = initialAfter;
@@ -1711,6 +1717,7 @@ export class ExternalAgentStore {
       const page = await this.transport.external.listEvents(runtimeId, {
         limit: 1_000,
         ...(after === undefined ? {} : { after }),
+        ...(nativeThreadId === undefined ? {} : { nativeThreadId }),
       });
       events.push(...page.events);
       const next = page.events.at(-1)?.sequenceId;

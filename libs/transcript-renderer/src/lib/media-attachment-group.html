@@ -1,0 +1,10 @@
+<section
+  class="rv-media-group"
+  [class.rv-media-group--multiple]="attachments().length > 1"
+  [attr.aria-label]="attachments().length + ' image checkpoint(s)'"
+  data-testid="external-media-group"
+>
+  @for (attachment of attachments(); track attachment.id) {
+  <rv-attachment-block [attachment]="attachment" />
+  }
+</section>

@@ -10,6 +10,11 @@
     *ngComponentOutlet="renderer.component; inputs: customRendererInputs()"
   />
 </div>
+} @else if (attachments(); as attachments) {
+<rv-media-attachment-group
+  [class.rv-block--search-match]="searchMatched()"
+  [attachments]="attachments"
+/>
 } @else if (attachment(); as attachment) {
 <rv-attachment-block
   [class.rv-block--search-match]="searchMatched()"

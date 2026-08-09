@@ -25,10 +25,14 @@
   min-height: 2.5rem;
 }
 
-.rv-attachment__image-link {
+.rv-attachment__image-button {
   display: block;
+  padding: 0;
+  border: 0;
   min-width: 0;
   max-width: 100%;
+  background: transparent;
+  cursor: zoom-in;
 }
 
 .rv-attachment__image,
@@ -44,6 +48,15 @@
 
 .rv-attachment__image--failed {
   display: none;
+}
+
+.rv-attachment__retry {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .rv-attachment__audio {
@@ -136,6 +149,38 @@
   color: var(--rv-color-text-muted);
   font-family: var(--rv-font-technical);
   font-size: var(--rv-font-size-xs);
+}
+
+.rv-attachment-viewer {
+  position: fixed;
+  z-index: var(--rv-z-overlay);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--rv-space-xl);
+  background: var(--rv-color-scrim);
+}
+
+.rv-attachment-viewer__image {
+  max-width: calc(100vw - 2 * var(--rv-space-xl));
+  max-height: calc(100vh - 2 * var(--rv-space-xl));
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  box-shadow: var(--rv-shadow-overlay);
+  object-fit: contain;
+}
+
+.rv-attachment-viewer__close {
+  position: fixed;
+  top: var(--rv-space-lg);
+  right: var(--rv-space-lg);
+  min-height: var(--rv-density-control-md);
+  padding: 0 var(--rv-space-md);
+  border: 1px solid var(--rv-color-border-strong);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  cursor: pointer;
 }
 
 @media (max-width: 48rem) {

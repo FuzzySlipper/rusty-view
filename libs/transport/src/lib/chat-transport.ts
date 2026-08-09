@@ -229,6 +229,13 @@ export class ChatTransport {
     return this.http.replayAllEvents(sessionId, query);
   }
 
+  readAttachmentContent(
+    contentUrl: string,
+    signal?: AbortSignal,
+  ): Promise<Blob> {
+    return this.http.readAttachmentContent(contentUrl, signal);
+  }
+
   sendMessage(
     sessionId: string,
     request: SendChatMessageRequest,

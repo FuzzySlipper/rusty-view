@@ -19,6 +19,7 @@ import type {
 } from '@rusty-view/chat-domain';
 
 import { AttachmentBlockComponent } from './attachment-block';
+import { MediaAttachmentGroupComponent } from './media-attachment-group';
 import { WorkerManager } from './worker-manager';
 import {
   TRANSCRIPT_MARKDOWN_POLICY,
@@ -120,7 +121,11 @@ const AUTO_HTML_TAGS = new Set([
  */
 @Component({
   selector: 'rv-message-block',
-  imports: [NgComponentOutlet, AttachmentBlockComponent],
+  imports: [
+    NgComponentOutlet,
+    AttachmentBlockComponent,
+    MediaAttachmentGroupComponent,
+  ],
   templateUrl: './message-block.html',
   styleUrl: './message-block.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -285,6 +290,7 @@ export class MessageBlockComponent {
 
   /** Attachment metadata, when this block represents an inline uploaded file. */
   protected readonly attachment = computed(() => this.block().attachment);
+  protected readonly attachments = computed(() => this.block().attachments);
 
   /** Whether the tool block has expandable detail (result / reason). */
   protected readonly hasDetail = computed(
@@ -315,6 +321,7 @@ export class MessageBlockComponent {
     () =>
       this.customRenderer() === undefined &&
       this.attachment() === undefined &&
+      this.attachments() === undefined &&
       this.block().kind !== 'text' &&
       this.block().kind !== 'reasoning' &&
       this.block().kind !== 'service_notice',

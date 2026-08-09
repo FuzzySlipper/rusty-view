@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { NormalizedExternalRuntimeEvent } from '@rusty-view/protocol';
+import type {
+  ExternalRuntimeMediaReference,
+  NormalizedExternalRuntimeEvent,
+} from '@rusty-view/protocol';
 import { projectExternalAgentTranscript } from './external-agent-projection';
 
 describe('projectExternalAgentTranscript', () => {
@@ -934,6 +937,181 @@ describe('projectExternalAgentTranscript', () => {
         }),
       }),
     );
+  });
+
+  it('places ordered media after its tool and before later active-turn commentary', () => {
+    const media: readonly ExternalRuntimeMediaReference[] = [
+      {
+        mediaIndex: 0,
+        captureSource: 'dynamic_tool_input_image',
+        captureState: 'available',
+        attachmentId: 'attachment:first',
+        filename: 'proof.png',
+        mimeType: 'image/png',
+        byteSize: 120,
+        sha256: 'a'.repeat(64),
+        width: 12,
+        height: 10,
+        contentUrl: '/v1/chat/sessions/session-1/attachments/first/content',
+      },
+      {
+        mediaIndex: 1,
+        captureSource: 'dynamic_tool_input_image',
+        captureState: 'available',
+        attachmentId: 'attachment:second',
+        filename: 'proof-2.png',
+        mimeType: 'image/png',
+        byteSize: 240,
+        sha256: 'b'.repeat(64),
+        width: 24,
+        height: 20,
+        contentUrl: '/v1/chat/sessions/session-1/attachments/second/content',
+      },
+    ];
+    const events: NormalizedExternalRuntimeEvent[] = [
+      {
+        ...event('1', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'I am opening the screenshots.',
+          messagePhase: 'commentary',
+        }),
+        itemId: 'commentary-before',
+      },
+      {
+        ...event('2', 'dynamic_tool_activity', {
+          nativeMethod: 'item/started',
+          status: 'inProgress',
+          tool: 'view_image',
+        }),
+        itemId: 'view-images',
+      },
+      {
+        ...event('3', 'dynamic_tool_activity', {
+          nativeMethod: 'item/completed',
+          status: 'completed',
+          tool: 'view_image',
+          success: true,
+          media,
+        }),
+        itemId: 'view-images',
+      },
+      {
+        ...event('4', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'The second screenshot shows the mismatch.',
+          messagePhase: 'commentary',
+        }),
+        itemId: 'commentary-after',
+      },
+    ];
+
+    const messages = projectExternalAgentTranscript(undefined, events);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.status).toBe('streaming');
+    expect(messages[0]?.blocks.map((block) => block.kind)).toEqual([
+      'text',
+      'tool_call',
+      'attachment',
+      'text',
+    ]);
+    const mediaBlock = messages[0]?.blocks[2];
+    expect(mediaBlock?.attachments?.map((attachment) => attachment.id)).toEqual(
+      ['attachment:first', 'attachment:second'],
+    );
+    expect(mediaBlock?.attachments?.[0]).toMatchObject({
+      contentLoadPolicy: 'authenticated_lazy',
+      contentState: 'available',
+      contentSha256: 'a'.repeat(64),
+      width: 12,
+      height: 10,
+      metadata: { externalSequenceId: 3, mediaIndex: 0 },
+    });
+
+    const replayed = projectExternalAgentTranscript(undefined, [
+      ...events,
+      ...events.slice(2, 3),
+    ]);
+    expect(
+      replayed
+        .flatMap((message) => message.blocks)
+        .filter((block) => block.kind === 'attachment'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps later same-filename checkpoints separate and preserves unavailable state', () => {
+    const first = {
+      ...event('10', 'item_lifecycle', {
+        nativeMethod: 'item/completed',
+        media: [
+          {
+            mediaIndex: 0,
+            captureSource: 'image_view_path',
+            captureState: 'available',
+            attachmentId: 'attachment:revision-one',
+            filename: 'proof.png',
+            mimeType: 'image/png',
+            byteSize: 10,
+            sha256: '1'.repeat(64),
+            width: 1,
+            height: 1,
+            contentUrl: '/content/one',
+          },
+        ],
+      }),
+      itemId: 'view-one',
+    };
+    const second = {
+      ...event('11', 'item_lifecycle', {
+        nativeMethod: 'item/completed',
+        media: [
+          {
+            mediaIndex: 0,
+            captureSource: 'image_view_path',
+            captureState: 'available',
+            attachmentId: 'attachment:revision-two',
+            filename: 'proof.png',
+            mimeType: 'image/png',
+            byteSize: 20,
+            sha256: '2'.repeat(64),
+            width: 2,
+            height: 2,
+            contentUrl: '/content/two',
+          },
+        ],
+      }),
+      itemId: 'view-two',
+    };
+    const unavailable = {
+      ...event('12', 'item_lifecycle', {
+        nativeMethod: 'item/completed',
+        media: [
+          {
+            mediaIndex: 0,
+            captureSource: 'image_view_path',
+            captureState: 'unavailable',
+            reasonCode: 'external_media_source_unavailable',
+          },
+        ],
+      }),
+      itemId: 'view-missing',
+    };
+
+    const blocks = projectExternalAgentTranscript(undefined, [
+      first,
+      second,
+      unavailable,
+    ]).flatMap((message) => message.blocks);
+    expect(blocks).toHaveLength(3);
+    expect(blocks.map((block) => block.attachments?.[0]?.id)).toEqual([
+      'attachment:revision-one',
+      'attachment:revision-two',
+      'external-media:runtime-1:thread-1:turn-1:view-missing:0',
+    ]);
+    expect(blocks[2]?.attachments?.[0]).toMatchObject({
+      contentState: 'unavailable',
+      url: undefined,
+      metadata: { reasonCode: 'external_media_source_unavailable' },
+    });
   });
 
   it('preserves commentary and final-answer phases from completed snapshots', () => {

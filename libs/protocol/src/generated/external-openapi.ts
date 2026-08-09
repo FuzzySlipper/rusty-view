@@ -3010,6 +3010,22 @@ export interface components {
             idempotencyKey: string;
             result: unknown;
         };
+        ExternalRuntimeMediaReference: {
+            mediaIndex: number;
+            /** @enum {string} */
+            captureSource: "dynamic_tool_input_image" | "mcp_image_content" | "image_view_path";
+            /** @enum {string} */
+            captureState: "available" | "unavailable" | "unsupported" | "empty" | "oversized" | "failed";
+            reasonCode?: string;
+            attachmentId?: string;
+            filename?: string;
+            mimeType?: string;
+            byteSize?: number;
+            sha256?: string;
+            width?: number;
+            height?: number;
+            contentUrl?: string;
+        };
         ExternalRuntimeEventPayload: {
             nativeMethod: string;
             status?: string;
@@ -3036,6 +3052,7 @@ export interface components {
             server?: string;
             tool?: string;
             success?: boolean;
+            media?: components["schemas"]["ExternalRuntimeMediaReference"][];
             summary?: string[];
             /** @enum {string} */
             messagePhase?: "commentary" | "final_answer" | "unknown";
@@ -3729,6 +3746,7 @@ export interface operations {
         parameters: {
             query?: {
                 after?: number;
+                native_thread_id?: string;
                 limit?: number;
             };
             header?: never;

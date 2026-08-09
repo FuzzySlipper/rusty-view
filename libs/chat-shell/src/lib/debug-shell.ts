@@ -12,7 +12,12 @@ import {
 } from '@angular/core';
 import { ChatStore, ExternalAgentStore } from '@rusty-view/chat-store';
 import { ChatTheme } from '@rusty-view/chat-theme';
-import type { ChatMessage, MessageBlock } from '@rusty-view/chat-domain';
+import type {
+  ChatAttachment,
+  ChatMessage,
+  MessageBlock,
+} from '@rusty-view/chat-domain';
+import { ChatTransport } from '@rusty-view/transport';
 import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
@@ -25,6 +30,7 @@ import type { StreamStatusKind } from '@rusty-view/chat-components';
 import {
   MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
+  ATTACHMENT_CONTENT_LOADER,
   TranscriptViewportComponent,
   type MessageBlockDetail,
   type MessageRevisionAction,
@@ -77,6 +83,18 @@ import { formatNativeReasoningEffort } from './native-reasoning-effort';
   styleUrl: './debug-shell.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [
+    {
+      provide: ATTACHMENT_CONTENT_LOADER,
+      useFactory:
+        (transport: ChatTransport) =>
+        async (attachment: ChatAttachment, signal: AbortSignal) => {
+          if (attachment.url === undefined) {
+            throw new Error('Attachment content reference is unavailable.');
+          }
+          return transport.readAttachmentContent(attachment.url, signal);
+        },
+      deps: [ChatTransport],
+    },
     {
       provide: TOOL_CALL_DEBUG_DETAIL_LOADER,
       useFactory: (store: ChatStore) =>

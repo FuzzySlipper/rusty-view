@@ -1,41 +1,58 @@
 <figure
   class="rv-attachment"
+  [attr.data-attachment-id]="attachment().id"
   [attr.data-kind]="attachment().kind"
   [attr.data-status]="attachment().status ?? 'active'"
+  [attr.data-content-state]="attachment().contentState ?? 'available'"
+  [attr.data-external-sequence-id]="
+    attachment().metadata?.['externalSequenceId'] ?? null
+  "
+  [attr.data-external-turn-id]="
+    attachment().metadata?.['externalTurnId'] ?? null
+  "
+  [attr.data-external-item-id]="
+    attachment().metadata?.['externalItemId'] ?? null
+  "
+  [attr.data-media-index]="attachment().metadata?.['mediaIndex'] ?? null"
 >
-  <div class="rv-attachment__preview">
+  <div class="rv-attachment__preview" [style.aspect-ratio]="imageAspectRatio()">
     @if (attachment().status === 'removed') {
     <span class="rv-attachment__state" role="status">Attachment removed</span>
     } @else { @switch (attachment().kind) { @case ('image') { @if
     (imageSource(); as source) {
-    <a
-      class="rv-attachment__image-link"
-      [href]="imageOpenUrl()"
-      target="_blank"
-      rel="noopener noreferrer"
+    <button
+      type="button"
+      class="rv-attachment__image-button"
       [attr.aria-label]="'Open full-size image: ' + attachment().name"
+      (click)="openPreview()"
     >
       <img
         class="rv-attachment__image"
         [class.rv-attachment__image--failed]="imageState() === 'failed'"
         [src]="source"
         [alt]="attachment().name"
+        loading="lazy"
         (load)="markImageAvailable()"
         (error)="markImageFailed()"
       />
-    </a>
-    @if (imageState() === 'loading') {
+    </button>
+    } @if (imageState() === 'deferred' || imageState() === 'loading') {
     <span
       class="rv-attachment__state rv-attachment__state--loading"
       role="status"
       >Loading image…</span
     >
     } @else if (imageState() === 'failed') {
-    <span class="rv-attachment__state rv-attachment__state--error" role="alert"
-      >Image failed to load</span
+    <span class="rv-attachment__state rv-attachment__state--error" role="alert">
+      Image failed to load
+      <button type="button" class="rv-attachment__retry" (click)="retryImage()">
+        Retry
+      </button>
+    </span>
+    } @else if (imageState() === 'unavailable') {
+    <span class="rv-attachment__state" role="status"
+      >{{ unavailableLabel() }}</span
     >
-    } } @else {
-    <span class="rv-attachment__state" role="status">Image unavailable</span>
     } } @case ('audio') { @if (attachment().url) {
     <audio
       class="rv-attachment__audio"
@@ -59,9 +76,8 @@
       [href]="attachment().url"
       target="_blank"
       rel="noopener noreferrer"
+      >Open file</a
     >
-      Open file
-    </a>
     } @else {
     <span class="rv-attachment__state" role="status">File unavailable</span>
     } } } }
@@ -69,11 +85,12 @@
 
   <figcaption class="rv-attachment__meta">
     <span class="rv-attachment__name">{{ attachment().name }}</span>
-    <span class="rv-attachment__detail">{{ attachment().kind }}</span>
     @if (attachment().mimeType) {
     <span class="rv-attachment__detail">{{ attachment().mimeType }}</span>
     } @if (fileSizeLabel()) {
     <span class="rv-attachment__detail">{{ fileSizeLabel() }}</span>
+    } @if (dimensionsLabel()) {
+    <span class="rv-attachment__detail">{{ dimensionsLabel() }}</span>
     }
   </figcaption>
 
@@ -83,3 +100,30 @@
   <span class="rv-attachment__truncated">preview truncated</span>
   } }
 </figure>
+
+@if (previewOpen() && fullImageSource(); as source) {
+<div
+  class="rv-attachment-viewer"
+  role="dialog"
+  aria-modal="true"
+  tabindex="-1"
+  [attr.aria-label]="'Full-size image: ' + attachment().name"
+  (click)="closePreviewFromBackdrop($event)"
+  (keydown.escape)="closePreview()"
+>
+  <button
+    #previewCloseButton
+    type="button"
+    class="rv-attachment-viewer__close"
+    aria-label="Close full-size image"
+    (click)="closePreview()"
+  >
+    Close
+  </button>
+  <img
+    class="rv-attachment-viewer__image"
+    [src]="source"
+    [alt]="attachment().name"
+  />
+</div>
+}

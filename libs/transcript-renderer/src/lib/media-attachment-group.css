@@ -1,0 +1,24 @@
+:host {
+  display: block;
+}
+
+.rv-media-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--rv-space-sm);
+  max-width: 72rem;
+}
+
+.rv-media-group--multiple {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rv-media-group--multiple rv-attachment-block {
+  min-width: 0;
+}
+
+@media (max-width: 48rem) {
+  .rv-media-group--multiple {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

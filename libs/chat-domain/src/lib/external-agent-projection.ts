@@ -2,9 +2,11 @@ import type {
   ExternalThreadProjection,
   ExternalThreadTurnErrorProjection,
   ExternalThreadTurnProjection,
+  ExternalRuntimeMediaReference,
   NormalizedExternalRuntimeEvent,
 } from '@rusty-view/protocol';
 import type {
+  ChatAttachment,
   ChatMessage,
   MessageBlock,
   MessageRole,
@@ -165,9 +167,13 @@ export function projectExternalAgentTranscript(
     const preservesOmittedDynamicTool = group.some(
       (event) => event.kind === 'dynamic_tool_activity',
     );
+    const preservesMediaCheckpoint = group.some(
+      (event) => (event.payload.media?.length ?? 0) > 0,
+    );
     if (
       snapshotCoverage?.terminal &&
       !preservesOmittedDynamicTool &&
+      !preservesMediaCheckpoint &&
       !(
         snapshotCoverage.error === null &&
         group.some((event) => event.payload.error !== undefined)
@@ -183,9 +189,11 @@ export function projectExternalAgentTranscript(
         {
           ...block,
           id:
-            projectedBlocks.length === 1
-              ? `block:${itemIdentity}`
-              : `block:${itemIdentity}:${block.kind}:${index}`,
+            block.metadata?.['externalMedia'] === true
+              ? block.id
+              : projectedBlocks.length === 1
+                ? `block:${itemIdentity}`
+                : `block:${itemIdentity}:${block.kind}:${index}`,
         },
         itemIdentity,
         first.kind,
@@ -455,6 +463,16 @@ function blocksForGroup(
   events: readonly NormalizedExternalRuntimeEvent[],
   messageStatus: ChatMessage['status'],
 ): MessageBlock[] {
+  return [
+    ...blocksForGroupWithoutMedia(events, messageStatus),
+    ...blocksForExternalMedia(events),
+  ];
+}
+
+function blocksForGroupWithoutMedia(
+  events: readonly NormalizedExternalRuntimeEvent[],
+  messageStatus: ChatMessage['status'],
+): MessageBlock[] {
   const first = events[0];
   if (first === undefined) return [];
   const latestErrorEvent = events
@@ -628,6 +646,114 @@ function blocksForGroup(
   return events
     .map((event) => eventBlock(event, messageStatus))
     .filter((block): block is MessageBlock => block !== undefined);
+}
+
+interface ProjectedExternalMedia {
+  readonly firstSequenceId: number;
+  readonly event: NormalizedExternalRuntimeEvent;
+  readonly reference: ExternalRuntimeMediaReference;
+}
+
+function blocksForExternalMedia(
+  events: readonly NormalizedExternalRuntimeEvent[],
+): MessageBlock[] {
+  const mediaByIndex = new Map<number, ProjectedExternalMedia>();
+  for (const event of events) {
+    for (const reference of event.payload.media ?? []) {
+      const existing = mediaByIndex.get(reference.mediaIndex);
+      mediaByIndex.set(reference.mediaIndex, {
+        firstSequenceId: existing?.firstSequenceId ?? event.sequenceId,
+        event,
+        reference,
+      });
+    }
+  }
+  const orderedMedia = [...mediaByIndex.values()].sort(
+    (left, right) =>
+      left.firstSequenceId - right.firstSequenceId ||
+      left.reference.mediaIndex - right.reference.mediaIndex,
+  );
+  if (orderedMedia.length === 0) return [];
+  const first = orderedMedia[0];
+  if (first === undefined) return [];
+  const itemIdentity =
+    first.event.itemId ??
+    `${first.event.eventId}:${first.reference.mediaIndex}`;
+  const blockId = [
+    'block:external-media',
+    first.event.runtimeId,
+    first.event.nativeThreadId ?? 'thread',
+    first.event.nativeTurnId ?? 'turn',
+    itemIdentity,
+  ].join(':');
+  const attachments = orderedMedia.map(projectExternalMediaAttachment);
+  return [
+    {
+      id: blockId,
+      messageId: '',
+      kind: 'attachment',
+      content: attachments.map((attachment) => attachment.name).join('\n'),
+      estimatedHeight: undefined,
+      renderPolicy: 'full',
+      attachments,
+      metadata: {
+        externalMedia: true,
+        externalRuntimeId: first.event.runtimeId,
+        externalThreadId: first.event.nativeThreadId,
+        externalTurnId: first.event.nativeTurnId,
+        externalItemId: first.event.itemId,
+        firstExternalSequenceId: first.firstSequenceId,
+      },
+    },
+  ];
+}
+
+function projectExternalMediaAttachment(
+  media: ProjectedExternalMedia,
+): ChatAttachment {
+  const reference = media.reference;
+  const event = media.event;
+  const stableFallbackId = [
+    'external-media',
+    event.runtimeId,
+    event.nativeThreadId ?? 'thread',
+    event.nativeTurnId ?? 'turn',
+    event.itemId ?? event.eventId,
+    reference.mediaIndex,
+  ].join(':');
+  return {
+    id: reference.attachmentId ?? stableFallbackId,
+    status: 'active',
+    kind: 'image',
+    name: reference.filename ?? `Image ${reference.mediaIndex + 1}`,
+    mimeType: reference.mimeType,
+    sizeBytes: reference.byteSize,
+    url:
+      reference.captureState === 'available' ? reference.contentUrl : undefined,
+    thumbnailUrl: undefined,
+    contentState: reference.captureState,
+    contentLoadPolicy: 'authenticated_lazy',
+    ...(reference.sha256 === undefined
+      ? {}
+      : { contentSha256: reference.sha256 }),
+    ...(reference.width === undefined ? {} : { width: reference.width }),
+    ...(reference.height === undefined ? {} : { height: reference.height }),
+    textPreview: undefined,
+    scopeId: undefined,
+    metadata: {
+      externalRuntimeMedia: true,
+      captureSource: reference.captureSource,
+      captureState: reference.captureState,
+      reasonCode: reference.reasonCode,
+      mediaIndex: reference.mediaIndex,
+      externalSequenceId: media.firstSequenceId,
+      externalEventId: event.eventId,
+      externalRuntimeId: event.runtimeId,
+      externalThreadId: event.nativeThreadId,
+      externalTurnId: event.nativeTurnId,
+      externalItemId: event.itemId,
+    },
+  };
 }
 
 interface ProjectedExternalToolActivity {

@@ -124,6 +124,8 @@ export type NormalizedExternalRuntimeEvent =
   ExternalSchemas['NormalizedExternalRuntimeEvent'];
 export type ExternalRuntimeEventPayload =
   ExternalSchemas['ExternalRuntimeEventPayload'];
+export type ExternalRuntimeMediaReference =
+  ExternalSchemas['ExternalRuntimeMediaReference'];
 export type ExternalRuntimeRawDetail =
   ExternalSchemas['ExternalRuntimeRawDetail'];
 export type ExternalInteractionAttention =

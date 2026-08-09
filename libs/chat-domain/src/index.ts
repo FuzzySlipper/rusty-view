@@ -50,6 +50,8 @@ export type {
   TranscriptTextSpan,
   AttachmentMediaKind,
   AttachmentLifecycleStatus,
+  AttachmentContentState,
+  AttachmentContentLoadPolicy,
   AttachmentTextPreview,
   ChatAttachment,
   ChatAttachmentLink,

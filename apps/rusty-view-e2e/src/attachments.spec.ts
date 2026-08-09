@@ -213,10 +213,22 @@ test('attachment events render stable responsive image blocks and lifecycle stat
   const image = activeBlock.locator('.rv-attachment__image');
   await expect(image).toBeVisible();
   await expect(activeBlock).not.toContainText('Loading image');
-  const openLink = activeBlock.locator('.rv-attachment__image-link');
-  await expect(openLink).toHaveAttribute('href', `${CONTENT_URL}?revision=2`);
-  await expect(openLink).toHaveAttribute('target', '_blank');
-  await expect(openLink).toHaveAttribute('rel', 'noopener noreferrer');
+  const openButton = activeBlock.locator('.rv-attachment__image-button');
+  await expect(openButton).toHaveAttribute(
+    'aria-label',
+    'Open full-size image: att_active.png',
+  );
+  await openButton.click();
+  const focusedViewer = page.getByRole('dialog', {
+    name: 'Full-size image: att_active.png',
+  });
+  await expect(focusedViewer).toBeVisible();
+  await expect(focusedViewer.locator('img')).toHaveAttribute(
+    'src',
+    `${CONTENT_URL}?revision=2`,
+  );
+  await page.keyboard.press('Escape');
+  await expect(focusedViewer).toBeHidden();
 
   await expect(
     messageRows

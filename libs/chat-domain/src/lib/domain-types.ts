@@ -53,6 +53,7 @@ export type KnownMessageBlockKind =
   | 'tool_result'
   | 'debug'
   | 'command'
+  | 'attachment'
   | 'service_notice';
 
 export type MessageBlockKind = KnownMessageBlockKind | (string & {});
@@ -93,6 +94,14 @@ export interface TranscriptTextSpan {
 
 export type AttachmentMediaKind = 'image' | 'audio' | 'video' | 'file';
 export type AttachmentLifecycleStatus = 'active' | 'removed';
+export type AttachmentContentState =
+  | 'available'
+  | 'unavailable'
+  | 'unsupported'
+  | 'empty'
+  | 'oversized'
+  | 'failed';
+export type AttachmentContentLoadPolicy = 'direct' | 'authenticated_lazy';
 
 export interface AttachmentTextPreview {
   readonly text: string;
@@ -109,6 +118,11 @@ export interface ChatAttachment {
   readonly sizeBytes: number | undefined;
   readonly url: string | undefined;
   readonly thumbnailUrl: string | undefined;
+  readonly contentState?: AttachmentContentState;
+  readonly contentLoadPolicy?: AttachmentContentLoadPolicy;
+  readonly contentSha256?: string;
+  readonly width?: number;
+  readonly height?: number;
   readonly textPreview: AttachmentTextPreview | undefined;
   readonly scopeId: string | undefined;
   readonly metadata?: MessageMetadata;
@@ -180,6 +194,7 @@ export interface MessageBlock {
   /** Optional semantic spans for text blocks. Ignored for non-text blocks. */
   readonly textSpans?: readonly TranscriptTextSpan[];
   readonly attachment?: ChatAttachment;
+  readonly attachments?: readonly ChatAttachment[];
   readonly metadata?: MessageMetadata;
 }
 

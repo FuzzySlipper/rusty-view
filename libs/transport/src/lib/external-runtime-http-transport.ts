@@ -182,14 +182,26 @@ export class ExternalRuntimeHttpTransport {
 
   async listEvents(
     runtimeId: string,
-    query?: { readonly after?: number; readonly limit?: number },
+    query?: {
+      readonly after?: number;
+      readonly limit?: number;
+      readonly nativeThreadId?: string;
+    },
   ): Promise<ExternalRuntimeEventPage> {
     return unwrap(
       await this.request<ListExternalRuntimeEventsResponse>(
         'GET',
         `/v1/external-runtimes/${encodeURIComponent(runtimeId)}/events`,
         undefined,
-        query,
+        query === undefined
+          ? undefined
+          : {
+              ...(query.after === undefined ? {} : { after: query.after }),
+              ...(query.limit === undefined ? {} : { limit: query.limit }),
+              ...(query.nativeThreadId === undefined
+                ? {}
+                : { native_thread_id: query.nativeThreadId }),
+            },
       ),
     );
   }

@@ -11,6 +11,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 
 import { ChatHttpTransport } from './chat-http-transport';
+import { ExternalRuntimeHttpTransport } from './external-runtime-http-transport';
 import type { ChatTransportConfig, FetchImpl } from './chat-transport-config';
 import { resolveChatTransportConfig } from './chat-transport-config';
 import { ChatTransportError } from './chat-transport-error';
@@ -137,6 +138,36 @@ function signalHonoringFetch(
 }
 
 describe('ChatHttpTransport', () => {
+  describe('readAttachmentContent', () => {
+    it('fetches opaque relative content through configured auth and returns exact bytes', async () => {
+      const expected = new Uint8Array([137, 80, 78, 71]);
+      const { fetch, lastRequest } = capturingFetch(
+        new Response(expected, {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        }),
+      );
+      const transport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: fetch, bearerToken: 'media-token' }),
+      );
+
+      const blob = await transport.readAttachmentContent(
+        '/v1/chat/sessions/session-1/attachments/attachment%3Aproof/content',
+      );
+
+      expect(lastRequest().url).toBe(
+        'http://localhost:9347/v1/chat/sessions/session-1/attachments/attachment%3Aproof/content',
+      );
+      expect(lastRequest().headers.get('Authorization')).toBe(
+        'Bearer media-token',
+      );
+      expect(blob.type).toBe('image/png');
+      expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([
+        137, 80, 78, 71,
+      ]);
+    });
+  });
+
   describe('listSessions', () => {
     it('sends GET to /v1/chat/sessions', async () => {
       const page: ChatSessionPage = {
@@ -879,5 +910,27 @@ describe('ChatHttpTransport', () => {
 
       expect(events).toHaveLength(ChatHttpTransport.MAX_REPLAY_PAGES);
     });
+  });
+});
+
+describe('ExternalRuntimeHttpTransport', () => {
+  it('maps a selected thread event query to the snake-case HTTP contract', async () => {
+    const { fetch, lastRequest } = capturingFetch(jsonOk({ events: [] }));
+    const transport = new ExternalRuntimeHttpTransport(
+      makeConfig({ fetchImpl: fetch }),
+    );
+
+    await transport.listEvents('runtime-1', {
+      after: 40,
+      limit: 25,
+      nativeThreadId: 'thread-1',
+    });
+
+    const url = new URL(lastRequest().url);
+    expect(url.pathname).toBe('/v1/external-runtimes/runtime-1/events');
+    expect(url.searchParams.get('after')).toBe('40');
+    expect(url.searchParams.get('limit')).toBe('25');
+    expect(url.searchParams.get('native_thread_id')).toBe('thread-1');
+    expect(url.searchParams.has('nativeThreadId')).toBe(false);
   });
 });
