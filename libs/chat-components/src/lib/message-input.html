@@ -6,11 +6,12 @@
   (dragleave)="onDragLeave($event)"
   (drop)="onDrop($event)"
 >
-  @if (attachmentsEnabled()) {
+  @if (attachmentsEnabled()) { @if (attachmentControlsVisible()) {
   <div class="rv-input__attachments">
     <label class="rv-input__attach">
       <span>Attach</span>
       <input
+        #attachmentInput
         type="file"
         data-testid="message-attachment-input"
         [attr.accept]="accept() ?? null"
@@ -32,7 +33,17 @@
     </select>
     }
   </div>
-  }
+  } @else {
+  <input
+    #attachmentInput
+    class="rv-input__attachment-input"
+    type="file"
+    data-testid="message-attachment-input"
+    [attr.accept]="accept() ?? null"
+    [multiple]="activeScope()?.multiple !== false"
+    (change)="onFileInput($event)"
+  />
+  } }
 
   <textarea
     class="rv-input__field"

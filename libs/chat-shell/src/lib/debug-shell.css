@@ -179,6 +179,10 @@
   justify-content: flex-end;
 }
 
+.rv-debug__composer-attachment {
+  margin-right: auto;
+}
+
 .rv-debug__composer-controls select {
   margin-left: auto;
   max-width: 190px;

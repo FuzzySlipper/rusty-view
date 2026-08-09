@@ -45,7 +45,8 @@
   color: var(--rv-color-accent);
 }
 
-.rv-input__attach input {
+.rv-input__attach input,
+.rv-input__attachment-input {
   display: none;
 }
 

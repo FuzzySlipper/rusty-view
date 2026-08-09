@@ -625,6 +625,10 @@ export class DebugShellComponent {
     }
   }
 
+  protected openExternalAttachmentPicker(): void {
+    this.messageInput()?.openAttachmentPicker();
+  }
+
   protected onAttachmentRetry(
     selection: MessageInputAttachmentSelection,
   ): void {

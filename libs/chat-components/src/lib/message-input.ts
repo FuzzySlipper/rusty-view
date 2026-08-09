@@ -1,11 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  type ElementRef,
   type OnDestroy,
   computed,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   attachmentKindForMimeType,
@@ -86,6 +88,7 @@ export class MessageInputComponent implements OnDestroy {
   /** Submitted prompts and commands for Up/Down navigation (newest-first). */
   readonly submissionHistory = input<readonly string[] | undefined>(undefined);
   readonly attachmentsEnabled = input<boolean>(false);
+  readonly attachmentControlsVisible = input<boolean>(true);
   readonly attachmentScopes = input<readonly ChatAttachmentScope[]>([]);
   readonly attachmentStates = input<readonly MessageInputAttachmentState[]>([]);
   readonly send = output<string>();
@@ -104,6 +107,8 @@ export class MessageInputComponent implements OnDestroy {
   protected readonly attachments = signal<
     readonly MessageInputAttachmentSelection[]
   >([]);
+  private readonly attachmentInput =
+    viewChild<ElementRef<HTMLInputElement>>('attachmentInput');
   /** null = not navigating history; number = index into effectiveHistory(). */
   protected readonly historyIndex = signal<number | null>(null);
   /** Draft preserved when the user enters history navigation. */
@@ -152,6 +157,11 @@ export class MessageInputComponent implements OnDestroy {
   });
 
   protected readonly accept = computed(() => this.activeScope()?.accept);
+
+  openAttachmentPicker(): void {
+    if (!this.attachmentsEnabled() || this.disabled()) return;
+    this.attachmentInput()?.nativeElement.click();
+  }
 
   private readonly effectiveHistory = computed(
     () => this.submissionHistory() ?? this.commandHistory(),

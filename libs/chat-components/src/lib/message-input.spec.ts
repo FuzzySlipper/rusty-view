@@ -20,6 +20,24 @@ describe('MessageInputComponent', () => {
     TestBed.configureTestingModule({});
   });
 
+  it('keeps a hidden picker available when attachment controls are hosted externally', () => {
+    const fixture = TestBed.createComponent(MessageInputComponent);
+    fixture.componentRef.setInput('attachmentsEnabled', true);
+    fixture.componentRef.setInput('attachmentControlsVisible', false);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(
+      '[data-testid="message-attachment-input"]',
+    ) as HTMLInputElement;
+    const click = vi.spyOn(input, 'click');
+
+    expect(
+      fixture.nativeElement.querySelector('.rv-input__attachments'),
+    ).toBeNull();
+    fixture.componentInstance.openAttachmentPicker();
+    expect(click).toHaveBeenCalledOnce();
+  });
+
   it('erases the previous word only for the configured composer hotkey', () => {
     const fixture = TestBed.createComponent(MessageInputComponent);
     fixture.detectChanges();

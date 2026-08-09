@@ -470,6 +470,22 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   await row.click();
 
   const composer = page.getByTestId('message-input-field');
+  const externalControls = page.getByTestId('external-composer-controls');
+  const attachmentPicker = page.getByTestId('external-attachment-picker');
+  const messageMode = externalControls.getByLabel('External message mode');
+  await expect(attachmentPicker).toBeVisible();
+  await expect(page.locator('.rv-input__attachments')).toHaveCount(0);
+  const attachmentPickerBox = await attachmentPicker.boundingBox();
+  const messageModeBox = await messageMode.boundingBox();
+  expect(attachmentPickerBox).not.toBeNull();
+  expect(messageModeBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (attachmentPickerBox?.y ?? 0) +
+        (attachmentPickerBox?.height ?? 0) / 2 -
+        ((messageModeBox?.y ?? 0) + (messageModeBox?.height ?? 0) / 2),
+    ),
+  ).toBeLessThan(2);
   await expect(
     page
       .locator('.rv-message--user')

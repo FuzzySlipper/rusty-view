@@ -272,6 +272,15 @@
         class="rv-debug__composer-controls"
         data-testid="external-composer-controls"
       >
+        <button
+          type="button"
+          class="rv-debug__composer-attachment"
+          data-testid="external-attachment-picker"
+          [disabled]="inputDisabled() || !attachmentsEnabled()"
+          (click)="openExternalAttachmentPicker()"
+        >
+          Attach chat image
+        </button>
         <select
           aria-label="External message mode"
           [value]="external.composerMode()"
@@ -298,6 +307,7 @@
         [submissionHistory]="inputSubmissionHistory()"
         [erasePreviousWordHotkey]="hotkeys.binding('erasePreviousWord')"
         [attachmentsEnabled]="attachmentsEnabled()"
+        [attachmentControlsVisible]="!externalSelected()"
         [attachmentScopes]="attachmentScopes"
         [attachmentStates]="composerAttachmentStates()"
         (send)="onSendMessage($event)"
