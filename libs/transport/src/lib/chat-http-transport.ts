@@ -532,7 +532,25 @@ export class ChatHttpTransport {
     contentUrl: string,
     signal?: AbortSignal,
   ): Promise<Blob> {
-    const url = new URL(contentUrl, this.config.baseUrl).toString();
+    const configuredOrigin = new URL(this.config.baseUrl).origin;
+    let resolvedUrl: URL;
+    try {
+      resolvedUrl = new URL(contentUrl, this.config.baseUrl);
+    } catch (error) {
+      throw new ChatTransportError({
+        code: 'config_error',
+        message: 'Attachment content URL is invalid',
+        cause: error,
+      });
+    }
+    const url = resolvedUrl.toString();
+    if (resolvedUrl.origin !== configuredOrigin) {
+      throw new ChatTransportError({
+        code: 'config_error',
+        message: 'Attachment content URL must use the configured Crew origin',
+        endpoint: url,
+      });
+    }
     const timeoutSignal = AbortSignal.timeout(this.config.timeoutMs);
     const requestSignal =
       signal === undefined

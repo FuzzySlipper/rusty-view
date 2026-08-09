@@ -166,6 +166,46 @@ describe('ChatHttpTransport', () => {
         137, 80, 78, 71,
       ]);
     });
+
+    it('loads same-origin absolute content with configured auth', async () => {
+      const { fetch, lastRequest } = capturingFetch(
+        new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+      );
+      const transport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: fetch, bearerToken: 'media-token' }),
+      );
+
+      await transport.readAttachmentContent(
+        'http://localhost:9347/v1/chat/sessions/session-1/attachments/proof/content',
+      );
+
+      expect(lastRequest().headers.get('Authorization')).toBe(
+        'Bearer media-token',
+      );
+    });
+
+    it.each([
+      'https://attacker.invalid/capture',
+      'http://attacker.invalid/capture',
+    ])('rejects off-origin content before fetch: %s', async (contentUrl) => {
+      let fetchCalls = 0;
+      const fetch = (async () => {
+        fetchCalls += 1;
+        return new Response(new Uint8Array([1]), { status: 200 });
+      }) as FetchImpl;
+      const transport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: fetch, bearerToken: 'media-token' }),
+      );
+
+      await expect(
+        transport.readAttachmentContent(contentUrl),
+      ).rejects.toMatchObject({
+        code: 'config_error',
+        message: 'Attachment content URL must use the configured Crew origin',
+        endpoint: contentUrl,
+      });
+      expect(fetchCalls).toBe(0);
+    });
   });
 
   describe('listSessions', () => {
