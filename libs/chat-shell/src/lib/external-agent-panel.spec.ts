@@ -41,6 +41,7 @@ async function createPanel(
   createCrewSession: (
     profileId: string,
     revision: number,
+    workspaceCwd: string,
     idempotencyKey: string,
   ) => Promise<unknown> = async () => undefined,
 ) {
@@ -222,15 +223,16 @@ describe('ExternalAgentPanelComponent creation retries', () => {
     expect(
       fixture.nativeElement.querySelector('[aria-label="Codex runtime"]'),
     ).toBeNull();
-    expect(fixture.nativeElement.textContent).not.toContain(
-      'Working directory',
-    );
+    expect(fixture.nativeElement.textContent).toContain('Working directory');
+
+    panel.updateDraft(panel.cwd, input('/home/dev/project-a'));
 
     await panel.create({ preventDefault: vi.fn() } as unknown as Event);
 
     expect(chat.createCrewSession).toHaveBeenCalledWith(
       'tester',
       7,
+      '/home/dev/project-a',
       expect.any(String),
     );
     expect(created).toHaveBeenCalledWith('crew-session-1');

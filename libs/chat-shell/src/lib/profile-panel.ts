@@ -256,6 +256,14 @@ export class ProfilePanelComponent {
     return null;
   }
 
+  protected sessionWorkdirLabel(session: ChatSessionSummary): string | null {
+    const workdir = this.sessionWorkdir(session);
+    if (workdir === null || workdir === '/') return workdir;
+    const parts = workdir.split('/').filter((part) => part !== '');
+    if (parts.length <= 2) return workdir;
+    return `…/${parts.slice(-2).join('/')}`;
+  }
+
   protected externalSession(
     session: ChatSessionSummary,
   ): ExternalAgentSession | undefined {

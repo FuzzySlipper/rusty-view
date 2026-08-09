@@ -6,7 +6,8 @@ const backend = process.env['RV_LIVE_BACKEND_URL'] ?? 'http://127.0.0.1:9348';
 const provider = process.env['RV_LIVE_PROVIDER_ALIAS'] ?? 'tester-chat';
 const providerTurn =
   process.env['RV_CREW_SESSION_PROVIDER_TURN']?.trim() !== '0';
-const marker = `CREW_SESSION_CREATE_6327_${Date.now()}`;
+const markerA = `CREW_SESSION_WORKSPACE_A_6695_${Date.now()}`;
+const markerB = `CREW_SESSION_WORKSPACE_B_6695_${Date.now()}`;
 
 test.describe('Crew brain session creation and archive @live-agent', () => {
   test.skip(
@@ -19,36 +20,27 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
     request,
   }, testInfo) => {
     test.setTimeout(10 * 60_000);
-    const profile = `rv-crew-create-6327-${Date.now()}`;
-    const fallbackProfile = `${profile}-fallback`;
+    const profile = `rv-crew-workspace-6695-${Date.now()}`;
     let profileCreated = false;
-    let fallbackProfileCreated = false;
-    let creationBody: unknown;
-    let creationKey: string | null = null;
+    const creationBodies: unknown[] = [];
+    const creationKeys: string[] = [];
     page.on('request', (request) => {
       if (
         request.method() === 'POST' &&
         new URL(request.url()).pathname === '/v1/chat/sessions'
       ) {
-        creationBody = request.postDataJSON();
-        creationKey = request.headers()['idempotency-key'] ?? null;
+        creationBodies.push(request.postDataJSON());
+        const key = request.headers()['idempotency-key'];
+        if (key !== undefined) creationKeys.push(key);
       }
     });
 
     try {
       await page.goto(`${backend}/?api=${encodeURIComponent(backend)}`);
       await page.locator('[data-menu-id="profiles"]').click();
-      await createProfile(page, profile, 'Crew create 6327');
+      await createProfile(page, profile, 'Crew workspace 6695');
       profileCreated = true;
-      await createProfile(page, fallbackProfile, 'Crew fallback 6327');
-      fallbackProfileCreated = true;
-      await activeSessionForProfile(request, fallbackProfile);
-
-      // Profile creation supplies a real provider-backed brain and template
-      // session. Archive that template so the fresh-session API can prove its
-      // intended no-active-session precondition without touching shared data.
-      const templateSessionId = await activeSessionForProfile(request, profile);
-      await archiveSession(request, templateSessionId, 'template');
+      await activeSessionForProfile(request, profile);
       await page
         .getByTestId('top-menu-panel-profiles')
         .getByRole('button', { name: 'Close profiles' })
@@ -64,7 +56,9 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
         { timeout: 30_000 },
       );
       await page.getByLabel('Agent session profile').selectOption(profile);
-      await expect(page.getByPlaceholder('/home/dev/project')).toHaveCount(0);
+      await page
+        .getByPlaceholder('/home/dev/project')
+        .fill('/home/dev/rusty-view');
       await expect(page.getByPlaceholder('Optional session name')).toHaveCount(
         0,
       );
@@ -90,24 +84,101 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
         (element) => (element as HTMLElement).dataset['sessionId'] ?? '',
       );
       expect(sessionId).toBeTruthy();
-      expect(creationBody).toEqual({
+      expect(creationBodies[0]).toEqual({
         profile_id: profile,
         expected_profile_revision: expect.any(Number),
+        workspace_cwd: '/home/dev/rusty-view',
       });
-      expect(creationKey).toBeTruthy();
+      expect(creationKeys[0]).toBeTruthy();
 
       if (providerTurn) {
         await page
           .getByTestId('message-input-field')
-          .fill(`Reply with exactly ${marker} and nothing else.`);
+          .fill(`Reply with exactly ${markerA} and nothing else.`);
         await page.getByTestId('send-message').click();
         await expect(
           page
             .locator('[data-message-role="assistant"]')
-            .filter({ hasText: marker })
+            .filter({ hasText: markerA })
             .last(),
         ).toBeVisible({ timeout: 7 * 60_000 });
       }
+
+      await page.getByTestId('profile-new-session').click();
+      await page.getByLabel('Agent session profile').selectOption(profile);
+      await page
+        .getByPlaceholder('/home/dev/project')
+        .fill('/home/dev/rusty-crew');
+      await page.getByTestId('external-agent-create-submit').click();
+      const second = page.locator(
+        '[data-testid="profile-session-row"].rv-profile-session--selected',
+      );
+      await expect(second).toHaveAttribute('data-session-id', /\S+/, {
+        timeout: 30_000,
+      });
+      const secondSessionId = await second.evaluate(
+        (element) => (element as HTMLElement).dataset['sessionId'] ?? '',
+      );
+      expect(secondSessionId).not.toBe(sessionId);
+      expect(creationBodies[1]).toEqual({
+        profile_id: profile,
+        expected_profile_revision: expect.any(Number),
+        workspace_cwd: '/home/dev/rusty-crew',
+      });
+      expect(creationKeys[1]).toBeTruthy();
+      expect(creationKeys[1]).not.toBe(creationKeys[0]);
+
+      const firstRow = page.locator(
+        `[data-testid="profile-session-row"][data-session-id="${sessionId}"]`,
+      );
+      const secondRow = page.locator(
+        `[data-testid="profile-session-row"][data-session-id="${secondSessionId}"]`,
+      );
+      await expect(firstRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-view',
+      );
+      await expect(secondRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-crew',
+      );
+
+      if (providerTurn) {
+        await page
+          .getByTestId('message-input-field')
+          .fill(`Reply with exactly ${markerB} and nothing else.`);
+        await page.getByTestId('send-message').click();
+        await expect(
+          page
+            .locator('[data-message-role="assistant"]')
+            .filter({ hasText: markerB })
+            .last(),
+        ).toBeVisible({ timeout: 7 * 60_000 });
+        await firstRow.click();
+        await expect(
+          page
+            .locator('[data-message-role="assistant"]')
+            .filter({ hasText: markerA })
+            .last(),
+        ).toBeVisible({ timeout: 30_000 });
+        await expect(
+          page
+            .locator('[data-message-role="assistant"]')
+            .filter({ hasText: markerB }),
+        ).toHaveCount(0);
+      }
+
+      await page.reload();
+      await expect(firstRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-view',
+        { timeout: 30_000 },
+      );
+      await expect(secondRow).toHaveAttribute(
+        'data-workdir',
+        '/home/dev/rusty-crew',
+      );
+      await firstRow.click();
       await page.screenshot({
         path: testInfo.outputPath(
           providerTurn
@@ -165,7 +236,7 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
         await expect(
           page
             .locator('[data-message-role="assistant"]')
-            .filter({ hasText: marker })
+            .filter({ hasText: markerA })
             .last(),
         ).toBeVisible();
       }
@@ -174,10 +245,6 @@ test.describe('Crew brain session creation and archive @live-agent', () => {
         fullPage: true,
       });
     } finally {
-      if (fallbackProfileCreated) {
-        await archiveLiveSessionsForProfile(request, fallbackProfile);
-        await deleteProfile(request, fallbackProfile);
-      }
       if (profileCreated) {
         await archiveLiveSessionsForProfile(request, profile);
         await deleteProfile(request, profile);
@@ -246,7 +313,7 @@ async function archiveSession(
   const response = await request.post(
     `${backend}/v1/chat/sessions/${encodeURIComponent(sessionId)}/commands`,
     {
-      headers: { 'Idempotency-Key': `rv-6327-${suffix}-${Date.now()}` },
+      headers: { 'Idempotency-Key': `rv-6695-${suffix}-${Date.now()}` },
       data: { command: '/archive' },
     },
   );
@@ -279,7 +346,7 @@ async function deleteProfile(
     `${backend}/v1/admin/control/profiles/${encodeURIComponent(profileId)}/delete`,
     {
       data: {
-        reason: 'Rusty View task 6327 live certification cleanup',
+        reason: 'Rusty View task 6695 live certification cleanup',
         confirmProfileId: profileId,
       },
     },

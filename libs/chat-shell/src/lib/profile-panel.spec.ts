@@ -323,8 +323,13 @@ describe('ProfilePanelComponent', () => {
       'codex_app_server',
     ]);
     expect(rows.map((row) => row.textContent).join(' ')).toContain(
-      '/home/dev/direct-project',
+      '…/dev/direct-project',
     );
+    expect(
+      rows[0]
+        ?.querySelector('.rv-profile-session__workdir')
+        ?.getAttribute('title'),
+    ).toBe('/home/dev/direct-project');
     expect(rows.map((row) => row.textContent).join(' ')).toContain(
       'managed-session',
     );

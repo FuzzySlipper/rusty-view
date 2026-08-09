@@ -651,6 +651,7 @@ export interface components {
         CreateCrewChatSessionRequest: {
             profile_id: string;
             expected_profile_revision: number;
+            workspace_cwd: string;
         };
         CrewAgentSessionCreationRecord: {
             requestFingerprint: string;

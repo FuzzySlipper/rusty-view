@@ -331,6 +331,7 @@ export class ExternalAgentPanelComponent {
     event.preventDefault();
     if (!this.canSubmit()) return;
     this.attempted.set(true);
+    if (this.cwdValidationError() !== undefined) return;
     if (this.creatorMode() === 'crew') {
       const profile = this.selectedCreationProfile();
       if (profile?.revision === undefined) return;
@@ -338,10 +339,12 @@ export class ExternalAgentPanelComponent {
         mode: 'crew',
         profileId: profile.profileId,
         profileRevision: profile.revision,
+        workspaceCwd: this.cwd().trim(),
       });
       const result = await this.chat.createCrewSession(
         profile.profileId,
         profile.revision,
+        this.cwd().trim(),
         this.idempotencyKeyFor(intentKey),
       );
       if (result === undefined) {
@@ -355,7 +358,6 @@ export class ExternalAgentPanelComponent {
       this.clearAttemptFeedback();
       return;
     }
-    if (this.cwdValidationError() !== undefined) return;
     const intent = this.creationIntent();
     const intentKey = JSON.stringify(intent);
     const idempotencyKey = this.idempotencyKeyFor(intentKey);

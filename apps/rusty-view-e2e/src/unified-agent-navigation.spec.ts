@@ -566,7 +566,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     'aria-pressed',
     'true',
   );
-  await expect(page.getByPlaceholder('/home/dev/project')).toHaveCount(0);
+  await page.getByPlaceholder('/home/dev/project').fill('/home/dev/project-a');
   await expect(page.getByPlaceholder('Optional session name')).toHaveCount(0);
   await page.getByTestId('external-agent-create-submit').click();
   await expect
@@ -574,6 +574,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
     .toEqual({
       profile_id: 'software-engineer',
       expected_profile_revision: 7,
+      workspace_cwd: '/home/dev/project-a',
     });
   expect(crewCreationKey).toBeTruthy();
   await expect(

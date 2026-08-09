@@ -176,7 +176,7 @@ describe('ChatHttpTransport', () => {
   });
 
   describe('createCrewSession', () => {
-    it('posts only profile identity and revision with an idempotency key', async () => {
+    it('posts profile identity, revision, and session workspace with an idempotency key', async () => {
       const result = {
         creation: {
           requestFingerprint: 'sha256:test',
@@ -191,7 +191,11 @@ describe('ChatHttpTransport', () => {
 
       await expect(
         transport.createCrewSession(
-          { profile_id: 'software-engineer', expected_profile_revision: 7 },
+          {
+            profile_id: 'software-engineer',
+            expected_profile_revision: 7,
+            workspace_cwd: '/home/dev/project-a',
+          },
           'crew-create-key',
         ),
       ).resolves.toEqual(result);
@@ -203,6 +207,7 @@ describe('ChatHttpTransport', () => {
       expect(JSON.parse(request.body ?? '')).toEqual({
         profile_id: 'software-engineer',
         expected_profile_revision: 7,
+        workspace_cwd: '/home/dev/project-a',
       });
     });
   });

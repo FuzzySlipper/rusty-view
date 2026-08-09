@@ -542,6 +542,7 @@ export class ChatStore implements OnDestroy {
   async createCrewSession(
     profileId: string,
     expectedProfileRevision: number,
+    workspaceCwd: string,
     idempotencyKey: string,
   ): Promise<CreateCrewChatSessionResult | undefined> {
     if (this._crewSessionCreating()) return undefined;
@@ -553,6 +554,7 @@ export class ChatStore implements OnDestroy {
         {
           profile_id: profileId,
           expected_profile_revision: expectedProfileRevision,
+          workspace_cwd: workspaceCwd,
         },
         idempotencyKey,
       );

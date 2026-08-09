@@ -101,7 +101,9 @@
                 >
               </span>
               @if (sessionWorkdir(session); as workdir) {
-              <span class="rv-profile-session__workdir">{{ workdir }}</span>
+              <span class="rv-profile-session__workdir" [title]="workdir"
+                >{{ sessionWorkdirLabel(session) }}</span
+              >
               }
               <span class="rv-profile-session__id"
                 >{{ session.session_id }}</span

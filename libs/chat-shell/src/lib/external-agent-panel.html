@@ -91,11 +91,28 @@
       </select>
     </label>
 
-    @if (creatorMode() === 'crew') {
+    <label>
+      Working directory
+      <input
+        type="text"
+        required
+        placeholder="/home/dev/project"
+        autocomplete="off"
+        aria-describedby="external-agent-cwd-error"
+        [attr.aria-invalid]="attempted() && cwdValidationError() ? 'true' : null"
+        [value]="cwd()"
+        (input)="updateDraft(cwd, $event)"
+      />
+    </label>
+    @if (attempted() && cwdValidationError()) {
+    <div id="external-agent-cwd-error" class="rv-agents__error" role="alert">
+      {{ cwdValidationError() }}
+    </div>
+    } @if (creatorMode() === 'crew') {
     <div class="rv-agents__create-summary">
-      Starts a fresh Crew brain session from the active profile. View sends only
-      the profile identity and current revision; profile configuration remains
-      authoritative.
+      Starts a fresh Crew brain session in this working directory. The working
+      directory belongs to the new session; profile configuration remains
+      reusable and authoritative for brain and tool settings.
     </div>
     @if (selectedCreationProfile()?.revision === undefined) {
     <div class="rv-agents__error" role="alert">
@@ -123,25 +140,6 @@
         }
       </select>
     </label>
-
-    <label>
-      Working directory
-      <input
-        type="text"
-        required
-        placeholder="/home/dev/project"
-        autocomplete="off"
-        aria-describedby="external-agent-cwd-error"
-        [attr.aria-invalid]="attempted() && cwdValidationError() ? 'true' : null"
-        [value]="cwd()"
-        (input)="updateDraft(cwd, $event)"
-      />
-    </label>
-    @if (attempted() && cwdValidationError()) {
-    <div id="external-agent-cwd-error" class="rv-agents__error" role="alert">
-      {{ cwdValidationError() }}
-    </div>
-    }
 
     <label>
       Label

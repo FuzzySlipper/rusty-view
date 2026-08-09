@@ -1403,13 +1403,19 @@ describe('ChatStore', () => {
     const store = setupStore(transport, new InMemoryChatStorage());
 
     await expect(
-      store.createCrewSession('software-engineer', 7, 'create-key'),
+      store.createCrewSession(
+        'software-engineer',
+        7,
+        '/home/dev/project-a',
+        'create-key',
+      ),
     ).resolves.toMatchObject({ creation: { outcome: 'created' } });
 
     expect(transport.createCrewSession).toHaveBeenCalledWith(
       {
         profile_id: 'software-engineer',
         expected_profile_revision: 7,
+        workspace_cwd: '/home/dev/project-a',
       },
       'create-key',
     );
@@ -1435,7 +1441,12 @@ describe('ChatStore', () => {
     const store = setupStore(transport, new InMemoryChatStorage());
 
     await expect(
-      store.createCrewSession('software-engineer', 7, 'create-key'),
+      store.createCrewSession(
+        'software-engineer',
+        7,
+        '/home/dev/project-a',
+        'create-key',
+      ),
     ).resolves.toBeUndefined();
 
     expect(transport.listSessions).toHaveBeenCalled();
