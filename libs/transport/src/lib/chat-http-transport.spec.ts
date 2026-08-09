@@ -65,6 +65,7 @@ interface CapturedRequest {
   method: string;
   headers: Headers;
   body: string | undefined;
+  rawBody: BodyInit | null | undefined;
 }
 
 function capturingFetch(response: Response): {
@@ -81,6 +82,7 @@ function capturingFetch(response: Response): {
       method: init?.method ?? 'GET',
       headers: new Headers(init?.headers),
       body: typeof init?.body === 'string' ? init.body : undefined,
+      rawBody: init?.body,
     };
     return response;
   };
@@ -444,6 +446,81 @@ describe('ChatHttpTransport', () => {
       });
 
       expect(lastRequest().headers.get('Idempotency-Key')).toBeNull();
+    });
+  });
+
+  describe('composer attachment lifecycle', () => {
+    it('uploads raw image bytes with filename, MIME type, auth, and idempotency', async () => {
+      const upload = {
+        status: 'created' as const,
+        attachment: {
+          attachment_id: 'attachment-1',
+          session_id: 'sess_1',
+          status: 'active' as const,
+          filename: 'clipboard image.png',
+          mime_type: 'image/png',
+          byte_size: 6,
+          storage_url: 'artifact://image',
+          download_url: '/content',
+          extracted_text_truncated: false,
+          metadata_json: {},
+          created_at: '2026-08-09T00:00:00Z',
+          updated_at: '2026-08-09T00:00:00Z',
+          links: [],
+        },
+      };
+      const { fetch, lastRequest } = capturingFetch(jsonOk(upload));
+      const transport = new ChatHttpTransport(
+        makeConfig({ fetchImpl: fetch, bearerToken: 'secret' }),
+      );
+      const file = new File(['pixels'], 'clipboard image.png', {
+        type: 'image/png',
+      });
+
+      const result = await transport.uploadAttachment(
+        'sess_1',
+        file,
+        file.name,
+        'upload-1',
+      );
+
+      expect(result.attachment.attachment_id).toBe('attachment-1');
+      const request = lastRequest();
+      expect(request.method).toBe('POST');
+      expect(request.url).toContain('/attachments/upload');
+      expect(request.url).toContain('filename=clipboard+image.png');
+      expect(request.headers.get('Content-Type')).toBe('image/png');
+      expect(request.headers.get('Idempotency-Key')).toBe('upload-1');
+      expect(request.headers.get('Authorization')).toBe('Bearer secret');
+      expect(request.rawBody).toBe(file);
+      expect(request.body).toBeUndefined();
+    });
+
+    it('removes a discarded uploaded attachment', async () => {
+      const removed = {
+        status: 'removed' as const,
+        attachment: {
+          attachment_id: 'attachment:1',
+          session_id: 'sess_1',
+          status: 'removed' as const,
+          filename: 'clip.png',
+          byte_size: 6,
+          storage_url: 'artifact://image',
+          extracted_text_truncated: false,
+          metadata_json: {},
+          created_at: '2026-08-09T00:00:00Z',
+          updated_at: '2026-08-09T00:00:00Z',
+          links: [],
+        },
+        latest_cursor: 'sess_1:2',
+      };
+      const { fetch, lastRequest } = capturingFetch(jsonOk(removed));
+      const transport = new ChatHttpTransport(makeConfig({ fetchImpl: fetch }));
+
+      await transport.removeAttachment('sess_1', 'attachment:1');
+
+      expect(lastRequest().method).toBe('DELETE');
+      expect(lastRequest().url).toContain('/attachments/attachment%3A1');
     });
   });
 

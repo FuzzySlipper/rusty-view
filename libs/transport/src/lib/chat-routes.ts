@@ -46,6 +46,12 @@ export const SESSION_PROVIDER_REQUEST_DEBUG_DETAIL_PATH =
 export const SESSION_MESSAGES_PATH =
   '/v1/chat/sessions/{session_id}/messages' as const satisfies ChatPath;
 
+export const SESSION_ATTACHMENT_UPLOAD_PATH =
+  '/v1/chat/sessions/{session_id}/attachments/upload' as const satisfies ChatPath;
+
+export const SESSION_ATTACHMENT_PATH =
+  '/v1/chat/sessions/{session_id}/attachments/{attachment_id}' as const satisfies ChatPath;
+
 export const SESSION_SLOTS_PATH =
   '/v1/chat/sessions/{session_id}/slots' as const satisfies ChatPath;
 

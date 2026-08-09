@@ -982,6 +982,41 @@ describe('ChatStore', () => {
     );
   });
 
+  it('sends one attachment-linked user message and reports acceptance', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    const accepted = await store.sendMessageWithAttachments('', [
+      'attachment-1',
+      'attachment-2',
+    ]);
+
+    expect(accepted).toBe(true);
+    expect(transport.sendMessage).toHaveBeenCalledOnce();
+    expect(transport.sendMessage).toHaveBeenCalledWith('sess_test', {
+      actor: expect.any(Object),
+      body: '',
+      attachment_ids: ['attachment-1', 'attachment-2'],
+    });
+  });
+
+  it('keeps attachment-linked sends recoverable when transport fails', async () => {
+    const transport = createMockTransport({ sendError: new Error('offline') });
+    const store = setupStore(transport, new InMemoryChatStorage());
+
+    await store.selectSession('sess_test');
+    const accepted = await store.sendMessageWithAttachments('retry me', [
+      'attachment-1',
+    ]);
+
+    expect(accepted).toBe(false);
+    expect(store.pendingSends()[0]).toMatchObject({
+      text: 'retry me',
+      status: 'error',
+    });
+  });
+
   it('sendMessage shows an immediate assistant typing placeholder while the send is in flight', async () => {
     const transport = createMockTransport({});
     let resolveSend!: (value: SendChatMessageResult) => void;

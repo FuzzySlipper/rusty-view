@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  type OnDestroy,
   computed,
   input,
   output,
@@ -19,8 +20,27 @@ export type MessageInputAttachmentSource = 'picker' | 'paste' | 'drop';
 export interface MessageInputAttachmentSelection {
   readonly file: File;
   readonly attachment: ChatAttachment;
+  readonly previewUrl?: string;
   readonly scope: ChatAttachmentScope | undefined;
   readonly source: MessageInputAttachmentSource;
+}
+
+export type MessageInputAttachmentStatus =
+  | 'uploading'
+  | 'uploaded'
+  | 'sending'
+  | 'removing'
+  | 'error';
+
+export interface MessageInputAttachmentState {
+  readonly localAttachmentId: string;
+  readonly status: MessageInputAttachmentStatus;
+  readonly error?: string;
+}
+
+export interface MessageInputAttachmentSubmission {
+  readonly text: string;
+  readonly attachments: readonly MessageInputAttachmentSelection[];
 }
 
 export interface MessageInputCommandArgumentValue {
@@ -56,7 +76,7 @@ const TEXT_PREVIEW_LIMIT = 2_000;
   styleUrl: './message-input.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MessageInputComponent {
+export class MessageInputComponent implements OnDestroy {
   readonly disabled = input<boolean>(false);
   readonly erasePreviousWordHotkey = input<string>('Ctrl+W');
   readonly placeholder = input<string>('Type a message…');
@@ -67,11 +87,14 @@ export class MessageInputComponent {
   readonly submissionHistory = input<readonly string[] | undefined>(undefined);
   readonly attachmentsEnabled = input<boolean>(false);
   readonly attachmentScopes = input<readonly ChatAttachmentScope[]>([]);
+  readonly attachmentStates = input<readonly MessageInputAttachmentState[]>([]);
   readonly send = output<string>();
+  readonly sendWithAttachments = output<MessageInputAttachmentSubmission>();
   readonly hintSelected = output<string>();
   readonly attachmentsSelected =
     output<readonly MessageInputAttachmentSelection[]>();
   readonly attachmentRemoved = output<MessageInputAttachmentSelection>();
+  readonly attachmentRetry = output<MessageInputAttachmentSelection>();
 
   protected readonly text = signal('');
   protected readonly hintOpen = signal(false);
@@ -284,9 +307,18 @@ export class MessageInputComponent {
 
   protected async onPaste(event: ClipboardEvent): Promise<void> {
     if (!this.attachmentsEnabled()) return;
-    const files = event.clipboardData?.files;
-    if (files === undefined || files.length === 0) return;
-    await this.addFiles(files, 'paste');
+    const clipboard = event.clipboardData;
+    if (clipboard === null) return;
+    const itemFiles = Array.from(clipboard.items ?? [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    const candidates =
+      itemFiles.length > 0 ? itemFiles : Array.from(clipboard.files);
+    const images = candidates.filter((file) => isComposerImage(file.type));
+    if (images.length === 0) return;
+    event.preventDefault();
+    await this.addFiles(images, 'paste');
   }
 
   protected onDragOver(event: DragEvent): void {
@@ -370,7 +402,12 @@ export class MessageInputComponent {
 
   protected submit(): void {
     const value = this.text().trim();
-    if (value.length === 0 || this.disabled()) {
+    const attachments = this.attachments();
+    if ((value.length === 0 && attachments.length === 0) || this.disabled()) {
+      return;
+    }
+    if (attachments.length > 0) {
+      this.sendWithAttachments.emit({ text: value, attachments });
       return;
     }
     this.send.emit(value);
@@ -384,7 +421,38 @@ export class MessageInputComponent {
     this.attachments.update((items) =>
       items.filter((item) => item.attachment.id !== selection.attachment.id),
     );
+    revokePreviewUrl(selection.previewUrl);
     this.attachmentRemoved.emit(selection);
+  }
+
+  protected retryAttachment(selection: MessageInputAttachmentSelection): void {
+    this.attachmentRetry.emit(selection);
+  }
+
+  protected attachmentState(
+    selection: MessageInputAttachmentSelection,
+  ): MessageInputAttachmentState | undefined {
+    return this.attachmentStates().find(
+      (state) => state.localAttachmentId === selection.attachment.id,
+    );
+  }
+
+  /** Called by the container after the linked message is durably accepted. */
+  completeAttachmentSubmission(): void {
+    for (const selection of this.attachments()) {
+      revokePreviewUrl(selection.previewUrl);
+    }
+    this.attachments.set([]);
+    this.text.set('');
+    this.hintOpen.set(false);
+    this.historyIndex.set(null);
+    this.savedDraft = '';
+  }
+
+  ngOnDestroy(): void {
+    for (const selection of this.attachments()) {
+      revokePreviewUrl(selection.previewUrl);
+    }
   }
 
   protected hasArgs(schema: Record<string, unknown>): boolean {
@@ -425,10 +493,12 @@ export class MessageInputComponent {
     scope: ChatAttachmentScope | undefined,
   ): Promise<MessageInputAttachmentSelection> {
     const mimeType = file.type || undefined;
+    const previewUrl = createPreviewUrl(file);
     return {
       file,
       scope,
       source,
+      ...(previewUrl === undefined ? {} : { previewUrl }),
       attachment: {
         id: attachmentId(file),
         status: 'active',
@@ -442,6 +512,30 @@ export class MessageInputComponent {
         scopeId: scope?.id,
       },
     };
+  }
+}
+
+function isComposerImage(mimeType: string): boolean {
+  return (
+    mimeType === 'image/png' ||
+    mimeType === 'image/jpeg' ||
+    mimeType === 'image/webp'
+  );
+}
+
+function createPreviewUrl(file: File): string | undefined {
+  if (
+    !isComposerImage(file.type) ||
+    typeof URL.createObjectURL !== 'function'
+  ) {
+    return undefined;
+  }
+  return URL.createObjectURL(file);
+}
+
+function revokePreviewUrl(url: string | undefined): void {
+  if (url !== undefined && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url);
   }
 }
 

@@ -297,7 +297,14 @@
         [commands]="inputCommands()"
         [submissionHistory]="inputSubmissionHistory()"
         [erasePreviousWordHotkey]="hotkeys.binding('erasePreviousWord')"
+        [attachmentsEnabled]="attachmentsEnabled()"
+        [attachmentScopes]="attachmentScopes"
+        [attachmentStates]="composerAttachmentStates()"
         (send)="onSendMessage($event)"
+        (sendWithAttachments)="onSendWithAttachments($event)"
+        (attachmentsSelected)="onAttachmentsSelected($event)"
+        (attachmentRemoved)="onAttachmentRemoved($event)"
+        (attachmentRetry)="onAttachmentRetry($event)"
       />
       @if (composerError()) {
       <div

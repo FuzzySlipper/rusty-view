@@ -371,6 +371,9 @@ export type LogicalTurnControlReceipt = Schemas['LogicalTurnControlReceipt'];
 export type SendChatMessageRequest = Schemas['SendChatMessageRequest'];
 export type ChatActor = Schemas['ChatActor'];
 export type SendChatMessageResult = Schemas['SendChatMessageResult'];
+export type AttachmentRecord = Schemas['AttachmentRecord'];
+export type AttachmentUploadResult = Schemas['AttachmentUploadResult'];
+export type AttachmentMutationResult = Schemas['AttachmentMutationResult'];
 
 // ---- commands ----
 export type ChatCommandRegistry = Schemas['ChatCommandRegistry'];
@@ -391,6 +394,10 @@ export type ReplayChatSessionEventsResponse =
   operations['replayChatSessionEvents']['responses'][200]['content']['application/json'];
 export type SendChatMessageResponse =
   operations['sendChatMessage']['responses'][202]['content']['application/json'];
+export type UploadAttachmentContentResponse =
+  operations['uploadAttachmentContent']['responses'][201]['content']['application/json'];
+export type RemoveAttachmentResponse =
+  operations['removeAttachment']['responses'][200]['content']['application/json'];
 export type ListChatCommandsResponse =
   operations['listChatCommands']['responses'][200]['content']['application/json'];
 export type ExecuteChatCommandResponse =

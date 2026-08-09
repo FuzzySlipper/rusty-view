@@ -15,6 +15,9 @@ export { MessageInputComponent } from './lib/message-input';
 export type {
   MessageInputAttachmentSelection,
   MessageInputAttachmentSource,
+  MessageInputAttachmentState,
+  MessageInputAttachmentStatus,
+  MessageInputAttachmentSubmission,
   MessageInputCommandArgumentValue,
   MessageInputCommandDescriptor,
 } from './lib/message-input';

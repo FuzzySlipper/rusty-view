@@ -54,7 +54,7 @@
     type="button"
     class="rv-input__send"
     data-testid="send-message"
-    [disabled]="disabled() || text().trim().length === 0"
+    [disabled]="disabled() || (text().trim().length === 0 && attachments().length === 0)"
     (click)="submit()"
   >
     Send
@@ -62,20 +62,53 @@
   @if (attachments().length > 0) {
   <div class="rv-input__attachment-list" aria-label="Selected attachments">
     @for (item of attachments(); track item.attachment.id) {
-    <button
-      type="button"
+    <div
       class="rv-input__attachment"
       data-testid="message-attachment-chip"
-      (click)="removeAttachment(item)"
       [rvTooltip]="item.attachment.name"
       rvTooltipPlacement="top"
+      [attr.data-status]="attachmentState(item)?.status ?? 'selected'"
     >
+      @if (item.previewUrl) {
+      <img
+        class="rv-input__attachment-image"
+        [src]="item.previewUrl"
+        [alt]="item.attachment.name"
+      />
+      }
       <span class="rv-input__attachment-kind">{{ item.attachment.kind }}</span>
       <span class="rv-input__attachment-name">{{ item.attachment.name }}</span>
+      <span class="rv-input__attachment-size">{{ item.file.size }} B</span>
       @if (item.attachment.textPreview) {
       <span class="rv-input__attachment-preview">text</span>
-      }
-    </button>
+      } @if (attachmentState(item); as state) {
+      <span class="rv-input__attachment-status" role="status">
+        {{ state.status }}
+      </span>
+      @if (state.error) {
+      <span class="rv-input__attachment-error" role="alert"
+        >{{ state.error }}</span
+      >
+      <button
+        type="button"
+        class="rv-input__attachment-retry"
+        data-testid="message-attachment-retry"
+        (click)="retryAttachment(item)"
+      >
+        Retry
+      </button>
+      } }
+      <button
+        type="button"
+        class="rv-input__attachment-remove"
+        data-testid="message-attachment-remove"
+        [disabled]="attachmentState(item)?.status === 'sending' || attachmentState(item)?.status === 'removing'"
+        (click)="removeAttachment(item)"
+        [attr.aria-label]="'Remove ' + item.attachment.name"
+      >
+        Remove
+      </button>
+    </div>
     }
   </div>
   } @if (hintOpen() && filteredCommands().length > 0) {

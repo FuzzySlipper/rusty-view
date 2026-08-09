@@ -450,6 +450,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chat/sessions/{session_id}/attachments/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Crew-owned raw image bytes */
+        post: operations["uploadAttachmentContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/chat/sessions/{session_id}/attachments/{attachment_id}": {
         parameters: {
             query?: never;
@@ -1150,6 +1167,7 @@ export interface components {
         SendChatMessageRequest: {
             actor: components["schemas"]["ChatActor"];
             body: string;
+            attachment_ids?: string[];
             client_message_id?: string;
             reason?: string;
         };
@@ -1303,6 +1321,11 @@ export interface components {
             status: "created" | "linked" | "removed" | "updated";
             attachment: components["schemas"]["AttachmentRecord"];
             latest_cursor: string;
+        };
+        AttachmentUploadResult: {
+            /** @enum {string} */
+            status: "created";
+            attachment: components["schemas"]["AttachmentRecord"];
         };
         DataBankScopeRecord: {
             scope_id: string;
@@ -2734,6 +2757,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApiEnvelope"] & {
                         data?: components["schemas"]["AttachmentMutationResult"];
+                    };
+                };
+            };
+        };
+    };
+    uploadAttachmentContent: {
+        parameters: {
+            query: {
+                filename: string;
+            };
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/png": string;
+                "image/jpeg": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description Image bytes persisted and attachment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["AttachmentUploadResult"];
                     };
                 };
             };

@@ -1,6 +1,8 @@
 import type {
   ApiEnvelope,
   ApiError,
+  AttachmentMutationResult,
+  AttachmentUploadResult,
   ChatCommandRegistry,
   ChatEvent,
   ChatEventPage,
@@ -47,6 +49,8 @@ import type {
   DeleteMessageVariantResponse,
   CancelChatSessionLogicalTurnResponse,
   ResolveChatSessionLogicalTurnResponse,
+  RemoveAttachmentResponse,
+  UploadAttachmentContentResponse,
 } from '@rusty-view/protocol';
 
 import {
@@ -61,6 +65,8 @@ import {
   SESSION_PROVIDER_REQUEST_DEBUG_DETAIL_PATH,
   SESSION_TOOL_CALL_DEBUG_DETAIL_PATH,
   SESSION_MESSAGES_PATH,
+  SESSION_ATTACHMENT_PATH,
+  SESSION_ATTACHMENT_UPLOAD_PATH,
   SESSION_ACTIVE_BRANCH_PATH,
   SESSION_SLOT_ACTIVE_VARIANT_PATH,
   SESSION_SLOT_VARIANT_PATH,
@@ -281,6 +287,59 @@ export class ChatHttpTransport {
       'POST',
       SESSION_MESSAGES_PATH,
       options,
+    );
+    return unwrapEnvelope(body);
+  }
+
+  /** Persist browser-owned raw image bytes without JSON/base64 expansion. */
+  async uploadAttachment(
+    sessionId: string,
+    file: Blob,
+    filename: string,
+    idempotencyKey: string,
+  ): Promise<AttachmentUploadResult> {
+    const url = this.buildUrl(
+      SESSION_ATTACHMENT_UPLOAD_PATH,
+      { session_id: sessionId },
+      { filename },
+    );
+    const headers = this.buildHeaders({
+      extraHeaders: {
+        [HEADER_NAMES.contentType]: file.type || 'application/octet-stream',
+        [HEADER_NAMES.idempotencyKey]: idempotencyKey,
+      },
+    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: 'POST',
+        headers,
+        body: file,
+        ...(this.config.writeTimeoutMs > 0
+          ? { signal: AbortSignal.timeout(this.config.writeTimeoutMs) }
+          : {}),
+      });
+    } catch (error) {
+      throw withChatTransportEndpoint(classifyFetchError(error), url);
+    }
+    if (!response.ok) await this.handleHttpError(response, url);
+    return unwrapEnvelope(
+      await this.readJsonResponse<UploadAttachmentContentResponse>(
+        response,
+        url,
+      ),
+    );
+  }
+
+  /** Remove a staged attachment that the operator discarded before send. */
+  async removeAttachment(
+    sessionId: string,
+    attachmentId: string,
+  ): Promise<AttachmentMutationResult> {
+    const body = await this.requestJson<RemoveAttachmentResponse>(
+      'DELETE',
+      SESSION_ATTACHMENT_PATH,
+      { pathParams: { session_id: sessionId, attachment_id: attachmentId } },
     );
     return unwrapEnvelope(body);
   }
@@ -657,19 +716,23 @@ export class ChatHttpTransport {
       await this.handleHttpError(response, url);
     }
 
-    let body: unknown;
+    return this.readJsonResponse<TBody>(response, url);
+  }
+
+  private async readJsonResponse<TBody>(
+    response: Response,
+    endpoint: string,
+  ): Promise<TBody> {
     try {
-      body = await response.json();
+      return (await response.json()) as TBody;
     } catch {
       throw new ChatTransportError({
         code: 'envelope_error',
         message: `Response body is not valid JSON (HTTP ${response.status})`,
         statusCode: response.status,
-        endpoint: url,
+        endpoint,
       });
     }
-
-    return body as TBody;
   }
 
   private async handleHttpError(

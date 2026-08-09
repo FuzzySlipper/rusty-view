@@ -986,8 +986,10 @@ describe('MessageInputComponent', () => {
       fixture.detectChanges();
 
       const file = new File(['pixels'], 'clip.png', { type: 'image/png' });
+      const preventDefault = vi.fn();
       await component['onPaste']({
         clipboardData: { files: [file] },
+        preventDefault,
       } as unknown as ClipboardEvent);
 
       const selection = selectedSpy.mock.calls[0]?.[0]?.[0];
@@ -996,6 +998,25 @@ describe('MessageInputComponent', () => {
       expect(selection.source).toBe('paste');
       expect(selection.attachment.kind).toBe('image');
       expect(selection.attachment.textPreview).toBeUndefined();
+      expect(preventDefault).toHaveBeenCalledOnce();
+    });
+
+    it('preserves ordinary text paste behavior', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const selectedSpy = vi.fn();
+      const preventDefault = vi.fn();
+      component.attachmentsSelected.subscribe(selectedSpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.detectChanges();
+
+      await component['onPaste']({
+        clipboardData: { files: [], items: [] },
+        preventDefault,
+      } as unknown as ClipboardEvent);
+
+      expect(preventDefault).not.toHaveBeenCalled();
+      expect(selectedSpy).not.toHaveBeenCalled();
     });
 
     it('uses dropped files as attachments and clears drag state', async () => {
@@ -1031,11 +1052,12 @@ describe('MessageInputComponent', () => {
       fixture.componentRef.setInput('attachmentsEnabled', true);
       fixture.detectChanges();
 
-      const file = new File(['data'], 'data.json', {
-        type: 'application/json',
+      const file = new File(['data'], 'clip.webp', {
+        type: 'image/webp',
       });
       await component['onPaste']({
         clipboardData: { files: [file] },
+        preventDefault: vi.fn(),
       } as unknown as ClipboardEvent);
       const selection = component['attachments']()[0];
       expect(selection).toBeDefined();
@@ -1046,6 +1068,66 @@ describe('MessageInputComponent', () => {
 
       expect(component['attachments']()).toHaveLength(0);
       expect(removedSpy).toHaveBeenCalledWith(selection);
+    });
+
+    it('renders recoverable upload errors and emits retry', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const retrySpy = vi.fn();
+      component.attachmentRetry.subscribe(retrySpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.detectChanges();
+
+      const file = new File(['pixels'], 'failed.png', { type: 'image/png' });
+      await component['onPaste']({
+        clipboardData: { files: [file] },
+        preventDefault: vi.fn(),
+      } as unknown as ClipboardEvent);
+      const selection = component['attachments']()[0];
+      expect(selection).toBeDefined();
+      if (selection === undefined) return;
+      fixture.componentRef.setInput('attachmentStates', [
+        {
+          localAttachmentId: selection.attachment.id,
+          status: 'error',
+          error: 'upload failed',
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(
+        fixture.nativeElement.querySelector('[role="alert"]')?.textContent,
+      ).toContain('upload failed');
+      fixture.nativeElement
+        .querySelector('[data-testid="message-attachment-retry"]')
+        .click();
+      expect(retrySpy).toHaveBeenCalledWith(selection);
+    });
+
+    it('submits an attachment-only message and clears after completion', async () => {
+      const fixture = TestBed.createComponent(MessageInputComponent);
+      const component = fixture.componentInstance;
+      const sendSpy = vi.fn();
+      component.sendWithAttachments.subscribe(sendSpy);
+      fixture.componentRef.setInput('attachmentsEnabled', true);
+      fixture.detectChanges();
+
+      const file = new File(['pixels'], 'clipboard.png', {
+        type: 'image/png',
+      });
+      await component['onPaste']({
+        clipboardData: { files: [file] },
+        preventDefault: vi.fn(),
+      } as unknown as ClipboardEvent);
+      component['submit']();
+
+      expect(sendSpy).toHaveBeenCalledWith({
+        text: '',
+        attachments: component['attachments'](),
+      });
+      expect(component['attachments']()).toHaveLength(1);
+      component.completeAttachmentSubmission();
+      expect(component['attachments']()).toHaveLength(0);
     });
   });
 });

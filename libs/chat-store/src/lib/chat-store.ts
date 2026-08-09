@@ -1303,6 +1303,25 @@ export class ChatStore implements OnDestroy {
 
   /** Send a user message to the active session. */
   async sendMessage(text: string): Promise<void> {
+    await this.sendMessageInternal(text, []);
+  }
+
+  /**
+   * Send one user message linked to already-uploaded composer attachments.
+   * Returns whether the write and catch-up completed so the shell can retain
+   * staged files after a recoverable send failure.
+   */
+  sendMessageWithAttachments(
+    text: string,
+    attachmentIds: readonly string[],
+  ): Promise<boolean> {
+    return this.sendMessageInternal(text, attachmentIds);
+  }
+
+  private async sendMessageInternal(
+    text: string,
+    attachmentIds: readonly string[],
+  ): Promise<boolean> {
     const sessionId = this._activeSessionId();
     if (sessionId === null) {
       throw new Error('No active session — call selectSession first.');
@@ -1324,6 +1343,9 @@ export class ChatStore implements OnDestroy {
       await this.transport.sendMessage(sessionId, {
         actor: DEBUG_ACTOR,
         body: text,
+        ...(attachmentIds.length > 0
+          ? { attachment_ids: [...attachmentIds] }
+          : {}),
       });
       await this.catchUpAfterWrite(sessionId, cursorBeforeSend, revision);
       this._pendingSends.update((sends) =>
@@ -1331,6 +1353,7 @@ export class ChatStore implements OnDestroy {
           (send) => send.id !== pendingId || send.sessionId !== sessionId,
         ),
       );
+      return true;
     } catch (error) {
       this._pendingSends.update((sends) =>
         sends.map((send) =>
@@ -1339,6 +1362,7 @@ export class ChatStore implements OnDestroy {
             : send,
         ),
       );
+      return false;
     }
   }
 

@@ -117,18 +117,44 @@
   background: var(--rv-color-surface-raised);
   color: var(--rv-color-text-secondary);
   font-size: var(--rv-font-size-xs);
-  cursor: pointer;
 }
 
-.rv-input__attachment:hover {
+.rv-input__attachment[data-status='error'] {
   border-color: var(--rv-color-danger);
-  color: var(--rv-color-danger);
+}
+
+.rv-input__attachment-image {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--rv-radius);
+  object-fit: cover;
 }
 
 .rv-input__attachment-kind,
-.rv-input__attachment-preview {
+.rv-input__attachment-preview,
+.rv-input__attachment-size,
+.rv-input__attachment-status {
   font-family: var(--rv-font-technical);
   color: var(--rv-color-text-muted);
+}
+
+.rv-input__attachment-error {
+  color: var(--rv-color-danger);
+}
+
+.rv-input__attachment-retry,
+.rv-input__attachment-remove {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-bg);
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+}
+
+.rv-input__attachment-remove:hover:not(:disabled) {
+  border-color: var(--rv-color-danger);
+  color: var(--rv-color-danger);
 }
 
 .rv-input__attachment-name {

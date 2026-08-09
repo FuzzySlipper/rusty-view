@@ -1,5 +1,7 @@
 import type {
   ChatCommandRegistry,
+  AttachmentMutationResult,
+  AttachmentUploadResult,
   ChatEvent,
   ChatEventPage,
   ChatSessionOpenResult,
@@ -242,6 +244,27 @@ export class ChatTransport {
     idempotencyKey?: string,
   ): Promise<SendChatMessageResult> {
     return this.http.sendMessage(sessionId, request, idempotencyKey);
+  }
+
+  uploadAttachment(
+    sessionId: string,
+    file: Blob,
+    filename: string,
+    idempotencyKey: string,
+  ): Promise<AttachmentUploadResult> {
+    return this.http.uploadAttachment(
+      sessionId,
+      file,
+      filename,
+      idempotencyKey,
+    );
+  }
+
+  removeAttachment(
+    sessionId: string,
+    attachmentId: string,
+  ): Promise<AttachmentMutationResult> {
+    return this.http.removeAttachment(sessionId, attachmentId);
   }
 
   sessionContext(sessionId: string): Promise<SessionContextUsageResult> {

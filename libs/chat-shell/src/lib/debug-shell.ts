@@ -21,6 +21,10 @@ import { ChatTransport } from '@rusty-view/transport';
 import {
   ContextDiagnosticsComponent,
   MessageInputComponent,
+  type MessageInputAttachmentSelection,
+  type MessageInputAttachmentState,
+  type MessageInputAttachmentStatus,
+  type MessageInputAttachmentSubmission,
   type MessageInputCommandDescriptor,
   StreamStatusComponent,
   TooltipDirective,
@@ -54,6 +58,14 @@ import {
 } from './slash-commands/slash-command-runtime';
 import { externalCommandComposerDescriptors } from './external-command-composer';
 import { formatNativeReasoningEffort } from './native-reasoning-effort';
+
+interface ComposerAttachmentUpload {
+  readonly selection: MessageInputAttachmentSelection;
+  readonly sessionId: string;
+  readonly status: MessageInputAttachmentStatus;
+  readonly attachmentId?: string;
+  readonly error?: string;
+}
 
 /**
  * Debug chat shell — the composition layer that wires everything together.
@@ -142,9 +154,18 @@ export class DebugShellComponent {
   protected readonly hotkeys = inject(HotkeySettingsService);
   protected readonly theme = inject(ChatTheme);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly transport = inject(ChatTransport);
   private readonly slashCommands =
     inject(CHAT_SLASH_COMMANDS, { optional: true }) ?? [];
   private readonly transcriptViewport = viewChild(TranscriptViewportComponent);
+  private readonly messageInput = viewChild(MessageInputComponent);
+  private readonly composerAttachments = signal<
+    readonly ComposerAttachmentUpload[]
+  >([]);
+  private readonly composerAttachmentError = signal<string | undefined>(
+    undefined,
+  );
+  private composerSessionId: string | null = null;
 
   protected readonly showInspector = computed(
     () => this.theme.settings().showInspector,
@@ -202,7 +223,30 @@ export class DebugShellComponent {
       (this.external.selectedThreadId() !== undefined &&
         this.external.loading()) ||
       this.external.pending() ||
-      this.pluginCommandPending(),
+      this.pluginCommandPending() ||
+      this.composerAttachments().some((attachment) =>
+        ['uploading', 'sending', 'removing'].includes(attachment.status),
+      ),
+  );
+  protected readonly attachmentsEnabled = computed(
+    () => !this.externalSelected() && this.store.activeSessionId() !== null,
+  );
+  protected readonly attachmentScopes = [
+    {
+      id: 'chat-images',
+      label: 'Chat images',
+      accept: 'image/png,image/jpeg,image/webp',
+      multiple: true,
+    },
+  ] as const;
+  protected readonly composerAttachmentStates = computed<
+    readonly MessageInputAttachmentState[]
+  >(() =>
+    this.composerAttachments().map((attachment) => ({
+      localAttachmentId: attachment.selection.attachment.id,
+      status: attachment.status,
+      ...(attachment.error === undefined ? {} : { error: attachment.error }),
+    })),
   );
   protected readonly unifiedSelectedSessionId = computed(() =>
     this.externalSelected()
@@ -320,10 +364,12 @@ export class DebugShellComponent {
       : this.store.commandHistory();
     return submissionHistory(this.displayedMessages(), commands);
   });
-  protected readonly composerError = computed(() =>
-    this.externalSelected()
-      ? this.external.commandError()
-      : this.pluginCommandError(),
+  protected readonly composerError = computed(
+    () =>
+      this.composerAttachmentError() ??
+      (this.externalSelected()
+        ? this.external.commandError()
+        : this.pluginCommandError()),
   );
 
   protected readonly isViewingHistorical = computed(() =>
@@ -339,6 +385,12 @@ export class DebugShellComponent {
 
   constructor() {
     this.installTestSnapshotApi();
+    effect(() => {
+      const sessionId = this.unifiedSelectedSessionId();
+      if (sessionId === this.composerSessionId) return;
+      this.composerSessionId = sessionId;
+      untracked(() => this.clearComposerAttachments());
+    });
     effect(() => {
       const sessionId = this.store.activeSessionId();
       const runtimeKind =
@@ -549,6 +601,196 @@ export class DebugShellComponent {
     void this.store.submit(text);
   }
 
+  protected onAttachmentsSelected(
+    selections: readonly MessageInputAttachmentSelection[],
+  ): void {
+    const sessionId = this.store.activeSessionId();
+    if (sessionId === null || this.externalSelected()) return;
+    this.composerAttachmentError.set(undefined);
+    this.composerAttachments.update((attachments) => [
+      ...attachments,
+      ...selections.map((selection) => ({
+        selection,
+        sessionId,
+        status: 'uploading' as const,
+      })),
+    ]);
+    for (const selection of selections) {
+      void this.uploadComposerAttachment(selection, sessionId);
+    }
+  }
+
+  protected onAttachmentRetry(
+    selection: MessageInputAttachmentSelection,
+  ): void {
+    const attachment = this.composerAttachments().find(
+      (candidate) =>
+        candidate.selection.attachment.id === selection.attachment.id,
+    );
+    if (attachment === undefined) return;
+    void this.uploadComposerAttachment(selection, attachment.sessionId);
+  }
+
+  protected onAttachmentRemoved(
+    selection: MessageInputAttachmentSelection,
+  ): void {
+    const attachment = this.composerAttachments().find(
+      (candidate) =>
+        candidate.selection.attachment.id === selection.attachment.id,
+    );
+    this.composerAttachments.update((attachments) =>
+      attachments.filter(
+        (candidate) =>
+          candidate.selection.attachment.id !== selection.attachment.id,
+      ),
+    );
+    if (attachment?.attachmentId !== undefined) {
+      void this.removeUploadedAttachment(attachment);
+    }
+  }
+
+  protected async onSendWithAttachments(
+    submission: MessageInputAttachmentSubmission,
+  ): Promise<void> {
+    const uploads = submission.attachments
+      .map((selection) =>
+        this.composerAttachments().find(
+          (candidate) =>
+            candidate.selection.attachment.id === selection.attachment.id,
+        ),
+      )
+      .filter(
+        (attachment): attachment is ComposerAttachmentUpload =>
+          attachment !== undefined,
+      );
+    if (
+      uploads.length !== submission.attachments.length ||
+      uploads.some(
+        (attachment) =>
+          attachment.status !== 'uploaded' ||
+          attachment.attachmentId === undefined,
+      )
+    ) {
+      this.composerAttachmentError.set(
+        'Every image must finish uploading before send. Retry or remove failed images.',
+      );
+      return;
+    }
+    this.composerAttachmentError.set(undefined);
+    this.updateComposerAttachmentStatus(
+      uploads.map((upload) => upload.selection.attachment.id),
+      'sending',
+    );
+    const accepted = await this.store.sendMessageWithAttachments(
+      submission.text,
+      uploads.map((upload) => upload.attachmentId as string),
+    );
+    if (!accepted) {
+      this.updateComposerAttachmentStatus(
+        uploads.map((upload) => upload.selection.attachment.id),
+        'error',
+        'Message send failed. The uploaded image is retained for retry.',
+      );
+      this.composerAttachmentError.set(
+        'Message send failed. Retry with the same uploaded images.',
+      );
+      return;
+    }
+    const completedIds = new Set(
+      uploads.map((upload) => upload.selection.attachment.id),
+    );
+    this.composerAttachments.update((attachments) =>
+      attachments.filter(
+        (attachment) => !completedIds.has(attachment.selection.attachment.id),
+      ),
+    );
+    this.messageInput()?.completeAttachmentSubmission();
+  }
+
+  private async uploadComposerAttachment(
+    selection: MessageInputAttachmentSelection,
+    sessionId: string,
+  ): Promise<void> {
+    this.updateComposerAttachmentStatus([selection.attachment.id], 'uploading');
+    try {
+      const result = await this.transport.uploadAttachment(
+        sessionId,
+        selection.file,
+        selection.file.name || 'clipboard-image',
+        `rusty-view:${selection.attachment.id}`,
+      );
+      const current = this.composerAttachments().find(
+        (attachment) =>
+          attachment.selection.attachment.id === selection.attachment.id,
+      );
+      if (current === undefined || current.sessionId !== sessionId) {
+        await this.transport.removeAttachment(
+          sessionId,
+          result.attachment.attachment_id,
+        );
+        return;
+      }
+      this.composerAttachments.update((attachments) =>
+        attachments.map((attachment) =>
+          attachment.selection.attachment.id === selection.attachment.id
+            ? uploadedComposerAttachment(
+                attachment,
+                result.attachment.attachment_id,
+              )
+            : attachment,
+        ),
+      );
+    } catch (error) {
+      this.updateComposerAttachmentStatus(
+        [selection.attachment.id],
+        'error',
+        composerErrorMessage(error),
+      );
+    }
+  }
+
+  private async removeUploadedAttachment(
+    attachment: ComposerAttachmentUpload,
+  ): Promise<void> {
+    try {
+      await this.transport.removeAttachment(
+        attachment.sessionId,
+        attachment.attachmentId as string,
+      );
+    } catch (error) {
+      this.composerAttachmentError.set(
+        `Image cleanup failed: ${composerErrorMessage(error)}`,
+      );
+    }
+  }
+
+  private updateComposerAttachmentStatus(
+    localIds: readonly string[],
+    status: MessageInputAttachmentStatus,
+    error?: string,
+  ): void {
+    const ids = new Set(localIds);
+    this.composerAttachments.update((attachments) =>
+      attachments.map((attachment) =>
+        ids.has(attachment.selection.attachment.id)
+          ? composerAttachmentWithStatus(attachment, status, error)
+          : attachment,
+      ),
+    );
+  }
+
+  private clearComposerAttachments(): void {
+    const attachments = this.composerAttachments();
+    this.composerAttachments.set([]);
+    this.composerAttachmentError.set(undefined);
+    for (const attachment of attachments) {
+      if (attachment.attachmentId !== undefined) {
+        void this.removeUploadedAttachment(attachment);
+      }
+    }
+    this.messageInput()?.completeAttachmentSubmission();
+  }
+
   protected onReconnect(): void {
     void this.store.reconnect();
   }
@@ -741,6 +983,31 @@ export class DebugShellComponent {
       }
     });
   }
+}
+
+function uploadedComposerAttachment(
+  attachment: ComposerAttachmentUpload,
+  attachmentId: string,
+): ComposerAttachmentUpload {
+  const withoutError = { ...attachment };
+  delete withoutError.error;
+  return { ...withoutError, status: 'uploaded', attachmentId };
+}
+
+function composerAttachmentWithStatus(
+  attachment: ComposerAttachmentUpload,
+  status: MessageInputAttachmentStatus,
+  error?: string,
+): ComposerAttachmentUpload {
+  const withoutError = { ...attachment };
+  delete withoutError.error;
+  return error === undefined
+    ? { ...withoutError, status }
+    : { ...withoutError, status, error };
+}
+
+function composerErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function confirmCommand(message: string | undefined): Promise<boolean> {
