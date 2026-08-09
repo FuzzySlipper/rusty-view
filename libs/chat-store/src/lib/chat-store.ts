@@ -1314,13 +1314,15 @@ export class ChatStore implements OnDestroy {
   sendMessageWithAttachments(
     text: string,
     attachmentIds: readonly string[],
+    idempotencyKey: string,
   ): Promise<boolean> {
-    return this.sendMessageInternal(text, attachmentIds);
+    return this.sendMessageInternal(text, attachmentIds, idempotencyKey);
   }
 
   private async sendMessageInternal(
     text: string,
     attachmentIds: readonly string[],
+    idempotencyKey?: string,
   ): Promise<boolean> {
     const sessionId = this._activeSessionId();
     if (sessionId === null) {
@@ -1333,20 +1335,34 @@ export class ChatStore implements OnDestroy {
       id: pendingId,
       sessionId,
       text,
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
       status: 'sending',
       error: undefined,
     };
-    this._pendingSends.update((sends) => [...sends, pending]);
+    this._pendingSends.update((sends) => [
+      ...sends.filter(
+        (send) =>
+          idempotencyKey === undefined ||
+          send.sessionId !== sessionId ||
+          send.idempotencyKey !== idempotencyKey,
+      ),
+      pending,
+    ]);
 
     try {
       const cursorBeforeSend = this.lastCursor();
-      await this.transport.sendMessage(sessionId, {
+      const request = {
         actor: DEBUG_ACTOR,
         body: text,
         ...(attachmentIds.length > 0
           ? { attachment_ids: [...attachmentIds] }
           : {}),
-      });
+      };
+      if (idempotencyKey === undefined) {
+        await this.transport.sendMessage(sessionId, request);
+      } else {
+        await this.transport.sendMessage(sessionId, request, idempotencyKey);
+      }
       await this.catchUpAfterWrite(sessionId, cursorBeforeSend, revision);
       this._pendingSends.update((sends) =>
         sends.filter(

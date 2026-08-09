@@ -166,6 +166,7 @@ export class DebugShellComponent {
     undefined,
   );
   private composerSessionId: string | null = null;
+  private attachmentMessageIdempotencyKey: string | undefined;
 
   protected readonly showInspector = computed(
     () => this.theme.settings().showInspector,
@@ -681,9 +682,12 @@ export class DebugShellComponent {
       uploads.map((upload) => upload.selection.attachment.id),
       'sending',
     );
+    this.attachmentMessageIdempotencyKey ??=
+      newAttachmentMessageIdempotencyKey();
     const accepted = await this.store.sendMessageWithAttachments(
       submission.text,
       uploads.map((upload) => upload.attachmentId as string),
+      this.attachmentMessageIdempotencyKey,
     );
     if (!accepted) {
       this.updateComposerAttachmentStatus(
@@ -704,6 +708,7 @@ export class DebugShellComponent {
         (attachment) => !completedIds.has(attachment.selection.attachment.id),
       ),
     );
+    this.attachmentMessageIdempotencyKey = undefined;
     this.messageInput()?.completeAttachmentSubmission();
   }
 
@@ -783,6 +788,7 @@ export class DebugShellComponent {
     const attachments = this.composerAttachments();
     this.composerAttachments.set([]);
     this.composerAttachmentError.set(undefined);
+    this.attachmentMessageIdempotencyKey = undefined;
     for (const attachment of attachments) {
       if (attachment.attachmentId !== undefined) {
         void this.removeUploadedAttachment(attachment);
@@ -1008,6 +1014,14 @@ function composerAttachmentWithStatus(
 
 function composerErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function newAttachmentMessageIdempotencyKey(): string {
+  const id =
+    typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `rusty-view-message:${id}`;
 }
 
 function confirmCommand(message: string | undefined): Promise<boolean> {

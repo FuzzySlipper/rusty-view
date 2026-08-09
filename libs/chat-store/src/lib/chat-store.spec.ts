@@ -987,18 +987,23 @@ describe('ChatStore', () => {
     const store = setupStore(transport, new InMemoryChatStorage());
 
     await store.selectSession('sess_test');
-    const accepted = await store.sendMessageWithAttachments('', [
-      'attachment-1',
-      'attachment-2',
-    ]);
+    const accepted = await store.sendMessageWithAttachments(
+      '',
+      ['attachment-1', 'attachment-2'],
+      'composer-message-1',
+    );
 
     expect(accepted).toBe(true);
     expect(transport.sendMessage).toHaveBeenCalledOnce();
-    expect(transport.sendMessage).toHaveBeenCalledWith('sess_test', {
-      actor: expect.any(Object),
-      body: '',
-      attachment_ids: ['attachment-1', 'attachment-2'],
-    });
+    expect(transport.sendMessage).toHaveBeenCalledWith(
+      'sess_test',
+      {
+        actor: expect.any(Object),
+        body: '',
+        attachment_ids: ['attachment-1', 'attachment-2'],
+      },
+      'composer-message-1',
+    );
   });
 
   it('keeps attachment-linked sends recoverable when transport fails', async () => {
@@ -1006,15 +1011,83 @@ describe('ChatStore', () => {
     const store = setupStore(transport, new InMemoryChatStorage());
 
     await store.selectSession('sess_test');
-    const accepted = await store.sendMessageWithAttachments('retry me', [
-      'attachment-1',
-    ]);
+    const accepted = await store.sendMessageWithAttachments(
+      'retry me',
+      ['attachment-1'],
+      'composer-message-retry',
+    );
 
     expect(accepted).toBe(false);
     expect(store.pendingSends()[0]).toMatchObject({
       text: 'retry me',
+      idempotencyKey: 'composer-message-retry',
       status: 'error',
     });
+  });
+
+  it('reuses one attachment message identity after commit-then-catch-up failure', async () => {
+    const transport = createMockTransport({});
+    const durableMessageKeys = new Set<string>();
+    let durableMessages = 0;
+    let attachmentLinks = 0;
+    let wakes = 0;
+    (
+      transport as unknown as {
+        sendMessage: ReturnType<typeof vi.fn>;
+        replayAllEvents: ReturnType<typeof vi.fn>;
+      }
+    ).sendMessage = vi.fn(
+      async (_sessionId: string, _request: unknown, idempotencyKey: string) => {
+        if (!durableMessageKeys.has(idempotencyKey)) {
+          durableMessageKeys.add(idempotencyKey);
+          durableMessages += 1;
+          attachmentLinks += 1;
+          wakes += 1;
+        }
+        return acceptedResult();
+      },
+    );
+    (
+      transport as unknown as {
+        replayAllEvents: ReturnType<typeof vi.fn>;
+      }
+    ).replayAllEvents = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('catch-up failed after commit'))
+      .mockResolvedValueOnce([]);
+    const store = setupStore(transport, new InMemoryChatStorage());
+    await store.selectSession('sess_test');
+
+    const first = await store.sendMessageWithAttachments(
+      'retry me once',
+      ['attachment-1'],
+      'composer-message-stable',
+    );
+    const retry = await store.sendMessageWithAttachments(
+      'retry me once',
+      ['attachment-1'],
+      'composer-message-stable',
+    );
+
+    expect(first).toBe(false);
+    expect(retry).toBe(true);
+    expect(transport.sendMessage).toHaveBeenCalledTimes(2);
+    expect(transport.sendMessage).toHaveBeenNthCalledWith(
+      1,
+      'sess_test',
+      expect.objectContaining({ attachment_ids: ['attachment-1'] }),
+      'composer-message-stable',
+    );
+    expect(transport.sendMessage).toHaveBeenNthCalledWith(
+      2,
+      'sess_test',
+      expect.objectContaining({ attachment_ids: ['attachment-1'] }),
+      'composer-message-stable',
+    );
+    expect(durableMessages).toBe(1);
+    expect(attachmentLinks).toBe(1);
+    expect(wakes).toBe(1);
+    expect(store.pendingSends()).toEqual([]);
   });
 
   it('sendMessage shows an immediate assistant typing placeholder while the send is in flight', async () => {

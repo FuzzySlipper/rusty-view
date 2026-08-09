@@ -6,6 +6,7 @@ export interface PendingSend {
   readonly id: string;
   readonly sessionId: string;
   readonly text: string;
+  readonly idempotencyKey?: string;
   readonly status: 'sending' | 'error';
   readonly error: StoreErrorDetail | undefined;
 }
