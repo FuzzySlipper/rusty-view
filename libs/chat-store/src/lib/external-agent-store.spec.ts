@@ -2073,6 +2073,106 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledTimes(1);
   });
 
+  it('merges a live selected-thread event delivered during cached history hydration', async () => {
+    const runtime = registration('runtime-1');
+    const selectedThread = {
+      ...thread('thread-1', 10),
+      status: 'active' as const,
+    };
+    const cachedEvent = event(105, 'turn-1', 'active');
+    const replayEvent = event(101, 'turn-1', 'active');
+    const liveDocumentEvent = {
+      ...event(110, 'turn-1', 'active'),
+      eventId: 'document-live-110',
+      kind: 'item_lifecycle' as const,
+      payload: {
+        nativeMethod: 'item/completed',
+        documents: [
+          {
+            documentIndex: 0,
+            captureSource: 'agent_message_file_link' as const,
+            captureState: 'available' as const,
+            attachmentId: 'attachment-document-live',
+            filename: 'live-checkpoint.md',
+            mimeType: 'text/markdown',
+            languageHint: 'markdown',
+            byteSize: 55,
+            sha256: 'a'.repeat(64),
+            contentUrl: '/content/attachment-document-live',
+          },
+        ],
+      },
+    };
+    const replay = deferred<{ events: NormalizedExternalRuntimeEvent[] }>();
+    const streamEvent = deferred<NormalizedExternalRuntimeEvent>();
+    const listEvents = vi.fn(
+      async (_runtimeId: string, query?: { nativeThreadId?: string }) =>
+        query?.nativeThreadId === selectedThread.threadId
+          ? replay.promise
+          : { events: [] },
+    );
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([selectedThread], null)),
+      listEvents,
+      readThread: vi.fn(async () => ({ thread: selectedThread })),
+      streamExternalRuntimeEvents: vi.fn(() => ({
+        close: vi.fn(),
+        async *events() {
+          yield await streamEvent.promise;
+        },
+      })),
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected active session');
+    const cache = (
+      store as unknown as {
+        transcriptCache: {
+          set(key: string, value: unknown, weight: number): void;
+        };
+      }
+    ).transcriptCache;
+    cache.set(
+      session.key,
+      {
+        updatedAt: selectedThread.updatedAt,
+        thread: selectedThread,
+        events: [cachedEvent],
+        cursor: cachedEvent.sequenceId,
+        eventHistoryLoaded: false,
+      },
+      1,
+    );
+
+    const selecting = store.selectSession(session);
+    streamEvent.resolve(liveDocumentEvent);
+    await vi.waitFor(() => {
+      expect(store.events()).toContainEqual(liveDocumentEvent);
+    });
+    replay.resolve({ events: [replayEvent, cachedEvent] });
+    await expect(selecting).resolves.toBe(true);
+
+    expect(store.events()).toEqual([
+      replayEvent,
+      cachedEvent,
+      liveDocumentEvent,
+    ]);
+    expect(store.eventHistoryLoaded()).toBe(true);
+
+    await expect(store.selectSession(session)).resolves.toBe(true);
+    expect(store.events()).toEqual([
+      replayEvent,
+      cachedEvent,
+      liveDocumentEvent,
+    ]);
+    expect(
+      store
+        .events()
+        .filter((candidate) => candidate.eventId === 'document-live-110'),
+    ).toHaveLength(1);
+  });
+
   it('paints a cached active thread immediately while revalidating it', async () => {
     const runtime = registration('runtime-1');
     const firstThread = threadWithUserPrompts('hot transcript');

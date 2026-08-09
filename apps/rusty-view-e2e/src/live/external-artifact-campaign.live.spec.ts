@@ -102,7 +102,9 @@ test.describe('external artifact campaign @live-agent @media @documents', () => 
       });
       await expect(turnStatus).toHaveAttribute('data-turn-phase', 'active');
       await expect(
-        page.locator('ol[start="7"]').filter({ hasText: 'Screenshot checked' }),
+        page
+          .locator('rv-message-block ol[start="7"]')
+          .filter({ hasText: 'Screenshot checked' }),
       ).toContainText('Documents ready');
       await openCheckpoint(page, 0, 'RV_CAMPAIGN_MARKDOWN_6659');
       await openCheckpoint(page, 1, 'RV_CAMPAIGN_RUST_6659');
@@ -449,7 +451,7 @@ async function deleteThread(
         );
         return response.status();
       },
-      { timeout: 60_000 },
+      { timeout: 3 * 60_000 },
     )
     .toBe(200);
 }

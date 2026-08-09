@@ -724,10 +724,13 @@ export class ExternalAgentStore {
           (event) => event.nativeThreadId === session.thread.threadId,
         );
         this.selectedRuntimeEventCursor = latestDefinedCursor(
-          page.at(-1)?.sequenceId,
+          latestDefinedCursor(
+            this.selectedRuntimeEventCursor,
+            page.at(-1)?.sequenceId,
+          ),
           fleetCursor,
         );
-        this.events.set(events);
+        this.mergeEvents(events);
         this.eventHistoryLoaded.set(true);
       }
       this.cacheSelectedTranscript();
