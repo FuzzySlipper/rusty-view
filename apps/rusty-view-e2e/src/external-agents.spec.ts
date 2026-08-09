@@ -13,6 +13,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let streamReplyForNextMessage = false;
   let streamReplyThreadId = 'thread-1';
   let nextStreamingSequence = 200;
+  let selectedHistoryThreadId: string | null = null;
   let listedBindings = [binding];
   let listedThreads = [thread];
   let listedEvents: unknown[] = [...events];
@@ -135,7 +136,10 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         nextCursor: null,
         backwardsCursor: null,
       });
-    if (url.pathname.endsWith('/events')) return ok({ events: listedEvents });
+    if (url.pathname.endsWith('/events')) {
+      selectedHistoryThreadId = url.searchParams.get('native_thread_id');
+      return ok({ events: listedEvents });
+    }
     if (url.pathname.endsWith('/stream'))
       return route.fulfill({
         status: 200,
@@ -494,8 +498,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     'Effort: medium',
   );
   const loadEventHistory = page.getByTestId('load-external-event-history');
-  await expect(loadEventHistory).toBeVisible();
-  await loadEventHistory.click();
+  await expect.poll(() => selectedHistoryThreadId).toBe('thread-1');
   await expect(loadEventHistory).toBeHidden();
   await page.getByTestId('message-input-field').fill('/');
   await expect(
