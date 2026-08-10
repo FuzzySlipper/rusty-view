@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test('external agent fleet, transcript activity, interactions, and controls are visible', async ({
   page,
 }, testInfo) => {
+  test.slow();
   let interactionResolution: unknown;
   let rejectMessages = false;
   let rejectControls = false;
@@ -62,6 +63,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
         sessionId: 'session-created',
         preview: 'New browser-created Codex session',
         name: 'View external session',
+        status: 'idle',
         turns: [],
       };
       listedBindings = [...listedBindings, createdBinding];
@@ -450,10 +452,28 @@ test('external agent fleet, transcript activity, interactions, and controls are 
     .getByTestId('external-agent-row')
     .filter({ hasText: 'New browser-created Codex session' });
   await expect(clearedCreatedRow).toContainText('unmapped');
+  const selectedSessionReady = Promise.all([
+    page.waitForResponse((response) => {
+      if (!response.url().endsWith('/threads/read')) return false;
+      const body = response.request().postDataJSON() as { threadId?: string };
+      return body.threadId === 'thread-created' && response.ok();
+    }),
+    page.waitForResponse(
+      (response) =>
+        response
+          .url()
+          .endsWith('/external-bindings/binding-created/commands') &&
+        response.request().method() === 'GET' &&
+        response.ok(),
+    ),
+  ]);
   await clearedCreatedRow.click();
+  await selectedSessionReady;
+  await expect(page.getByTestId('message-input-field')).toBeEnabled();
   await page
     .getByTestId('message-input-field')
     .fill('Hello from the created session');
+  await expect(page.getByTestId('send-message')).toBeEnabled();
   await page.getByTestId('send-message').click();
   await expect.poll(() => messageBindingId).toBe('binding-created');
 
