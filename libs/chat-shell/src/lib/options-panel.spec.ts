@@ -28,13 +28,29 @@ class MemoryUserIdentityStorage implements UserIdentitySettingsStorage {
   }
 }
 
+class DeferredUserIdentityStorage extends MemoryUserIdentityStorage {
+  private resolveLoad: ((value: unknown | null) => void) | undefined;
+  private readonly loadPromise = new Promise<unknown | null>((resolve) => {
+    this.resolveLoad = resolve;
+  });
+
+  override load(): Promise<unknown | null> {
+    return this.loadPromise;
+  }
+
+  resolve(value: unknown | null): void {
+    this.resolveLoad?.(value);
+  }
+}
+
 describe('OptionsPanelComponent', () => {
   beforeEach(() => {
     document.documentElement.style.cssText = '';
   });
 
-  async function createOptions() {
-    const identityStorage = new MemoryUserIdentityStorage();
+  async function createOptions(
+    identityStorage = new MemoryUserIdentityStorage(),
+  ) {
     await TestBed.configureTestingModule({
       imports: [OptionsPanelComponent],
       providers: [
@@ -249,6 +265,28 @@ describe('OptionsPanelComponent', () => {
     await fixture.whenStable();
     expect(TestBed.inject(UserIdentitySettingsService).identity()).toBe('user');
     expect(identityStorage.value).toEqual({ version: 1, identity: 'user' });
+  });
+
+  it('updates an untouched identity draft when delayed hydration completes', async () => {
+    const identityStorage = new DeferredUserIdentityStorage();
+    const { fixture } = await createOptions(identityStorage);
+    const host: HTMLElement = fixture.nativeElement;
+    const generalTab = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('.rv-tab-strip__tab'),
+    ).find((button) => button.textContent?.trim() === 'General');
+    generalTab?.click();
+    fixture.detectChanges();
+
+    const input = host.querySelector<HTMLInputElement>(
+      '[data-testid="user-identity-input"]',
+    );
+    expect(input?.value).toBe('user');
+
+    identityStorage.resolve({ version: 1, identity: 'Alice' });
+    await TestBed.inject(UserIdentitySettingsService).whenReady();
+    fixture.detectChanges();
+
+    expect(input?.value).toBe('Alice');
   });
 
   it('renders the built-in Hotkeys tab and records a unique shortcut', async () => {

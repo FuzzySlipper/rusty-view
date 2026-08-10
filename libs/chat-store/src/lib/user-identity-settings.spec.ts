@@ -22,6 +22,21 @@ class MemoryUserIdentityStorage implements UserIdentitySettingsStorage {
   }
 }
 
+class DeferredUserIdentityStorage extends MemoryUserIdentityStorage {
+  private resolveLoad: ((value: unknown | null) => void) | undefined;
+  private readonly loadPromise = new Promise<unknown | null>((resolve) => {
+    this.resolveLoad = resolve;
+  });
+
+  override load(): Promise<unknown | null> {
+    return this.loadPromise;
+  }
+
+  resolve(value: unknown | null): void {
+    this.resolveLoad?.(value);
+  }
+}
+
 describe('UserIdentitySettingsService', () => {
   let storage: MemoryUserIdentityStorage;
 
@@ -77,5 +92,49 @@ describe('UserIdentitySettingsService', () => {
     expect(
       normalizeUserIdentitySettings({ version: 1, identity: 'line\nbreak' }),
     ).toBe(DEFAULT_USER_IDENTITY_SETTINGS);
+  });
+
+  it('exposes readiness and preserves an edit made during delayed hydration', async () => {
+    const deferredStorage = new DeferredUserIdentityStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        UserIdentitySettingsService,
+        {
+          provide: USER_IDENTITY_SETTINGS_STORAGE,
+          useValue: deferredStorage,
+        },
+      ],
+    });
+    const service = TestBed.inject(UserIdentitySettingsService);
+
+    expect(service.hydrated()).toBe(false);
+    expect(await service.setIdentity('Bob')).toBe(true);
+    deferredStorage.resolve({ version: 1, identity: 'Alice' });
+    await service.whenReady();
+
+    expect(service.hydrated()).toBe(true);
+    expect(service.identity()).toBe('Bob');
+  });
+
+  it('preserves a reset made during delayed hydration', async () => {
+    const deferredStorage = new DeferredUserIdentityStorage();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        UserIdentitySettingsService,
+        {
+          provide: USER_IDENTITY_SETTINGS_STORAGE,
+          useValue: deferredStorage,
+        },
+      ],
+    });
+    const service = TestBed.inject(UserIdentitySettingsService);
+
+    await service.reset();
+    deferredStorage.resolve({ version: 1, identity: 'Alice' });
+    await service.whenReady();
+
+    expect(service.identity()).toBe('user');
   });
 });

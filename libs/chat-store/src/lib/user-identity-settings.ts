@@ -47,13 +47,21 @@ export class UserIdentitySettingsService {
   private readonly current = signal<UserIdentitySettings>(
     DEFAULT_USER_IDENTITY_SETTINGS,
   );
+  private readonly loadPromise: Promise<void>;
   private revision = 0;
 
   readonly settings = this.current.asReadonly();
   readonly identity = computed(() => this.current().identity);
+  private readonly hydrationComplete = signal(false);
+  readonly hydrated = this.hydrationComplete.asReadonly();
 
   constructor() {
-    void this.load();
+    this.loadPromise = this.load();
+  }
+
+  /** Wait until the initial persisted identity has been reconciled. */
+  whenReady(): Promise<void> {
+    return this.loadPromise;
   }
 
   async setIdentity(value: string): Promise<boolean> {
@@ -74,10 +82,14 @@ export class UserIdentitySettingsService {
   }
 
   private async load(): Promise<void> {
-    const revisionBeforeLoad = this.revision;
-    const stored = await this.storage?.load();
-    if (this.revision !== revisionBeforeLoad) return;
-    this.current.set(normalizeUserIdentitySettings(stored));
+    try {
+      const revisionBeforeLoad = this.revision;
+      const stored = await this.storage?.load();
+      if (this.revision !== revisionBeforeLoad) return;
+      this.current.set(normalizeUserIdentitySettings(stored));
+    } finally {
+      this.hydrationComplete.set(true);
+    }
   }
 }
 

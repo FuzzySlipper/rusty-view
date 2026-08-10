@@ -1352,6 +1352,7 @@ export class ChatStore implements OnDestroy {
     ]);
 
     try {
+      await this.userIdentity.whenReady();
       const cursorBeforeSend = this.lastCursor();
       const request = {
         actor: userActor(this.userIdentity.identity()),

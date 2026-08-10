@@ -27,7 +27,12 @@ import type { ChatConnectionState } from '@rusty-view/transport';
 
 import { CHAT_STORE_VERSION } from '../index';
 import { ChatStore, CHAT_STORAGE_ADAPTER } from './chat-store';
-import { UserIdentitySettingsService } from './user-identity-settings';
+import {
+  USER_IDENTITY_SETTINGS_STORAGE,
+  UserIdentitySettingsService,
+  type UserIdentitySettings,
+  type UserIdentitySettingsStorage,
+} from './user-identity-settings';
 
 // ---- in-memory storage for tests ----
 
@@ -63,6 +68,26 @@ class InMemoryChatStorage implements ChatStorageAdapter {
   }
   async setUiState(state: ChatUiState): Promise<void> {
     this.uiState = state;
+  }
+}
+
+class DeferredUserIdentityStorage implements UserIdentitySettingsStorage {
+  private resolveLoad: ((value: unknown | null) => void) | undefined;
+  private readonly loadPromise = new Promise<unknown | null>((resolve) => {
+    this.resolveLoad = resolve;
+  });
+  saved: UserIdentitySettings | null = null;
+
+  load(): Promise<unknown | null> {
+    return this.loadPromise;
+  }
+
+  async save(settings: UserIdentitySettings): Promise<void> {
+    this.saved = settings;
+  }
+
+  resolve(value: unknown | null): void {
+    this.resolveLoad?.(value);
   }
 }
 
@@ -479,12 +504,21 @@ function deferred<T>(): {
 function setupStore(
   transport: ChatTransport,
   storage: ChatStorageAdapter,
+  identityStorage?: UserIdentitySettingsStorage,
 ): ChatStore {
   TestBed.configureTestingModule({
     providers: [
       ChatStore,
       { provide: ChatTransport, useValue: transport },
       { provide: CHAT_STORAGE_ADAPTER, useValue: storage },
+      ...(identityStorage === undefined
+        ? []
+        : [
+            {
+              provide: USER_IDENTITY_SETTINGS_STORAGE,
+              useValue: identityStorage,
+            },
+          ]),
     ],
   });
   return TestBed.inject(ChatStore);
@@ -996,6 +1030,59 @@ describe('ChatStore', () => {
       actor: { id: 'Alice', kind: 'human' },
       body: 'hello',
     });
+  });
+
+  it('waits for persisted identity hydration before an ordinary text send', async () => {
+    const transport = createMockTransport({});
+    const identityStorage = new DeferredUserIdentityStorage();
+    const store = setupStore(
+      transport,
+      new InMemoryChatStorage(),
+      identityStorage,
+    );
+
+    await store.selectSession('sess_test');
+    const submitted = store.sendMessage('hello after reload');
+    await Promise.resolve();
+    expect(transport.sendMessage).not.toHaveBeenCalled();
+
+    identityStorage.resolve({ version: 1, identity: 'Alice' });
+    await submitted;
+    expect(transport.sendMessage).toHaveBeenCalledWith('sess_test', {
+      actor: { id: 'Alice', kind: 'human' },
+      body: 'hello after reload',
+    });
+  });
+
+  it('waits for persisted identity hydration before an attachment send', async () => {
+    const transport = createMockTransport({});
+    const identityStorage = new DeferredUserIdentityStorage();
+    const store = setupStore(
+      transport,
+      new InMemoryChatStorage(),
+      identityStorage,
+    );
+
+    await store.selectSession('sess_test');
+    const submitted = store.sendMessageWithAttachments(
+      'attachment after reload',
+      ['attachment-1'],
+      'message-after-reload',
+    );
+    await Promise.resolve();
+    expect(transport.sendMessage).not.toHaveBeenCalled();
+
+    identityStorage.resolve({ version: 1, identity: 'Alice' });
+    expect(await submitted).toBe(true);
+    expect(transport.sendMessage).toHaveBeenCalledWith(
+      'sess_test',
+      {
+        actor: { id: 'Alice', kind: 'human' },
+        body: 'attachment after reload',
+        attachment_ids: ['attachment-1'],
+      },
+      'message-after-reload',
+    );
   });
 
   it('sends one attachment-linked user message and reports acceptance', async () => {

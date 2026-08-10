@@ -1,11 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   signal,
 } from '@angular/core';
 import {
-  DEFAULT_USER_IDENTITY,
   USER_IDENTITY_MAX_LENGTH,
   UserIdentitySettingsService,
 } from '@rusty-view/chat-store';
@@ -20,13 +20,16 @@ import {
 export class GeneralSettingsTabComponent {
   protected readonly userIdentity = inject(UserIdentitySettingsService);
   protected readonly maxIdentityLength = USER_IDENTITY_MAX_LENGTH;
-  protected readonly draft = signal(this.userIdentity.identity());
+  private readonly draftOverride = signal<string | undefined>(undefined);
+  protected readonly draft = computed(
+    () => this.draftOverride() ?? this.userIdentity.identity(),
+  );
   protected readonly feedback = signal('');
 
   protected updateDraft(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
-    this.draft.set(target.value);
+    this.draftOverride.set(target.value);
     this.feedback.set('');
   }
 
@@ -38,13 +41,13 @@ export class GeneralSettingsTabComponent {
       );
       return;
     }
-    this.draft.set(this.userIdentity.identity());
+    this.draftOverride.set(undefined);
     this.feedback.set('User identity saved. New messages will use it.');
   }
 
   protected async reset(): Promise<void> {
     await this.userIdentity.reset();
-    this.draft.set(DEFAULT_USER_IDENTITY);
+    this.draftOverride.set(undefined);
     this.feedback.set('Default user identity restored.');
   }
 }
