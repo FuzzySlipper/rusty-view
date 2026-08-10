@@ -1,0 +1,79 @@
+:host {
+  display: block;
+}
+
+.rv-general-settings {
+  display: grid;
+  gap: var(--rv-space-lg);
+  padding: var(--rv-space-lg);
+  color: var(--rv-color-text-primary);
+}
+
+.rv-general-settings header,
+.rv-general-settings__form {
+  display: grid;
+  gap: var(--rv-space-sm);
+}
+
+.rv-general-settings h2,
+.rv-general-settings p {
+  margin: 0;
+}
+
+.rv-general-settings p,
+.rv-general-settings__form > span {
+  color: var(--rv-color-text-muted);
+  font-size: var(--rv-font-size-sm);
+}
+
+.rv-general-settings__form {
+  padding: var(--rv-space-md);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+}
+
+.rv-general-settings__form label {
+  font-weight: var(--rv-font-weight-bold);
+}
+
+.rv-general-settings__control {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto auto;
+  gap: var(--rv-space-sm);
+}
+
+.rv-general-settings input,
+.rv-general-settings button {
+  min-height: var(--rv-density-control-md);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-primary);
+  font: inherit;
+}
+
+.rv-general-settings input {
+  padding: 0 var(--rv-space-sm);
+}
+
+.rv-general-settings button {
+  padding: 0 var(--rv-space-md);
+  color: var(--rv-color-text-secondary);
+  cursor: pointer;
+}
+
+.rv-general-settings input:focus-visible,
+.rv-general-settings button:hover,
+.rv-general-settings button:focus-visible {
+  border-color: var(--rv-color-accent);
+}
+
+@media (max-width: 560px) {
+  .rv-general-settings__control {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rv-general-settings input {
+    grid-column: 1 / -1;
+  }
+}

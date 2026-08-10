@@ -27,6 +27,7 @@ import type { ChatConnectionState } from '@rusty-view/transport';
 
 import { CHAT_STORE_VERSION } from '../index';
 import { ChatStore, CHAT_STORAGE_ADAPTER } from './chat-store';
+import { UserIdentitySettingsService } from './user-identity-settings';
 
 // ---- in-memory storage for tests ----
 
@@ -976,10 +977,25 @@ describe('ChatStore', () => {
     await store.selectSession('sess_test');
     await store.sendMessage('test message');
 
-    expect(transport.sendMessage).toHaveBeenCalledWith(
-      'sess_test',
-      expect.objectContaining({ body: 'test message' }),
-    );
+    expect(transport.sendMessage).toHaveBeenCalledWith('sess_test', {
+      actor: { id: 'user', kind: 'human' },
+      body: 'test message',
+    });
+  });
+
+  it('uses the configured soft user identity for ordinary Crew messages', async () => {
+    const transport = createMockTransport({});
+    const store = setupStore(transport, new InMemoryChatStorage());
+    const identity = TestBed.inject(UserIdentitySettingsService);
+    await identity.setIdentity('Alice');
+
+    await store.selectSession('sess_test');
+    await store.sendMessage('hello');
+
+    expect(transport.sendMessage).toHaveBeenCalledWith('sess_test', {
+      actor: { id: 'Alice', kind: 'human' },
+      body: 'hello',
+    });
   });
 
   it('sends one attachment-linked user message and reports acceptance', async () => {

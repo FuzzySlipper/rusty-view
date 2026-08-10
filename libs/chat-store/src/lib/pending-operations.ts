@@ -11,8 +11,10 @@ export interface PendingSend {
   readonly error: StoreErrorDetail | undefined;
 }
 
-/** Default actor for the operator app — overridden by the shell if needed. */
-export const DEBUG_ACTOR: ChatActor = {
-  id: 'debug-user',
-  kind: 'human',
-} as const satisfies ChatActor;
+/** Build the ordinary human actor envelope from the local soft identity. */
+export function userActor(identity: string): ChatActor {
+  return {
+    id: identity,
+    kind: 'human',
+  } as const satisfies ChatActor;
+}

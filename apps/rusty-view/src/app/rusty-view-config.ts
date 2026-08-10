@@ -13,6 +13,7 @@ import {
   SwitchboardStore,
   CHAT_STORAGE_ADAPTER,
   IndexedDbChatStorage,
+  USER_IDENTITY_SETTINGS_STORAGE,
 } from '@rusty-view/chat-store';
 import {
   ChatTheme,
@@ -24,6 +25,7 @@ import { TRANSCRIPT_TEXT_RENDER_MODE } from '@rusty-view/transcript-renderer';
 import {
   HOTKEY_SETTINGS_STORAGE,
   IndexedDbHotkeySettingsStorage,
+  IndexedDbUserIdentitySettingsStorage,
 } from '@rusty-view/chat-shell';
 
 /**
@@ -150,6 +152,10 @@ export function provideRustyView(
     {
       provide: HOTKEY_SETTINGS_STORAGE,
       useClass: IndexedDbHotkeySettingsStorage,
+    },
+    {
+      provide: USER_IDENTITY_SETTINGS_STORAGE,
+      useClass: IndexedDbUserIdentitySettingsStorage,
     },
     IndexedDbChatSettingsStorage,
     provideChatTheme(),

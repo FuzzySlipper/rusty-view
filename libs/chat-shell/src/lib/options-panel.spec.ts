@@ -3,6 +3,12 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import {
+  USER_IDENTITY_SETTINGS_STORAGE,
+  UserIdentitySettingsService,
+  type UserIdentitySettings,
+  type UserIdentitySettingsStorage,
+} from '@rusty-view/chat-store';
+import {
   CHAT_SETTINGS_STORAGE,
   ChatTheme,
   InMemoryChatSettingsStorage,
@@ -10,12 +16,25 @@ import {
 
 import { OptionsPanelComponent } from './options-panel';
 
+class MemoryUserIdentityStorage implements UserIdentitySettingsStorage {
+  value: UserIdentitySettings | null = null;
+
+  async load(): Promise<unknown | null> {
+    return this.value;
+  }
+
+  async save(settings: UserIdentitySettings): Promise<void> {
+    this.value = settings;
+  }
+}
+
 describe('OptionsPanelComponent', () => {
   beforeEach(() => {
     document.documentElement.style.cssText = '';
   });
 
   async function createOptions() {
+    const identityStorage = new MemoryUserIdentityStorage();
     await TestBed.configureTestingModule({
       imports: [OptionsPanelComponent],
       providers: [
@@ -24,16 +43,20 @@ describe('OptionsPanelComponent', () => {
           provide: CHAT_SETTINGS_STORAGE,
           useValue: new InMemoryChatSettingsStorage(),
         },
+        {
+          provide: USER_IDENTITY_SETTINGS_STORAGE,
+          useValue: identityStorage,
+        },
       ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(OptionsPanelComponent);
     fixture.detectChanges();
-    return fixture;
+    return { fixture, identityStorage };
   }
 
   it('renders the built-in Appearance tab', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
     expect(host.textContent).toContain('User Settings');
     expect(host.textContent).toContain('Appearance');
@@ -42,7 +65,7 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('renders dense reusable chat preferences and applies toggles', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
     const theme = TestBed.inject(ChatTheme);
 
@@ -85,7 +108,7 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('selects an IDE-style syntax palette without changing the base UI theme', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
     const theme = TestBed.inject(ChatTheme);
     const syntaxTheme = host.querySelector<HTMLSelectElement>(
@@ -109,7 +132,7 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('configures interface and technical font roles independently', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
     const theme = TestBed.inject(ChatTheme);
 
@@ -143,7 +166,7 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('updates and resets the persisted composer height preference', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
     const theme = TestBed.inject(ChatTheme);
     const slider = host.querySelector<HTMLInputElement>(
@@ -169,7 +192,7 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('toggles the persisted session status bar preference', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const theme = TestBed.inject(ChatTheme);
     const toggle = fixture.nativeElement.querySelector(
       '[data-testid="appearance-session-status-bar"]',
@@ -184,15 +207,52 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('keeps the appearance tab active by default', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const activeTab: HTMLElement | null = fixture.nativeElement.querySelector(
       '.rv-tab-strip__tab--active',
     );
     expect(activeTab?.textContent?.trim()).toBe('Appearance');
   });
 
+  it('edits, persists, and resets the ordinary chat user identity', async () => {
+    const { fixture, identityStorage } = await createOptions();
+    const host: HTMLElement = fixture.nativeElement;
+    const generalTab = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('.rv-tab-strip__tab'),
+    ).find((button) => button.textContent?.trim() === 'General');
+    generalTab?.click();
+    fixture.detectChanges();
+
+    const input = host.querySelector<HTMLInputElement>(
+      '[data-testid="user-identity-input"]',
+    );
+    expect(input?.value).toBe('user');
+    if (input === null) return;
+
+    input.value = 'Alice';
+    input.dispatchEvent(new Event('input'));
+    host
+      .querySelector<HTMLButtonElement>('[data-testid="user-identity-save"]')
+      ?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(TestBed.inject(UserIdentitySettingsService).identity()).toBe(
+      'Alice',
+    );
+    expect(identityStorage.value).toEqual({ version: 1, identity: 'Alice' });
+
+    host
+      .querySelector<HTMLButtonElement>('[data-testid="user-identity-reset"]')
+      ?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(TestBed.inject(UserIdentitySettingsService).identity()).toBe('user');
+    expect(identityStorage.value).toEqual({ version: 1, identity: 'user' });
+  });
+
   it('renders the built-in Hotkeys tab and records a unique shortcut', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     const host: HTMLElement = fixture.nativeElement;
     const hotkeysTab = Array.from(
       host.querySelectorAll<HTMLButtonElement>('.rv-tab-strip__tab'),
@@ -223,7 +283,7 @@ describe('OptionsPanelComponent', () => {
   });
 
   it('emits dismissed when the close button is clicked', async () => {
-    const fixture = await createOptions();
+    const { fixture } = await createOptions();
     let dismissed = false;
     (
       fixture.componentInstance as OptionsPanelComponent & {

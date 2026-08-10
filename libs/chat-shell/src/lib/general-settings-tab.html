@@ -1,0 +1,36 @@
+<section class="rv-general-settings">
+  <header>
+    <h2>General</h2>
+    <p>Local operator preferences for ordinary Crew chat sessions.</p>
+  </header>
+
+  <form
+    class="rv-general-settings__form"
+    (submit)="$event.preventDefault(); save()"
+  >
+    <label for="rv-user-identity">User identity</label>
+    <p id="rv-user-identity-help">
+      Soft attribution sent with new prompts. Responses-based Crew brains can
+      see this name; it is not an account, login, or permission boundary.
+    </p>
+    <div class="rv-general-settings__control">
+      <input
+        id="rv-user-identity"
+        data-testid="user-identity-input"
+        type="text"
+        autocomplete="off"
+        [attr.maxlength]="maxIdentityLength"
+        [value]="draft()"
+        aria-describedby="rv-user-identity-help rv-user-identity-feedback"
+        (input)="updateDraft($event)"
+      />
+      <button type="submit" data-testid="user-identity-save">Save</button>
+      <button type="button" data-testid="user-identity-reset" (click)="reset()">
+        Reset
+      </button>
+    </div>
+    <span id="rv-user-identity-feedback" aria-live="polite">
+      {{ feedback() }}
+    </span>
+  </form>
+</section>

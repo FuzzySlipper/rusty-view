@@ -16,6 +16,7 @@ export { CommandComposerComponent } from './lib/command-composer';
 export { TopMenuComponent } from './lib/top-menu';
 export { TopMenuController } from './lib/top-menu-controller';
 export { OptionsPanelComponent } from './lib/options-panel';
+export { GeneralSettingsTabComponent } from './lib/general-settings-tab';
 export { AppearanceTabComponent } from './lib/appearance-tab';
 export { HotkeysTabComponent } from './lib/hotkeys-tab';
 export {
@@ -29,6 +30,7 @@ export {
   type HotkeySettings,
   type HotkeySettingsStorage,
 } from './lib/hotkey-settings';
+export { IndexedDbUserIdentitySettingsStorage } from './lib/user-identity-settings-storage';
 export { HelpPanelComponent } from './lib/help-panel';
 export { DebugPanelComponent } from './lib/debug-panel';
 export { ProfilePanelComponent } from './lib/profile-panel';

@@ -10,6 +10,7 @@ import {
 import { TabStripComponent, type TabEntry } from '@rusty-view/chat-components';
 
 import { AppearanceTabComponent } from './appearance-tab';
+import { GeneralSettingsTabComponent } from './general-settings-tab';
 import { HotkeysTabComponent } from './hotkeys-tab';
 import {
   CHAT_OPTIONS_TABS,
@@ -19,15 +20,21 @@ import {
 /** Built-in tabs the Options panel always ships with. */
 const BUILT_IN_TABS: readonly ChatOptionsTab[] = [
   {
+    id: 'general',
+    label: 'General',
+    order: 0,
+    component: GeneralSettingsTabComponent,
+  },
+  {
     id: 'appearance',
     label: 'Appearance',
-    order: 0,
+    order: 10,
     component: AppearanceTabComponent,
   },
   {
     id: 'hotkeys',
     label: 'Hotkeys',
-    order: 10,
+    order: 20,
     component: HotkeysTabComponent,
   },
 ];

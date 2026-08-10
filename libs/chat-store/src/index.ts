@@ -61,5 +61,16 @@ export {
 export type { StoreApiErrorDetail, StoreErrorDetail } from './lib/store-error';
 export { IndexedDbChatStorage } from './lib/indexed-db-chat-storage';
 export type { PendingSend } from './lib/pending-operations';
+export { userActor } from './lib/pending-operations';
+export {
+  DEFAULT_USER_IDENTITY,
+  DEFAULT_USER_IDENTITY_SETTINGS,
+  USER_IDENTITY_MAX_LENGTH,
+  USER_IDENTITY_SETTINGS_STORAGE,
+  UserIdentitySettingsService,
+  normalizeUserIdentitySettings,
+  type UserIdentitySettings,
+  type UserIdentitySettingsStorage,
+} from './lib/user-identity-settings';
 
 export const CHAT_STORE_VERSION = '0.0.0' as const;

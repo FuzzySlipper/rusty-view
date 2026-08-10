@@ -39,8 +39,9 @@ import type {
 import { ChatTransport, type ChatConnectionState } from '@rusty-view/transport';
 import type { ChatEventStream } from '@rusty-view/transport';
 
-import { DEBUG_ACTOR, type PendingSend } from './pending-operations';
+import { type PendingSend, userActor } from './pending-operations';
 import { storeErrorDetail, storeErrorMessage } from './store-error';
+import { UserIdentitySettingsService } from './user-identity-settings';
 import { WeightedLruCache } from './weighted-lru-cache';
 
 interface CachedNativeTranscript {
@@ -89,6 +90,7 @@ export const CHAT_STORAGE_ADAPTER = new InjectionToken<ChatStorageAdapter>(
 export class ChatStore implements OnDestroy {
   private readonly transport = inject(ChatTransport);
   private readonly storage = inject(CHAT_STORAGE_ADAPTER);
+  private readonly userIdentity = inject(UserIdentitySettingsService);
 
   // ---- private state signals ----
   private readonly _sessions = signal<ChatSessionSummary[]>([]);
@@ -1352,7 +1354,7 @@ export class ChatStore implements OnDestroy {
     try {
       const cursorBeforeSend = this.lastCursor();
       const request = {
-        actor: DEBUG_ACTOR,
+        actor: userActor(this.userIdentity.identity()),
         body: text,
         ...(attachmentIds.length > 0
           ? { attachment_ids: [...attachmentIds] }
