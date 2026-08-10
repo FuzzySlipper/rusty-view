@@ -464,7 +464,7 @@ test('Agents navigates Crew and Codex sessions while Codex retains management', 
   expect(chatMessageRequests[0]).toMatchObject({
     pathname: '/v1/chat/sessions/direct-session/messages',
     body: {
-      actor: { id: 'debug-user', kind: 'human' },
+      actor: { id: 'user', kind: 'human' },
       body: 'DIRECT_SEND_PROOF',
     },
   });
