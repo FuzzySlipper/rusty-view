@@ -325,6 +325,158 @@ describe('projectExternalAgentTranscript', () => {
     });
   });
 
+  it('keeps turnless slash commands between the snapshot turns they preceded', () => {
+    const thread = {
+      threadId: 'thread-1',
+      sessionId: 'session-1',
+      parentThreadId: null,
+      preview: 'later prompt',
+      ephemeral: false,
+      modelProvider: 'openai',
+      effectiveModel: 'gpt-5.6',
+      createdAt: 100,
+      updatedAt: 400,
+      status: 'idle',
+      cwd: '/workspace',
+      cliVersion: '0.144.1',
+      name: null,
+      agentNickname: null,
+      agentRole: null,
+      turns: [
+        {
+          turnId: 'turn-before',
+          status: 'completed',
+          startedAt: 100,
+          completedAt: 150,
+          durationMs: 50_000,
+          items: [
+            {
+              itemId: 'user-before',
+              kind: 'userMessage',
+              text: 'First prompt',
+            },
+            {
+              itemId: 'assistant-before',
+              kind: 'agentMessage',
+              text: 'First answer',
+            },
+          ],
+        },
+        {
+          turnId: 'turn-after',
+          status: 'completed',
+          startedAt: 300,
+          completedAt: 350,
+          durationMs: 50_000,
+          items: [
+            {
+              itemId: 'user-after',
+              kind: 'userMessage',
+              text: 'Later prompt',
+            },
+            {
+              itemId: 'assistant-after',
+              kind: 'agentMessage',
+              text: 'Later answer',
+            },
+          ],
+        },
+      ],
+    };
+    const effortStarted = {
+      ...event('200', 'command_started', {
+        nativeMethod: 'rustyCrew/externalCommand',
+        status: 'pending',
+        command: 'effort',
+        argument: 'medium',
+      }),
+      nativeTurnId: null,
+      requestId: 'effort-command',
+      createdAt: '1970-01-01T00:03:20.000Z',
+    };
+    const effortCompleted = {
+      ...event('201', 'command_completed', {
+        nativeMethod: 'rustyCrew/externalCommand',
+        status: 'applied',
+        command: 'effort',
+        argument: 'medium',
+        message: 'Reasoning effort set to medium.',
+      }),
+      nativeTurnId: null,
+      requestId: 'effort-command',
+      createdAt: '1970-01-01T00:03:20.100Z',
+    };
+    const laterEffortStarted = {
+      ...event('250', 'command_started', {
+        nativeMethod: 'rustyCrew/externalCommand',
+        status: 'pending',
+        command: 'effort',
+        argument: 'high',
+      }),
+      nativeTurnId: null,
+      requestId: 'later-effort-command',
+      createdAt: '1970-01-01T00:04:10.000Z',
+    };
+    const laterEffortCompleted = {
+      ...event('251', 'command_completed', {
+        nativeMethod: 'rustyCrew/externalCommand',
+        status: 'applied',
+        command: 'effort',
+        argument: 'high',
+        message: 'Reasoning effort set to high.',
+      }),
+      nativeTurnId: null,
+      requestId: 'later-effort-command',
+      createdAt: '1970-01-01T00:04:10.100Z',
+    };
+
+    const messages = projectExternalAgentTranscript(thread, [
+      effortStarted,
+      effortCompleted,
+      laterEffortStarted,
+      laterEffortCompleted,
+    ]);
+
+    expect(
+      messages.map((message) =>
+        message.blocks.map((block) => block.content).join('\n'),
+      ),
+    ).toEqual([
+      'First prompt',
+      'First answer',
+      'Reasoning effort set to medium.',
+      'Reasoning effort set to high.',
+      'Later prompt',
+      'Later answer',
+    ]);
+    expect(messages[2]).toMatchObject({
+      id: 'external-event:external-command:effort-command',
+      status: 'completed',
+      blocks: [
+        expect.objectContaining({
+          kind: 'command',
+          tool: expect.objectContaining({
+            name: '/effort medium',
+            status: 'completed',
+          }),
+        }),
+      ],
+    });
+    expect(messages[3]).toMatchObject({
+      id: 'external-event:external-command:later-effort-command',
+      status: 'completed',
+      blocks: [
+        expect.objectContaining({
+          kind: 'command',
+          tool: expect.objectContaining({
+            name: '/effort high',
+            status: 'completed',
+          }),
+        }),
+      ],
+    });
+  });
+
   it('coalesces command execution output deltas into one stable block', () => {
     const started = {
       ...event('1', 'command_activity', {

@@ -238,28 +238,45 @@ export function projectExternalAgentTranscript(
       );
       continue;
     }
-    messages.push(
-      buildMessage(
-        `external-event:${key}`,
-        first.sessionId ??
-          `${first.runtimeId}:${first.nativeThreadId ?? 'runtime'}`,
-        'assistant',
-        first.createdAt,
-        blocks,
-        status,
-        {
-          runtimeId: first.runtimeId,
-          nativeThreadId: first.nativeThreadId,
-          nativeTurnId: first.nativeTurnId,
-          ...(blocks.some((block) => block.kind === 'text')
-            ? { externalAgentText: true }
-            : {}),
-          ...(messagePhase === undefined ? {} : { messagePhase }),
-        },
-      ),
+    const standaloneMessage = buildMessage(
+      `external-event:${key}`,
+      first.sessionId ??
+        `${first.runtimeId}:${first.nativeThreadId ?? 'runtime'}`,
+      'assistant',
+      first.createdAt,
+      blocks,
+      status,
+      {
+        runtimeId: first.runtimeId,
+        nativeThreadId: first.nativeThreadId,
+        nativeTurnId: first.nativeTurnId,
+        ...(blocks.some((block) => block.kind === 'text')
+          ? { externalAgentText: true }
+          : {}),
+        ...(messagePhase === undefined ? {} : { messagePhase }),
+      },
     );
+    if (isExternalCommandEvent(first.kind)) {
+      insertMessageChronologically(messages, standaloneMessage);
+    } else {
+      messages.push(standaloneMessage);
+    }
   }
   return messages;
+}
+
+function insertMessageChronologically(
+  messages: ChatMessage[],
+  message: ChatMessage,
+): void {
+  const insertionIndex = messages.findIndex(
+    (existing) => existing.createdAt.localeCompare(message.createdAt) > 0,
+  );
+  if (insertionIndex < 0) {
+    messages.push(message);
+    return;
+  }
+  messages.splice(insertionIndex, 0, message);
 }
 
 function blocksForExternalInputImages(
