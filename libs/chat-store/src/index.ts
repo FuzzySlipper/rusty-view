@@ -14,6 +14,8 @@
 
 export { ChatStore, CHAT_STORAGE_ADAPTER } from './lib/chat-store';
 export { AdminStore } from './lib/admin-store';
+export { TelegramDiplomatStore } from './lib/telegram-diplomat-store';
+export type { TelegramDiplomatSessionOption } from './lib/telegram-diplomat-store';
 export { SwitchboardStore } from './lib/switchboard-store';
 export {
   buildSwitchboardTargetOptions,

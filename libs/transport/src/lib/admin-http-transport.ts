@@ -96,6 +96,13 @@ import type {
   StorageQueryCatalog,
   StorageQueryInput,
   StorageQueryResult,
+  TelegramDiplomatBindingCreateRequest,
+  TelegramDiplomatBindingData,
+  TelegramDiplomatBindingMoveRequest,
+  TelegramDiplomatBindingRelabelRequest,
+  TelegramDiplomatBindingRevisionRequest,
+  TelegramDiplomatCredentialUpdateRequest,
+  TelegramDiplomatReadback,
 } from './admin-api-types';
 
 interface RequestOptions {
@@ -247,6 +254,69 @@ export class AdminHttpTransport {
 
   capabilities(): Promise<ApiCapabilityRegistry> {
     return this.request('GET', '/v1/admin/capabilities');
+  }
+
+  telegramDiplomat(): Promise<TelegramDiplomatReadback> {
+    return this.request('GET', '/v1/admin/telegram-diplomat');
+  }
+
+  createTelegramDiplomatBinding(
+    request: TelegramDiplomatBindingCreateRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.request('POST', '/v1/admin/telegram-diplomat/bindings', {
+      body: request,
+    });
+  }
+
+  moveTelegramDiplomatBinding(
+    bindingId: string,
+    request: TelegramDiplomatBindingMoveRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.telegramDiplomatBindingMutation(bindingId, 'move', request);
+  }
+
+  relabelTelegramDiplomatBinding(
+    bindingId: string,
+    request: TelegramDiplomatBindingRelabelRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.telegramDiplomatBindingMutation(bindingId, 'relabel', request);
+  }
+
+  setTelegramDiplomatBindingStatus(
+    bindingId: string,
+    action: 'pause' | 'resume' | 'remove',
+    request: TelegramDiplomatBindingRevisionRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.telegramDiplomatBindingMutation(bindingId, action, request);
+  }
+
+  updateTelegramDiplomatCredential(
+    request: TelegramDiplomatCredentialUpdateRequest,
+  ): Promise<TelegramDiplomatReadback & { readonly tokenUpdated: true }> {
+    return this.request('POST', '/v1/admin/telegram-diplomat/credential', {
+      body: request,
+    });
+  }
+
+  reloadTelegramDiplomat(): Promise<TelegramDiplomatReadback> {
+    return this.request('POST', '/v1/admin/telegram-diplomat/reload', {
+      body: {},
+    });
+  }
+
+  private telegramDiplomatBindingMutation(
+    bindingId: string,
+    action: 'move' | 'relabel' | 'pause' | 'resume' | 'remove',
+    body:
+      | TelegramDiplomatBindingMoveRequest
+      | TelegramDiplomatBindingRelabelRequest
+      | TelegramDiplomatBindingRevisionRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.request(
+      'POST',
+      `/v1/admin/telegram-diplomat/bindings/${encodeURIComponent(bindingId)}/${action}`,
+      { body },
+    );
   }
 
   /** Read the directory through this deployment's fixed coordination surface. */

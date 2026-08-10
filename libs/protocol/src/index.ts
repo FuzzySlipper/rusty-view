@@ -35,6 +35,7 @@ import type {
   operations as externalOperations,
 } from './generated/external-openapi';
 import type { components as providerAdminComponents } from './generated/provider-admin-openapi';
+import type { components as telegramDiplomatAdminComponents } from './generated/telegram-diplomat-admin-openapi';
 
 /**
  * Schemas namespace from the generated OpenAPI artifact. Re-exported so the
@@ -52,11 +53,37 @@ export type {
   operations as ProviderAdminApiOperations,
   paths as ProviderAdminApiPaths,
 } from './generated/provider-admin-openapi';
+export type {
+  components as TelegramDiplomatAdminApiComponents,
+  operations as TelegramDiplomatAdminApiOperations,
+  paths as TelegramDiplomatAdminApiPaths,
+} from './generated/telegram-diplomat-admin-openapi';
 
 /** Shortcut into the generated schemas map, for the aliases below. */
 type Schemas = components['schemas'];
 type ExternalSchemas = externalComponents['schemas'];
 type ProviderAdminSchemas = providerAdminComponents['schemas'];
+type TelegramDiplomatAdminSchemas = telegramDiplomatAdminComponents['schemas'];
+
+// ---- Telegram install diplomat admin contract ----
+export type TelegramDiplomatState =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatState'];
+export type TelegramDiplomatReadback =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatReadback'];
+export type TelegramDiplomatBinding =
+  TelegramDiplomatAdminSchemas['InstallDiplomatBindingRecord'];
+export type TelegramDiplomatBindingCreateRequest =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatBindingCreateRequest'];
+export type TelegramDiplomatBindingMoveRequest =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatBindingMoveRequest'];
+export type TelegramDiplomatBindingRelabelRequest =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatBindingRelabelRequest'];
+export type TelegramDiplomatBindingRevisionRequest =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatBindingRevisionRequest'];
+export type TelegramDiplomatCredentialUpdateRequest =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatCredentialUpdateRequest'];
+export type TelegramDiplomatBindingData =
+  TelegramDiplomatAdminSchemas['TelegramDiplomatBindingData'];
 
 // ---- model-provider admin contract ----
 //

@@ -1,0 +1,432 @@
+<div class="rv-telegram" data-testid="telegram-diplomat-panel">
+  <header class="rv-telegram__hero">
+    <div>
+      <span class="rv-telegram__eyebrow">Optional installation adapter</span>
+      <h2>Telegram install diplomat</h2>
+      <p>
+        One bot represents this Crew installation. Its Telegram surface binds to
+        one exact session; the session profile and working directory remain
+        independent and unchanged when the binding moves.
+      </p>
+    </div>
+    @if (diplomat.readback(); as readback) {
+    <span
+      class="rv-telegram__state"
+      [attr.data-state]="readback.state"
+      data-testid="telegram-diplomat-state"
+      >{{ readback.state }}</span
+    >
+    }
+  </header>
+
+  <div class="rv-telegram__toolbar">
+    <button type="button" (click)="refresh()" [disabled]="diplomat.loading()">
+      {{ diplomat.loading() ? 'Loading…' : 'Refresh' }}
+    </button>
+    <button type="button" (click)="reload()" [disabled]="diplomat.saving()">
+      Reload connector
+    </button>
+  </div>
+
+  @if (diplomat.error(); as error) {
+  <div class="rv-telegram__message rv-telegram__message--error" role="alert">
+    <strong>Telegram operation failed</strong><span>{{ error }}</span>
+    <span>Authoritative state was reloaded where possible.</span>
+  </div>
+  } @if (diplomat.notice(); as notice) {
+  <div class="rv-telegram__message" role="status">{{ notice }}</div>
+  } @if (diplomat.loading() && diplomat.readback() === null) {
+  <div class="rv-telegram__empty" role="status">
+    Loading Telegram installation state…
+  </div>
+  } @else if (diplomat.readback(); as readback) {
+  <section class="rv-telegram__grid rv-telegram__grid--identity">
+    <article class="rv-telegram__card">
+      <h3>1. Bot credential</h3>
+      <dl>
+        <dt>adapter</dt>
+        <dd>{{ readback.adapterId }}</dd>
+        <dt>credential</dt>
+        <dd>{{ readback.credentialId }}</dd>
+        <dt>secret stored</dt>
+        <dd>{{ readback.credential?.credential?.hasSecret ? 'yes' : 'no' }}</dd>
+        <dt>revision</dt>
+        <dd>{{ readback.credential?.revision ?? '—' }}</dd>
+      </dl>
+      <label>
+        <span
+          >{{ readback.credential ? 'Rotate bot token' : 'Bot token' }}</span
+        >
+        <input
+          #telegramToken
+          type="password"
+          autocomplete="new-password"
+          placeholder="Token is never read back"
+          data-testid="telegram-token-input"
+        />
+      </label>
+      <button
+        type="button"
+        class="rv-telegram__primary"
+        (click)="saveToken(telegramToken)"
+        [disabled]="diplomat.saving()"
+      >
+        {{ readback.credential ? 'Rotate token' : 'Save token' }}
+      </button>
+    </article>
+
+    <article class="rv-telegram__card">
+      <h3>2. Verified bot identity</h3>
+      @if (readback.botIdentity; as bot) {
+      <div class="rv-telegram__bot">
+        <span class="rv-telegram__bot-mark">T</span>
+        <div>
+          <strong>{{ bot.displayLabel ?? bot.username ?? bot.userId }}</strong>
+          <code>{{ bot.username ? '@' + bot.username : bot.userId }}</code>
+        </div>
+      </div>
+      } @else {
+      <div class="rv-telegram__empty">
+        No verified Bot API identity. Save a token, then reload the connector.
+      </div>
+      }
+      <aside class="rv-telegram__guidance">
+        <strong>Bot-to-Bot Communication Mode</strong>
+        <span>
+          In BotFather, disable group privacy when diplomats must observe group
+          messages. Add each install bot to the shared group. Crew still routes
+          only through the exact chat/topic/session binding shown here.
+        </span>
+      </aside>
+    </article>
+  </section>
+
+  <section class="rv-telegram__card rv-telegram__setup">
+    <div class="rv-telegram__section-heading">
+      <div>
+        <span class="rv-telegram__eyebrow">Observed Telegram surfaces</span>
+        <h3>3. Create exact binding</h3>
+      </div>
+      <span>{{ readback.candidates.length }} observed</span>
+    </div>
+    @if (readback.candidates.length === 0) {
+    <div class="rv-telegram__empty" data-testid="telegram-candidates-empty">
+      No groups or topics observed yet. Send a message in the target group or
+      topic, then refresh. Free-form chat identifiers are intentionally not
+      used.
+    </div>
+    } @else if (diplomat.sessions().length === 0) {
+    <div class="rv-telegram__empty">
+      No active full Crew sessions are available. Start a session, then refresh.
+    </div>
+    } @else {
+    <div class="rv-telegram__form-grid">
+      <label
+        ><span>Installation id</span
+        ><input
+          #installationIdInput
+          [value]="installationId()"
+          (input)="setText('installationId', installationIdInput.value)"
+      /></label>
+      <label
+        ><span>Installation label</span
+        ><input
+          #installationLabelInput
+          [value]="installationLabel()"
+          (input)="setText('installationLabel', installationLabelInput.value)"
+          placeholder="Workshop Crew"
+      /></label>
+      <label
+        ><span>Observed group / topic</span
+        ><select
+          #candidateSelect
+          [value]="selectedCandidateKey()"
+          (change)="selectCandidate(candidateSelect.value)"
+          data-testid="telegram-candidate-select"
+        >
+          @for (candidate of readback.candidates; track candidate.externalChatId
+          + ':' + (candidate.externalThreadId ?? '')) {
+          <option
+            [value]="candidate.externalChatId + '\u0000' + (candidate.externalThreadId ?? '')"
+          >
+            {{ candidateLabel(candidate) }}
+          </option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Exact Crew session</span
+        ><select
+          #sessionSelect
+          [value]="selectedSessionId()"
+          (change)="selectSession(sessionSelect.value)"
+          data-testid="telegram-session-select"
+        >
+          @for (session of diplomat.sessions(); track session.sessionId) {
+          <option [value]="session.sessionId">
+            {{ sessionLabel(session) }}
+          </option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Participation</span
+        ><select
+          #participationSelect
+          [value]="participationMode()"
+          (change)="selectParticipation(participationSelect.value)"
+        >
+          <option value="mention_or_reply">Mention or reply</option>
+          <option value="topic_human_messages">
+            All human messages in topic
+          </option>
+        </select></label
+      >
+    </div>
+    @if (selectedSession(); as session) {
+    <div
+      class="rv-telegram__separation"
+      data-testid="telegram-session-separation"
+    >
+      <span
+        ><small>binding target</small
+        ><strong>{{ session.sessionId }}</strong></span
+      >
+      <span><small>agent</small><strong>{{ session.agentId }}</strong></span>
+      <span
+        ><small>profile (unchanged)</small
+        ><strong>{{ session.profileId }}</strong></span
+      >
+      <span
+        ><small>workdir (unchanged)</small
+        ><strong>{{ session.workdir ?? 'unavailable' }}</strong></span
+      >
+    </div>
+    }
+    <button
+      type="button"
+      class="rv-telegram__primary"
+      (click)="createBinding()"
+      [disabled]="createDisabled()"
+      data-testid="telegram-create-binding"
+    >
+      Create install diplomat binding
+    </button>
+    }
+  </section>
+
+  <section class="rv-telegram__card">
+    <div class="rv-telegram__section-heading">
+      <div>
+        <span class="rv-telegram__eyebrow">Current assignment</span>
+        <h3>Install diplomat operations</h3>
+      </div>
+      <span>{{ diplomat.bindings().length }} bindings</span>
+    </div>
+    @if (diplomat.bindings().length === 0) {
+    <div class="rv-telegram__empty" data-testid="telegram-bindings-empty">
+      No diplomat is bound. The connector can be configured without assigning a
+      session.
+    </div>
+    } @else {
+    <label
+      ><span>Binding record</span
+      ><select
+        #bindingSelect
+        [value]="selectedBinding()?.bindingId ?? ''"
+        (change)="selectBinding(bindingSelect.value)"
+        data-testid="telegram-binding-select"
+      >
+        @for (binding of diplomat.bindings(); track binding.bindingId) {
+        <option [value]="binding.bindingId">
+          {{ binding.installationLabel }} · {{ binding.status }} · r{{
+          binding.revision }}
+        </option>
+        }
+      </select></label
+    >
+    @if (selectedBinding(); as binding) {
+    <div class="rv-telegram__binding" [attr.data-status]="binding.status">
+      <div class="rv-telegram__binding-head">
+        <strong>{{ binding.installationLabel }}</strong
+        ><span>{{ binding.status }}</span>
+      </div>
+      <dl>
+        <dt>bot</dt>
+        <dd>{{ '@' + binding.botUsername }} · {{ binding.botUserId }}</dd>
+        <dt>group</dt>
+        <dd>{{ binding.externalChatId }}</dd>
+        <dt>topic</dt>
+        <dd>{{ binding.externalThreadId ?? 'main chat' }}</dd>
+        <dt>session</dt>
+        <dd>{{ binding.sessionId }}</dd>
+        <dt>agent</dt>
+        <dd>{{ binding.agentId }}</dd>
+        <dt>profile</dt>
+        <dd>{{ selectedBindingSession()?.profileId ?? 'unavailable' }}</dd>
+        <dt>workdir</dt>
+        <dd>{{ selectedBindingSession()?.workdir ?? 'unavailable' }}</dd>
+        <dt>revision</dt>
+        <dd>{{ binding.revision }}</dd>
+        <dt>degraded reason</dt>
+        <dd>{{ binding.degradedReason ?? '—' }}</dd>
+      </dl>
+      <div class="rv-telegram__operations">
+        <label
+          ><span>Move binding to session</span
+          ><select
+            #moveSessionSelect
+            [value]="moveSessionId()"
+            (change)="selectMoveSession(moveSessionSelect.value)"
+          >
+            @for (session of diplomat.sessions(); track session.sessionId) {
+            <option [value]="session.sessionId">
+              {{ sessionLabel(session) }}
+            </option>
+            }
+          </select></label
+        >
+        <button
+          type="button"
+          (click)="moveBinding(moveSessionSelect.value)"
+          [disabled]="diplomat.saving()"
+        >
+          Move binding only
+        </button>
+        <label
+          ><span>Installation label</span
+          ><input
+            #relabelInput
+            [value]="relabelValue()"
+            (input)="setText('relabel', relabelInput.value)"
+        /></label>
+        <button
+          type="button"
+          (click)="relabelBinding()"
+          [disabled]="diplomat.saving() || relabelValue().trim().length === 0"
+        >
+          Relabel
+        </button>
+        <button
+          type="button"
+          (click)="toggleBinding()"
+          [disabled]="diplomat.saving() || binding.status === 'removed'"
+        >
+          {{ binding.status === 'paused' || binding.status === 'needs_rebind' ?
+          'Resume' : 'Pause' }}
+        </button>
+        <button
+          type="button"
+          class="rv-telegram__danger"
+          (click)="removeBinding()"
+          [disabled]="diplomat.saving() || binding.status === 'removed'"
+        >
+          {{ confirmRemove() ? 'Confirm remove binding' : 'Remove binding' }}
+        </button>
+      </div>
+      <p class="rv-telegram__invariant">
+        Move, pause, resume, relabel, and remove operate on this revisioned
+        Telegram binding. They do not archive either session, edit a profile, or
+        change a working directory.
+      </p>
+    </div>
+    } }
+  </section>
+
+  <section class="rv-telegram__card">
+    <div class="rv-telegram__section-heading">
+      <div>
+        <span class="rv-telegram__eyebrow">Live readback</span>
+        <h3>Connector diagnostics</h3>
+      </div>
+    </div>
+    @if (readback.connector; as connector) {
+    <div class="rv-telegram__diagnostic-grid">
+      <span
+        ><small>running</small
+        ><strong>{{ connector.running ? 'yes' : 'no' }}</strong></span
+      >
+      <span
+        ><small>polls</small><strong>{{ connector.pollCount }}</strong></span
+      >
+      <span
+        ><small>last poll</small
+        ><strong>{{ formatTimestamp(connector.lastPollAt) }}</strong></span
+      >
+      <span
+        ><small>cursor / next</small
+        ><strong
+          >{{ connector.lastUpdateId ?? '—' }} / {{ connector.nextOffset ?? '—'
+          }}</strong
+        ></span
+      >
+      <span
+        ><small>last inbound</small
+        ><strong>{{ formatTimestamp(connector.lastInboundAt) }}</strong></span
+      >
+      <span
+        ><small>last outbound</small
+        ><strong>{{ formatTimestamp(connector.lastOutboundAt) }}</strong></span
+      >
+      <span
+        ><small>delivered / failed</small
+        ><strong
+          >{{ connector.outbound.sent }} / {{ connector.outbound.failed
+          }}</strong
+        ></span
+      >
+      <span
+        ><small>delivery retries</small
+        ><strong>{{ connector.outbound.retried }}</strong></span
+      >
+      <span
+        ><small>loop terminated</small
+        ><strong>{{ connector.inbound.loopTerminated }}</strong></span
+      >
+      <span
+        ><small>rate limited</small
+        ><strong>{{ connector.inbound.rateLimited }}</strong></span
+      >
+      <span
+        ><small>ambiguous</small
+        ><strong>{{ connector.inbound.ambiguous }}</strong></span
+      >
+      <span
+        ><small>media available / failed</small
+        ><strong
+          >{{ connector.media.available }} / {{ connector.media.failed
+          }}</strong
+        ></span
+      >
+      <span
+        ><small>media bytes</small
+        ><strong>{{ connector.media.bytesStored }}</strong></span
+      >
+      <span
+        ><small>last external message</small
+        ><strong
+          >{{ connector.outbound.lastExternalMessageId ?? '—' }}</strong
+        ></span
+      >
+    </div>
+    @if (connector.lastError || connector.outbound.lastError ||
+    connector.media.lastError) {
+    <div class="rv-telegram__message rv-telegram__message--error">
+      <span
+        >{{ connector.lastError ?? connector.outbound.lastError ??
+        connector.media.lastError }}</span
+      >
+    </div>
+    } } @else {
+    <div class="rv-telegram__empty">
+      Connector diagnostics are unavailable while the adapter is disabled or has
+      not started.
+    </div>
+    }
+  </section>
+  } @else {
+  <div class="rv-telegram__empty" role="alert">
+    Telegram diplomat readback is unavailable.
+  </div>
+  }
+</div>

@@ -23,6 +23,14 @@
     </button>
     <button
       type="button"
+      [class.rv-admin-service__tab--active]="activeTab() === 'telegram'"
+      (click)="selectTab('telegram')"
+      data-testid="service-telegram-tab"
+    >
+      Telegram
+    </button>
+    <button
+      type="button"
       [class.rv-admin-service__tab--active]="activeTab() === 'memory'"
       (click)="selectTab('memory')"
     >
@@ -37,7 +45,9 @@
     </button>
   </nav>
 
-  @if (activeTab() === 'runtime') {
+  @if (activeTab() === 'telegram') {
+  <rv-admin-telegram-diplomat-panel />
+  } @else if (activeTab() === 'runtime') {
 
   <div class="rv-admin-service__toolbar">
     <button

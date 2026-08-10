@@ -29,6 +29,14 @@ import type {
   RuntimeActivityStatus,
   RuntimeActivityView,
   SessionWorkspaceUpdateRecord,
+  TelegramDiplomatBinding,
+  TelegramDiplomatBindingCreateRequest,
+  TelegramDiplomatBindingData,
+  TelegramDiplomatBindingMoveRequest,
+  TelegramDiplomatBindingRelabelRequest,
+  TelegramDiplomatBindingRevisionRequest,
+  TelegramDiplomatCredentialUpdateRequest,
+  TelegramDiplomatReadback,
 } from '@rusty-view/protocol';
 
 export type {
@@ -48,6 +56,14 @@ export type {
   ChatCompletionsPromptCaching,
   ResponsesProviderDialect,
   ExternalMessageDeliveryPolicy,
+  TelegramDiplomatBinding,
+  TelegramDiplomatBindingCreateRequest,
+  TelegramDiplomatBindingData,
+  TelegramDiplomatBindingMoveRequest,
+  TelegramDiplomatBindingRelabelRequest,
+  TelegramDiplomatBindingRevisionRequest,
+  TelegramDiplomatCredentialUpdateRequest,
+  TelegramDiplomatReadback,
 };
 
 export type CoordinationDeploymentRole = 'production' | 'debug';

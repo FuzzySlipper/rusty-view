@@ -1462,6 +1462,7 @@ export interface components {
             /** @constant */
             type: "human_message";
         } | {
+            attachment_ids?: string[];
             binding_id: string;
             correlation_id: string;
             expires_at: string;
@@ -1677,6 +1678,74 @@ export interface components {
         FanOutFailurePolicy: "fail_fast" | "fail_soft";
         /** @enum {string} */
         FanOutGroupStatus: "in_progress" | "completed" | "partial_failure" | "failed_fast";
+        InstallDiplomatBindingQuery: {
+            adapterId?: string | null;
+            bindingId?: string | null;
+            externalChatId?: string | null;
+            externalThreadId?: string | null;
+            installationId?: string | null;
+            sessionId?: string | null;
+            status?: components["schemas"]["InstallDiplomatBindingStatus"] | null;
+        };
+        InstallDiplomatBindingRecord: {
+            adapterId: string;
+            agentId: string;
+            bindingId: string;
+            botUserId: string;
+            botUsername: string;
+            createdAt: string;
+            degradedReason?: string | null;
+            externalChatId: string;
+            externalThreadId?: string | null;
+            installationId: string;
+            installationLabel: string;
+            instanceId?: string | null;
+            participationMode: components["schemas"]["InstallDiplomatParticipationMode"];
+            /** Format: uint64 */
+            revision: number;
+            schemaVersion: string;
+            sessionId: string;
+            status: components["schemas"]["InstallDiplomatBindingStatus"];
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        InstallDiplomatBindingStatus: "active" | "paused" | "needs_rebind" | "removed";
+        InstallDiplomatBindingStatusUpdate: {
+            bindingId: string;
+            degradedReason?: string | null;
+            /** Format: uint64 */
+            expectedRevision: number;
+            status: components["schemas"]["InstallDiplomatBindingStatus"];
+            updatedAt: string;
+        };
+        InstallDiplomatBindingWrite: {
+            adapterId: string;
+            agentId: string;
+            bindingId: string;
+            botUserId: string;
+            botUsername: string;
+            /** Format: uint64 */
+            expectedRevision?: number | null;
+            externalChatId: string;
+            externalThreadId?: string | null;
+            installationId: string;
+            installationLabel: string;
+            instanceId?: string | null;
+            participationMode: components["schemas"]["InstallDiplomatParticipationMode"];
+            sessionId: string;
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        InstallDiplomatParticipationMode: "mention_or_reply" | "topic_human_messages";
+        InstallDiplomatRebindRequest: {
+            agentId: string;
+            bindingId: string;
+            /** Format: uint64 */
+            expectedRevision: number;
+            instanceId?: string | null;
+            sessionId: string;
+            updatedAt: string;
+        };
         LogicalTurnAdmission: {
             initialCheckpoint: components["schemas"]["LogicalTurnCheckpoint"];
             lifecycleEvent: components["schemas"]["LogicalTurnLifecycleEvent"];
@@ -2691,6 +2760,60 @@ export interface components {
             previous: components["schemas"]["SessionWorkspace"];
             session: components["schemas"]["SessionState"];
         };
+        /** @enum {string} */
+        TelegramDiplomatIngressDecision: "routed" | "ignored" | "binding_unavailable" | "loop_terminated" | "rate_limited";
+        TelegramDiplomatIngressPlan: {
+            binding: components["schemas"]["InstallDiplomatBindingRecord"];
+            crewCorrelationId?: string | null;
+            decision: components["schemas"]["TelegramDiplomatIngressDecision"];
+            interaction?: components["schemas"]["TelegramDiplomatInteractionRecord"] | null;
+            reasonCode: string;
+            replyToExternalMessageId?: string | null;
+            sender: components["schemas"]["TelegramDiplomatSender"];
+            targetSessionId?: string | null;
+        };
+        TelegramDiplomatIngressRequest: {
+            addressedToBot: boolean;
+            bindingId: string;
+            correlatedInteraction: boolean;
+            externalMessageId: string;
+            interactionId: string;
+            receivedAt: string;
+            receivingBotUserId: string;
+            replyToExternalMessageId?: string | null;
+            sender: components["schemas"]["TelegramDiplomatSender"];
+        };
+        TelegramDiplomatInteractionRecord: {
+            bindingId: string;
+            /** Format: uint32 */
+            botDepth: number;
+            /** Format: uint32 */
+            botMessageCount: number;
+            botMessageTimestamps: string[];
+            botPairKey?: string | null;
+            createdAt: string;
+            crewCorrelationId: string;
+            deadlineAt: string;
+            interactionId: string;
+            lastExternalMessageId: string;
+            lastSender: components["schemas"]["TelegramDiplomatSender"];
+            /** Format: uint64 */
+            revision: number;
+            rootExternalMessageId: string;
+            schemaVersion: string;
+            terminalReason?: components["schemas"]["TelegramDiplomatInteractionTerminalReason"] | null;
+            updatedAt: string;
+        };
+        /** @enum {string} */
+        TelegramDiplomatInteractionTerminalReason: "depth_exceeded" | "message_budget_exceeded" | "interaction_expired" | "bot_pair_rate_limited" | "binding_unavailable";
+        TelegramDiplomatSender: {
+            displayLabel?: string | null;
+            externalUserId: string;
+            kind: components["schemas"]["TelegramDiplomatSenderKind"];
+            username?: string | null;
+        };
+        /** @enum {string} */
+        TelegramDiplomatSenderKind: "human" | "bot" | "sender_chat";
         ToolCallMetadata: {
             adapter_id?: string | null;
             binding_id?: string | null;

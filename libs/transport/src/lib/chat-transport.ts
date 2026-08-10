@@ -137,6 +137,13 @@ import type {
   StorageQueryCatalog,
   StorageQueryInput,
   StorageQueryResult,
+  TelegramDiplomatBindingCreateRequest,
+  TelegramDiplomatBindingData,
+  TelegramDiplomatBindingMoveRequest,
+  TelegramDiplomatBindingRelabelRequest,
+  TelegramDiplomatBindingRevisionRequest,
+  TelegramDiplomatCredentialUpdateRequest,
+  TelegramDiplomatReadback,
 } from './admin-api-types';
 import type {
   AdminActivityQuery,
@@ -444,6 +451,52 @@ export class ChatTransport {
 
   adminCapabilities(): Promise<ApiCapabilityRegistry> {
     return this.adminHttp.capabilities();
+  }
+
+  adminTelegramDiplomat(): Promise<TelegramDiplomatReadback> {
+    return this.adminHttp.telegramDiplomat();
+  }
+
+  createAdminTelegramDiplomatBinding(
+    request: TelegramDiplomatBindingCreateRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.adminHttp.createTelegramDiplomatBinding(request);
+  }
+
+  moveAdminTelegramDiplomatBinding(
+    bindingId: string,
+    request: TelegramDiplomatBindingMoveRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.adminHttp.moveTelegramDiplomatBinding(bindingId, request);
+  }
+
+  relabelAdminTelegramDiplomatBinding(
+    bindingId: string,
+    request: TelegramDiplomatBindingRelabelRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.adminHttp.relabelTelegramDiplomatBinding(bindingId, request);
+  }
+
+  setAdminTelegramDiplomatBindingStatus(
+    bindingId: string,
+    action: 'pause' | 'resume' | 'remove',
+    request: TelegramDiplomatBindingRevisionRequest,
+  ): Promise<TelegramDiplomatBindingData> {
+    return this.adminHttp.setTelegramDiplomatBindingStatus(
+      bindingId,
+      action,
+      request,
+    );
+  }
+
+  updateAdminTelegramDiplomatCredential(
+    request: TelegramDiplomatCredentialUpdateRequest,
+  ): Promise<TelegramDiplomatReadback & { readonly tokenUpdated: true }> {
+    return this.adminHttp.updateTelegramDiplomatCredential(request);
+  }
+
+  reloadAdminTelegramDiplomat(): Promise<TelegramDiplomatReadback> {
+    return this.adminHttp.reloadTelegramDiplomat();
   }
 
   coordinationAgentDirectory(): Promise<CoordinationAgentDirectory> {

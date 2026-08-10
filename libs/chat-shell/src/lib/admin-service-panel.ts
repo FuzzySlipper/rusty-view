@@ -14,6 +14,7 @@ import type {
 import { AdminStore } from '@rusty-view/chat-store';
 import { CHAT_DEBUG_TAB_CONTEXT } from './shell-extension-tokens';
 import { AdminSwitchboardPanelComponent } from './admin-switchboard-panel';
+import { AdminTelegramDiplomatPanelComponent } from './admin-telegram-diplomat-panel';
 
 import {
   formatDurationMs,
@@ -82,7 +83,10 @@ const APPLY_SEMANTICS_ROWS: readonly ServiceCapabilityRow[] = [
 
 @Component({
   selector: 'rv-admin-service-panel',
-  imports: [AdminSwitchboardPanelComponent],
+  imports: [
+    AdminSwitchboardPanelComponent,
+    AdminTelegramDiplomatPanelComponent,
+  ],
   templateUrl: './admin-service-panel.html',
   styleUrl: './admin-service-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -117,9 +121,9 @@ export class AdminServicePanelComponent {
     serviceWakeTimeoutPolicy(this.admin.configValidation()),
   );
   protected readonly draftMode = signal<'disabled' | 'default'>('disabled');
-  protected readonly activeTab = signal<'runtime' | 'switchboard' | 'memory'>(
-    'runtime',
-  );
+  protected readonly activeTab = signal<
+    'runtime' | 'telegram' | 'switchboard' | 'memory'
+  >('runtime');
   protected readonly draftDefaultMs = signal(600_000);
   protected readonly localError = signal<string | null>(null);
   protected readonly hasRuntimeConfigDraftBase = computed(
@@ -151,7 +155,9 @@ export class AdminServicePanelComponent {
     this.dismissed.emit();
   }
 
-  protected selectTab(tab: 'runtime' | 'switchboard' | 'memory'): void {
+  protected selectTab(
+    tab: 'runtime' | 'telegram' | 'switchboard' | 'memory',
+  ): void {
     this.activeTab.set(tab);
   }
 

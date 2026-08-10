@@ -193,6 +193,14 @@ export type {
   StorageQueryParameter,
   StorageQueryParameterType,
   StorageQueryResult,
+  TelegramDiplomatBinding,
+  TelegramDiplomatBindingCreateRequest,
+  TelegramDiplomatBindingData,
+  TelegramDiplomatBindingMoveRequest,
+  TelegramDiplomatBindingRelabelRequest,
+  TelegramDiplomatBindingRevisionRequest,
+  TelegramDiplomatCredentialUpdateRequest,
+  TelegramDiplomatReadback,
 } from './lib/admin-api-types';
 
 export { ChatEventStream } from './lib/chat-event-stream';

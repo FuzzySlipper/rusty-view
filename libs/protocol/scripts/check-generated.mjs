@@ -67,6 +67,20 @@ const CONTRACTS = [
       'provider-admin-openapi.ts',
     ),
   },
+  {
+    name: 'telegram diplomat admin',
+    source:
+      process.env['RUSTY_VIEW_TELEGRAM_DIPLOMAT_ADMIN_OPENAPI_SOURCE'] ??
+      '/home/dev/rusty-crew/docs/telegram-diplomat-admin-api-v0.openapi.json',
+    checkedIn: join(
+      REPO_ROOT,
+      'libs',
+      'protocol',
+      'src',
+      'generated',
+      'telegram-diplomat-admin-openapi.ts',
+    ),
+  },
 ];
 
 const tmpDir = mkdtempSync(join(tmpdir(), 'rv-protocol-check-'));
