@@ -722,7 +722,7 @@ function applyToolCall(
     reasonCode,
     debugDetailId,
   };
-  const messages = upsertActivityBlock(
+  const { messages } = upsertActivityBlock(
     { ...projection, toolCalls },
     event,
     `tool-${toolCallId}`,
@@ -774,7 +774,7 @@ function applyCommand(
     reasonCode: entry.reasonCode,
     debugDetailId: undefined,
   };
-  const messages = upsertActivityBlock(
+  const { messages, messageId: commandMessageId } = upsertActivityBlock(
     { ...projection, commands },
     event,
     `cmd-${entry.commandName}`,
@@ -787,9 +787,7 @@ function applyCommand(
     status === 'started'
       ? messages
       : messages.map((message) =>
-          message.blocks.some(
-            (block) => block.id === `cmd-${entry.commandName}`,
-          )
+          message.id === commandMessageId
             ? {
                 ...message,
                 status:
@@ -1422,28 +1420,34 @@ function upsertActivityBlock(
   kind: 'tool_call' | 'command',
   content: string,
   tool: ToolBlockMeta,
-): readonly ChatMessage[] {
+): {
+  readonly messages: readonly ChatMessage[];
+  readonly messageId: string;
+} {
   const { messages, messageId } = resolveActiveAssistantMessage(
     projection,
     event,
   );
   const index = messages.findIndex((msg) => msg.id === messageId);
   if (index < 0) {
-    return messages;
+    return { messages, messageId };
   }
-  return messages.map((msg, i) => {
-    if (i !== index) return msg;
-    const block: MessageBlock = {
-      id: blockId,
-      messageId,
-      kind,
-      content,
-      estimatedHeight: undefined,
-      renderPolicy: 'collapsed',
-      tool,
-    };
-    return { ...msg, blocks: replaceBlock(msg.blocks, block) };
-  });
+  return {
+    messageId,
+    messages: messages.map((msg, i) => {
+      if (i !== index) return msg;
+      const block: MessageBlock = {
+        id: blockId,
+        messageId,
+        kind,
+        content,
+        estimatedHeight: undefined,
+        renderPolicy: 'collapsed',
+        tool,
+      };
+      return { ...msg, blocks: replaceBlock(msg.blocks, block) };
+    }),
+  };
 }
 
 function finalizeAssistantMessage(

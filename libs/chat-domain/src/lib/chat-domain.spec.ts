@@ -1263,6 +1263,50 @@ describe('command lifecycle events', () => {
     expect(cmdBlock?.tool?.reasonCode).toBe('forbidden');
   });
 
+  it('settles only the current row for repeated same-name commands', () => {
+    const projection = projectConversation([
+      makeEvent('command_started', {
+        command_name: '/status',
+        summary: 'Checking status',
+        status: 'started',
+      }),
+      makeEvent('command_completed', {
+        command_name: '/status',
+        summary: 'Status ready',
+        status: 'completed',
+      }),
+      makeEvent('message_created', {
+        message_id: 'between-status-commands',
+        role: 'user',
+        body: 'Check it again.',
+      }),
+      makeEvent('command_started', {
+        command_name: '/status',
+        summary: 'Checking status again',
+        status: 'started',
+      }),
+      makeEvent('command_failed', {
+        command_name: '/status',
+        summary: 'Status unavailable',
+        status: 'failed',
+        reason_code: 'unavailable',
+      }),
+    ]);
+
+    expect(projection.messages.map((message) => message.status)).toEqual([
+      'completed',
+      'completed',
+      'error',
+    ]);
+    expect(
+      projection.messages.map(
+        (message) =>
+          message.blocks.find((block) => block.kind === 'command')?.tool
+            ?.status,
+      ),
+    ).toEqual(['completed', undefined, 'failed']);
+  });
+
   it('ignores malformed command payloads without crashing', () => {
     const projection = projectConversation([
       makeEvent('command_started', {
