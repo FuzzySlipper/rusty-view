@@ -35,9 +35,8 @@ export function projectExternalAgentTranscript(
       };
       snapshotCoverageByTurn.set(turn.turnId, coverage);
       const assistantBlocks: MessageBlock[] = [];
-      const assistantCoverage: Array<
-        Omit<SnapshotItemCoverage, 'messageIndex'>
-      > = [];
+      const assistantCoverage: Array<Omit<SnapshotItemCoverage, 'messageId'>> =
+        [];
       let hasExternalAgentText = false;
       for (const item of turn.items) {
         const status = item.status ?? turn.status;
@@ -54,17 +53,17 @@ export function projectExternalAgentTranscript(
             block,
             ...blocksForExternalInputImages(item.inputImages),
           ];
-          const messageIndex = messages.length;
+          const messageId = `external:${thread.threadId}:${turn.turnId}:${item.itemId}`;
           coverage.items.push({
             itemId: item.itemId,
             kind: item.kind,
             content,
-            messageIndex,
+            messageId,
             blockIndex: 0,
           });
           messages.push(
             buildMessage(
-              `external:${thread.threadId}:${turn.turnId}:${item.itemId}`,
+              messageId,
               thread.sessionId,
               'user',
               unixDate(turn.startedAt ?? thread.updatedAt),
@@ -93,14 +92,14 @@ export function projectExternalAgentTranscript(
         assistantBlocks.push(...errorMessage.blocks);
       }
       if (assistantBlocks.length > 0) {
-        const messageIndex = messages.length;
+        const messageId = externalTurnMessageId(thread.threadId, turn.turnId);
         coverage.items.push(
-          ...assistantCoverage.map((item) => ({ ...item, messageIndex })),
+          ...assistantCoverage.map((item) => ({ ...item, messageId })),
         );
         const messagePhase = messagePhaseForBlocks(assistantBlocks);
         messages.push(
           buildMessage(
-            externalTurnMessageId(thread.threadId, turn.turnId),
+            messageId,
             thread.sessionId,
             'assistant',
             unixDate(turn.startedAt ?? thread.updatedAt),
@@ -142,7 +141,7 @@ export function projectExternalAgentTranscript(
       if (reconciliation.item !== undefined) {
         applyMessagePhase(
           messages,
-          reconciliation.item.messageIndex,
+          reconciliation.item.messageId,
           reconciliation.item.blockIndex,
           reconciliation.messagePhase,
         );
@@ -153,7 +152,7 @@ export function projectExternalAgentTranscript(
       ) {
         appendSnapshotContinuation(
           messages,
-          reconciliation.item.messageIndex,
+          reconciliation.item.messageId,
           reconciliation.item.blockIndex,
           reconciliation.uncoveredContent,
           assistantTurnStatus,
@@ -317,7 +316,7 @@ interface SnapshotItemCoverage {
   readonly itemId: string;
   readonly kind: string;
   readonly content: string;
-  readonly messageIndex: number;
+  readonly messageId: string;
   readonly blockIndex: number;
 }
 
@@ -476,12 +475,16 @@ function suffixPrefixOverlap(snapshot: string, events: string): number {
 
 function appendSnapshotContinuation(
   messages: ChatMessage[],
-  messageIndex: number,
+  messageId: string,
   blockIndex: number,
   continuation: string,
   status: ChatMessage['status'],
 ): void {
   if (continuation === '') return;
+  const messageIndex = messages.findIndex(
+    (message) => message.id === messageId,
+  );
+  if (messageIndex < 0) return;
   const message = messages[messageIndex];
   const block = message?.blocks[blockIndex];
   if (message === undefined || block === undefined) return;
@@ -507,11 +510,15 @@ function appendSnapshotContinuation(
 
 function applyMessagePhase(
   messages: ChatMessage[],
-  messageIndex: number,
+  messageId: string,
   blockIndex: number,
   phase: 'commentary' | 'final_answer' | 'unknown' | undefined,
 ): void {
   if (phase === undefined) return;
+  const messageIndex = messages.findIndex(
+    (message) => message.id === messageId,
+  );
+  if (messageIndex < 0) return;
   const message = messages[messageIndex];
   const block = message?.blocks[blockIndex];
   if (message === undefined || block === undefined) return;

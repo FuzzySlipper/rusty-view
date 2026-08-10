@@ -429,12 +429,23 @@ describe('projectExternalAgentTranscript', () => {
       requestId: 'later-effort-command',
       createdAt: '1970-01-01T00:04:10.100Z',
     };
+    const laterAssistantPhase = {
+      ...event('301', 'assistant_text_delta', {
+        nativeMethod: 'item/agentMessage/delta',
+        text: 'Later answer',
+        messagePhase: 'final_answer',
+      }),
+      nativeTurnId: 'turn-after',
+      itemId: 'assistant-after',
+      createdAt: '1970-01-01T00:05:01.000Z',
+    };
 
     const messages = projectExternalAgentTranscript(thread, [
       effortStarted,
       effortCompleted,
       laterEffortStarted,
       laterEffortCompleted,
+      laterAssistantPhase,
     ]);
 
     expect(
@@ -475,6 +486,11 @@ describe('projectExternalAgentTranscript', () => {
         }),
       ],
     });
+    expect(messages[4]?.metadata?.['messagePhase']).toBeUndefined();
+    expect(messages[5]?.metadata?.['messagePhase']).toBe('final_answer');
+    expect(messages[5]?.blocks[0]?.metadata?.['messagePhase']).toBe(
+      'final_answer',
+    );
   });
 
   it('coalesces command execution output deltas into one stable block', () => {
