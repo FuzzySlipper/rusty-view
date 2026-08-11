@@ -13,6 +13,7 @@ import type {
   ExternalAgentSessionCreateWrite,
   ExternalBindingMetadataWrite,
   ExternalBindingMessageWrite,
+  ExternalBindingProfileRefreshReceipt,
   ExternalBindingRestoreWrite,
   ExternalControlReceipt,
   ExternalControlWrite,
@@ -459,6 +460,7 @@ export class ExternalAgentStore {
               this.transport.external.readThread(runtime.runtimeId, {
                 threadId,
                 includeTurns: false,
+                limit: 50,
               }),
             ),
           );
@@ -712,6 +714,7 @@ export class ExternalAgentStore {
         this.transport.external.readThread(runtimeId, {
           threadId: session.thread.threadId,
           includeTurns: true,
+          limit: 50,
         }),
         replayHistory
           ? this.listAllEvents(runtimeId, undefined, session.thread.threadId)
@@ -932,6 +935,10 @@ export class ExternalAgentStore {
       );
       return undefined;
     }
+    if (isProfileRefreshCommand(input)) {
+      await this.refreshSelectedProfile(binding);
+      return undefined;
+    }
     this.pending.set(true);
     this.commandError.set(undefined);
     this.commandResult.set(undefined);
@@ -982,6 +989,137 @@ export class ExternalAgentStore {
     }
   }
 
+  private async refreshSelectedProfile(
+    selectedBinding: ExternalAgentBinding,
+  ): Promise<void> {
+    this.pending.set(true);
+    this.commandError.set(undefined);
+    this.commandResult.set(undefined);
+    this.lifecycleNotice.set(undefined);
+    try {
+      const fleet = await this.transport.external.listBindings();
+      const binding = fleet.bindings.find(
+        (candidate) => candidate.bindingId === selectedBinding.bindingId,
+      );
+      const profileState = fleet.profileStates.find(
+        (candidate) => candidate.bindingId === selectedBinding.bindingId,
+      );
+      if (binding === undefined || binding.nativeThreadId == null) {
+        throw new Error(
+          'The selected Codex binding changed. Refresh Agents and run /refresh-profile again.',
+        );
+      }
+      if (
+        profileState === undefined ||
+        profileState.currentProfileRevision === null ||
+        profileState.currentPromptHash === null
+      ) {
+        throw new Error(
+          'The current profile prompt is unavailable. Refresh Agents and inspect the profile before retrying.',
+        );
+      }
+      const receipt = await this.transport.external.refreshBindingProfile(
+        binding.bindingId,
+        {
+          expectedBindingRevision: binding.revision,
+          expectedNativeThreadId: binding.nativeThreadId,
+          expectedProfileRevision: profileState.currentProfileRevision,
+          expectedProfilePromptHash: profileState.currentPromptHash,
+        },
+      );
+      if (receipt.outcome === 'thread_replaced') {
+        await this.applyProfileRefreshReplacement(binding, receipt);
+        this.lifecycleNotice.set(
+          `Started a fresh Codex session with profile ${receipt.profileState.profileId ?? 'unknown'} revision ${receipt.profileState.currentProfileRevision ?? 'unknown'}; exact switchboard routes were moved by Crew.`,
+        );
+        await this.refreshSelectedCommands();
+        return;
+      }
+      this.bindingMutationRevision += 1;
+      this.bindings.update((bindings) =>
+        bindings.map((candidate) =>
+          candidate.bindingId === receipt.binding.bindingId
+            ? receipt.binding
+            : candidate,
+        ),
+      );
+      this.lifecycleNotice.set(
+        receipt.outcome === 'already_current'
+          ? 'The selected Codex session already uses the current profile prompt; no new session was created.'
+          : 'Updated the selected Codex binding to the current profile revision; the prompt was unchanged, so the existing thread was preserved.',
+      );
+    } catch (error) {
+      this.commandError.set(
+        `Profile refresh failed: ${profileRefreshErrorMessage(error)}`,
+      );
+    } finally {
+      this.pending.set(false);
+    }
+  }
+
+  private async applyProfileRefreshReplacement(
+    predecessor: ExternalAgentBinding,
+    receipt: ExternalBindingProfileRefreshReceipt,
+  ): Promise<void> {
+    const successor = receipt.binding;
+    if (
+      successor.bindingId === predecessor.bindingId ||
+      successor.nativeThreadId == null
+    ) {
+      throw new Error(
+        'Crew profile refresh did not return a distinct bound successor thread.',
+      );
+    }
+    const runtimeId = predecessor.runtimeId;
+    const previousKey = sessionKey(runtimeId, receipt.previousNativeThreadId);
+    const selectionRevision = this.selectionRevision;
+    const stillSelected = () =>
+      selectionRevision === this.selectionRevision &&
+      this.selectedSessionKey() === previousKey;
+    const read = await this.transport.external.readThread(runtimeId, {
+      threadId: receipt.nativeThreadId,
+      includeTurns: true,
+      limit: 50,
+    });
+
+    this.bindingMutationRevision += 1;
+    this.bindings.update((bindings) => [
+      ...bindings.filter(
+        (candidate) =>
+          candidate.bindingId !== predecessor.bindingId &&
+          candidate.bindingId !== successor.bindingId,
+      ),
+      successor,
+    ]);
+    this.transcriptCache.delete(previousKey);
+    this.runtimeThreads.update((threads) => [
+      ...threads.filter(
+        (entry) =>
+          entry.runtimeId !== runtimeId ||
+          (entry.thread.threadId !== receipt.nativeThreadId &&
+            entry.thread.threadId !== receipt.previousNativeThreadId),
+      ),
+      { runtimeId, thread: read.thread },
+    ]);
+
+    if (!stillSelected()) return;
+    this.selectionRevision += 1;
+    this.stream?.close();
+    this.stream = undefined;
+    this.selectedRuntimeEventCursor = this.fleetCursors.get(runtimeId);
+    this.events.set([]);
+    this.eventHistoryLoading.set(false);
+    this.eventHistoryLoaded.set(false);
+    this.selectedRuntimeId.set(runtimeId);
+    this.selectedThreadId.set(receipt.nativeThreadId);
+    this.selectedThread.set(read.thread);
+    this.seen.update((seen) => ({
+      ...seen,
+      [sessionKey(runtimeId, receipt.nativeThreadId)]: read.thread.updatedAt,
+    }));
+    this.startStream(runtimeId, this.selectedRuntimeEventCursor);
+  }
+
   private async applyThreadReplacement(
     binding: ExternalAgentBinding,
     replacement: ExternalRuntimeThreadReplacementResult,
@@ -1010,6 +1148,7 @@ export class ExternalAgentStore {
     const read = await this.transport.external.readThread(runtimeId, {
       threadId: replacement.nativeThreadId,
       includeTurns: true,
+      limit: 50,
     });
     const sessionId = replacement.sessionId ?? binding.sessionId;
     const nextBinding: ExternalAgentBinding = {
@@ -1262,6 +1401,7 @@ export class ExternalAgentStore {
       this.transport.external.readThread(runtimeId, {
         threadId,
         includeTurns: true,
+        limit: 50,
       }),
       this.refreshSelectedEvents(),
     ]);
@@ -2186,6 +2326,27 @@ function mergeBindings(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isProfileRefreshCommand(input: string): boolean {
+  const command = input.trim().split(/\s+/, 1)[0]?.toLowerCase();
+  return command === '/refresh-profile' || command === '/profile-refresh';
+}
+
+function profileRefreshErrorMessage(error: unknown): string {
+  if (!(error instanceof ChatTransportError)) return errorMessage(error);
+  const reason = error.apiError?.reason_code;
+  if (reason === 'external_binding_profile_refresh_thread_busy') {
+    return 'the Codex thread still has active work. Wait for it to settle, then run /refresh-profile again.';
+  }
+  if (
+    reason === 'external_binding_profile_refresh_revision_conflict' ||
+    reason === 'external_binding_profile_refresh_identity_conflict' ||
+    reason === 'external_binding_profile_refresh_profile_revision_conflict'
+  ) {
+    return 'the binding or profile changed while the command was prepared. Refresh Agents, verify the selected session, and run /refresh-profile again.';
+  }
+  return errorMessage(error);
 }
 
 function exactBindingRestoreWrite(

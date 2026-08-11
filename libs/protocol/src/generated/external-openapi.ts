@@ -1666,6 +1666,26 @@ export interface components {
             /** @constant */
             type: "machine_fact";
         };
+        ExternalTurnPage: {
+            hasMoreBefore: boolean;
+            items: components["schemas"]["ExternalTurnPageEntry"][];
+        };
+        ExternalTurnPageCursor: {
+            /** Format: uint64 */
+            creationOrdinal: number;
+            requestId: string;
+        };
+        ExternalTurnPageEntry: {
+            cursor: components["schemas"]["ExternalTurnPageCursor"];
+            turn: components["schemas"]["ExternalTurnCorrelation"];
+        };
+        ExternalTurnPageQuery: {
+            before?: components["schemas"]["ExternalTurnPageCursor"] | null;
+            /** Format: uint32 */
+            limit: number;
+            nativeThreadId: string;
+            runtimeId: string;
+        };
         /** @enum {string} */
         ExternalTurnPhase: "accepted" | "starting" | "active" | "waiting_interaction" | "completed" | "failed" | "interrupted" | "outcome_unknown";
         ExternalTurnTerminalError: {
@@ -2392,6 +2412,13 @@ export interface components {
             reviewTaskStatus?: string | null;
             reviewVerdict?: string | null;
             reviewer: string;
+            /**
+             * Format: uint32
+             * @default 0
+             */
+            reviewerDispatchAttempts: number;
+            reviewerDispatchGeneration?: string | null;
+            reviewerDispatchNextRetryAt?: string | null;
             reviewerSessionId?: string | null;
             /** Format: uint64 */
             revision: number;
@@ -2436,11 +2463,21 @@ export interface components {
             /** @constant */
             type: "adapter_failed";
         } | {
+            reasonCode: string;
+            retryGeneration: string;
+            summary: string;
+            /** @constant */
+            type: "reviewer_dispatch_failed";
+        } | {
             dispatchDeliveryId: string;
             dispatchMessageId: string;
             reviewerSessionId: string;
             /** @constant */
             type: "reviewer_dispatched";
+        } | {
+            reasonCode: string;
+            /** @constant */
+            type: "reviewer_redispatch_pending";
         } | {
             resultDigest: string;
             resultJson: string;
@@ -2468,6 +2505,11 @@ export interface components {
             /** @constant */
             type: "den_already_finalized";
             verdict: string;
+        } | {
+            taskStatus: string;
+            terminalReason: string;
+            /** @constant */
+            type: "den_task_terminal";
         } | {
             /** @constant */
             type: "reply_pending";
@@ -3230,8 +3272,14 @@ export interface components {
         };
         ExternalThreadReadRequest: {
             threadId: string;
-            /** @default true */
+            /**
+             * @description When true, returns one bounded turn page. It never requests the complete native transcript.
+             * @default true
+             */
             includeTurns: boolean;
+            /** @default 50 */
+            limit: number;
+            beforeCursor?: string;
         };
         ExternalThreadItemProjection: {
             itemId: string;
@@ -3242,6 +3290,8 @@ export interface components {
             /** @enum {string} */
             messagePhase?: "commentary" | "final_answer" | "unknown";
             inputImages?: components["schemas"]["ExternalInputImageReference"][];
+            detailHandle?: string;
+            truncated?: boolean;
         };
         ExternalInputImageReference: {
             attachmentId: string;
@@ -3262,6 +3312,7 @@ export interface components {
             completedAt: number | null;
             durationMs: number | null;
             items: components["schemas"]["ExternalThreadItemProjection"][];
+            itemsTruncated?: boolean;
         };
         ExternalThreadTurnErrorProjection: {
             message: string;
@@ -3299,6 +3350,14 @@ export interface components {
         };
         ExternalThreadReadResult: {
             thread: components["schemas"]["ExternalThreadProjection"];
+            turnPage: components["schemas"]["ExternalThreadTurnPage"];
+        };
+        ExternalThreadTurnPage: {
+            limit: number;
+            hasMoreBefore: boolean;
+            beforeCursor: string | null;
+            pageStartCursor: string | null;
+            pageEndCursor: string | null;
         };
         ExternalThreadLifecycleBindingTransition: {
             bindingId: string;
@@ -3315,6 +3374,12 @@ export interface components {
             outcome: "applied" | "already_archived" | "already_active";
             nativeArchived: boolean;
             bindings: components["schemas"]["ExternalThreadLifecycleBindingTransition"][];
+            crewSessions: components["schemas"]["ExternalThreadLifecycleSessionTransition"][];
+        };
+        ExternalThreadLifecycleSessionTransition: {
+            sessionId: string;
+            previousStatus: string;
+            currentStatus: string;
         };
         ExternalThreadDeleteReceipt: {
             runtimeId: string;

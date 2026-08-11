@@ -160,6 +160,7 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-1',
       includeTurns: true,
+      limit: 50,
     });
   });
 
@@ -593,6 +594,7 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-stale',
       includeTurns: false,
+      limit: 50,
     });
     expect(store.sessions().map((session) => session.thread.threadId)).toEqual([
       'thread-1',
@@ -633,6 +635,7 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-active-missing',
       includeTurns: false,
+      limit: 50,
     });
     expect(store.sessions().map((session) => session.thread.threadId)).toEqual([
       'thread-1',
@@ -1535,6 +1538,7 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-1',
       includeTurns: true,
+      limit: 50,
     });
   });
 
@@ -1606,6 +1610,7 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-1',
       includeTurns: true,
+      limit: 50,
     });
     expect(store.messages()[0]).toMatchObject({
       status: 'error',
@@ -1772,6 +1777,7 @@ describe('ExternalAgentStore', () => {
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-replacement',
       includeTurns: true,
+      limit: 50,
     });
     expect(store.selectedThreadId()).toBe('thread-replacement');
     expect(store.selectedThread()).toBe(replacementThread);
@@ -1822,6 +1828,103 @@ describe('ExternalAgentStore', () => {
         }),
       }),
     ]);
+  });
+
+  it('runs /refresh-profile with fresh guards and selects the archived-thread successor', async () => {
+    const originalBinding = {
+      ...externalBinding(),
+      profileId: 'reviewer',
+      profileRevision: 18,
+      profilePromptHash: 'a'.repeat(64),
+      revision: 4,
+    };
+    const successorBinding = {
+      ...originalBinding,
+      bindingId: 'binding-fresh',
+      sessionId: 'session-fresh',
+      agentId: 'agent-fresh',
+      nativeThreadId: 'thread-fresh',
+      profileRevision: 19,
+      profilePromptHash: 'b'.repeat(64),
+      revision: 1,
+      lineage: {
+        predecessorBindingId: originalBinding.bindingId,
+        predecessorSessionId: originalBinding.sessionId ?? '',
+        predecessorNativeThreadId: originalBinding.nativeThreadId ?? '',
+        transitionId: 'profile-refresh-1',
+        reasonCode: 'profile_prompt_refresh',
+        createdAt: '2026-08-11T00:00:00Z',
+      },
+    };
+    const listBindings = vi.fn(async () => ({
+      bindings: [originalBinding],
+      profileStates: [
+        {
+          bindingId: originalBinding.bindingId,
+          profileId: 'reviewer',
+          state: 'stale' as const,
+          refreshRequired: true,
+          appliedProfileRevision: 18,
+          appliedPromptHash: 'a'.repeat(64),
+          currentProfileRevision: 19,
+          currentPromptHash: 'b'.repeat(64),
+        },
+      ],
+    }));
+    const refreshBindingProfile = vi.fn(async () => ({
+      outcome: 'thread_replaced' as const,
+      binding: successorBinding,
+      previousNativeThreadId: 'thread-1',
+      nativeThreadId: 'thread-fresh',
+      previousNativeThreadArchived: true,
+      profileState: {
+        bindingId: successorBinding.bindingId,
+        profileId: 'reviewer',
+        state: 'current' as const,
+        refreshRequired: false,
+        appliedProfileRevision: 19,
+        appliedPromptHash: 'b'.repeat(64),
+        currentProfileRevision: 19,
+        currentPromptHash: 'b'.repeat(64),
+      },
+    }));
+    const replacementThread = thread('thread-fresh', 20);
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [originalBinding],
+      listBindings,
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread: vi.fn(async () => ({ thread: replacementThread })),
+      refreshBindingProfile,
+    });
+    await store.refresh();
+    store.selectedRuntimeId.set('runtime-1');
+    store.selectedThreadId.set('thread-1');
+    store.selectedThread.set(thread('thread-1', 10));
+
+    await store.executeCommand('/refresh-profile');
+
+    expect(refreshBindingProfile).toHaveBeenCalledWith('binding-1', {
+      expectedBindingRevision: 4,
+      expectedNativeThreadId: 'thread-1',
+      expectedProfileRevision: 19,
+      expectedProfilePromptHash: 'b'.repeat(64),
+    });
+    expect(store.selectedThreadId()).toBe('thread-fresh');
+    expect(store.selectedBinding()).toMatchObject({
+      bindingId: 'binding-fresh',
+      sessionId: 'session-fresh',
+      profileRevision: 19,
+    });
+    expect(store.bindings()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ bindingId: originalBinding.bindingId }),
+      ]),
+    );
+    expect(store.commandHistory()).toEqual([]);
+    expect(store.lifecycleNotice()).toContain(
+      'exact switchboard routes were moved by Crew',
+    );
   });
 
   it('keeps an immediate post-/new transport failure visible on the replacement thread', async () => {
@@ -2589,6 +2692,7 @@ function setupStore(options: {
   executeCommand?: ReturnType<typeof vi.fn>;
   updateBindingMetadata?: ReturnType<typeof vi.fn>;
   restoreBinding?: ReturnType<typeof vi.fn>;
+  refreshBindingProfile?: ReturnType<typeof vi.fn>;
   rawDetail?: ReturnType<typeof vi.fn>;
   streamExternalRuntimeEvents?: ReturnType<typeof vi.fn>;
 }): ExternalAgentStore {
@@ -2619,6 +2723,7 @@ function setupStore(options: {
     executeCommand: options.executeCommand ?? vi.fn(),
     updateBindingMetadata: options.updateBindingMetadata ?? vi.fn(),
     restoreBinding: options.restoreBinding ?? vi.fn(),
+    refreshBindingProfile: options.refreshBindingProfile ?? vi.fn(),
     rawDetail: options.rawDetail ?? vi.fn(),
   };
   TestBed.configureTestingModule({

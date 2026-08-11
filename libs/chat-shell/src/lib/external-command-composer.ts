@@ -8,20 +8,28 @@ import type {
 export function externalCommandComposerDescriptors(
   catalog: ExternalRuntimeCommandCatalog | undefined,
 ): readonly MessageInputCommandDescriptor[] {
-  if (catalog === undefined) return [];
+  const profileRefresh: MessageInputCommandDescriptor = {
+    name: 'refresh-profile',
+    description:
+      'Start a fresh Codex session with the current profile prompt and move exact switchboard routes to it. Alias: /profile-refresh.',
+  };
+  if (catalog === undefined) return [profileRefresh];
 
-  return catalog.commands.flatMap((command) => {
-    const descriptor = commandDescriptor(command, catalog);
-    return [
-      descriptor,
-      ...command.aliases.map((alias) => ({
-        ...descriptor,
-        name: alias,
-        description:
-          `Alias for /${command.name}. ${descriptor.description ?? ''}`.trim(),
-      })),
-    ];
-  });
+  return [
+    profileRefresh,
+    ...catalog.commands.flatMap((command) => {
+      const descriptor = commandDescriptor(command, catalog);
+      return [
+        descriptor,
+        ...command.aliases.map((alias) => ({
+          ...descriptor,
+          name: alias,
+          description:
+            `Alias for /${command.name}. ${descriptor.description ?? ''}`.trim(),
+        })),
+      ];
+    }),
+  ];
 }
 
 function commandDescriptor(

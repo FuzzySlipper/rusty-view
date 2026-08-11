@@ -9,6 +9,7 @@ import type {
   ExternalBindingFleet,
   ExternalBindingMessageWrite,
   ExternalBindingMetadataWrite,
+  ExternalBindingProfileRefreshWrite,
   ExternalBindingRestoreWrite,
   ExternalControlReceipt,
   ExternalControlWrite,
@@ -36,6 +37,7 @@ import type {
   ReadExternalRuntimeThreadResponse,
   ResolveExternalInteractionResponse,
   RestoreExternalBindingResponse,
+  RefreshExternalBindingProfileResponse,
   ExecuteExternalBindingCommandResponse,
   SendExternalBindingMessageResponse,
   SubmitExternalBindingControlResponse,
@@ -106,6 +108,19 @@ export class ExternalRuntimeHttpTransport {
       await this.request<RestoreExternalBindingResponse>(
         'POST',
         `/v1/external-bindings/${encodeURIComponent(bindingId)}/restore`,
+        request,
+      ),
+    );
+  }
+
+  async refreshBindingProfile(
+    bindingId: string,
+    request: ExternalBindingProfileRefreshWrite,
+  ): Promise<RefreshExternalBindingProfileResponse['data']> {
+    return unwrap(
+      await this.request<RefreshExternalBindingProfileResponse>(
+        'POST',
+        `/v1/external-bindings/${encodeURIComponent(bindingId)}/profile-refresh`,
         request,
       ),
     );

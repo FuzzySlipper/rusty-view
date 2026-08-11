@@ -6,6 +6,7 @@ describe('externalCommandComposerDescriptors', () => {
     const commands = externalCommandComposerDescriptors(catalog());
 
     expect(commands.map((command) => command.name)).toEqual([
+      'refresh-profile',
       'help',
       'commands',
       'model',
@@ -39,7 +40,13 @@ describe('externalCommandComposerDescriptors', () => {
       })),
     });
 
-    expect(commands[0]?.description).toContain('model_list_unavailable');
+    expect(commands[1]?.description).toContain('model_list_unavailable');
+  });
+
+  it('keeps profile refresh available when native command discovery fails', () => {
+    expect(externalCommandComposerDescriptors(undefined)).toEqual([
+      expect.objectContaining({ name: 'refresh-profile' }),
+    ]);
   });
 });
 

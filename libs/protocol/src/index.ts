@@ -121,6 +121,12 @@ export type ExternalBindingRestoreWrite =
   ExternalSchemas['ExternalBindingRestoreWrite'];
 export type ExternalAgentBindingRestoreReceipt =
   ExternalSchemas['ExternalAgentBindingRestoreReceipt'];
+export type ExternalBindingProfileState =
+  ExternalSchemas['ExternalBindingProfileState'];
+export type ExternalBindingProfileRefreshWrite =
+  ExternalSchemas['ExternalBindingProfileRefreshWrite'];
+export type ExternalBindingProfileRefreshReceipt =
+  ExternalSchemas['ExternalBindingProfileRefreshReceipt'];
 export type ExternalAgentSessionCreateWrite =
   ExternalSchemas['ExternalAgentSessionCreateWrite'];
 export type ExternalAgentSessionCreateResult =
@@ -235,6 +241,8 @@ export type WriteExternalBindingMetadataResponse =
   externalOperations['writeExternalBindingMetadata']['responses'][200]['content']['application/json'];
 export type RestoreExternalBindingResponse =
   externalOperations['restoreExternalBinding']['responses'][200]['content']['application/json'];
+export type RefreshExternalBindingProfileResponse =
+  externalOperations['refreshExternalBindingProfile']['responses'][200]['content']['application/json'];
 export type ListExternalRuntimeThreadsResponse =
   externalOperations['listExternalRuntimeThreads']['responses'][200]['content']['application/json'];
 export type ReadExternalRuntimeThreadResponse =

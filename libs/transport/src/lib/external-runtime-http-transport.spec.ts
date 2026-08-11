@@ -165,6 +165,69 @@ describe('ExternalRuntimeHttpTransport', () => {
     });
   });
 
+  it('refreshes an external binding profile through the generated concurrency contract', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-bindings/binding%2Fstale/profile-refresh',
+        );
+        expect(JSON.parse(String(init?.body))).toEqual({
+          expectedBindingRevision: 4,
+          expectedNativeThreadId: 'thread-old',
+          expectedProfileRevision: 19,
+          expectedProfilePromptHash: 'a'.repeat(64),
+        });
+        return json({
+          ok: true,
+          data: {
+            outcome: 'thread_replaced',
+            binding: {
+              bindingId: 'binding-fresh',
+              runtimeId: 'runtime-1',
+              nativeThreadId: 'thread-fresh',
+              sessionId: 'session-fresh',
+              agentId: 'agent-fresh',
+              profileId: 'reviewer',
+              purpose: 'crew_agent',
+              status: 'active',
+              effectiveConfigFingerprint: 'config',
+              revision: 1,
+              createdAt: '',
+              updatedAt: '',
+            },
+            previousNativeThreadId: 'thread-old',
+            nativeThreadId: 'thread-fresh',
+            previousNativeThreadArchived: true,
+            profileState: {
+              bindingId: 'binding-fresh',
+              profileId: 'reviewer',
+              state: 'current',
+              refreshRequired: false,
+              appliedProfileRevision: 19,
+              appliedPromptHash: 'a'.repeat(64),
+              currentProfileRevision: 19,
+              currentPromptHash: 'a'.repeat(64),
+            },
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(
+      transport.refreshBindingProfile('binding/stale', {
+        expectedBindingRevision: 4,
+        expectedNativeThreadId: 'thread-old',
+        expectedProfileRevision: 19,
+        expectedProfilePromptHash: 'a'.repeat(64),
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'thread_replaced',
+      binding: { bindingId: 'binding-fresh' },
+    });
+  });
+
   it('uses generated endpoint shapes for fleets, pagination, and controls', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
