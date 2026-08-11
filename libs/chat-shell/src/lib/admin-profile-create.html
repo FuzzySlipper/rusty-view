@@ -55,6 +55,20 @@
           </select>
         </label>
         <label>
+          <span>Initial session workspace</span>
+          <input
+            type="text"
+            [value]="form().workspaceCwd"
+            (input)="updateText('workspaceCwd', $event)"
+            autocomplete="off"
+            placeholder="/absolute/path/to/workspace"
+          />
+        </label>
+        <p class="rv-admin-profiles__hint">
+          Session-scoped working directory for the initial Crew session. It is
+          required for a full session and is not stored as a profile cwd.
+        </p>
+        <label>
           <span>Provider alias</span>
           <select
             [value]="form().providerAlias"

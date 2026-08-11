@@ -17,7 +17,10 @@ import {
   type TransportOptions,
 } from './admin-profiles.testing';
 
-async function createWindow(options: TransportOptions = {}) {
+async function createWindow(
+  options: TransportOptions = {},
+  initialWorkspace = '/home/dev',
+) {
   await TestBed.configureTestingModule({
     imports: [AdminProfileCreateComponent],
     providers: [
@@ -28,6 +31,14 @@ async function createWindow(options: TransportOptions = {}) {
   }).compileComponents();
   const fixture = TestBed.createComponent(AdminProfileCreateComponent);
   fixture.detectChanges();
+  if (initialWorkspace !== '') {
+    (fixture.componentInstance as unknown as CreateComponentApi).updateText(
+      'workspaceCwd',
+      {
+        target: { value: initialWorkspace },
+      },
+    );
+  }
   await TestBed.inject(AdminStore).refresh();
   fixture.detectChanges();
   return fixture;
@@ -39,6 +50,7 @@ interface CreateComponentApi {
       | 'profileId'
       | 'sessionId'
       | 'implementationId'
+      | 'workspaceCwd'
       | 'providerAlias'
       | 'soulMarkdown',
     event: { target: { value: string } },
@@ -84,8 +96,59 @@ describe('AdminProfileCreateComponent', () => {
 
     const request = lastCreateRequest(transport.createAdminProfile);
     expect(request.profileId).toBe('minimal-prime');
+    expect(request.workspaceCwd).toBe('/home/dev');
     expect(request).not.toHaveProperty('modelConfig');
     expect(request).not.toHaveProperty('kind');
+  });
+
+  it('requires an explicit initial workspace for the default full session', async () => {
+    const fixture = await createWindow({}, '');
+    const component =
+      fixture.componentInstance as unknown as CreateComponentApi;
+
+    component.updateText('profileId', { target: { value: 'needs-workspace' } });
+    fixture.detectChanges();
+
+    const createButton = (fixture.nativeElement as HTMLElement).querySelector(
+      'button.rv-admin-profiles__button--primary',
+    ) as HTMLButtonElement | null;
+    expect(createButton?.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain(
+      'is not stored as a profile cwd',
+    );
+  });
+
+  it('keeps the form open and surfaces an embedded failed control outcome', async () => {
+    const fixture = await createWindow();
+    const component =
+      fixture.componentInstance as unknown as CreateComponentApi;
+    const transport = TestBed.inject(ChatTransport);
+    const created = vi.fn();
+    fixture.componentInstance.created.subscribe(created);
+    vi.spyOn(transport, 'createAdminProfile').mockResolvedValue({
+      command: {
+        name: 'create_profile',
+        target: {},
+        requestId: 'req-failed',
+      },
+      outcome: {
+        status: 'failed',
+        summary: 'initial session workspace is invalid',
+        reasonCode: 'control_executor_failed',
+      },
+      audit: { started: true, terminal: true },
+      observation: {},
+    });
+
+    component.updateText('profileId', { target: { value: 'failed-prime' } });
+    component.createProfile();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(created).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain(
+      'initial session workspace is invalid',
+    );
   });
 
   it('omits sessionId/implementationId/mcpToolProfile/mcpBindings/toolPolicy by default', async () => {

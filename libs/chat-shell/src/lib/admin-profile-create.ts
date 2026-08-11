@@ -37,6 +37,8 @@ interface ProfileFormState {
   readonly agentId: string;
   readonly sessionId: string;
   readonly implementationId: string;
+  /** Session-scoped workspace for the initial session created by Crew. */
+  readonly workspaceCwd: string;
   /** '' means use the backend default session kind. */
   readonly kind: '' | 'full' | 'worker' | 'delegated';
   /**
@@ -60,6 +62,7 @@ const INITIAL_FORM: ProfileFormState = {
   agentId: '',
   sessionId: '',
   implementationId: '',
+  workspaceCwd: '',
   kind: '',
   providerAlias: '',
   soulMarkdown: '',
@@ -120,8 +123,17 @@ export class AdminProfileCreateComponent {
   protected readonly toolSelections = signal<readonly string[]>([]);
 
   protected readonly createDisabled = computed(
-    () => this.admin.saving() || this.form().profileId.trim() === '',
+    () =>
+      this.admin.saving() ||
+      this.form().profileId.trim() === '' ||
+      (this.initialSessionWorkspaceRequired() &&
+        this.form().workspaceCwd.trim() === ''),
   );
+
+  protected readonly initialSessionWorkspaceRequired = computed(() => {
+    const kind = this.form().kind;
+    return kind === '' || kind === 'full';
+  });
 
   /**
    * Derived runtime graph actions from the most recent create-profile call
@@ -303,6 +315,7 @@ export class AdminProfileCreateComponent {
   }));
 
   protected createProfile(): void {
+    if (this.createDisabled()) return;
     const request = buildCreateProfileRequest(this.form(), {
       mcpSelections: this.mcpSelections(),
       localToolProfileId: this.selectedToolProfileId(),
@@ -335,6 +348,7 @@ function buildCreateProfileRequest(
     ...optionalString('agentId', form.agentId),
     ...optionalString('sessionId', form.sessionId),
     ...optionalString('implementationId', form.implementationId),
+    ...optionalString('workspaceCwd', form.workspaceCwd),
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
     ...optionalString('providerAlias', form.providerAlias),
     ...optionalMultilineString('soulMarkdown', form.soulMarkdown),

@@ -1164,6 +1164,32 @@ describe('AdminStore behavior', () => {
     expect(store.saving()).toBe(false);
   });
 
+  it('surfaces an embedded failed create outcome without refreshing', async () => {
+    const transport = createTransport();
+    vi.spyOn(transport, 'createAdminProfile').mockResolvedValue({
+      command: {
+        name: 'create_profile',
+        target: {},
+        requestId: 'req-failed',
+      },
+      outcome: {
+        status: 'failed',
+        summary: 'request.workspaceCwd is required',
+        reasonCode: 'control_executor_failed',
+      },
+      audit: { started: true, terminal: true },
+      observation: {},
+    });
+    const store = setupAdminStore(transport);
+
+    await store.createProfile({ profileId: 'new-profile' });
+
+    expect(store.error()).toBe('request.workspaceCwd is required');
+    expect(store.createResult()?.outcome.status).toBe('failed');
+    expect(transport.adminDiagnostics).not.toHaveBeenCalled();
+    expect(store.saving()).toBe(false);
+  });
+
   it('deleteProfile stores purge details and refreshes admin data', async () => {
     const transport = createTransport();
     const store = setupAdminStore(transport);

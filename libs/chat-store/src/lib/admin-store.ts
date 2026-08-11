@@ -602,6 +602,13 @@ export class AdminStore {
     try {
       const result = await this.transport.createAdminProfile(request);
       this._createResult.set(result);
+      if (
+        result.outcome.status !== 'completed' ||
+        result.outcome.result === undefined
+      ) {
+        this._error.set(storeErrorDetail(new Error(result.outcome.summary)));
+        return;
+      }
       await this.refresh();
     } catch (error) {
       this._error.set(storeErrorDetail(error));

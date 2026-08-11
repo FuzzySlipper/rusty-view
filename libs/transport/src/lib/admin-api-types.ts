@@ -664,6 +664,11 @@ export interface CreateAdminProfileRequest {
   readonly implementationId?: string;
   readonly kind?: 'full' | 'worker' | 'delegated';
   /**
+   * Workspace root for the initial session created with this profile. This is
+   * session-scoped runtime state, not a profile-level cwd default.
+   */
+  readonly workspaceCwd?: string;
+  /**
    * Explicit MCP server bindings (task #3648). Omit for a profile with no MCP
    * tools. Each binding requires `serverId` from the MCP catalog; optional
    * fields default on the backend. Preferred over the legacy
