@@ -28,6 +28,7 @@ import type {
   ExternalRuntimeThreadReplacementResult,
   ExternalThreadProjection,
   ExternalThreadLifecycleReceipt,
+  ExternalThreadTurnPage,
   ExternalTurnPhase,
   NormalizedExternalRuntimeEvent,
   SendExternalBindingMessageResponse,
@@ -97,6 +98,12 @@ interface CachedExternalTranscript {
   readonly events: readonly NormalizedExternalRuntimeEvent[];
   readonly cursor?: number;
   readonly eventHistoryLoaded: boolean;
+  readonly turnPage: ExternalThreadTurnPage;
+}
+
+export interface ExternalTurnHistoryError {
+  readonly kind: 'recent' | 'older';
+  readonly message: string;
 }
 
 interface OptimisticExternalUserMessage {
@@ -128,6 +135,7 @@ export interface ExternalLifecycleRecovery {
 const EXTERNAL_TRANSCRIPT_CACHE_CAPACITY = 8;
 const EXTERNAL_TRANSCRIPT_CACHE_WEIGHT = 60_000;
 const EXTERNAL_EVENT_PAGE_SIZE = 1_000;
+const EXTERNAL_TURN_PAGE_SIZE = 50;
 
 @Injectable({ providedIn: 'root' })
 export class ExternalAgentStore {
@@ -189,6 +197,16 @@ export class ExternalAgentStore {
   readonly loading = signal(false);
   readonly eventHistoryLoading = signal(false);
   readonly eventHistoryLoaded = signal(false);
+  readonly turnHistoryLoading = signal(false);
+  readonly turnHistoryPage = signal<ExternalThreadTurnPage | undefined>(
+    undefined,
+  );
+  readonly turnHistoryError = signal<ExternalTurnHistoryError | undefined>(
+    undefined,
+  );
+  readonly hasOlderTurns = computed(
+    () => this.turnHistoryPage()?.hasMoreBefore === true,
+  );
   readonly pending = signal(false);
   readonly loadingMore = signal(false);
   readonly creatingSession = signal(false);
@@ -686,6 +704,9 @@ export class ExternalAgentStore {
     this.rawDetailError.set(undefined);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(false);
+    this.turnHistoryLoading.set(false);
+    this.turnHistoryError.set(undefined);
+    this.turnHistoryPage.set(emptyExternalTurnPage());
     this.selectedRuntimeId.set(runtimeId);
     this.selectedThreadId.set(threadId);
     this.selectedThread.set(result.thread);
@@ -709,6 +730,9 @@ export class ExternalAgentStore {
     this.rawDetailError.set(undefined);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(cached?.eventHistoryLoaded ?? false);
+    this.turnHistoryLoading.set(false);
+    this.turnHistoryError.set(undefined);
+    this.turnHistoryPage.set(cached?.turnPage);
     const active = isActiveExternalSession(session);
     this.selectedThread.set(cached?.thread);
     this.commandCatalog.set(undefined);
@@ -742,33 +766,24 @@ export class ExternalAgentStore {
         return true;
       }
 
-      const replayHistory = cached?.eventHistoryLoaded !== true;
-      const [read, page] = await Promise.all([
-        this.transport.external.readThread(runtimeId, {
-          threadId: session.thread.threadId,
-          includeTurns: true,
-          limit: 50,
-        }),
-        replayHistory
-          ? this.listAllEvents(runtimeId, undefined, session.thread.threadId)
-          : Promise.resolve([]),
-      ]);
+      const read = await this.transport.external.readThread(runtimeId, {
+        threadId: session.thread.threadId,
+        includeTurns: true,
+        limit: EXTERNAL_TURN_PAGE_SIZE,
+      });
       if (!this.isCurrentSelection(revision, session.key)) return false;
-      this.selectedThread.set(read.thread);
-      if (replayHistory) {
-        const events = page.filter(
-          (event) => event.nativeThreadId === session.thread.threadId,
-        );
-        this.selectedRuntimeEventCursor = latestDefinedCursor(
-          latestDefinedCursor(
-            this.selectedRuntimeEventCursor,
-            page.at(-1)?.sequenceId,
-          ),
-          fleetCursor,
-        );
-        this.mergeEvents(events);
-        this.eventHistoryLoaded.set(true);
-      }
+      this.selectedThread.update((current) =>
+        current === undefined
+          ? read.thread
+          : mergeExternalThreadPage(current, read.thread, 'newer'),
+      );
+      this.turnHistoryPage.set(
+        cached?.turnPage ?? normalizedExternalTurnPage(read.turnPage),
+      );
+      this.selectedRuntimeEventCursor = latestDefinedCursor(
+        this.selectedRuntimeEventCursor,
+        fleetCursor,
+      );
       this.cacheSelectedTranscript();
       if (cached === undefined) {
         this.startStream(runtimeId, this.selectedRuntimeEventCursor);
@@ -779,7 +794,9 @@ export class ExternalAgentStore {
       return true;
     } catch (error) {
       if (this.isCurrentSelection(revision, session.key)) {
-        this.error.set(error instanceof Error ? error.message : String(error));
+        const message = `Loading the recent transcript page failed: ${errorMessage(error)}. Retry without losing the history already shown.`;
+        this.error.set(message);
+        this.turnHistoryError.set({ kind: 'recent', message });
       }
       return false;
     } finally {
@@ -872,6 +889,89 @@ export class ExternalAgentStore {
     }
   }
 
+  async loadOlderSelectedTurns(): Promise<boolean> {
+    const runtimeId = this.selectedRuntimeId();
+    const threadId = this.selectedThreadId();
+    const key = this.selectedSessionKey();
+    const page = this.turnHistoryPage();
+    if (
+      runtimeId === undefined ||
+      threadId === undefined ||
+      key === undefined ||
+      page?.hasMoreBefore !== true ||
+      this.turnHistoryLoading()
+    ) {
+      return false;
+    }
+    const beforeCursor = page.pageStartCursor;
+    if (beforeCursor === null) {
+      const message =
+        'Older transcript history is available, but Crew did not provide a backward cursor. Refresh the session and retry.';
+      this.turnHistoryError.set({ kind: 'older', message });
+      this.error.set(message);
+      return false;
+    }
+
+    const revision = this.selectionRevision;
+    this.turnHistoryLoading.set(true);
+    this.turnHistoryError.set(undefined);
+    try {
+      const read = await this.transport.external.readThread(runtimeId, {
+        threadId,
+        includeTurns: true,
+        limit: EXTERNAL_TURN_PAGE_SIZE,
+        beforeCursor,
+      });
+      if (!this.isCurrentSelection(revision, key)) return false;
+      if (read.thread.threadId !== threadId) {
+        throw new Error(
+          `Crew returned thread ${read.thread.threadId} for requested thread ${threadId}`,
+        );
+      }
+      const nextPage = normalizedExternalTurnPage(read.turnPage);
+      if (nextPage.hasMoreBefore && nextPage.pageStartCursor === beforeCursor) {
+        throw new Error(
+          'Crew returned a stale backward cursor and did not advance the transcript page',
+        );
+      }
+      this.selectedThread.update((current) =>
+        current === undefined
+          ? read.thread
+          : mergeExternalThreadPage(current, read.thread, 'older'),
+      );
+      this.turnHistoryPage.set(nextPage);
+      this.error.set(undefined);
+      this.cacheSelectedTranscript();
+      return true;
+    } catch (error) {
+      if (this.isCurrentSelection(revision, key)) {
+        const message = `Loading older transcript history failed: ${errorMessage(error)}. Already-loaded messages were kept; retry this page.`;
+        this.turnHistoryError.set({ kind: 'older', message });
+        this.error.set(message);
+      }
+      return false;
+    } finally {
+      if (this.isCurrentSelection(revision, key)) {
+        this.turnHistoryLoading.set(false);
+      }
+    }
+  }
+
+  async retrySelectedTurnHistory(): Promise<boolean> {
+    const failure = this.turnHistoryError();
+    if (failure?.kind === 'older') return this.loadOlderSelectedTurns();
+    const key = this.selectedSessionKey();
+    const session = this.sessions().find((candidate) => candidate.key === key);
+    if (session === undefined) {
+      const message =
+        'The selected session is no longer in the loaded inventory. Refresh Agents and select it again.';
+      this.turnHistoryError.set({ kind: 'recent', message });
+      this.error.set(message);
+      return false;
+    }
+    return this.selectSession(session);
+  }
+
   lineagePeer(session: ExternalAgentSession): ExternalAgentSession | undefined {
     const binding = session.binding;
     if (binding === undefined) return undefined;
@@ -913,6 +1013,9 @@ export class ExternalAgentStore {
     this.rawDetailError.set(undefined);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(false);
+    this.turnHistoryLoading.set(false);
+    this.turnHistoryPage.set(undefined);
+    this.turnHistoryError.set(undefined);
     this.selectedRuntimeEventCursor = undefined;
     this.commandCatalog.set(undefined);
     this.commandResult.set(undefined);
@@ -1167,6 +1270,9 @@ export class ExternalAgentStore {
     this.events.set([]);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(false);
+    this.turnHistoryLoading.set(false);
+    this.turnHistoryPage.set(normalizedExternalTurnPage(read.turnPage));
+    this.turnHistoryError.set(undefined);
     this.selectedRuntimeId.set(runtimeId);
     this.selectedThreadId.set(receipt.nativeThreadId);
     this.selectedThread.set(read.thread);
@@ -1267,6 +1373,9 @@ export class ExternalAgentStore {
     this.events.set([]);
     this.eventHistoryLoading.set(false);
     this.eventHistoryLoaded.set(false);
+    this.turnHistoryLoading.set(false);
+    this.turnHistoryPage.set(normalizedExternalTurnPage(read.turnPage));
+    this.turnHistoryError.set(undefined);
     this.selectedRuntimeId.set(runtimeId);
     this.selectedThreadId.set(replacement.nativeThreadId);
     this.selectedThread.set(read.thread);
@@ -1634,12 +1743,16 @@ export class ExternalAgentStore {
       this.transport.external.readThread(runtimeId, {
         threadId,
         includeTurns: true,
-        limit: 50,
+        limit: EXTERNAL_TURN_PAGE_SIZE,
       }),
       this.refreshSelectedEvents(),
     ]);
     if (!this.isCurrentSelection(revision, key)) return;
-    this.selectedThread.set(read.thread);
+    this.selectedThread.update((current) =>
+      current === undefined
+        ? read.thread
+        : mergeExternalThreadPage(current, read.thread, 'newer'),
+    );
     this.cacheSelectedTranscript();
   }
 
@@ -2121,6 +2234,7 @@ export class ExternalAgentStore {
     const thread = this.selectedThread();
     if (key === undefined || thread === undefined) return;
     const events = this.events();
+    const turnPage = this.turnHistoryPage() ?? emptyExternalTurnPage();
     this.transcriptCache.set(
       key,
       {
@@ -2131,6 +2245,7 @@ export class ExternalAgentStore {
           ? {}
           : { cursor: this.selectedRuntimeEventCursor }),
         eventHistoryLoaded: this.eventHistoryLoaded(),
+        turnPage,
       },
       events.length + thread.turns.length * 8,
     );
@@ -2322,6 +2437,81 @@ function optimisticUserMessage(
 
 export function sessionKey(runtimeId: string, threadId: string): string {
   return `${runtimeId}:${threadId}`;
+}
+
+function emptyExternalTurnPage(): ExternalThreadTurnPage {
+  return {
+    limit: EXTERNAL_TURN_PAGE_SIZE,
+    hasMoreBefore: false,
+    beforeCursor: null,
+    pageStartCursor: null,
+    pageEndCursor: null,
+  };
+}
+
+function normalizedExternalTurnPage(
+  page: ExternalThreadTurnPage | undefined,
+): ExternalThreadTurnPage {
+  return page ?? emptyExternalTurnPage();
+}
+
+function mergeExternalThreadPage(
+  current: ExternalThreadProjection,
+  incoming: ExternalThreadProjection,
+  direction: 'older' | 'newer',
+): ExternalThreadProjection {
+  const orderedTurns =
+    direction === 'older'
+      ? [...incoming.turns, ...current.turns]
+      : [...current.turns, ...incoming.turns];
+  const turnOrder: string[] = [];
+  const turnsById = new Map<
+    string,
+    ExternalThreadProjection['turns'][number]
+  >();
+  for (const turn of orderedTurns) {
+    const previous = turnsById.get(turn.turnId);
+    if (previous === undefined) turnOrder.push(turn.turnId);
+    turnsById.set(
+      turn.turnId,
+      previous === undefined ? turn : mergeExternalTurn(previous, turn),
+    );
+  }
+  const authoritative = direction === 'older' ? current : incoming;
+  return {
+    ...authoritative,
+    turns: turnOrder.flatMap((turnId) => {
+      const turn = turnsById.get(turnId);
+      return turn === undefined ? [] : [turn];
+    }),
+  };
+}
+
+function mergeExternalTurn(
+  current: ExternalThreadProjection['turns'][number],
+  incoming: ExternalThreadProjection['turns'][number],
+): ExternalThreadProjection['turns'][number] {
+  const itemOrder: string[] = [];
+  const itemsById = new Map<
+    string,
+    ExternalThreadProjection['turns'][number]['items'][number]
+  >();
+  for (const item of [...current.items, ...incoming.items]) {
+    const previous = itemsById.get(item.itemId);
+    if (previous === undefined) itemOrder.push(item.itemId);
+    itemsById.set(
+      item.itemId,
+      previous === undefined ? item : { ...previous, ...item },
+    );
+  }
+  return {
+    ...current,
+    ...incoming,
+    items: itemOrder.flatMap((itemId) => {
+      const item = itemsById.get(itemId);
+      return item === undefined ? [] : [item];
+    }),
+  };
 }
 
 function latestDefinedCursor(

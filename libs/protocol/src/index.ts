@@ -144,6 +144,7 @@ export type ExternalThreadReadRequest =
   ExternalSchemas['ExternalThreadReadRequest'];
 export type ExternalThreadReadResult =
   ExternalSchemas['ExternalThreadReadResult'];
+export type ExternalThreadTurnPage = ExternalSchemas['ExternalThreadTurnPage'];
 export type AgentMessageInboxQuery = ExternalSchemas['AgentMessageInboxQuery'];
 export type AgentMessageTrafficItem =
   ExternalSchemas['AgentMessageTrafficItem'];

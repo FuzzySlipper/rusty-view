@@ -373,6 +373,48 @@ describe('ExternalRuntimeHttpTransport', () => {
     });
   });
 
+  it('sends the generated backward turn cursor in bounded thread reads', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/external-runtimes/runtime%2Fa/threads/read',
+        );
+        expect(JSON.parse(String(init?.body))).toEqual({
+          threadId: 'thread/b',
+          includeTurns: true,
+          limit: 50,
+          beforeCursor: 'turn-cursor-50',
+        });
+        return json({
+          ok: true,
+          data: {
+            thread: { threadId: 'thread/b', turns: [] },
+            turnPage: {
+              limit: 50,
+              hasMoreBefore: false,
+              beforeCursor: 'turn-cursor-50',
+              pageStartCursor: 'turn-cursor-1',
+              pageEndCursor: 'turn-cursor-49',
+            },
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(
+      transport.readThread('runtime/a', {
+        threadId: 'thread/b',
+        includeTurns: true,
+        limit: 50,
+        beforeCursor: 'turn-cursor-50',
+      }),
+    ).resolves.toMatchObject({
+      turnPage: { pageStartCursor: 'turn-cursor-1' },
+    });
+  });
+
   it('uses the generated native thread lifecycle routes', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

@@ -2235,7 +2235,7 @@ describe('ExternalAgentStore', () => {
     expect(store.events()).toEqual([freshEvent]);
   });
 
-  it('hydrates an inactive thread with scoped history and caches it', async () => {
+  it('opens an inactive thread from a bounded snapshot and caches event history only on demand', async () => {
     let updatedAt = 10;
     const runtime = registration('runtime-1');
     const historicalEvent = {
@@ -2267,6 +2267,10 @@ describe('ExternalAgentStore', () => {
     if (first === undefined) throw new Error('expected inactive session');
 
     await store.selectSession(first);
+    expect(listEvents).toHaveBeenCalledTimes(1);
+    expect(store.eventHistoryLoaded()).toBe(false);
+
+    await expect(store.loadSelectedEventHistory()).resolves.toBe(true);
     await store.selectSession(first);
 
     expect(listEvents).toHaveBeenCalledTimes(2);
@@ -2322,6 +2326,10 @@ describe('ExternalAgentStore', () => {
 
     expect(store.eventHistoryLoaded()).toBe(false);
     await store.selectSession(session);
+
+    expect(store.events()).toEqual([snapshotTail]);
+    expect(store.eventHistoryLoaded()).toBe(false);
+    await expect(store.loadSelectedEventHistory()).resolves.toBe(true);
 
     expect(listEvents).toHaveBeenLastCalledWith('runtime-1', {
       limit: 1_000,
@@ -2409,7 +2417,8 @@ describe('ExternalAgentStore', () => {
       1,
     );
 
-    const selecting = store.selectSession(session);
+    await expect(store.selectSession(session)).resolves.toBe(true);
+    const selecting = store.loadSelectedEventHistory();
     streamEvent.resolve(liveDocumentEvent);
     await vi.waitFor(() => {
       expect(store.events()).toContainEqual(liveDocumentEvent);
@@ -2435,6 +2444,176 @@ describe('ExternalAgentStore', () => {
         .events()
         .filter((candidate) => candidate.eventId === 'document-live-110'),
     ).toHaveLength(1);
+  });
+
+  it('loads recent turns first, prepends overlapping older pages, and preserves a concurrent newest refresh', async () => {
+    const runtime = registration('runtime-1');
+    const listed = { ...thread('thread-1', 40), status: 'active' as const };
+    const recent = {
+      ...listed,
+      turns: [projectedTurn(2, 'two'), projectedTurn(3, 'three')],
+    };
+    const older = {
+      ...listed,
+      turns: [projectedTurn(1, 'one'), projectedTurn(2, 'two')],
+    };
+    const newest = {
+      ...listed,
+      updatedAt: 50,
+      turns: [projectedTurn(3, 'three'), projectedTurn(4, 'four')],
+    };
+    const olderRead = deferred<{
+      readonly thread: ExternalThreadProjection;
+      readonly turnPage: ReturnType<typeof turnPage>;
+    }>();
+    const readThread = vi
+      .fn()
+      .mockResolvedValueOnce({
+        thread: recent,
+        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-3'),
+      })
+      .mockImplementationOnce(() => olderRead.promise)
+      .mockResolvedValueOnce({
+        thread: newest,
+        turnPage: turnPage(true, 'turn-cursor-3', 'turn-cursor-4'),
+      });
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([listed], null)),
+      listEvents: vi.fn(async () => ({ events: [] })),
+      readThread,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected paged session');
+
+    await expect(store.selectSession(session)).resolves.toBe(true);
+    expect(readThread).toHaveBeenNthCalledWith(1, 'runtime-1', {
+      threadId: 'thread-1',
+      includeTurns: true,
+      limit: 50,
+    });
+    expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
+      'turn-2',
+      'turn-3',
+    ]);
+    expect(store.hasOlderTurns()).toBe(true);
+
+    const loadingOlder = store.loadOlderSelectedTurns();
+    const refreshingNewest = (
+      store as unknown as { refreshSelectedProjection(): Promise<void> }
+    ).refreshSelectedProjection();
+    await refreshingNewest;
+    olderRead.resolve({
+      thread: older,
+      turnPage: turnPage(false, 'turn-cursor-1', 'turn-cursor-2'),
+    });
+    await expect(loadingOlder).resolves.toBe(true);
+
+    expect(readThread).toHaveBeenNthCalledWith(2, 'runtime-1', {
+      threadId: 'thread-1',
+      includeTurns: true,
+      limit: 50,
+      beforeCursor: 'turn-cursor-2',
+    });
+    expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
+      'turn-1',
+      'turn-2',
+      'turn-3',
+      'turn-4',
+    ]);
+    expect(
+      store.selectedThread()?.turns.flatMap((turn) => turn.items).length,
+    ).toBe(4);
+    expect(store.hasOlderTurns()).toBe(false);
+  });
+
+  it('retains the recent transcript across an older-page failure and retries the same cursor', async () => {
+    const runtime = registration('runtime-1');
+    const listed = thread('thread-1', 20);
+    const recent = { ...listed, turns: [projectedTurn(2, 'two')] };
+    const older = { ...listed, turns: [projectedTurn(1, 'one')] };
+    const readThread = vi
+      .fn()
+      .mockResolvedValueOnce({
+        thread: recent,
+        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-2'),
+      })
+      .mockRejectedValueOnce(
+        new ChatTransportError({
+          code: 'response_parse_error',
+          message: 'Crew returned an incomplete JSON response.',
+          endpoint: '/v1/external-runtimes/runtime-1/threads/read',
+        }),
+      )
+      .mockResolvedValueOnce({
+        thread: older,
+        turnPage: turnPage(false, 'turn-cursor-1', 'turn-cursor-1'),
+      });
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([listed], null)),
+      readThread,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected paged session');
+    await store.selectSession(session);
+
+    await expect(store.loadOlderSelectedTurns()).resolves.toBe(false);
+    expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
+      'turn-2',
+    ]);
+    expect(store.turnHistoryError()).toMatchObject({ kind: 'older' });
+    expect(store.turnHistoryError()?.message).toContain(
+      'Already-loaded messages were kept',
+    );
+
+    await expect(store.retrySelectedTurnHistory()).resolves.toBe(true);
+    expect(readThread).toHaveBeenNthCalledWith(3, 'runtime-1', {
+      threadId: 'thread-1',
+      includeTurns: true,
+      limit: 50,
+      beforeCursor: 'turn-cursor-2',
+    });
+    expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
+      'turn-1',
+      'turn-2',
+    ]);
+    expect(store.turnHistoryError()).toBeUndefined();
+  });
+
+  it('rejects a stale backward cursor without duplicating the current page', async () => {
+    const runtime = registration('runtime-1');
+    const listed = thread('thread-1', 20);
+    const recent = { ...listed, turns: [projectedTurn(2, 'two')] };
+    const readThread = vi
+      .fn()
+      .mockResolvedValueOnce({
+        thread: recent,
+        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-2'),
+      })
+      .mockResolvedValueOnce({
+        thread: recent,
+        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-2'),
+      });
+    const store = setupStore({
+      runtimes: [runtime],
+      listThreads: vi.fn(async () => page([listed], null)),
+      readThread,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected paged session');
+    await store.selectSession(session);
+
+    await expect(store.loadOlderSelectedTurns()).resolves.toBe(false);
+    expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
+      'turn-2',
+    ]);
+    expect(store.turnHistoryError()?.message).toContain(
+      'stale backward cursor',
+    );
   });
 
   it('paints a cached active thread immediately while revalidating it', async () => {
@@ -2533,7 +2712,7 @@ describe('ExternalAgentStore', () => {
     expect(store.selectedThread()?.threadId).toBe('thread-2');
   });
 
-  it('hydrates inactive raw event history when the session is selected', async () => {
+  it('hydrates inactive raw event history only when explicitly requested', async () => {
     const runtime = registration('runtime-1');
     const selectedThread = { ...thread('thread-1', 10), status: 'idle' };
     const selectedEvent = event(90, 'turn-1', 'completed');
@@ -2556,8 +2735,9 @@ describe('ExternalAgentStore', () => {
     if (session === undefined) throw new Error('expected inactive session');
     await store.selectSession(session);
 
-    expect(store.events()).toEqual([selectedEvent]);
-    await expect(store.loadSelectedEventHistory()).resolves.toBe(false);
+    expect(store.events()).toEqual([]);
+    expect(store.eventHistoryLoaded()).toBe(false);
+    await expect(store.loadSelectedEventHistory()).resolves.toBe(true);
 
     expect(listEvents).toHaveBeenCalledTimes(2);
     expect(store.events()).toEqual([selectedEvent]);
@@ -2610,11 +2790,11 @@ describe('ExternalAgentStore', () => {
 
     await store.selectSession(session);
 
-    expect(listEvents).toHaveBeenCalledTimes(2);
+    expect(listEvents).toHaveBeenCalledTimes(1);
     expect(streamExternalRuntimeEvents).toHaveBeenCalledWith('runtime-1', 100);
     expect(store.activeTurnId()).toBe('turn-live');
     expect(store.turnPhase()).toBe('active');
-    expect(store.eventHistoryLoaded()).toBe(true);
+    expect(store.eventHistoryLoaded()).toBe(false);
   });
 
   it('seeds a large event cursor from one indexed tail read', async () => {
@@ -2660,7 +2840,7 @@ describe('ExternalAgentStore', () => {
       'runtime-1',
       latestSequence,
     );
-    expect(listEvents).toHaveBeenCalledTimes(2);
+    expect(listEvents).toHaveBeenCalledTimes(1);
     expect(readEventHead).toHaveBeenCalledWith('runtime-1');
     expect(store.events()).toEqual([]);
   });
@@ -3073,6 +3253,44 @@ function emptyTurnPage() {
     beforeCursor: null,
     pageStartCursor: null,
     pageEndCursor: null,
+  };
+}
+
+function turnPage(
+  hasMoreBefore: boolean,
+  pageStartCursor: string | null,
+  pageEndCursor: string | null,
+) {
+  return {
+    limit: 50,
+    hasMoreBefore,
+    beforeCursor: null,
+    pageStartCursor,
+    pageEndCursor,
+  };
+}
+
+function projectedTurn(
+  id: number,
+  text: string,
+): ExternalThreadProjection['turns'][number] {
+  return {
+    turnId: `turn-${id}`,
+    status: 'completed',
+    statusSource: 'native',
+    terminalReasonCode: null,
+    error: null,
+    startedAt: id,
+    completedAt: id,
+    durationMs: 0,
+    items: [
+      {
+        itemId: `item-${id}`,
+        kind: 'userMessage',
+        status: 'completed',
+        text,
+      },
+    ],
   };
 }
 

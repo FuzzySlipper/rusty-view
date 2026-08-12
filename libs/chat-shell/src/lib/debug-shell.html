@@ -153,7 +153,38 @@
       (interaction.status === 'pending') {
       <rv-external-interaction-card [interaction]="interaction" /> } } }
       <div class="rv-debug__transcript" data-testid="transcript-shell">
-        @if (transcriptLoading() && displayedMessages().length === 0) {
+        @if (externalSelected() && external.turnHistoryError(); as failure) {
+        <div
+          class="rv-debug__transcript-history rv-debug__transcript-history--error"
+          data-testid="external-turn-history-error"
+          role="alert"
+        >
+          <span>{{ failure.message }}</span>
+          <button
+            type="button"
+            data-testid="retry-external-turn-history"
+            [disabled]="external.turnHistoryLoading() || external.loading()"
+            (click)="external.retrySelectedTurnHistory()"
+          >
+            Retry page
+          </button>
+        </div>
+        } @else if (externalSelected() && external.hasOlderTurns()) {
+        <div
+          class="rv-debug__transcript-history"
+          data-testid="external-turn-history"
+        >
+          <button
+            type="button"
+            data-testid="load-older-external-turns"
+            [disabled]="external.turnHistoryLoading()"
+            (click)="external.loadOlderSelectedTurns()"
+          >
+            {{ external.turnHistoryLoading() ? 'Loading older messages…' : 'Load
+            older messages' }}
+          </button>
+        </div>
+        } @if (transcriptLoading() && displayedMessages().length === 0) {
         <div
           class="rv-debug__transcript-loading"
           data-testid="session-transcript-loading"

@@ -212,7 +212,34 @@
 .rv-debug__transcript {
   position: relative;
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.rv-debug__transcript > rv-transcript-viewport {
+  flex: 1;
+  min-height: 0;
+}
+
+.rv-debug__transcript-history {
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-xs) var(--rv-space-md);
+  border-bottom: 1px solid var(--rv-color-border);
+  background: var(--rv-color-surface-raised);
+  color: var(--rv-color-text-muted);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-debug__transcript-history--error {
+  justify-content: space-between;
+  color: var(--rv-color-danger);
 }
 
 .rv-debug__transcript-loading {
