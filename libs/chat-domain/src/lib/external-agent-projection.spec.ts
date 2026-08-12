@@ -1592,6 +1592,126 @@ describe('projectExternalAgentTranscript', () => {
     ]);
   });
 
+  it('suppresses contentless generic snapshot items around meaningful phased messages', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'review transcript',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              { itemId: 'empty-before', kind: 'item' },
+              {
+                itemId: 'commentary',
+                kind: 'agentMessage',
+                text: 'Checking the implementation.',
+                messagePhase: 'commentary',
+              },
+              { itemId: 'empty-middle', kind: 'item', summary: [] },
+              {
+                itemId: 'final',
+                kind: 'agentMessage',
+                text: 'Approved.',
+                messagePhase: 'final_answer',
+              },
+              { itemId: 'empty-after', kind: 'item', text: '   ' },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks.map((block) => block.content)).toEqual([
+      'Checking the implementation.',
+      'Approved.',
+    ]);
+    expect(messages[0]?.blocks.map((block) => block.metadata)).toEqual([
+      expect.objectContaining({ messagePhase: 'commentary' }),
+      expect.objectContaining({ messagePhase: 'final_answer' }),
+    ]);
+    expect(
+      messages
+        .flatMap((message) => message.blocks)
+        .some((block) => /^item$/i.test(block.content.trim())),
+    ).toBe(false);
+  });
+
+  it('lets a meaningful live event fill a skipped generic snapshot identity once', () => {
+    const snapshot = {
+      threadId: 'thread-1',
+      sessionId: 'session-1',
+      parentThreadId: null,
+      preview: 'active transcript',
+      ephemeral: false,
+      modelProvider: 'openai',
+      effectiveModel: 'gpt-5.6',
+      createdAt: 1,
+      updatedAt: 2,
+      status: 'active',
+      cwd: '/home/dev',
+      cliVersion: '0.144.1',
+      name: null,
+      agentNickname: null,
+      agentRole: null,
+      turns: [
+        {
+          turnId: 'turn-1',
+          status: 'inProgress',
+          startedAt: 1,
+          completedAt: null,
+          durationMs: null,
+          items: [{ itemId: 'late-item', kind: 'item' }],
+        },
+      ],
+    };
+    const events = [
+      {
+        ...event('101', 'assistant_text_delta', {
+          nativeMethod: 'item/agentMessage/delta',
+          text: 'Recovered meaningful content',
+        }),
+        itemId: 'late-item',
+      },
+      {
+        ...event('102', 'item_lifecycle', {
+          nativeMethod: 'item/completed',
+          status: 'completed',
+        }),
+        itemId: 'late-item',
+      },
+    ];
+
+    const messages = projectExternalAgentTranscript(snapshot, events);
+    const recovered = messages
+      .flatMap((message) => message.blocks)
+      .filter((block) => block.content === 'Recovered meaningful content');
+
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]?.metadata).toEqual(
+      expect.objectContaining({ externalItemId: 'late-item' }),
+    );
+  });
+
   it('uses full lifecycle phase without making phase-less deltas terminal', () => {
     const events = [
       {

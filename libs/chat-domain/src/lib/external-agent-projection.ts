@@ -39,6 +39,7 @@ export function projectExternalAgentTranscript(
         [];
       let hasExternalAgentText = false;
       for (const item of turn.items) {
+        if (isContentlessGenericSnapshotItem(item)) continue;
         const status = item.status ?? turn.status;
         const content =
           item.text ?? item.summary?.join('\n') ?? item.status ?? item.kind;
@@ -1321,6 +1322,22 @@ function blockForItem(
     );
   if (kind.includes('plan')) return simpleBlock(id, 'plan', content);
   return simpleBlock(id, 'text', content);
+}
+
+function isContentlessGenericSnapshotItem(
+  item: ExternalThreadTurnProjection['items'][number],
+): boolean {
+  if (item.kind.trim().toLowerCase() !== 'item') return false;
+  if ((item.inputImages?.length ?? 0) > 0) return false;
+  return (
+    !hasVisibleSnapshotItemText(item.text) &&
+    !item.summary?.some(hasVisibleSnapshotItemText) &&
+    !hasVisibleSnapshotItemText(item.status)
+  );
+}
+
+function hasVisibleSnapshotItemText(value: string | undefined): boolean {
+  return value !== undefined && value.trim().length > 0;
 }
 
 function buildMessage(
