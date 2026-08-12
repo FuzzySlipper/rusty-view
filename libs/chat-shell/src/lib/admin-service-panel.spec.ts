@@ -124,6 +124,15 @@ function configValidation(
 }
 
 describe('AdminServicePanelComponent', () => {
+  it('renders Den as a normal service-section tab', async () => {
+    const fixture = await createPanel();
+    const denTab = fixture.nativeElement.querySelector(
+      'nav[aria-label="Service sections"] [data-testid="service-den-tab"]',
+    );
+    expect(denTab).toBeInstanceOf(HTMLButtonElement);
+    expect(denTab?.textContent?.trim()).toBe('Den');
+  });
+
   it('renders memory surfaces as separate rows with explicit availability semantics', async () => {
     const transport = makeTransport({
       memorySurfaces: {

@@ -4,14 +4,6 @@
     <span class="rv-admin-service__title">Service Config</span>
     <button
       type="button"
-      [class.rv-admin-service__tab--active]="activeTab() === 'den'"
-      (click)="selectTab('den')"
-      data-testid="service-den-tab"
-    >
-      Den
-    </button>
-    <button
-      type="button"
       class="rv-admin-service__close"
       (click)="closePanel()"
       aria-label="Close service config"
@@ -50,6 +42,14 @@
       (click)="selectTab('switchboard')"
     >
       Switchboard
+    </button>
+    <button
+      type="button"
+      [class.rv-admin-service__tab--active]="activeTab() === 'den'"
+      (click)="selectTab('den')"
+      data-testid="service-den-tab"
+    >
+      Den
     </button>
   </nav>
 
