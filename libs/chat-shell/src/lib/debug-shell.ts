@@ -973,6 +973,15 @@ export class DebugShellComponent {
       getStreamingCharCount: () => this.store.streamingCharCount(),
       getLastCursor: () => this.store.lastCursor(),
       getMessageCount: () => this.store.messages().length,
+      getDisplayedMessageCount: () => this.displayedMessages().length,
+      getDisplayedMessages: () =>
+        this.displayedMessages().map((message) => ({
+          id: message.id,
+          role: message.author.role,
+          status: message.status,
+          blockKinds: message.blocks.map((block) => block.kind),
+          text: message.blocks.map((block) => block.content).join('\n'),
+        })),
       getRawEventCount: () => this.store.rawEvents().length,
       getBackendBaseUrl: () => this.store.backendBaseUrl(),
       getMessages: () =>
@@ -1142,6 +1151,14 @@ interface RustyViewTestApi {
   getStreamingCharCount(): number;
   getLastCursor(): string | null;
   getMessageCount(): number;
+  getDisplayedMessageCount(): number;
+  getDisplayedMessages(): readonly {
+    readonly id: string;
+    readonly role: string;
+    readonly status: string;
+    readonly blockKinds: readonly string[];
+    readonly text: string;
+  }[];
   getRawEventCount(): number;
   getBackendBaseUrl(): string;
   getMessages(): readonly {
