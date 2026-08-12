@@ -144,11 +144,19 @@ describe('AdminDenReviewPanelComponent', () => {
     const abandon = vi.spyOn(store, 'abandonPromptReviewer');
     const component = fixture.componentInstance as unknown as {
       pendingPrompt: { set(item: unknown): void };
+      pendingPromptContext: { set(context: unknown): void };
       cancelPrompt(): void;
     };
     component.pendingPrompt.set({ taskId: 6854 });
+    component.pendingPromptContext.set({
+      projectId: 'rusty-view',
+      deploymentRole: 'debug',
+    });
     component.cancelPrompt();
-    expect(abandon).toHaveBeenCalledWith(6854);
+    expect(abandon).toHaveBeenCalledWith(6854, {
+      projectId: 'rusty-view',
+      deploymentRole: 'debug',
+    });
   });
 
   it('rebases config drafts on refresh and leaves unconfigured fields empty', async () => {

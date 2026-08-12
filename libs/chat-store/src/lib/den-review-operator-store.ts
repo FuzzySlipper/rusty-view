@@ -98,16 +98,21 @@ export class DenReviewOperatorStore {
     }
   }
 
-  async promptReviewer(taskId: number): Promise<boolean> {
+  async promptReviewer(
+    taskId: number,
+    captured?: { projectId: string; deploymentRole: 'production' | 'debug' },
+  ): Promise<boolean> {
     const config = this._config();
     if (config === null || this._saving()) return false;
+    const projectId = captured?.projectId ?? this._projectId();
+    const deploymentRole = captured?.deploymentRole ?? config.deploymentRole;
     this._saving.set(true);
     this._error.set(null);
     try {
-      const actionKey = `${config.deploymentRole}:${this._projectId()}:${taskId}`;
+      const actionKey = `${deploymentRole}:${projectId}:${taskId}`;
       const identity =
         this.pendingPromptIdentities.get(actionKey) ??
-        `${config.deploymentRole}:${this._projectId()}:${taskId}:${globalThis.crypto.randomUUID()}`;
+        `${deploymentRole}:${projectId}:${taskId}:${globalThis.crypto.randomUUID()}`;
       this.pendingPromptIdentities.set(actionKey, identity);
       const result = await this.transport.external.promptReviewerForTask(
         taskId,
@@ -115,7 +120,7 @@ export class DenReviewOperatorStore {
           ttlMs: 300_000,
           correlationId: `review-operator:${identity}`,
           idempotencyKey: `review-operator:${identity}`,
-          expectedDeploymentRole: config.deploymentRole,
+          expectedDeploymentRole: deploymentRole,
         },
       );
       this._promptReceipt.set(result);
@@ -129,11 +134,12 @@ export class DenReviewOperatorStore {
     }
   }
 
-  abandonPromptReviewer(taskId: number): void {
-    const config = this._config();
-    if (config === null) return;
+  abandonPromptReviewer(
+    taskId: number,
+    captured: { projectId: string; deploymentRole: 'production' | 'debug' },
+  ): void {
     this.pendingPromptIdentities.delete(
-      `${config.deploymentRole}:${this._projectId()}:${taskId}`,
+      `${captured.deploymentRole}:${captured.projectId}:${taskId}`,
     );
   }
 

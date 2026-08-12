@@ -21,6 +21,10 @@ export class AdminDenReviewPanelComponent {
   protected readonly pendingPrompt = signal<ReviewOperatorPipelineItem | null>(
     null,
   );
+  protected readonly pendingPromptContext = signal<{
+    projectId: string;
+    deploymentRole: 'production' | 'debug';
+  } | null>(null);
 
   constructor() {
     void this.den.refresh().then(() => this.resetConfigDraft());
@@ -85,20 +89,33 @@ export class AdminDenReviewPanelComponent {
   }
 
   protected confirmPrompt(item: ReviewOperatorPipelineItem): void {
+    const deploymentRole = this.den.config()?.deploymentRole;
+    if (deploymentRole === undefined) return;
+    this.pendingPromptContext.set({
+      projectId: item.projectId,
+      deploymentRole,
+    });
     this.pendingPrompt.set(item);
   }
 
   protected cancelPrompt(): void {
     const item = this.pendingPrompt();
-    if (item !== null) this.den.abandonPromptReviewer(item.taskId);
+    const context = this.pendingPromptContext();
+    if (item !== null && context !== null)
+      this.den.abandonPromptReviewer(item.taskId, context);
     this.pendingPrompt.set(null);
+    this.pendingPromptContext.set(null);
   }
 
   protected sendPrompt(): void {
     const item = this.pendingPrompt();
-    if (item === null) return;
-    void this.den.promptReviewer(item.taskId).then((sent) => {
-      if (sent) this.pendingPrompt.set(null);
+    const context = this.pendingPromptContext();
+    if (item === null || context === null) return;
+    void this.den.promptReviewer(item.taskId, context).then((sent) => {
+      if (sent) {
+        this.pendingPrompt.set(null);
+        this.pendingPromptContext.set(null);
+      }
     });
   }
 

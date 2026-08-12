@@ -93,7 +93,7 @@ describe('Den review operator projection', () => {
     expect(distinctAction.idempotencyKey).not.toBe(first.idempotencyKey);
   });
 
-  it('rotates an ambiguous prompt identity after the operator abandons it', async () => {
+  it('abandons the captured prompt identity after a project switch', async () => {
     const promptReviewerForTask = vi
       .fn()
       .mockRejectedValueOnce(new Error('response lost'))
@@ -120,10 +120,15 @@ describe('Den review operator projection', () => {
     });
     const store = TestBed.inject(DenReviewOperatorStore);
     await store.refresh();
+    const captured = {
+      projectId: 'rusty-view',
+      deploymentRole: 'debug' as const,
+    };
 
-    expect(await store.promptReviewer(6854)).toBe(false);
-    store.abandonPromptReviewer(6854);
-    expect(await store.promptReviewer(6854)).toBe(true);
+    expect(await store.promptReviewer(6854, captured)).toBe(false);
+    store.setProjectId('another-project');
+    store.abandonPromptReviewer(6854, captured);
+    expect(await store.promptReviewer(6854, captured)).toBe(true);
 
     const abandoned = promptReviewerForTask.mock.calls[0]?.[1];
     const newAction = promptReviewerForTask.mock.calls[1]?.[1];
