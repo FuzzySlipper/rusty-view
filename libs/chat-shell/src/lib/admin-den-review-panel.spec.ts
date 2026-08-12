@@ -56,6 +56,7 @@ describe('AdminDenReviewPanelComponent', () => {
                 reviewer: '@reviewer',
                 reviewerSessionId: 'reviewer-session-7',
                 reviewerDispatchAttempts: 2,
+                reviewerDispatchNextRetryAt: '2026-08-12T00:01:00Z',
                 repository: 'FuzzySlipper/rusty-view',
                 gitRef: 'main',
                 commitSha: 'd5bcfeb024459e8887da64da8651988f80ff3fc2',
@@ -97,6 +98,27 @@ describe('AdminDenReviewPanelComponent', () => {
               latestRound: { id: 4515 },
               latestGate: { id: 3264, status: 'passed' },
             },
+            pipelineItem(6858, 'review_terminal', {
+              reviewVerdict: 'looks_good',
+              reviewTaskStatus: 'done',
+              terminalReason: 'external_cli_review_complete',
+            }),
+            pipelineItem(6859, 'review_terminal', {
+              reviewVerdict: 'changes_requested',
+              reviewTaskStatus: 'in_progress',
+              terminalReason: 'external_cli_review_complete',
+            }),
+            pipelineItem(6860, 'review_terminal', {
+              terminalReason: 'checks_failed',
+              gateStatus: 'failed',
+            }),
+            pipelineItem(6861, 'reply_terminal', {
+              reviewVerdict: 'looks_good',
+              replyReasonCode: 'requester_route_unavailable',
+            }),
+            pipelineItem(6862, 'superseded', {
+              terminalReason: 'newer_exact_sha_submitted',
+            }),
           ],
         })),
         writeReviewOperatorConfig: vi.fn(),
@@ -127,6 +149,17 @@ describe('AdminDenReviewPanelComponent', () => {
     expect(text).toContain('den_reviewable_not_submitted');
     expect(text).toContain('den_finalization_pending');
     expect(text).toContain('review_complete_reply_pending');
+    expect(text).toContain('Reviewer delivery retrying');
+    expect(text).toContain('Ready to submit');
+    expect(text).toContain('Saving review result');
+    expect(text).toContain('Review complete');
+    expect(text).toContain('2 failed attempts; retry 2026-08-12T00:01:00Z');
+    expect(text).toContain('Address the findings, then submit the new commit.');
+    expect(text).toContain('Fix the failing checks, then submit a new commit.');
+    expect(text).toContain(
+      'The review finished; inspect requester delivery diagnostics.',
+    );
+    expect(text).toContain('No action — use the newer submission.');
     expect(text).toContain('gate passed');
     expect(text).toContain('route_disabled');
     expect(text).toContain('submission-1');
@@ -139,6 +172,19 @@ describe('AdminDenReviewPanelComponent', () => {
     expect(text).toContain('pending / adapter_retry');
     expect(button?.disabled).toBe(true);
     expect(promptReviewerForTask).not.toHaveBeenCalled();
+
+    const visibleStatuses = Array.from(
+      fixture.nativeElement.querySelectorAll(
+        '.rv-den__stage',
+      ) as NodeListOf<HTMLElement>,
+      (status) => status.textContent?.trim(),
+    );
+    expect(visibleStatuses).toContain('Approved');
+    expect(visibleStatuses).toContain('Changes requested');
+    expect(visibleStatuses).toContain('Checks failed');
+    expect(visibleStatuses).toContain('Notification failed');
+    expect(visibleStatuses).toContain('Superseded');
+    expect(visibleStatuses).not.toContain('review_terminal');
 
     const store = TestBed.inject(DenReviewOperatorStore);
     const abandon = vi.spyOn(store, 'abandonPromptReviewer');
@@ -241,6 +287,37 @@ describe('AdminDenReviewPanelComponent', () => {
     });
   });
 });
+
+function pipelineItem(
+  taskId: number,
+  phase: string,
+  overrides: Record<string, unknown>,
+) {
+  return {
+    stableId: `submission-${taskId}`,
+    projectId: 'rusty-view',
+    taskId,
+    stage: phase,
+    latestRound: { id: taskId },
+    latestGate: null,
+    submission: {
+      submissionId: `submission-${taskId}`,
+      projectId: 'rusty-view',
+      taskId: String(taskId),
+      phase,
+      revision: 1,
+      reviewer: '@reviewer',
+      reviewerDispatchAttempts: 0,
+      repository: 'FuzzySlipper/rusty-view',
+      gitRef: 'main',
+      commitSha: 'd5bcfeb024459e8887da64da8651988f80ff3fc2',
+      requiredChecks: [],
+      createdAt: '2026-08-11T23:59:00Z',
+      updatedAt: '2026-08-12T00:00:00Z',
+      ...overrides,
+    },
+  };
+}
 
 function config(
   configRevision: string,

@@ -99,10 +99,10 @@
         <thead>
           <tr>
             <th>Task</th>
-            <th>Stage</th>
+            <th>Status</th>
             <th>Gate / round</th>
-            <th>Managed delivery</th>
-            <th>Reason</th>
+            <th>Reviewer delivery</th>
+            <th>What now</th>
             <th></th>
           </tr>
         </thead>
@@ -115,7 +115,8 @@
               ><code>{{ item.stableId }}</code>
             </td>
             <td>
-              <span class="rv-den__stage">{{ item.stage }}</span
+              <span class="rv-den__stage" [attr.data-tone]="statusTone(item)"
+                >{{ statusLabel(item) }}</span
               ><code>{{ shortSha(item) }}</code>
             </td>
             <td>
@@ -128,19 +129,9 @@
             <td>
               <span
                 >{{ item.submission?.reviewer ?? 'direct / not managed' }}</span
-              ><span
-                >attempts {{ item.submission?.reviewerDispatchAttempts ?? 0
-                }}</span
-              ><span
-                >next {{ item.submission?.reviewerDispatchNextRetryAt ?? '-'
-                }}</span
-              >
+              ><span>{{ reviewerDeliveryStatus(item) }}</span>
             </td>
-            <td>
-              {{ item.submission?.lastAdapterError ??
-              item.submission?.terminalReason ??
-              item.submission?.replyReasonCode ?? '-' }}
-            </td>
+            <td>{{ statusNextAction(item) }}</td>
             <td>
               <button
                 type="button"
@@ -156,8 +147,11 @@
                 <dl class="rv-den__detail">
                   <dt>submission</dt>
                   <dd>{{ submission.submissionId }}</dd>
-                  <dt>phase / revision</dt>
-                  <dd>{{ submission.phase }} / {{ submission.revision }}</dd>
+                  <dt>internal stage / phase / revision</dt>
+                  <dd>
+                    {{ item.stage }} / {{ submission.phase }} / {{
+                    submission.revision }}
+                  </dd>
                   <dt>repository / ref</dt>
                   <dd>{{ submission.repository }} / {{ submission.gitRef }}</dd>
                   <dt>commit</dt>
@@ -195,6 +189,11 @@
                   <dd>{{ submission.reviewFinalizationId ?? '-' }}</dd>
                   <dt>reviewer session</dt>
                   <dd>{{ submission.reviewerSessionId ?? '-' }}</dd>
+                  <dt>dispatch failures / next retry</dt>
+                  <dd>
+                    {{ submission.reviewerDispatchAttempts }} / {{
+                    submission.reviewerDispatchNextRetryAt ?? '-' }}
+                  </dd>
                   <dt>dispatch message / delivery</dt>
                   <dd>
                     {{ submission.dispatchMessageId ?? '-' }} / {{
@@ -225,6 +224,8 @@
                 <dl class="rv-den__detail">
                   <dt>managed submission</dt>
                   <dd>none</dd>
+                  <dt>internal stage</dt>
+                  <dd>{{ item.stage }}</dd>
                   <dt>Den task</dt>
                   <dd>{{ item.projectId }} / {{ item.taskId }}</dd>
                   <dt>review round</dt>

@@ -7,6 +7,79 @@ import {
 import { DenReviewOperatorStore } from '@rusty-view/chat-store';
 import type { ReviewOperatorPipelineItem } from '@rusty-view/protocol';
 
+type ReviewStatusTone =
+  | 'attention'
+  | 'failure'
+  | 'neutral'
+  | 'success'
+  | 'waiting';
+
+interface ReviewStatusPresentation {
+  readonly label: string;
+  readonly nextAction: string;
+  readonly tone: ReviewStatusTone;
+}
+
+const REVIEW_STAGE_PRESENTATIONS: Readonly<
+  Record<string, ReviewStatusPresentation>
+> = {
+  den_reviewable_not_submitted: {
+    label: 'Ready to submit',
+    nextAction: 'Submit it for managed review when ready.',
+    tone: 'attention',
+  },
+  managed_submission_accepted: {
+    label: 'Preparing review',
+    nextAction: 'Waiting for the review handoff.',
+    tone: 'waiting',
+  },
+  github_gate_pending: {
+    label: 'Waiting for checks',
+    nextAction: 'No action — GitHub checks are running.',
+    tone: 'waiting',
+  },
+  den_gate_pending: {
+    label: 'Waiting for checks',
+    nextAction: 'No action — the Den gate is still running.',
+    tone: 'waiting',
+  },
+  den_gate_passed: {
+    label: 'Checks passed',
+    nextAction: 'Waiting for review to continue.',
+    tone: 'waiting',
+  },
+  reviewer_delivery_queued: {
+    label: 'Queued for reviewer',
+    nextAction: 'Waiting to send the review request.',
+    tone: 'waiting',
+  },
+  reviewer_delivery_retrying: {
+    label: 'Reviewer delivery retrying',
+    nextAction: 'Check the reviewer route if the next retry also fails.',
+    tone: 'attention',
+  },
+  reviewer_dispatched: {
+    label: 'Sent to reviewer',
+    nextAction: 'Waiting for the reviewer verdict.',
+    tone: 'waiting',
+  },
+  den_review_round_open: {
+    label: 'Review in progress',
+    nextAction: 'Waiting for the reviewer verdict.',
+    tone: 'waiting',
+  },
+  den_finalization_pending: {
+    label: 'Saving review result',
+    nextAction: 'Waiting for Den finalization.',
+    tone: 'waiting',
+  },
+  review_complete_reply_pending: {
+    label: 'Review complete',
+    nextAction: 'Waiting to notify the requester.',
+    tone: 'waiting',
+  },
+};
+
 @Component({
   selector: 'rv-admin-den-review-panel',
   templateUrl: './admin-den-review-panel.html',
@@ -131,6 +204,34 @@ export class AdminDenReviewPanelComponent {
     return item.submission?.commitSha?.slice(0, 12) ?? '-';
   }
 
+  protected statusLabel(item: ReviewOperatorPipelineItem): string {
+    return reviewStatusPresentation(item).label;
+  }
+
+  protected statusNextAction(item: ReviewOperatorPipelineItem): string {
+    return reviewStatusPresentation(item).nextAction;
+  }
+
+  protected statusTone(item: ReviewOperatorPipelineItem): ReviewStatusTone {
+    return reviewStatusPresentation(item).tone;
+  }
+
+  protected reviewerDeliveryStatus(item: ReviewOperatorPipelineItem): string {
+    const submission = item.submission;
+    if (submission === undefined) return 'Not a managed submission';
+    const failedAttempts = submission.reviewerDispatchAttempts ?? 0;
+    if (failedAttempts > 0) {
+      const attemptLabel = `${failedAttempts} failed ${failedAttempts === 1 ? 'attempt' : 'attempts'}`;
+      return submission.reviewerDispatchNextRetryAt == null
+        ? `${attemptLabel}; no retry scheduled`
+        : `${attemptLabel}; retry ${submission.reviewerDispatchNextRetryAt}`;
+    }
+    if (submission.dispatchDeliveryId !== undefined) return 'Delivered';
+    if (submission.phase === 'reviewer_dispatch_pending')
+      return 'Waiting to send';
+    return 'No delivery failures';
+  }
+
   protected reviewerRouteReason(): string {
     const route = this.den.config()?.reviewerRoute;
     if (route === undefined) return 'Reviewer route has not been loaded';
@@ -146,4 +247,105 @@ export class AdminDenReviewPanelComponent {
     this.endpointRef.set(config.endpointRef ?? '');
     this.auditIdentity.set(config.auditIdentity ?? '');
   }
+}
+
+function reviewStatusPresentation(
+  item: ReviewOperatorPipelineItem,
+): ReviewStatusPresentation {
+  const submission = item.submission;
+  const verdict = submission?.reviewVerdict;
+  const terminalReason = submission?.terminalReason;
+
+  if (
+    item.stage === 'superseded' ||
+    item.stage === 'den_gate_superseded' ||
+    submission?.gateStatus === 'superseded'
+  ) {
+    return {
+      label: 'Superseded',
+      nextAction: 'No action — use the newer submission.',
+      tone: 'neutral',
+    };
+  }
+
+  if (item.stage === 'review_terminal') {
+    if (verdict === 'looks_good') return approvedStatus();
+    if (verdict === 'changes_requested') return changesRequestedStatus();
+    if (
+      terminalReason === 'checks_failed' ||
+      submission?.gateStatus === 'failed'
+    ) {
+      return checksFailedStatus();
+    }
+    return {
+      label: 'Review ended',
+      nextAction: 'Inspect diagnostics to determine the outcome.',
+      tone: 'attention',
+    };
+  }
+
+  if (item.stage === 'review_complete_replied') {
+    if (verdict === 'looks_good') return approvedStatus();
+    if (verdict === 'changes_requested') return changesRequestedStatus();
+    return {
+      label: 'Review complete',
+      nextAction: 'No pipeline action needed.',
+      tone: 'success',
+    };
+  }
+
+  if (item.stage === 'reply_terminal') {
+    return {
+      label: 'Notification failed',
+      nextAction:
+        'The review finished; inspect requester delivery diagnostics.',
+      tone: 'failure',
+    };
+  }
+
+  if (item.stage === 'github_gate_failed' || item.stage === 'den_gate_failed') {
+    return checksFailedStatus();
+  }
+  if (
+    item.stage === 'github_gate_timed_out' ||
+    item.stage === 'den_gate_timed_out'
+  ) {
+    return {
+      label: 'Checks timed out',
+      nextAction: 'Inspect the GitHub gate before retrying.',
+      tone: 'failure',
+    };
+  }
+
+  return (
+    REVIEW_STAGE_PRESENTATIONS[item.stage] ?? {
+      label: 'Needs inspection',
+      nextAction: 'Inspect diagnostics for the internal pipeline state.',
+      tone: 'attention',
+    }
+  );
+}
+
+function approvedStatus(): ReviewStatusPresentation {
+  return {
+    label: 'Approved',
+    nextAction: 'No review action needed.',
+    tone: 'success',
+  };
+}
+
+function changesRequestedStatus(): ReviewStatusPresentation {
+  return {
+    label: 'Changes requested',
+    nextAction: 'Address the findings, then submit the new commit.',
+    tone: 'attention',
+  };
+}
+
+function checksFailedStatus(): ReviewStatusPresentation {
+  return {
+    label: 'Checks failed',
+    nextAction: 'Fix the failing checks, then submit a new commit.',
+    tone: 'failure',
+  };
 }
