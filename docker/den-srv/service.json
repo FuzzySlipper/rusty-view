@@ -1,9 +1,6 @@
 {
   "profilesDir": "/srv/rusty-eva/config/profiles",
   "skillsDir": "/srv/rusty-eva/config/skills",
-  "wakeTimeout": {
-    "mode": "disabled"
-  },
   "brains": [],
   "sessions": []
 }
