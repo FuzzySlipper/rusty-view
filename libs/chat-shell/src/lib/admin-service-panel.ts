@@ -15,6 +15,7 @@ import { AdminStore } from '@rusty-view/chat-store';
 import { CHAT_DEBUG_TAB_CONTEXT } from './shell-extension-tokens';
 import { AdminSwitchboardPanelComponent } from './admin-switchboard-panel';
 import { AdminTelegramDiplomatPanelComponent } from './admin-telegram-diplomat-panel';
+import { AdminDenReviewPanelComponent } from './admin-den-review-panel';
 
 import {
   formatDurationMs,
@@ -86,6 +87,7 @@ const APPLY_SEMANTICS_ROWS: readonly ServiceCapabilityRow[] = [
   imports: [
     AdminSwitchboardPanelComponent,
     AdminTelegramDiplomatPanelComponent,
+    AdminDenReviewPanelComponent,
   ],
   templateUrl: './admin-service-panel.html',
   styleUrl: './admin-service-panel.css',
@@ -122,7 +124,7 @@ export class AdminServicePanelComponent {
   );
   protected readonly draftMode = signal<'disabled' | 'default'>('disabled');
   protected readonly activeTab = signal<
-    'runtime' | 'telegram' | 'switchboard' | 'memory'
+    'runtime' | 'telegram' | 'switchboard' | 'memory' | 'den'
   >('runtime');
   protected readonly draftDefaultMs = signal(600_000);
   protected readonly localError = signal<string | null>(null);
@@ -156,7 +158,7 @@ export class AdminServicePanelComponent {
   }
 
   protected selectTab(
-    tab: 'runtime' | 'telegram' | 'switchboard' | 'memory',
+    tab: 'runtime' | 'telegram' | 'switchboard' | 'memory' | 'den',
   ): void {
     this.activeTab.set(tab);
   }

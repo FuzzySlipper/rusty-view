@@ -43,6 +43,7 @@ export { AdminProfileEditComponent } from './lib/admin-profile-edit';
 export { AdminToolProfileEditorComponent } from './lib/admin-tool-profile-editor';
 export { AdminProvidersPanelComponent } from './lib/admin-providers-panel';
 export { AdminServicePanelComponent } from './lib/admin-service-panel';
+export { AdminDenReviewPanelComponent } from './lib/admin-den-review-panel';
 export { AdminTelegramDiplomatPanelComponent } from './lib/admin-telegram-diplomat-panel';
 export { AdminSwitchboardPanelComponent } from './lib/admin-switchboard-panel';
 export {

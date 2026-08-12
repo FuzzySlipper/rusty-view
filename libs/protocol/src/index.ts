@@ -217,6 +217,20 @@ export type AgentRouteResolvedTarget =
   ExternalSchemas['AgentRouteResolvedTarget'];
 export type AgentRouteTarget = ExternalSchemas['AgentRouteTarget'];
 export type AgentRouteWrite = ExternalSchemas['AgentRouteWrite'];
+export type ReviewOperatorConfigReadback =
+  ExternalSchemas['ReviewOperatorConfigReadback'];
+export type ReviewOperatorConfigWrite =
+  ExternalSchemas['ReviewOperatorConfigWrite'];
+export type ReviewOperatorConfigMutationResult =
+  ExternalSchemas['ReviewOperatorConfigMutationResult'];
+export type ReviewOperatorPipelineItem =
+  ExternalSchemas['ReviewOperatorPipelineItem'];
+export type ReviewOperatorPipelinePage =
+  ExternalSchemas['ReviewOperatorPipelinePage'];
+export type ReviewOperatorPromptWrite =
+  ExternalSchemas['ReviewOperatorPromptWrite'];
+export type ReviewOperatorPromptReceipt =
+  ExternalSchemas['ReviewOperatorPromptReceipt'];
 export type ExternalMessageDeliveryPolicy =
   ExternalSchemas['ExternalMessageDeliveryPolicy'];
 export type RuntimeActivityCensus = ExternalSchemas['RuntimeActivityCensus'];
@@ -271,6 +285,14 @@ export type ResolveExternalInteractionResponse =
   externalOperations['resolveExternalInteraction']['responses'][200]['content']['application/json'];
 export type ReadExternalRuntimeRawDetailResponse =
   externalOperations['readExternalRuntimeRawDetail']['responses'][200]['content']['application/json'];
+export type ReadReviewOperatorConfigResponse =
+  externalOperations['readReviewOperatorConfig']['responses'][200]['content']['application/json'];
+export type WriteReviewOperatorConfigResponse =
+  externalOperations['writeReviewOperatorConfig']['responses'][200]['content']['application/json'];
+export type ReadReviewOperatorPipelineResponse =
+  externalOperations['readReviewOperatorPipeline']['responses'][200]['content']['application/json'];
+export type PromptReviewerForTaskResponse =
+  externalOperations['promptReviewerForTask']['responses'][200]['content']['application/json'];
 
 // ---- envelope + meta + error ----
 export type ApiEnvelope = Schemas['ApiEnvelope'];

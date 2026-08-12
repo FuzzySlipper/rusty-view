@@ -8,6 +8,7 @@ import {
 import { ChatTransport } from '@rusty-view/transport';
 import {
   AdminStore,
+  DenReviewOperatorStore,
   TelegramDiplomatStore,
   ChatStore,
   ExternalAgentStore,
@@ -170,6 +171,7 @@ export function provideRustyView(
     ExternalAgentStore,
     SwitchboardStore,
     AdminStore,
+    DenReviewOperatorStore,
     TelegramDiplomatStore,
     provideAppInitializer(() => {
       const store = inject(ChatStore);

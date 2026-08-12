@@ -1,0 +1,209 @@
+<div class="rv-den" data-testid="service-den-panel">
+  <div class="rv-den__toolbar">
+    <label
+      >project
+      <input [value]="den.projectId()" (input)="changeProject($event.target)"
+    /></label>
+    <button
+      type="button"
+      (click)="refresh()"
+      [disabled]="den.loading() || !den.projectId()"
+    >
+      Refresh
+    </button>
+    @if (den.lastSuccessfulRefresh(); as refreshed) {
+    <span>updated {{ refreshed }}</span> }
+  </div>
+
+  @if (den.error(); as error) {
+  <div class="rv-den__error" role="alert">{{ error }}</div>
+  } @if (den.config(); as config) {
+  <section>
+    <h2>Den authority</h2>
+    <div class="rv-den__summary">
+      <span>Crew role</span><strong>{{ config.deploymentRole }}</strong>
+      <span>health</span
+      ><strong [attr.data-status]="config.diagnostics.status"
+        >{{ config.diagnostics.status }}</strong
+      >
+      <span>credential</span
+      ><strong
+        >{{ config.credential.present ? config.credential.source : 'not
+        configured' }}</strong
+      >
+      <span>last probe</span
+      ><strong>{{ config.diagnostics.checkedAt }}</strong>
+      <span>reviewer route</span><strong>{{ reviewerRouteReason() }}</strong>
+    </div>
+    <p>{{ config.diagnostics.message }}</p>
+    <p>
+      Required capabilities: {{ config.diagnostics.requiredTools.join(', ') }}
+    </p>
+    @if (config.diagnostics.missingTools.length > 0) {
+    <p>Missing: {{ config.diagnostics.missingTools.join(', ') }}</p>
+    }
+    <div class="rv-den__config">
+      <label
+        >authority id
+        <input
+          [value]="authorityId()"
+          (input)="changeAuthorityId($event.target)"
+      /></label>
+      <label
+        >endpoint
+        <input
+          [value]="endpointRef()"
+          (input)="changeEndpointRef($event.target)"
+      /></label>
+      <label
+        >audit identity
+        <input
+          [value]="auditIdentity()"
+          (input)="changeAuditIdentity($event.target)"
+      /></label>
+      <button type="button" (click)="saveConfig()" [disabled]="den.saving()">
+        Save and apply
+      </button>
+    </div>
+  </section>
+  }
+
+  <section>
+    <h2>Review pipeline</h2>
+    <div class="rv-den__filters">
+      <label
+        >task <input (input)="changeFilter($event.target, 'task')"
+      /></label>
+      <label
+        >state <input (input)="changeFilter($event.target, 'state')"
+      /></label>
+      <label
+        >reviewer <input (input)="changeFilter($event.target, 'reviewer')"
+      /></label>
+      <label
+        >minimum age minutes
+        <input
+          type="number"
+          min="0"
+          value="0"
+          (input)="changeMinimumAge($event.target)"
+      /></label>
+      <label
+        ><input type="checkbox" (change)="changeFailuresOnly($event.target)" />
+        failures only</label
+      >
+    </div>
+    @if (den.pipeline(); as pipeline) {
+    <div class="rv-den__table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Stage</th>
+            <th>Gate / round</th>
+            <th>Managed delivery</th>
+            <th>Reason</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of den.filteredItems(); track item.stableId) {
+          <tr>
+            <td>
+              <strong>#{{ item.taskId }}</strong
+              ><span>{{ item.task?.['title'] ?? item.projectId }}</span>
+            </td>
+            <td>
+              <span class="rv-den__stage">{{ item.stage }}</span
+              ><code>{{ shortSha(item) }}</code>
+            </td>
+            <td>
+              <span>gate {{ item.latestGate?.['status'] ?? '-' }}</span
+              ><span
+                >round {{ item.latestRound?.['id'] ??
+                item.submission?.reviewRoundId ?? '-' }}</span
+              >
+            </td>
+            <td>
+              <span
+                >{{ item.submission?.reviewer ?? 'direct / not managed' }}</span
+              ><span
+                >attempts {{ item.submission?.reviewerDispatchAttempts ?? 0
+                }}</span
+              ><span
+                >next {{ item.submission?.reviewerDispatchNextRetryAt ?? '-'
+                }}</span
+              >
+            </td>
+            <td>
+              {{ item.submission?.lastAdapterError ??
+              item.submission?.terminalReason ??
+              item.submission?.replyReasonCode ?? '-' }}
+            </td>
+            <td>
+              <button
+                type="button"
+                (click)="confirmPrompt(item)"
+                [disabled]="den.config()?.diagnostics?.status !== 'ready' || den.config()?.reviewerRoute?.routable !== true"
+                [title]="reviewerRouteReason()"
+              >
+                Prompt reviewer
+              </button>
+            </td>
+          </tr>
+          } @empty {
+          <tr>
+            <td colspan="6">No review work matches these filters.</td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="rv-den__pager">
+      <button
+        type="button"
+        (click)="page(previousOffset(pipeline.offset, pipeline.limit))"
+        [disabled]="pipeline.offset === 0"
+      >
+        Previous
+      </button>
+      <span
+        >{{ pipeline.offset + 1 }}–{{ pipeline.offset + pipeline.items.length
+        }}</span
+      >
+      <button
+        type="button"
+        (click)="page(pipeline.nextOffset)"
+        [disabled]="pipeline.nextOffset === undefined"
+      >
+        Next
+      </button>
+    </div>
+    }
+  </section>
+
+  @if (pendingPrompt(); as item) {
+  <section class="rv-den__confirm" role="alertdialog" aria-modal="true">
+    <h2>Manual diagnostic prompt</h2>
+    <p>
+      Send <code>review {{ item.taskId }}</code> to <code>@reviewer</code> on
+      the {{ den.config()?.deploymentRole }} Crew service?
+    </p>
+    <p>{{ reviewerRouteReason() }}</p>
+    <p>This does not submit, repair, or advance a managed review.</p>
+    <button type="button" (click)="cancelPrompt()">Cancel</button>
+    <button type="button" (click)="sendPrompt()" [disabled]="den.saving()">
+      Send prompt
+    </button>
+  </section>
+  } @if (den.promptReceipt(); as result) {
+  <section role="status">
+    <h2>Last manual prompt</h2>
+    <code>{{ result.command }}</code> → <code>{{ result.target }}</code
+    ><span
+      >{{ result.receipt.status }} / {{ result.receipt.reasonCode ?? 'no error'
+      }}</span
+    ><span>{{ result.receipt.request.deliveryId }}</span>
+  </section>
+  }
+</div>

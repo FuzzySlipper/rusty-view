@@ -1,0 +1,112 @@
+:host {
+  display: block;
+  min-height: 0;
+  overflow: auto;
+}
+.rv-den {
+  display: grid;
+  gap: var(--rv-space-md);
+  padding: var(--rv-space-md);
+  color: var(--rv-color-text-secondary);
+  font: var(--rv-font-size-sm) var(--rv-font-ui);
+}
+.rv-den section {
+  display: grid;
+  gap: var(--rv-space-sm);
+  padding: var(--rv-space-md);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface-raised);
+}
+.rv-den h2,
+.rv-den p {
+  margin: 0;
+}
+.rv-den__toolbar,
+.rv-den__config,
+.rv-den__filters,
+.rv-den__pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--rv-space-sm);
+}
+.rv-den label {
+  display: grid;
+  gap: var(--rv-space-xs);
+  color: var(--rv-color-text-muted);
+}
+.rv-den input {
+  min-width: 10rem;
+  padding: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+}
+.rv-den button {
+  padding: var(--rv-space-xs) var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  color: var(--rv-color-text-primary);
+  cursor: pointer;
+}
+.rv-den button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.rv-den__summary {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--rv-space-xs) var(--rv-space-md);
+}
+.rv-den__summary span {
+  color: var(--rv-color-text-muted);
+}
+.rv-den__table-wrap {
+  overflow: auto;
+}
+.rv-den table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--rv-font-size-xs);
+}
+.rv-den th,
+.rv-den td {
+  padding: var(--rv-space-sm);
+  border-bottom: 1px solid var(--rv-color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.rv-den td {
+  min-width: 9rem;
+}
+.rv-den td span,
+.rv-den td code {
+  display: block;
+  margin-top: var(--rv-space-xs);
+  overflow-wrap: anywhere;
+}
+.rv-den__stage {
+  color: var(--rv-color-accent);
+  font-weight: var(--rv-font-weight-bold);
+}
+.rv-den__error {
+  padding: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-danger);
+  color: var(--rv-color-danger);
+}
+.rv-den__confirm {
+  position: sticky;
+  bottom: 0;
+  border-color: var(--rv-color-warning) !important;
+  box-shadow: var(--rv-shadow-overlay);
+}
+[data-status='ready'] {
+  color: var(--rv-color-success);
+}
+[data-status='missing_tools'],
+[data-status='unavailable'] {
+  color: var(--rv-color-danger);
+}

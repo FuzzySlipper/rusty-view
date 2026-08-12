@@ -468,6 +468,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/review-operator/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readReviewOperatorConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["writeReviewOperatorConfig"];
+        trace?: never;
+    };
+    "/v1/admin/review-operator/pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readReviewOperatorPipeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/review-operator/tasks/{task_id}/prompt-reviewer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["promptReviewerForTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2903,6 +2951,95 @@ export interface components {
             fallback_policy: components["schemas"]["WorkerPoolCapacityFallbackPolicy"];
             member_id: string;
         };
+        ReviewOperatorConfigReadback: {
+            configRevision: string;
+            /** @enum {string} */
+            deploymentRole: "production" | "debug";
+            authorityId?: string;
+            endpointRef?: string;
+            /** @constant */
+            serverName: "den";
+            /** @constant */
+            toolProfileKey: "direct";
+            auditIdentity?: string;
+            credential: {
+                present: boolean;
+                /** @enum {string} */
+                source: "service_environment" | "none";
+            };
+            diagnostics: components["schemas"]["ReviewDenAuthorityDiagnostics"];
+            reviewerRoute: components["schemas"]["AgentRouteResolution"];
+        };
+        ReviewOperatorConfigWrite: {
+            expectedConfigRevision: string;
+            enabled?: boolean;
+            authorityId?: string;
+            endpointRef?: string;
+            auditIdentity?: string;
+            /** @enum {string} */
+            expectedDeploymentRole?: "production" | "debug";
+        };
+        ReviewDenAuthorityDiagnostics: {
+            authorityId?: string;
+            auditIdentity?: string;
+            /** @constant */
+            serverName: "den";
+            /** @enum {string} */
+            status: "ready" | "unconfigured" | "unavailable" | "missing_tools";
+            requiredTools: string[];
+            missingTools: string[];
+            checkedAt: string;
+            message: string;
+        };
+        ReviewOperatorConfigMutationResult: {
+            /** @constant */
+            status: "updated";
+            config: components["schemas"]["ReviewOperatorConfigReadback"];
+            applyResult: {
+                [key: string]: unknown;
+            };
+        };
+        ReviewOperatorPipelineItem: {
+            stableId: string;
+            projectId: string;
+            taskId: number;
+            task?: {
+                [key: string]: unknown;
+            };
+            latestRound: {
+                [key: string]: unknown;
+            } | null;
+            latestGate: {
+                [key: string]: unknown;
+            } | null;
+            submission?: components["schemas"]["ReviewSubmissionRecord"];
+            stage: string;
+        };
+        ReviewOperatorPipelinePage: {
+            projectId: string;
+            /** @enum {string} */
+            deploymentRole: "production" | "debug";
+            limit: number;
+            offset: number;
+            nextOffset?: number;
+            denNextOffset?: number;
+            items: components["schemas"]["ReviewOperatorPipelineItem"][];
+        };
+        ReviewOperatorPromptWrite: {
+            ttlMs?: number;
+            correlationId?: string;
+            idempotencyKey?: string;
+            /** @enum {string} */
+            expectedDeploymentRole?: "production" | "debug";
+        };
+        ReviewOperatorPromptReceipt: {
+            /** @enum {string} */
+            deploymentRole: "production" | "debug";
+            command: string;
+            /** @constant */
+            target: "@reviewer";
+            receipt: components["schemas"]["AgentMessageDeliveryReceipt"];
+        };
         ExternalRuntimeCertificationList: {
             certifications: components["schemas"]["ExternalRuntimeCertificationRecord"][];
         };
@@ -4617,6 +4754,157 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["AgentCorrelatedRound"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readReviewOperatorConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ReviewOperatorConfigReadback"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    writeReviewOperatorConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewOperatorConfigWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ReviewOperatorConfigMutationResult"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readReviewOperatorPipeline: {
+        parameters: {
+            query: {
+                projectId: string;
+                limit?: number;
+                offset?: number;
+                expectedDeploymentRole?: "production" | "debug";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ReviewOperatorPipelinePage"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    promptReviewerForTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewOperatorPromptWrite"];
+            };
+        };
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["ReviewOperatorPromptReceipt"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };

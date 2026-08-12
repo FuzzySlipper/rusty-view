@@ -448,7 +448,131 @@ describe('ExternalRuntimeHttpTransport', () => {
       new Headers(fetchImpl.mock.calls[1]?.[1]?.headers).get('Last-Event-ID'),
     ).toBe('7');
   });
+  it('uses role-bound review operator reads and revision-guarded writes', async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        calls.push({
+          url: String(input),
+          method: String(init?.method),
+          ...(init?.body === undefined
+            ? {}
+            : { body: JSON.parse(String(init.body)) }),
+        });
+        if (String(input).includes('/pipeline')) {
+          return json({
+            ok: true,
+            data: {
+              projectId: 'rusty-view',
+              deploymentRole: 'debug',
+              limit: 25,
+              offset: 0,
+              items: [],
+            },
+            meta: meta(),
+          });
+        }
+        if (init?.method === 'PATCH') {
+          return json({
+            ok: true,
+            data: {
+              status: 'updated',
+              config: reviewConfig(),
+              applyResult: {},
+            },
+            meta: meta(),
+          });
+        }
+        return json({ ok: true, data: reviewConfig(), meta: meta() });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await transport.readReviewOperatorConfig('debug');
+    await transport.readReviewOperatorPipeline({
+      projectId: 'rusty-view',
+      limit: 25,
+      expectedDeploymentRole: 'debug',
+    });
+    await transport.writeReviewOperatorConfig({
+      expectedConfigRevision: 'revision-1',
+      authorityId: 'den',
+      endpointRef: 'config://mcp/den',
+      expectedDeploymentRole: 'debug',
+    });
+
+    expect(calls[0]?.url).toContain('expectedDeploymentRole=debug');
+    expect(calls[1]?.url).toContain('projectId=rusty-view');
+    expect(calls[2]).toMatchObject({
+      method: 'PATCH',
+      body: { expectedConfigRevision: 'revision-1' },
+    });
+  });
+
+  it('sends the manual prompt only through the explicit receipt endpoint', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        expect(String(input)).toBe(
+          'http://crew.test/v1/admin/review-operator/tasks/6854/prompt-reviewer',
+        );
+        expect(JSON.parse(String(init?.body))).toEqual({
+          ttlMs: 300000,
+          correlationId: 'correlation',
+          idempotencyKey: 'idem',
+          expectedDeploymentRole: 'production',
+        });
+        return json({
+          ok: true,
+          data: {
+            deploymentRole: 'production',
+            command: 'review 6854',
+            target: '@reviewer',
+            receipt: { status: 'accepted' },
+          },
+          meta: meta(),
+        });
+      });
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+    await expect(
+      transport.promptReviewerForTask(6854, {
+        ttlMs: 300000,
+        correlationId: 'correlation',
+        idempotencyKey: 'idem',
+        expectedDeploymentRole: 'production',
+      }),
+    ).resolves.toMatchObject({ command: 'review 6854', target: '@reviewer' });
+  });
 });
+
+function reviewConfig() {
+  return {
+    configRevision: 'revision-1',
+    deploymentRole: 'debug',
+    serverName: 'den',
+    toolProfileKey: 'direct',
+    credential: { present: false, source: 'none' },
+    diagnostics: {
+      serverName: 'den',
+      status: 'ready',
+      requiredTools: [],
+      missingTools: [],
+      checkedAt: '2026-08-12T00:00:00Z',
+      message: 'ready',
+    },
+    reviewerRoute: {
+      address: '@reviewer',
+      routable: true,
+      resolvedTarget: {
+        agentId: 'reviewer',
+        displayLabel: 'Reviewer',
+        profileId: 'reviewer',
+        runtimeKind: 'codex_app_server',
+        sessionId: 'reviewer-session',
+      },
+    },
+  } as const;
+}
 
 function config(
   fetchImpl: typeof fetch,

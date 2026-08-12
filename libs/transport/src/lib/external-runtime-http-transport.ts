@@ -36,6 +36,16 @@ import type {
   ReadExternalRuntimeRawDetailResponse,
   ReadExternalRuntimeThreadResponse,
   ResolveExternalInteractionResponse,
+  ReadReviewOperatorConfigResponse,
+  ReadReviewOperatorPipelineResponse,
+  ReviewOperatorConfigMutationResult,
+  ReviewOperatorConfigReadback,
+  ReviewOperatorConfigWrite,
+  ReviewOperatorPipelinePage,
+  ReviewOperatorPromptReceipt,
+  ReviewOperatorPromptWrite,
+  WriteReviewOperatorConfigResponse,
+  PromptReviewerForTaskResponse,
   RestoreExternalBindingResponse,
   RefreshExternalBindingProfileResponse,
   ExecuteExternalBindingCommandResponse,
@@ -55,6 +65,62 @@ export class ExternalRuntimeHttpTransport {
 
   constructor(private readonly config: ChatTransportConfig) {
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
+
+  async readReviewOperatorConfig(
+    expectedDeploymentRole?: 'production' | 'debug',
+  ): Promise<ReviewOperatorConfigReadback> {
+    return unwrap(
+      await this.request<ReadReviewOperatorConfigResponse>(
+        'GET',
+        '/v1/admin/review-operator/config',
+        undefined,
+        expectedDeploymentRole === undefined
+          ? undefined
+          : { expectedDeploymentRole },
+      ),
+    );
+  }
+
+  async writeReviewOperatorConfig(
+    request: ReviewOperatorConfigWrite,
+  ): Promise<ReviewOperatorConfigMutationResult> {
+    return unwrap(
+      await this.request<WriteReviewOperatorConfigResponse>(
+        'PATCH',
+        '/v1/admin/review-operator/config',
+        request,
+      ),
+    );
+  }
+
+  async readReviewOperatorPipeline(input: {
+    readonly projectId: string;
+    readonly limit?: number;
+    readonly offset?: number;
+    readonly expectedDeploymentRole?: 'production' | 'debug';
+  }): Promise<ReviewOperatorPipelinePage> {
+    return unwrap(
+      await this.request<ReadReviewOperatorPipelineResponse>(
+        'GET',
+        '/v1/admin/review-operator/pipeline',
+        undefined,
+        input,
+      ),
+    );
+  }
+
+  async promptReviewerForTask(
+    taskId: number,
+    request: ReviewOperatorPromptWrite,
+  ): Promise<ReviewOperatorPromptReceipt> {
+    return unwrap(
+      await this.request<PromptReviewerForTaskResponse>(
+        'POST',
+        `/v1/admin/review-operator/tasks/${taskId}/prompt-reviewer`,
+        request,
+      ),
+    );
   }
 
   async listRuntimes(): Promise<ExternalRuntimeFleet> {
@@ -337,7 +403,7 @@ export class ExternalRuntimeHttpTransport {
   }
 
   private async request<T extends SuccessEnvelope<unknown>>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'PATCH' | 'POST',
     path: string,
     body?: unknown,
     query?: Readonly<Record<string, unknown>>,
