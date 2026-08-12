@@ -2416,7 +2416,12 @@ export interface components {
         /** @enum {string} */
         ReviewSubmissionPhase: "submitted" | "den_handoff_recorded" | "gate_pending" | "gate_failed" | "reviewer_dispatch_pending" | "reviewer_dispatched" | "den_finalization_pending" | "den_finalized" | "reply_pending" | "replied" | "reply_terminal" | "review_terminal" | "superseded";
         ReviewSubmissionQuery: {
+            /** Format: uint32 */
+            limit?: number | null;
+            /** Format: uint64 */
+            offset?: number | null;
             pendingOnly: boolean;
+            projectId?: string | null;
             reviewerSessionId?: string | null;
             submissionId?: string | null;
             submitterSessionId?: string | null;
@@ -4771,7 +4776,9 @@ export interface operations {
     };
     readReviewOperatorConfig: {
         parameters: {
-            query?: never;
+            query?: {
+                expectedDeploymentRole?: "production" | "debug";
+            };
             header?: never;
             path?: never;
             cookie?: never;
