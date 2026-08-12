@@ -8,6 +8,7 @@ import {
 import type {
   ChatSessionSummary,
   ExternalBindingProfileState,
+  ExternalInteractionRecord,
 } from '@rusty-view/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -86,7 +87,7 @@ async function createOptions() {
     commandError: signal<string | undefined>(undefined),
     metadataPendingBindingIds: signal(new Set<string>()),
     metadataError: signal<string | undefined>(undefined),
-    interactions: signal([]),
+    interactions: signal<readonly ExternalInteractionRecord[]>([]),
     archiveThread: vi.fn(async () => true),
     restartSession: vi.fn(async () => true),
     interruptSession: vi.fn(async () => true),
@@ -152,6 +153,40 @@ describe('SessionOptionsComponent', () => {
 
     expect(external.archiveThread).toHaveBeenCalledWith(session);
     expect(chat.reconcileSessionsAfterLifecycleMutation).toHaveBeenCalledOnce();
+  });
+
+  it('keeps archive unavailable while that exact Codex thread has a pending interaction', async () => {
+    const { fixture, external } = await createOptions();
+    const session = codexSession();
+    external.interactions.set([
+      {
+        interactionId: 'interaction-1',
+        runtimeId: session.runtime.runtimeId,
+        bindingId: session.binding?.bindingId ?? 'binding-1',
+        requestId: 'request-1',
+        nativeRequestId: 'native-request-1',
+        nativeThreadId: session.thread.threadId,
+        nativeTurnId: 'turn-1',
+        kind: 'request_user_input',
+        prompt: { questions: [] },
+        allowedResponses: ['answers'],
+        status: 'pending',
+        requestedAt: '2026-08-12T00:00:00Z',
+        expiresAt: '2026-08-12T00:05:00Z',
+        revision: 1,
+      },
+    ]);
+    fixture.componentRef.setInput('externalSession', session);
+    fixture.detectChanges();
+
+    const archive = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="session-options-archive"]',
+    );
+    expect(archive).toBeInstanceOf(HTMLButtonElement);
+    expect((archive as HTMLButtonElement).disabled).toBe(true);
+    expect(archive?.getAttribute('title')).toBe(
+      'Resolve the pending interaction first.',
+    );
   });
 
   it('offers metadata-only new, cancel, and profile controls without trusting transcript activity', async () => {

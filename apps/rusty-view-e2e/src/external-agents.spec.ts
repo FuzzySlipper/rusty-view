@@ -15,6 +15,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   let streamReplyThreadId = 'thread-1';
   let nextStreamingSequence = 200;
   let selectedHistoryThreadId: string | null = null;
+  let selectedHistoryRequestCount = 0;
   let listedBindings = [binding];
   let listedThreads = [thread];
   let listedEvents: unknown[] = [...events];
@@ -140,6 +141,9 @@ test('external agent fleet, transcript activity, interactions, and controls are 
       });
     if (url.pathname.endsWith('/events')) {
       selectedHistoryThreadId = url.searchParams.get('native_thread_id');
+      if (selectedHistoryThreadId === 'thread-1') {
+        selectedHistoryRequestCount += 1;
+      }
       return ok({ events: listedEvents });
     }
     if (url.pathname.endsWith('/stream'))
@@ -535,6 +539,12 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   );
   const loadEventHistory = page.getByTestId('load-external-event-history');
   await expect.poll(() => selectedHistoryThreadId).toBe('thread-1');
+  const historyRequestsBeforeExplicitLoad = selectedHistoryRequestCount;
+  await expect(loadEventHistory).toBeVisible();
+  await loadEventHistory.click();
+  await expect
+    .poll(() => selectedHistoryRequestCount)
+    .toBeGreaterThan(historyRequestsBeforeExplicitLoad);
   await expect(loadEventHistory).toBeHidden();
   await page.getByTestId('message-input-field').fill('/');
   await expect(
@@ -710,7 +720,7 @@ test('external agent fleet, transcript activity, interactions, and controls are 
   messageBindingId = undefined;
   await composer.fill('Immediate replacement prompt');
   await page.getByTestId('send-message').click();
-  expect(messageBindingId).toBe('binding-replacement');
+  await expect.poll(() => messageBindingId).toBe('binding-replacement');
   await expect(page.getByTestId('transcript-shell')).toContainText(
     'Immediate replacement prompt',
   );

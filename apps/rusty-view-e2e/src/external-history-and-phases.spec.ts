@@ -181,11 +181,15 @@ test('renders one compact phased assistant turn identically after reload', async
 });
 
 async function archiveExternalAgent(page: Page, row: Locator): Promise<void> {
+  await row.scrollIntoViewIfNeeded();
   await row.getByTestId('external-agent-options').click();
-  await page
+  const archive = page
     .getByTestId('session-options-panel')
-    .getByTestId('session-options-archive')
-    .click();
+    .getByTestId('session-options-archive');
+  await expect(archive).toBeEnabled();
+  await archive.focus();
+  await expect(archive).toBeFocused();
+  await page.keyboard.press('Enter');
 }
 
 async function installHistoryFixture(page: Page): Promise<void> {
@@ -377,6 +381,21 @@ async function installHistoryFixture(page: Page): Promise<void> {
       const parts = url.pathname.split('/');
       const action = parts.at(-1) as 'archive' | 'unarchive' | 'delete';
       const threadId = decodeURIComponent(parts.at(-2) ?? '');
+      const affectedBindings = bindings.filter(
+        (binding) => binding.nativeThreadId === threadId,
+      );
+      const bindingTransitions = affectedBindings.map((binding) => ({
+        bindingId: binding.bindingId,
+        previousStatus: binding.status,
+        currentStatus: action === 'archive' ? 'archived' : binding.status,
+        revision:
+          action === 'archive' ? binding.revision + 1 : binding.revision,
+      }));
+      const crewSessionTransitions = affectedBindings.map((binding) => ({
+        sessionId: binding.sessionId,
+        previousStatus: binding.status,
+        currentStatus: action === 'archive' ? 'archived' : binding.status,
+      }));
       if (action === 'archive') {
         const thread = activeThreads.find((item) => item.threadId === threadId);
         activeThreads = activeThreads.filter(
@@ -406,16 +425,22 @@ async function installHistoryFixture(page: Page): Promise<void> {
           (item) => item.threadId !== threadId,
         );
       }
-      return ok({
+      const baseReceipt = {
         runtimeId: 'runtime-1',
         threadId,
         action,
         outcome: 'applied',
-        ...(action === 'delete'
-          ? { nativeDeleted: true }
-          : { nativeArchived: action === 'archive' }),
-        bindings: [],
-      });
+        bindings: bindingTransitions,
+      };
+      return ok(
+        action === 'delete'
+          ? { ...baseReceipt, nativeDeleted: true }
+          : {
+              ...baseReceipt,
+              nativeArchived: action === 'archive',
+              crewSessions: crewSessionTransitions,
+            },
+      );
     }
     if (/\/v1\/external-bindings\/[^/]+\/restore$/.test(url.pathname)) {
       const bindingId = decodeURIComponent(

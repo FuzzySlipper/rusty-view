@@ -171,6 +171,17 @@ export class SessionOptionsComponent {
       if (externalSession.controller?.driverState !== 'ready') {
         return 'The runtime controller is not ready.';
       }
+      const hasPendingInteraction = this.external
+        .interactions()
+        .some(
+          (interaction) =>
+            interaction.runtimeId === externalSession.runtime.runtimeId &&
+            interaction.nativeThreadId === externalSession.thread.threadId &&
+            interaction.status === 'pending',
+        );
+      if (hasPendingInteraction) {
+        return 'Resolve the pending interaction first.';
+      }
       return undefined;
     }
 
