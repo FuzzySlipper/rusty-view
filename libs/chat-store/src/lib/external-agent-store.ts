@@ -903,7 +903,7 @@ export class ExternalAgentStore {
     ) {
       return false;
     }
-    const beforeCursor = page.pageStartCursor;
+    const beforeCursor = page.beforeCursor;
     if (beforeCursor === null) {
       const message =
         'Older transcript history is available, but Crew did not provide a backward cursor. Refresh the session and retry.';
@@ -929,7 +929,7 @@ export class ExternalAgentStore {
         );
       }
       const nextPage = normalizedExternalTurnPage(read.turnPage);
-      if (nextPage.hasMoreBefore && nextPage.pageStartCursor === beforeCursor) {
+      if (nextPage.hasMoreBefore && nextPage.beforeCursor === beforeCursor) {
         throw new Error(
           'Crew returned a stale backward cursor and did not advance the transcript page',
         );

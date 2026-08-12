@@ -2470,12 +2470,22 @@ describe('ExternalAgentStore', () => {
       .fn()
       .mockResolvedValueOnce({
         thread: recent,
-        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-3'),
+        turnPage: turnPage(
+          true,
+          'opaque-before-turn-2',
+          'turn-cursor-2',
+          'turn-cursor-3',
+        ),
       })
       .mockImplementationOnce(() => olderRead.promise)
       .mockResolvedValueOnce({
         thread: newest,
-        turnPage: turnPage(true, 'turn-cursor-3', 'turn-cursor-4'),
+        turnPage: turnPage(
+          true,
+          'opaque-before-turn-3',
+          'turn-cursor-3',
+          'turn-cursor-4',
+        ),
       });
     const store = setupStore({
       runtimes: [runtime],
@@ -2506,7 +2516,7 @@ describe('ExternalAgentStore', () => {
     await refreshingNewest;
     olderRead.resolve({
       thread: older,
-      turnPage: turnPage(false, 'turn-cursor-1', 'turn-cursor-2'),
+      turnPage: turnPage(false, null, 'turn-cursor-1', 'turn-cursor-2'),
     });
     await expect(loadingOlder).resolves.toBe(true);
 
@@ -2514,7 +2524,7 @@ describe('ExternalAgentStore', () => {
       threadId: 'thread-1',
       includeTurns: true,
       limit: 50,
-      beforeCursor: 'turn-cursor-2',
+      beforeCursor: 'opaque-before-turn-2',
     });
     expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
       'turn-1',
@@ -2537,7 +2547,12 @@ describe('ExternalAgentStore', () => {
       .fn()
       .mockResolvedValueOnce({
         thread: recent,
-        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-2'),
+        turnPage: turnPage(
+          true,
+          'opaque-retry-cursor',
+          'turn-cursor-2',
+          'turn-cursor-2',
+        ),
       })
       .mockRejectedValueOnce(
         new ChatTransportError({
@@ -2548,7 +2563,7 @@ describe('ExternalAgentStore', () => {
       )
       .mockResolvedValueOnce({
         thread: older,
-        turnPage: turnPage(false, 'turn-cursor-1', 'turn-cursor-1'),
+        turnPage: turnPage(false, null, 'turn-cursor-1', 'turn-cursor-1'),
       });
     const store = setupStore({
       runtimes: [runtime],
@@ -2574,7 +2589,7 @@ describe('ExternalAgentStore', () => {
       threadId: 'thread-1',
       includeTurns: true,
       limit: 50,
-      beforeCursor: 'turn-cursor-2',
+      beforeCursor: 'opaque-retry-cursor',
     });
     expect(store.selectedThread()?.turns.map((turn) => turn.turnId)).toEqual([
       'turn-1',
@@ -2591,11 +2606,21 @@ describe('ExternalAgentStore', () => {
       .fn()
       .mockResolvedValueOnce({
         thread: recent,
-        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-2'),
+        turnPage: turnPage(
+          true,
+          'opaque-stale-cursor',
+          'turn-cursor-2',
+          'turn-cursor-2',
+        ),
       })
       .mockResolvedValueOnce({
         thread: recent,
-        turnPage: turnPage(true, 'turn-cursor-2', 'turn-cursor-2'),
+        turnPage: turnPage(
+          true,
+          'opaque-stale-cursor',
+          'turn-cursor-1',
+          'turn-cursor-2',
+        ),
       });
     const store = setupStore({
       runtimes: [runtime],
@@ -3258,13 +3283,14 @@ function emptyTurnPage() {
 
 function turnPage(
   hasMoreBefore: boolean,
+  beforeCursor: string | null,
   pageStartCursor: string | null,
   pageEndCursor: string | null,
 ) {
   return {
     limit: 50,
     hasMoreBefore,
-    beforeCursor: null,
+    beforeCursor,
     pageStartCursor,
     pageEndCursor,
   };
