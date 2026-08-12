@@ -111,7 +111,8 @@
           <tr>
             <td>
               <strong>#{{ item.taskId }}</strong
-              ><span>{{ item.task?.['title'] ?? item.projectId }}</span>
+              ><span>{{ item.task?.['title'] ?? item.projectId }}</span
+              ><code>{{ item.stableId }}</code>
             </td>
             <td>
               <span class="rv-den__stage">{{ item.stage }}</span
@@ -149,6 +150,96 @@
               >
                 Prompt reviewer
               </button>
+              <details>
+                <summary>Diagnostics</summary>
+                @if (item.submission; as submission) {
+                <dl class="rv-den__detail">
+                  <dt>submission</dt>
+                  <dd>{{ submission.submissionId }}</dd>
+                  <dt>phase / revision</dt>
+                  <dd>{{ submission.phase }} / {{ submission.revision }}</dd>
+                  <dt>repository / ref</dt>
+                  <dd>{{ submission.repository }} / {{ submission.gitRef }}</dd>
+                  <dt>commit</dt>
+                  <dd><code>{{ submission.commitSha }}</code></dd>
+                  <dt>base commit</dt>
+                  <dd><code>{{ submission.baseCommit ?? '-' }}</code></dd>
+                  <dt>required checks</dt>
+                  <dd>{{ submission.requiredChecks.join(', ') || '-' }}</dd>
+                  <dt>created / updated</dt>
+                  <dd>
+                    {{ submission.createdAt }} / {{ submission.updatedAt }}
+                  </dd>
+                  <dt>gate</dt>
+                  <dd>
+                    {{ submission.gateId ?? '-' }} / {{ submission.gateStatus ??
+                    '-' }}
+                  </dd>
+                  <dt>review round / packet</dt>
+                  <dd>
+                    {{ submission.reviewRoundId ?? '-' }} / {{
+                    submission.reviewPacketId ?? '-' }}
+                  </dd>
+                  <dt>review packet message</dt>
+                  <dd>{{ submission.reviewPacketMessageId ?? '-' }}</dd>
+                  <dt>review exact head</dt>
+                  <dd>
+                    <code>{{ submission.reviewExactHeadCommit ?? '-' }}</code>
+                  </dd>
+                  <dt>review verdict / task</dt>
+                  <dd>
+                    {{ submission.reviewVerdict ?? '-' }} / {{
+                    submission.reviewTaskStatus ?? '-' }}
+                  </dd>
+                  <dt>finalization</dt>
+                  <dd>{{ submission.reviewFinalizationId ?? '-' }}</dd>
+                  <dt>reviewer session</dt>
+                  <dd>{{ submission.reviewerSessionId ?? '-' }}</dd>
+                  <dt>dispatch message / delivery</dt>
+                  <dd>
+                    {{ submission.dispatchMessageId ?? '-' }} / {{
+                    submission.dispatchDeliveryId ?? '-' }}
+                  </dd>
+                  <dt>reply status / reason</dt>
+                  <dd>
+                    {{ submission.replyStatus ?? '-' }} / {{
+                    submission.replyReasonCode ?? '-' }}
+                  </dd>
+                  <dt>reply message / delivery</dt>
+                  <dd>
+                    {{ submission.replyMessageId ?? '-' }} / {{
+                    submission.replyDeliveryId ?? '-' }}
+                  </dd>
+                  <dt>terminal / adapter error</dt>
+                  <dd>
+                    {{ submission.terminalReason ?? '-' }} / {{
+                    submission.lastAdapterError ?? '-' }}
+                  </dd>
+                  <dt>relationship</dt>
+                  <dd>
+                    {{ submission.phase === 'superseded' ? 'superseded
+                    submission' : 'current submission record' }}
+                  </dd>
+                </dl>
+                } @else {
+                <dl class="rv-den__detail">
+                  <dt>managed submission</dt>
+                  <dd>none</dd>
+                  <dt>Den task</dt>
+                  <dd>{{ item.projectId }} / {{ item.taskId }}</dd>
+                  <dt>review round</dt>
+                  <dd>
+                    {{ item.latestRound?.['id'] ?? '-' }} / {{
+                    item.latestRound?.['status'] ?? '-' }}
+                  </dd>
+                  <dt>gate</dt>
+                  <dd>
+                    {{ item.latestGate?.['id'] ?? '-' }} / {{
+                    item.latestGate?.['status'] ?? '-' }}
+                  </dd>
+                </dl>
+                }
+              </details>
             </td>
           </tr>
           } @empty {

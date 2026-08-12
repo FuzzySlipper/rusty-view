@@ -15,9 +15,9 @@ import type { ReviewOperatorPipelineItem } from '@rusty-view/protocol';
 })
 export class AdminDenReviewPanelComponent {
   protected readonly den = inject(DenReviewOperatorStore);
-  protected readonly authorityId = signal('rusty-crew-review-den');
-  protected readonly endpointRef = signal('config://mcp/den');
-  protected readonly auditIdentity = signal('rusty-crew-review-service');
+  protected readonly authorityId = signal('');
+  protected readonly endpointRef = signal('');
+  protected readonly auditIdentity = signal('');
   protected readonly pendingPrompt = signal<ReviewOperatorPipelineItem | null>(
     null,
   );
@@ -34,7 +34,7 @@ export class AdminDenReviewPanelComponent {
   }
 
   protected refresh(): void {
-    void this.den.refresh();
+    void this.den.refresh().then(() => this.resetConfigDraft());
   }
 
   protected changeProject(target: EventTarget | null): void {
@@ -123,8 +123,8 @@ export class AdminDenReviewPanelComponent {
   private resetConfigDraft(): void {
     const config = this.den.config();
     if (config === null) return;
-    this.authorityId.set(config.authorityId ?? 'rusty-crew-review-den');
-    this.endpointRef.set(config.endpointRef ?? 'config://mcp/den');
-    this.auditIdentity.set(config.auditIdentity ?? 'rusty-crew-review-service');
+    this.authorityId.set(config.authorityId ?? '');
+    this.endpointRef.set(config.endpointRef ?? '');
+    this.auditIdentity.set(config.auditIdentity ?? '');
   }
 }

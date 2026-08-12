@@ -39,6 +39,7 @@ export class DenReviewOperatorStore {
   private readonly _promptReceipt = signal<ReviewOperatorPromptReceipt | null>(
     null,
   );
+  private readonly pendingPromptIdentities = new Map<string, string>();
 
   readonly config = this._config.asReadonly();
   readonly pipeline = this._pipeline.asReadonly();
@@ -103,7 +104,11 @@ export class DenReviewOperatorStore {
     this._saving.set(true);
     this._error.set(null);
     try {
-      const identity = `${config.deploymentRole}:${this._projectId()}:${taskId}:${globalThis.crypto.randomUUID()}`;
+      const actionKey = `${config.deploymentRole}:${this._projectId()}:${taskId}`;
+      const identity =
+        this.pendingPromptIdentities.get(actionKey) ??
+        `${config.deploymentRole}:${this._projectId()}:${taskId}:${globalThis.crypto.randomUUID()}`;
+      this.pendingPromptIdentities.set(actionKey, identity);
       const result = await this.transport.external.promptReviewerForTask(
         taskId,
         {
@@ -114,6 +119,7 @@ export class DenReviewOperatorStore {
         },
       );
       this._promptReceipt.set(result);
+      this.pendingPromptIdentities.delete(actionKey);
       return true;
     } catch (error) {
       this._error.set(storeErrorMessage(error));

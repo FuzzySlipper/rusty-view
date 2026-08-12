@@ -92,6 +92,22 @@
   color: var(--rv-color-accent);
   font-weight: var(--rv-font-weight-bold);
 }
+.rv-den details {
+  margin-top: var(--rv-space-sm);
+}
+.rv-den__detail {
+  display: grid;
+  grid-template-columns: max-content minmax(12rem, 1fr);
+  gap: var(--rv-space-xs) var(--rv-space-sm);
+  min-width: 32rem;
+}
+.rv-den__detail dt {
+  color: var(--rv-color-text-muted);
+}
+.rv-den__detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .rv-den__error {
   padding: var(--rv-space-sm);
   border: 1px solid var(--rv-color-danger);
