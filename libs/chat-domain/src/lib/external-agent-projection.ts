@@ -41,8 +41,7 @@ export function projectExternalAgentTranscript(
       for (const item of turn.items) {
         if (isContentlessGenericSnapshotItem(item)) continue;
         const status = item.status ?? turn.status;
-        const content =
-          item.text ?? item.summary?.join('\n') ?? item.status ?? item.kind;
+        const content = visibleSnapshotItemContent(item);
         const block = withExternalItemMetadata(
           blockForItem(item.itemId, item.kind, content, status),
           item.itemId,
@@ -1336,7 +1335,21 @@ function isContentlessGenericSnapshotItem(
   );
 }
 
-function hasVisibleSnapshotItemText(value: string | undefined): boolean {
+function visibleSnapshotItemContent(
+  item: ExternalThreadTurnProjection['items'][number],
+): string {
+  const text = item.text;
+  if (hasVisibleSnapshotItemText(text)) return text;
+  const summary = item.summary?.filter(hasVisibleSnapshotItemText).join('\n');
+  if (hasVisibleSnapshotItemText(summary)) return summary;
+  const status = item.status;
+  if (hasVisibleSnapshotItemText(status)) return status;
+  return item.kind;
+}
+
+function hasVisibleSnapshotItemText(
+  value: string | undefined,
+): value is string {
   return value !== undefined && value.trim().length > 0;
 }
 

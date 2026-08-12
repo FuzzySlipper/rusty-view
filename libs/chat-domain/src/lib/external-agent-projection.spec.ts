@@ -1656,6 +1656,57 @@ describe('projectExternalAgentTranscript', () => {
     ).toBe(false);
   });
 
+  it('uses meaningful generic summary or status when higher-precedence text is blank', () => {
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'generic item content',
+        ephemeral: false,
+        modelProvider: 'openai',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.144.1',
+        name: null,
+        agentNickname: null,
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'summary-item',
+                kind: 'item',
+                text: '   ',
+                summary: [' ', 'visible summary'],
+              },
+              {
+                itemId: 'status-item',
+                kind: 'item',
+                text: '',
+                status: 'running',
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks.map((block) => block.content)).toEqual([
+      'visible summary',
+      'running',
+    ]);
+  });
+
   it('lets a meaningful live event fill a skipped generic snapshot identity once', () => {
     const snapshot = {
       threadId: 'thread-1',
