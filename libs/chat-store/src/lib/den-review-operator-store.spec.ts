@@ -93,6 +93,44 @@ describe('Den review operator projection', () => {
     expect(distinctAction.idempotencyKey).not.toBe(first.idempotencyKey);
   });
 
+  it('rotates an ambiguous prompt identity after the operator abandons it', async () => {
+    const promptReviewerForTask = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('response lost'))
+      .mockResolvedValueOnce({ command: 'review 6854' });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        DenReviewOperatorStore,
+        {
+          provide: ChatTransport,
+          useValue: {
+            getConfig: () => ({ coordinationRole: 'debug' }),
+            external: {
+              readReviewOperatorConfig: vi.fn(async () => ({
+                deploymentRole: 'debug',
+              })),
+              readReviewOperatorPipeline: vi.fn(async () => ({ items: [] })),
+              writeReviewOperatorConfig: vi.fn(),
+              promptReviewerForTask,
+            },
+          },
+        },
+      ],
+    });
+    const store = TestBed.inject(DenReviewOperatorStore);
+    await store.refresh();
+
+    expect(await store.promptReviewer(6854)).toBe(false);
+    store.abandonPromptReviewer(6854);
+    expect(await store.promptReviewer(6854)).toBe(true);
+
+    const abandoned = promptReviewerForTask.mock.calls[0]?.[1];
+    const newAction = promptReviewerForTask.mock.calls[1]?.[1];
+    expect(newAction.idempotencyKey).not.toBe(abandoned.idempotencyKey);
+    expect(newAction.correlationId).not.toBe(abandoned.correlationId);
+  });
+
   it('replaces bounded pages without duplicating or rewriting stable identities', async () => {
     const readReviewOperatorPipeline = vi
       .fn()

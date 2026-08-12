@@ -89,6 +89,8 @@ export class AdminDenReviewPanelComponent {
   }
 
   protected cancelPrompt(): void {
+    const item = this.pendingPrompt();
+    if (item !== null) this.den.abandonPromptReviewer(item.taskId);
     this.pendingPrompt.set(null);
   }
 

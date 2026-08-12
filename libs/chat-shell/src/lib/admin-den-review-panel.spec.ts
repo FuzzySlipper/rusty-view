@@ -139,6 +139,16 @@ describe('AdminDenReviewPanelComponent', () => {
     expect(text).toContain('pending / adapter_retry');
     expect(button?.disabled).toBe(true);
     expect(promptReviewerForTask).not.toHaveBeenCalled();
+
+    const store = TestBed.inject(DenReviewOperatorStore);
+    const abandon = vi.spyOn(store, 'abandonPromptReviewer');
+    const component = fixture.componentInstance as unknown as {
+      pendingPrompt: { set(item: unknown): void };
+      cancelPrompt(): void;
+    };
+    component.pendingPrompt.set({ taskId: 6854 });
+    component.cancelPrompt();
+    expect(abandon).toHaveBeenCalledWith(6854);
   });
 
   it('rebases config drafts on refresh and leaves unconfigured fields empty', async () => {

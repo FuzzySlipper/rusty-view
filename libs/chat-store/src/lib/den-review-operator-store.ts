@@ -129,6 +129,14 @@ export class DenReviewOperatorStore {
     }
   }
 
+  abandonPromptReviewer(taskId: number): void {
+    const config = this._config();
+    if (config === null) return;
+    this.pendingPromptIdentities.delete(
+      `${config.deploymentRole}:${this._projectId()}:${taskId}`,
+    );
+  }
+
   setProjectId(projectId: string): void {
     this._projectId.set(projectId.trim());
   }
