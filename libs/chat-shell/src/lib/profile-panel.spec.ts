@@ -188,11 +188,18 @@ async function createPanel(sessions: ChatSessionSummary[]) {
   const externalStore = {
     refresh: vi.fn(async () => undefined),
     lifecyclePendingThreadIds: signal(new Set<string>()),
+    lifecycleRecoveryFor: vi.fn(() => undefined),
+    profileStateFor: vi.fn(() => undefined),
+    error: signal<string | undefined>(undefined),
+    commandError: signal<string | undefined>(undefined),
     metadataPendingBindingIds: signal(new Set<string>()),
     metadataError: signal<string | undefined>(undefined),
     interactions: signal([]),
     updateSessionMetadata: vi.fn(async () => true),
     archiveThread: vi.fn(async () => true),
+    restartSession: vi.fn(async () => true),
+    interruptSession: vi.fn(async () => true),
+    refreshSessionProfile: vi.fn(async () => undefined),
   };
   await TestBed.configureTestingModule({
     imports: [ProfilePanelComponent],

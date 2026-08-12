@@ -101,7 +101,7 @@ describe('external agent lifecycle reduction', () => {
 
 describe('external agent metadata editing', () => {
   it('revision-fences the write and updates the binding and visible title locally', async () => {
-    const original = externalBinding();
+    const original = { ...externalBinding(), profileId: 'profile-1' };
     const updateBindingMetadata = vi.fn(async () => ({
       ...original,
       label: 'Planning follow-up',
@@ -388,7 +388,21 @@ describe('ExternalAgentStore', () => {
         action: 'archive' as const,
         outcome: 'applied' as const,
         nativeArchived: true,
-        bindings: [],
+        bindings: [
+          {
+            bindingId: 'binding-1',
+            previousStatus: 'active',
+            currentStatus: 'archived',
+            revision: 2,
+          },
+        ],
+        crewSessions: [
+          {
+            sessionId: 'session-1',
+            previousStatus: 'idle',
+            currentStatus: 'archived',
+          },
+        ],
       };
     });
     const store = setupStore({
@@ -410,6 +424,54 @@ describe('ExternalAgentStore', () => {
     expect(store.selectedSessionKey()).toBeUndefined();
     expect(store.sessions()).toEqual([]);
     expect(store.lifecycleNotice()).toContain('Archived native Codex thread');
+  });
+
+  it('keeps a partial coordinated archive visible and retries the same row to reconciliation', async () => {
+    let archived = false;
+    const partial = new ChatTransportError({
+      code: 'http_error',
+      statusCode: 500,
+      message: 'Crew session archive failed after native archive',
+      apiError: {
+        code: 'internal_error',
+        reason_code: 'external_thread_crew_session_reconciliation_failed',
+        message: 'Crew session archive failed after native archive',
+        retryable: true,
+      },
+    });
+    const archiveThread = vi
+      .fn()
+      .mockRejectedValueOnce(partial)
+      .mockImplementationOnce(async () => {
+        archived = true;
+        return coordinatedArchiveReceipt();
+      });
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      bindings: [externalBinding()],
+      listThreads: vi.fn(async () =>
+        page(archived ? [] : [thread('thread-1', 10)], null),
+      ),
+      archiveThread,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected session');
+
+    await expect(store.archiveThread(session)).resolves.toBe(false);
+
+    expect(store.sessions()).toHaveLength(1);
+    expect(store.lifecycleRecoveryFor(session)).toMatchObject({
+      action: 'archive',
+      retryLabel: 'Reconcile archive',
+    });
+    expect(store.error()).toContain('partial state');
+
+    await expect(store.archiveThread(session)).resolves.toBe(true);
+
+    expect(archiveThread).toHaveBeenCalledTimes(2);
+    expect(store.lifecycleRecoveryFor(session)).toBeUndefined();
+    expect(store.sessions()).toEqual([]);
   });
 
   it('restores native history without reactivating its archived Crew binding', async () => {
@@ -1776,7 +1838,7 @@ describe('ExternalAgentStore', () => {
 
     expect(readThread).toHaveBeenCalledWith('runtime-1', {
       threadId: 'thread-replacement',
-      includeTurns: true,
+      includeTurns: false,
       limit: 50,
     });
     expect(store.selectedThreadId()).toBe('thread-replacement');
@@ -1828,6 +1890,69 @@ describe('ExternalAgentStore', () => {
         }),
       }),
     ]);
+  });
+
+  it('starts and cancels from row metadata without hydrating predecessor history', async () => {
+    const original = { ...externalBinding(), profileId: 'profile-1' };
+    const successor = {
+      ...original,
+      bindingId: 'binding-successor',
+      nativeThreadId: 'thread-successor',
+      sessionId: 'session-successor',
+      revision: 1,
+    };
+    let replaced = false;
+    const listBindings = vi.fn(async () => ({
+      bindings: replaced ? [successor] : [original],
+      profileStates: replaced
+        ? [profileState('binding-successor', 12)]
+        : [profileState('binding-1', 11)],
+    }));
+    const readThread = vi.fn(async () => ({
+      thread: thread('thread-successor', 20),
+      turnPage: emptyTurnPage(),
+    }));
+    const executeCommand = vi.fn(async () => {
+      replaced = true;
+      return {
+        ...externalCommandResult('applied'),
+        commandId: 'new-session-command',
+        input: '/new',
+        command: 'new',
+        result: {
+          threadReplacement: replacementResult(original, successor),
+        },
+      };
+    });
+    const submitControl = vi.fn(async () => controlReceipt('applied'));
+    const store = setupStore({
+      runtimes: [registration('runtime-1')],
+      listBindings,
+      listThreads: vi.fn(async () => page([thread('thread-1', 10)], null)),
+      readThread,
+      executeCommand,
+      submitControl,
+    });
+    await store.refresh();
+    const session = store.sessions()[0];
+    if (session === undefined) throw new Error('expected session');
+
+    await expect(store.interruptSession(session)).resolves.toBe(true);
+    await expect(store.restartSession(session)).resolves.toBe(true);
+
+    expect(submitControl).toHaveBeenCalledWith('binding-1', {
+      kind: 'interrupt_turn',
+      expectedBindingRevision: 1,
+      idempotencyKey: expect.stringMatching(/^rusty-view-cancel:/),
+      payload: {},
+    });
+    expect(readThread).toHaveBeenCalledWith('runtime-1', {
+      threadId: 'thread-successor',
+      includeTurns: false,
+      limit: 50,
+    });
+    expect(store.lifecycleNotice()).toContain('profile profile-1 revision 12');
+    expect(store.lifecycleNotice()).toContain('/home/dev/rusty-view');
   });
 
   it('runs /refresh-profile with fresh guards and selects the archived-thread successor', async () => {
@@ -2864,6 +2989,80 @@ function externalBinding(): ExternalAgentBinding {
     revision: 1,
     createdAt: '2026-07-11T00:00:00Z',
     updatedAt: '2026-07-11T00:00:00Z',
+  };
+}
+
+function coordinatedArchiveReceipt() {
+  return {
+    runtimeId: 'runtime-1',
+    threadId: 'thread-1',
+    action: 'archive' as const,
+    outcome: 'already_archived' as const,
+    nativeArchived: true,
+    bindings: [
+      {
+        bindingId: 'binding-1',
+        previousStatus: 'archived',
+        currentStatus: 'archived',
+        revision: 2,
+      },
+    ],
+    crewSessions: [
+      {
+        sessionId: 'session-1',
+        previousStatus: 'idle',
+        currentStatus: 'archived',
+      },
+    ],
+  };
+}
+
+function profileState(bindingId: string, revision: number) {
+  return {
+    bindingId,
+    profileId: 'profile-1',
+    state: 'current' as const,
+    refreshRequired: false,
+    appliedProfileRevision: revision,
+    appliedPromptHash: 'a'.repeat(64),
+    currentProfileRevision: revision,
+    currentPromptHash: 'a'.repeat(64),
+  };
+}
+
+function emptyTurnPage() {
+  return {
+    limit: 50,
+    hasMoreBefore: false,
+    beforeCursor: null,
+    pageStartCursor: null,
+    pageEndCursor: null,
+  };
+}
+
+function replacementResult(
+  predecessor: ExternalAgentBinding,
+  successor: ExternalAgentBinding,
+) {
+  return {
+    bindingId: successor.bindingId,
+    bindingRevision: successor.revision,
+    sessionId: successor.sessionId ?? null,
+    profileId: successor.profileId ?? null,
+    cwd: successor.cwd,
+    label: successor.label ?? null,
+    taskRef: successor.taskRef ?? null,
+    previousBindingId: predecessor.bindingId,
+    previousSessionId: predecessor.sessionId ?? null,
+    previousNativeThreadId: predecessor.nativeThreadId ?? 'thread-1',
+    nativeThreadId: successor.nativeThreadId ?? 'thread-successor',
+    previousNativeThreadArchived: true,
+    settingsPreserved: true,
+    settings: {
+      model: 'gpt-5.6',
+      modelProvider: 'openai',
+      effort: 'medium',
+    },
   };
 }
 

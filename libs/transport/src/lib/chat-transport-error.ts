@@ -10,6 +10,7 @@ export type ChatTransportErrorCode =
   | 'http_error'
   | 'auth_error'
   | 'envelope_error'
+  | 'response_parse_error'
   | 'sse_parse_error'
   | 'reconnect_exhausted'
   | 'aborted';
@@ -69,6 +70,8 @@ export class ChatTransportError extends Error {
         return false;
       case 'envelope_error':
         return false;
+      case 'response_parse_error':
+        return true;
       case 'sse_parse_error':
         return false;
       case 'reconnect_exhausted':

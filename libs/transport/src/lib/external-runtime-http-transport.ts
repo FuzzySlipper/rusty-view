@@ -449,7 +449,7 @@ export class ExternalRuntimeHttpTransport {
         timeout === undefined
           ? await request
           : await Promise.race([request, timeout]);
-      const responseBody = response.json();
+      const responseBody = parseJsonResponse(response, path);
       const parsed =
         timeout === undefined
           ? await responseBody
@@ -473,6 +473,24 @@ export class ExternalRuntimeHttpTransport {
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
     }
+  }
+}
+
+async function parseJsonResponse(
+  response: Response,
+  endpoint: string,
+): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new ChatTransportError({
+      code: 'response_parse_error',
+      message:
+        'Crew returned an incomplete or malformed JSON response. Retry this operation; if it repeats, refresh the service diagnostics.',
+      statusCode: response.status,
+      endpoint,
+      cause: error,
+    });
   }
 }
 

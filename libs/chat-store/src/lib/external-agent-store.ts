@@ -13,6 +13,7 @@ import type {
   ExternalAgentSessionCreateWrite,
   ExternalBindingMetadataWrite,
   ExternalBindingMessageWrite,
+  ExternalBindingProfileState,
   ExternalBindingProfileRefreshReceipt,
   ExternalBindingRestoreWrite,
   ExternalControlReceipt,
@@ -26,6 +27,7 @@ import type {
   ExternalRuntimeRawDetail,
   ExternalRuntimeThreadReplacementResult,
   ExternalThreadProjection,
+  ExternalThreadLifecycleReceipt,
   ExternalTurnPhase,
   NormalizedExternalRuntimeEvent,
   SendExternalBindingMessageResponse,
@@ -117,6 +119,12 @@ export interface ExternalPromptFailureDetail {
   readonly transportCode?: StoreErrorDetail['transportCode'];
 }
 
+export interface ExternalLifecycleRecovery {
+  readonly action: 'archive' | 'new_session';
+  readonly message: string;
+  readonly retryLabel: string;
+}
+
 const EXTERNAL_TRANSCRIPT_CACHE_CAPACITY = 8;
 const EXTERNAL_TRANSCRIPT_CACHE_WEIGHT = 60_000;
 const EXTERNAL_EVENT_PAGE_SIZE = 1_000;
@@ -131,6 +139,7 @@ export class ExternalAgentStore {
   private readonly refreshIdleWaiters: Array<() => void> = [];
   private interactionsPolling = false;
   private bindingMutationRevision = 0;
+  private readonly lifecycleAttemptKeys = new Map<string, string>();
   private selectionRevision = 0;
   private selectedRuntimeEventCursor: number | undefined;
   private readonly fleetCursors = new Map<string, number>();
@@ -152,6 +161,9 @@ export class ExternalAgentStore {
   readonly runtimes = signal<readonly ExternalRuntimeRegistration[]>([]);
   readonly controllers = signal<readonly ExternalRuntimeControllerStatus[]>([]);
   readonly bindings = signal<readonly ExternalAgentBinding[]>([]);
+  readonly bindingProfileStates = signal<
+    readonly ExternalBindingProfileState[]
+  >([]);
   readonly creationProfiles = signal<readonly ExternalAgentProfileOption[]>([]);
   private readonly runtimeThreads = signal<readonly RuntimeThread[]>([]);
   private readonly fleetEvents = signal<
@@ -187,6 +199,9 @@ export class ExternalAgentStore {
   readonly lifecyclePendingThreadIds = signal<ReadonlySet<string>>(new Set());
   readonly bindingRestorePendingIds = signal<ReadonlySet<string>>(new Set());
   readonly lifecycleNotice = signal<string | undefined>(undefined);
+  readonly lifecycleRecoveryBySession = signal<
+    Readonly<Record<string, ExternalLifecycleRecovery>>
+  >({});
   readonly metadataPendingBindingIds = signal<ReadonlySet<string>>(new Set());
   readonly metadataError = signal<string | undefined>(undefined);
   readonly metadataNotice = signal<string | undefined>(undefined);
@@ -297,6 +312,23 @@ export class ExternalAgentStore {
     );
   });
 
+  profileStateFor(
+    session: ExternalAgentSession,
+  ): ExternalBindingProfileState | undefined {
+    const bindingId = session.binding?.bindingId;
+    return bindingId === undefined
+      ? undefined
+      : this.bindingProfileStates().find(
+          (profileState) => profileState.bindingId === bindingId,
+        );
+  }
+
+  lifecycleRecoveryFor(
+    session: ExternalAgentSession,
+  ): ExternalLifecycleRecovery | undefined {
+    return this.lifecycleRecoveryBySession()[session.key];
+  }
+
   readonly hasMoreThreads = computed(() =>
     Object.values(this.threadCursors()).some((cursor) => cursor !== null),
   );
@@ -378,6 +410,7 @@ export class ExternalAgentStore {
           ? bindingFleet.bindings
           : mergeBindings(this.bindings(), bindingFleet.bindings);
       this.bindings.set(refreshedBindings);
+      this.bindingProfileStates.set(bindingFleet.profileStates ?? []);
       this.interactions.set(attention.interactions);
       const previousFleetEvents = this.fleetEvents();
       const activeRuntimeIds = new Set(
@@ -936,7 +969,16 @@ export class ExternalAgentStore {
       return undefined;
     }
     if (isProfileRefreshCommand(input)) {
-      await this.refreshSelectedProfile(binding);
+      const session = this.sessions().find(
+        (candidate) => candidate.binding?.bindingId === binding.bindingId,
+      );
+      if (session === undefined) {
+        this.commandError.set(
+          'Profile refresh failed: the selected binding is no longer present in the session inventory. Refresh Agents and try again.',
+        );
+        return undefined;
+      }
+      await this.refreshSessionProfile(session);
       return undefined;
     }
     this.pending.set(true);
@@ -989,15 +1031,21 @@ export class ExternalAgentStore {
     }
   }
 
-  private async refreshSelectedProfile(
-    selectedBinding: ExternalAgentBinding,
-  ): Promise<void> {
+  async refreshSessionProfile(session: ExternalAgentSession): Promise<void> {
+    const selectedBinding = session.binding;
+    if (selectedBinding === undefined) {
+      this.commandError.set(
+        'Profile refresh failed: this native thread has no Crew binding.',
+      );
+      return;
+    }
     this.pending.set(true);
     this.commandError.set(undefined);
     this.commandResult.set(undefined);
     this.lifecycleNotice.set(undefined);
     try {
       const fleet = await this.transport.external.listBindings();
+      this.bindingProfileStates.set(fleet.profileStates ?? []);
       const binding = fleet.bindings.find(
         (candidate) => candidate.bindingId === selectedBinding.bindingId,
       );
@@ -1029,10 +1077,19 @@ export class ExternalAgentStore {
       );
       if (receipt.outcome === 'thread_replaced') {
         await this.applyProfileRefreshReplacement(binding, receipt);
+        this.bindingProfileStates.update((states) => [
+          ...states.filter(
+            (profileState) =>
+              profileState.bindingId !== receipt.profileState.bindingId,
+          ),
+          receipt.profileState,
+        ]);
         this.lifecycleNotice.set(
-          `Started a fresh Codex session with profile ${receipt.profileState.profileId ?? 'unknown'} revision ${receipt.profileState.currentProfileRevision ?? 'unknown'}; exact switchboard routes were moved by Crew.`,
+          `Started a fresh Codex session with profile ${receipt.profileState.profileId ?? 'unknown'} revision ${receipt.profileState.appliedProfileRevision ?? 'unknown'} in ${receipt.binding.cwd}; exact switchboard routes were moved by Crew.`,
         );
-        await this.refreshSelectedCommands();
+        if (this.selectedBinding()?.bindingId === receipt.binding.bindingId) {
+          await this.refreshSelectedCommands();
+        }
         return;
       }
       this.bindingMutationRevision += 1;
@@ -1078,7 +1135,7 @@ export class ExternalAgentStore {
       this.selectedSessionKey() === previousKey;
     const read = await this.transport.external.readThread(runtimeId, {
       threadId: receipt.nativeThreadId,
-      includeTurns: true,
+      includeTurns: false,
       limit: 50,
     });
 
@@ -1147,7 +1204,7 @@ export class ExternalAgentStore {
       this.selectedSessionKey() === previousKey;
     const read = await this.transport.external.readThread(runtimeId, {
       threadId: replacement.nativeThreadId,
-      includeTurns: true,
+      includeTurns: false,
       limit: 50,
     });
     const sessionId = replacement.sessionId ?? binding.sessionId;
@@ -1175,12 +1232,17 @@ export class ExternalAgentStore {
     };
 
     this.bindingMutationRevision += 1;
-    this.bindings.update((bindings) => [
-      ...bindings.filter(
-        (candidate) => candidate.bindingId !== nextBinding.bindingId,
-      ),
-      nextBinding,
-    ]);
+    this.bindings.update((bindings) => {
+      const reconciledPredecessors = bindings
+        .filter((candidate) => candidate.bindingId !== nextBinding.bindingId)
+        .map((candidate) =>
+          candidate.bindingId === replacement.previousBindingId &&
+          replacement.previousNativeThreadArchived
+            ? { ...candidate, status: 'archived' as const }
+            : candidate,
+        );
+      return [...reconciledPredecessors, nextBinding];
+    });
     this.transcriptCache.delete(previousKey);
     this.runtimeThreads.update((threads) => [
       ...threads.filter(
@@ -1214,6 +1276,177 @@ export class ExternalAgentStore {
         read.thread.updatedAt,
     }));
     this.startStream(runtimeId, this.selectedRuntimeEventCursor);
+  }
+
+  async restartSession(session: ExternalAgentSession): Promise<boolean> {
+    const binding = session.binding;
+    if (binding === undefined) {
+      this.error.set(
+        'New session failed: this native thread has no Crew binding.',
+      );
+      return false;
+    }
+    const threadId = session.thread.threadId;
+    if (this.lifecyclePendingThreadIds().has(threadId)) return false;
+    this.lifecyclePendingThreadIds.update(
+      (current) => new Set([...current, threadId]),
+    );
+    this.error.set(undefined);
+    this.lifecycleNotice.set(undefined);
+    const attemptKey = `new:${binding.bindingId}`;
+    const idempotencyKey =
+      this.lifecycleAttemptKeys.get(attemptKey) ??
+      `rusty-view-new:${createExternalAgentRequestKey()}`;
+    this.lifecycleAttemptKeys.set(attemptKey, idempotencyKey);
+    try {
+      const latest = await this.refreshBindingInventory(binding.bindingId);
+      const result = await this.transport.external.executeCommand(
+        latest.bindingId,
+        {
+          input: '/new',
+          idempotencyKey,
+          expectedBindingRevision: latest.revision,
+        },
+      );
+      const replacement = result.result.threadReplacement;
+      if (result.status !== 'applied' || replacement === undefined) {
+        const message = newSessionRecoveryMessage(
+          result.message,
+          result.reasonCode,
+        );
+        if (result.reasonCode === 'external_command_restart_failed') {
+          this.setLifecycleRecovery(session.key, {
+            action: 'new_session',
+            message,
+            retryLabel: 'Reconcile new session',
+          });
+        } else {
+          this.lifecycleAttemptKeys.delete(attemptKey);
+          this.clearLifecycleRecovery(session.key);
+        }
+        this.error.set(message);
+        return false;
+      }
+      await this.applyThreadReplacement(latest, replacement, result.commandId);
+      const successor = await this.refreshBindingInventory(
+        replacement.bindingId,
+      );
+      this.clearLifecycleRecovery(session.key);
+      this.lifecycleAttemptKeys.delete(attemptKey);
+      const profileState = this.bindingProfileStates().find(
+        (state) => state.bindingId === successor.bindingId,
+      );
+      this.lifecycleNotice.set(
+        `Started fresh session ${successor.sessionId ?? replacement.sessionId ?? replacement.nativeThreadId} with profile ${successor.profileId ?? replacement.profileId ?? 'unknown'} revision ${profileState?.appliedProfileRevision ?? 'unknown'} in ${replacement.cwd}. Crew archived the predecessor thread, binding, and session together.`,
+      );
+      return true;
+    } catch (error) {
+      const reasonCode =
+        error instanceof ChatTransportError
+          ? error.apiError?.reason_code
+          : undefined;
+      const message = newSessionRecoveryMessage(
+        errorMessage(error),
+        reasonCode,
+      );
+      if (reasonCode === 'external_command_restart_failed') {
+        this.setLifecycleRecovery(session.key, {
+          action: 'new_session',
+          message,
+          retryLabel: 'Reconcile new session',
+        });
+      } else {
+        this.lifecycleAttemptKeys.delete(attemptKey);
+        this.clearLifecycleRecovery(session.key);
+      }
+      this.error.set(message);
+      return false;
+    } finally {
+      this.lifecyclePendingThreadIds.update((current) => {
+        const next = new Set(current);
+        next.delete(threadId);
+        return next;
+      });
+    }
+  }
+
+  async interruptSession(session: ExternalAgentSession): Promise<boolean> {
+    const binding = session.binding;
+    if (binding === undefined) {
+      this.error.set('Cancel failed: this native thread has no Crew binding.');
+      return false;
+    }
+    const threadId = session.thread.threadId;
+    if (this.lifecyclePendingThreadIds().has(threadId)) return false;
+    this.lifecyclePendingThreadIds.update(
+      (current) => new Set([...current, threadId]),
+    );
+    try {
+      this.error.set(undefined);
+      const latest = await this.refreshBindingInventory(binding.bindingId);
+      const receipt = await this.transport.external.submitControl(
+        latest.bindingId,
+        {
+          kind: 'interrupt_turn',
+          expectedBindingRevision: latest.revision,
+          idempotencyKey: `rusty-view-cancel:${createExternalAgentRequestKey()}`,
+          payload: {},
+        },
+      );
+      if (receipt.status !== 'applied') {
+        this.error.set(
+          `Cancel was ${receipt.status}${receipt.reasonCode == null ? '' : ` (${receipt.reasonCode})`}. Refresh the session state and retry if work is still active.`,
+        );
+        return false;
+      }
+      this.lifecycleNotice.set(
+        `Cancelled the authoritative active turn for Crew session ${latest.sessionId ?? latest.bindingId}.`,
+      );
+      return true;
+    } catch (error) {
+      this.error.set(`Cancel failed: ${lifecycleErrorMessage(error)}`);
+      return false;
+    } finally {
+      this.lifecyclePendingThreadIds.update((current) => {
+        const next = new Set(current);
+        next.delete(threadId);
+        return next;
+      });
+    }
+  }
+
+  private async refreshBindingInventory(
+    bindingId: string,
+  ): Promise<ExternalAgentBinding> {
+    const fleet = await this.transport.external.listBindings();
+    this.bindingMutationRevision += 1;
+    this.bindings.update((bindings) => mergeBindings(fleet.bindings, bindings));
+    this.bindingProfileStates.set(fleet.profileStates ?? []);
+    const binding = this.bindings().find(
+      (candidate) => candidate.bindingId === bindingId,
+    );
+    if (binding === undefined) {
+      throw new Error(`Crew binding ${bindingId} is no longer available.`);
+    }
+    return binding;
+  }
+
+  private setLifecycleRecovery(
+    sessionKey: string,
+    recovery: ExternalLifecycleRecovery,
+  ): void {
+    this.lifecycleRecoveryBySession.update((recoveries) => ({
+      ...recoveries,
+      [sessionKey]: recovery,
+    }));
+  }
+
+  private clearLifecycleRecovery(sessionKey: string): void {
+    this.lifecycleRecoveryBySession.update((recoveries) =>
+      Object.fromEntries(
+        Object.entries(recoveries).filter(([key]) => key !== sessionKey),
+      ),
+    );
   }
 
   private recordCommand(command: string): void {
@@ -1710,17 +1943,31 @@ export class ExternalAgentStore {
       this.error.set(undefined);
       this.lifecycleNotice.set(undefined);
       const runtimeId = session.runtime.runtimeId;
-      const receipt =
-        action === 'archive'
-          ? await this.transport.external.archiveThread(runtimeId, threadId)
-          : action === 'unarchive'
-            ? await this.transport.external.unarchiveThread(runtimeId, threadId)
-            : await this.transport.external.deleteThread(runtimeId, threadId);
+      let notice: string;
+      if (action === 'archive') {
+        const receipt = await this.transport.external.archiveThread(
+          runtimeId,
+          threadId,
+        );
+        assertCoordinatedArchiveReceipt(session, receipt);
+        notice = coordinatedArchiveNotice(session, receipt);
+      } else if (action === 'unarchive') {
+        const receipt = await this.transport.external.unarchiveThread(
+          runtimeId,
+          threadId,
+        );
+        notice = `Restored native Codex thread ${threadId} (${receipt.outcome}).`;
+      } else {
+        const receipt = await this.transport.external.deleteThread(
+          runtimeId,
+          threadId,
+        );
+        notice = `Deleted native Codex thread ${threadId} (${receipt.outcome}).`;
+      }
       if (this.selectedSessionKey() === session.key) this.clearSelection();
       this.transcriptCache.delete(session.key);
-      this.lifecycleNotice.set(
-        `${action === 'unarchive' ? 'Restored' : action === 'archive' ? 'Archived' : 'Deleted'} native Codex thread ${threadId} (${receipt.outcome}).`,
-      );
+      this.clearLifecycleRecovery(session.key);
+      this.lifecycleNotice.set(notice);
       this.runtimeThreads.update((threads) =>
         threads.filter(
           (entry) =>
@@ -1730,7 +1977,15 @@ export class ExternalAgentStore {
       await this.refresh();
       return true;
     } catch (error) {
-      this.error.set(`${capitalize(action)} failed: ${errorMessage(error)}`);
+      const message = `${capitalize(action)} failed: ${lifecycleErrorMessage(error)}`;
+      if (action === 'archive' && isPartialLifecycleFailure(error)) {
+        this.setLifecycleRecovery(session.key, {
+          action: 'archive',
+          message: `${message} Crew preserved the partial state. Use Reconcile archive to retry the same idempotent operation; it will finish whichever native, binding, or Crew-session step remains.`,
+          retryLabel: 'Reconcile archive',
+        });
+      }
+      this.error.set(this.lifecycleRecoveryFor(session)?.message ?? message);
       return false;
     } finally {
       this.lifecyclePendingThreadIds.update((current) => {
@@ -2326,6 +2581,90 @@ function mergeBindings(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function assertCoordinatedArchiveReceipt(
+  session: ExternalAgentSession,
+  receipt: ExternalThreadLifecycleReceipt,
+): void {
+  if (!receipt.nativeArchived) {
+    throw new Error(
+      'Crew returned archive success while the native thread remained active.',
+    );
+  }
+  const binding = session.binding;
+  if (binding === undefined) return;
+  const bindingTransition = receipt.bindings.find(
+    (transition) => transition.bindingId === binding.bindingId,
+  );
+  if (bindingTransition?.currentStatus !== 'archived') {
+    throw new Error(
+      `Crew returned archive success without an archived transition for binding ${binding.bindingId}.`,
+    );
+  }
+  if (binding.sessionId == null) return;
+  const sessionTransition = receipt.crewSessions.find(
+    (transition) => transition.sessionId === binding.sessionId,
+  );
+  if (sessionTransition?.currentStatus !== 'archived') {
+    throw new Error(
+      `Crew returned archive success without an archived transition for Crew session ${binding.sessionId}.`,
+    );
+  }
+}
+
+function coordinatedArchiveNotice(
+  session: ExternalAgentSession,
+  receipt: ExternalThreadLifecycleReceipt,
+): string {
+  const bindingCount = receipt.bindings.filter(
+    (transition) => transition.currentStatus === 'archived',
+  ).length;
+  const sessionCount = receipt.crewSessions.filter(
+    (transition) => transition.currentStatus === 'archived',
+  ).length;
+  if (session.binding === undefined) {
+    return `Archived native Codex thread ${receipt.threadId} (${receipt.outcome}); it had no Crew binding to reconcile.`;
+  }
+  return `Archived native Codex thread ${receipt.threadId}, ${bindingCount} Crew binding${bindingCount === 1 ? '' : 's'}, and ${sessionCount} exact Crew session${sessionCount === 1 ? '' : 's'} (${receipt.outcome}).`;
+}
+
+function lifecycleErrorMessage(error: unknown): string {
+  if (!(error instanceof ChatTransportError)) return errorMessage(error);
+  const reason = error.apiError?.reason_code;
+  if (reason === 'external_thread_active') {
+    return 'Crew reports an authoritative active turn. Cancel it or wait for it to finish, then retry.';
+  }
+  if (reason === 'external_thread_interaction_pending') {
+    return 'Crew reports a pending interaction. Resolve it, then retry.';
+  }
+  if (isPartialLifecycleFailure(error)) {
+    return `${error.message}${reason === undefined ? '' : ` (${reason})`}`;
+  }
+  return errorMessage(error);
+}
+
+function isPartialLifecycleFailure(error: unknown): boolean {
+  if (!(error instanceof ChatTransportError)) return false;
+  const reason = error.apiError?.reason_code;
+  return (
+    reason === 'external_thread_binding_reconciliation_failed' ||
+    reason === 'external_thread_crew_session_reconciliation_failed' ||
+    reason === 'external_command_restart_failed'
+  );
+}
+
+function newSessionRecoveryMessage(
+  message: string,
+  reasonCode?: string | null,
+): string {
+  if (reasonCode === 'external_command_restart_failed') {
+    return `New session only partially completed: ${message} Crew preserved the predecessor and any successor identity. Use Reconcile new session; the retry cannot create a duplicate successor.`;
+  }
+  if (reasonCode === 'external_command_turn_active') {
+    return 'New session is unavailable because Crew reports an authoritative active turn. Cancel it or wait for it to finish, then retry.';
+  }
+  return `New session failed${reasonCode == null ? '' : ` (${reasonCode})`}: ${message}`;
 }
 
 function isProfileRefreshCommand(input: string): boolean {

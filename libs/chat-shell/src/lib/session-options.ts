@@ -13,7 +13,6 @@ import { sessionExecutionIsWorking } from '@rusty-view/chat-domain';
 import {
   ChatStore,
   ExternalAgentStore,
-  isActiveExternalSession,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
 import type { ChatSessionSummary } from '@rusty-view/protocol';
@@ -40,6 +39,18 @@ export class SessionOptionsComponent {
   protected readonly workspaceDraft = signal('');
 
   protected readonly binding = computed(() => this.externalSession()?.binding);
+  protected readonly bindingProfileState = computed(() => {
+    const session = this.externalSession();
+    return session === undefined
+      ? undefined
+      : this.external.profileStateFor(session);
+  });
+  protected readonly lifecycleRecovery = computed(() => {
+    const session = this.externalSession();
+    return session === undefined
+      ? undefined
+      : this.external.lifecycleRecoveryFor(session);
+  });
   protected readonly isCodex = computed(
     () => this.externalSession() !== undefined,
   );
@@ -160,20 +171,7 @@ export class SessionOptionsComponent {
       if (externalSession.controller?.driverState !== 'ready') {
         return 'The runtime controller is not ready.';
       }
-      if (isActiveExternalSession(externalSession)) {
-        return 'Finish or interrupt the active turn first.';
-      }
-      const hasPendingInteraction = this.external
-        .interactions()
-        .some(
-          (interaction) =>
-            interaction.runtimeId === externalSession.runtime.runtimeId &&
-            interaction.nativeThreadId === externalSession.thread.threadId &&
-            interaction.status === 'pending',
-        );
-      return hasPendingInteraction
-        ? 'Resolve the pending interaction first.'
-        : undefined;
+      return undefined;
     }
 
     const chatSession = this.chatSession();
@@ -245,5 +243,54 @@ export class SessionOptionsComponent {
     if (await this.chat.archiveSession(chatSession.session_id)) {
       this.archived.emit();
     }
+  }
+
+  protected externalLifecycleDisabledReason(): string | undefined {
+    const session = this.externalSession();
+    if (session === undefined) return 'Session details are unavailable.';
+    if (session.binding === undefined) {
+      return 'This native Codex thread has no Crew binding.';
+    }
+    if (
+      this.external.lifecyclePendingThreadIds().has(session.thread.threadId)
+    ) {
+      return 'A lifecycle request is already running.';
+    }
+    return session.controller?.driverState !== 'ready'
+      ? 'The runtime controller is not ready.'
+      : undefined;
+  }
+
+  protected async startFreshSession(): Promise<void> {
+    const session = this.externalSession();
+    if (
+      session === undefined ||
+      this.externalLifecycleDisabledReason() !== undefined
+    ) {
+      return;
+    }
+    await this.external.restartSession(session);
+  }
+
+  protected async cancelActiveTurn(): Promise<void> {
+    const session = this.externalSession();
+    if (
+      session === undefined ||
+      this.externalLifecycleDisabledReason() !== undefined
+    ) {
+      return;
+    }
+    await this.external.interruptSession(session);
+  }
+
+  protected async refreshProfile(): Promise<void> {
+    const session = this.externalSession();
+    if (
+      session === undefined ||
+      this.externalLifecycleDisabledReason() !== undefined
+    ) {
+      return;
+    }
+    await this.external.refreshSessionProfile(session);
   }
 }

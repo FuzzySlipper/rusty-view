@@ -500,6 +500,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/review-operator/stale-review-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["readStaleReviewTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/review-operator/tasks/{task_id}/prompt-reviewer": {
         parameters: {
             query?: never;
@@ -3030,6 +3046,11 @@ export interface components {
             denNextOffset?: number;
             items: components["schemas"]["ReviewOperatorPipelineItem"][];
         };
+        StaleReviewTask: {
+            projectId: string;
+            taskId: number;
+        };
+        StaleReviewTaskList: components["schemas"]["StaleReviewTask"][];
         ReviewOperatorPromptWrite: {
             ttlMs?: number;
             correlationId?: string;
@@ -3353,6 +3374,7 @@ export interface components {
         };
         ExternalRuntimeEventPayload: {
             nativeMethod: string;
+            itemType?: string;
             status?: string;
             text?: string;
             message?: string;
@@ -4872,6 +4894,44 @@ export interface operations {
                         /** @constant */
                         ok: true;
                         data: components["schemas"]["ReviewOperatorPipelinePage"];
+                        meta: components["schemas"]["ApiMeta"];
+                    };
+                };
+            };
+            /** @description Rusty Crew API error envelope */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorEnvelope"];
+                };
+            };
+        };
+    };
+    readStaleReviewTasks: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                staleMs?: number;
+                expectedDeploymentRole?: "production" | "debug";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful typed response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                        data: components["schemas"]["StaleReviewTaskList"];
                         meta: components["schemas"]["ApiMeta"];
                     };
                 };

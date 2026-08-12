@@ -46,6 +46,21 @@
   <div class="rv-session-options__hint">
     Clear fields to restore the prompt-derived title or remove the Den mapping.
   </div>
+  <div
+    class="rv-session-options__workspace"
+    data-testid="external-session-lifecycle-context"
+  >
+    <div class="rv-session-options__workspace-heading">
+      <strong>Captured session context</strong>
+      <span>binding revision {{ binding()?.revision }}</span>
+    </div>
+    <code>{{ binding()?.cwd ?? externalSession()?.thread?.cwd }}</code>
+    <div class="rv-session-options__hint">
+      Profile {{ binding()?.profileId ?? 'unknown' }} · applied revision {{
+      bindingProfileState()?.appliedProfileRevision ?? 'unknown' }} · current
+      revision {{ bindingProfileState()?.currentProfileRevision ?? 'unknown' }}
+    </div>
+  </div>
   } @else if (isCodex()) {
   <div class="rv-session-options__hint">
     This native Codex thread has no Crew metadata binding to edit.
@@ -107,11 +122,21 @@
   <div class="rv-session-options__notice" role="status">
     {{ chat.workspaceUpdateNotice() }}
   </div>
-  } @if (actionError() || external.metadataError() ||
-  chat.sessionLifecycleError() || chat.workspaceUpdateError()) {
+  } @if (lifecycleRecovery(); as recovery) {
+  <div
+    class="rv-session-options__error"
+    role="alert"
+    data-testid="session-lifecycle-recovery"
+  >
+    {{ recovery.message }}
+  </div>
+  } @if (actionError() || external.error() || external.commandError() ||
+  external.metadataError() || chat.sessionLifecycleError() ||
+  chat.workspaceUpdateError()) {
   <div class="rv-session-options__error" role="alert">
-    {{ actionError() ?? external.metadataError() ?? chat.sessionLifecycleError()
-    ?? chat.workspaceUpdateError() }}
+    {{ actionError() ?? external.error() ?? external.commandError() ??
+    external.metadataError() ?? chat.sessionLifecycleError() ??
+    chat.workspaceUpdateError() }}
   </div>
   }
 
@@ -124,9 +149,38 @@
       [title]="archiveDisabledReason() ?? 'Archive this exact session'"
       (click)="archive()"
     >
-      Archive
+      {{ lifecycleRecovery()?.action === 'archive' ?
+      lifecycleRecovery()?.retryLabel : 'Archive' }}
     </button>
     @if (binding()) {
+    <button
+      type="button"
+      data-testid="session-options-new"
+      [disabled]="externalLifecycleDisabledReason() !== undefined"
+      [title]="externalLifecycleDisabledReason() ?? 'Archive this exact predecessor and start a fresh session from current profile metadata'"
+      (click)="startFreshSession()"
+    >
+      {{ lifecycleRecovery()?.action === 'new_session' ?
+      lifecycleRecovery()?.retryLabel : 'New session' }}
+    </button>
+    <button
+      type="button"
+      data-testid="session-options-cancel-turn"
+      [disabled]="externalLifecycleDisabledReason() !== undefined"
+      [title]="externalLifecycleDisabledReason() ?? 'Ask Crew to cancel the authoritative active turn'"
+      (click)="cancelActiveTurn()"
+    >
+      Cancel active turn
+    </button>
+    <button
+      type="button"
+      data-testid="session-options-refresh-profile"
+      [disabled]="externalLifecycleDisabledReason() !== undefined"
+      [title]="externalLifecycleDisabledReason() ?? 'Compare this binding with the current profile revision and create a fresh session when needed'"
+      (click)="refreshProfile()"
+    >
+      Refresh profile
+    </button>
     <button
       type="submit"
       class="rv-session-options__save"

@@ -5,7 +5,10 @@ import {
   ExternalAgentStore,
   type ExternalAgentSession,
 } from '@rusty-view/chat-store';
-import type { ChatSessionSummary } from '@rusty-view/protocol';
+import type {
+  ChatSessionSummary,
+  ExternalBindingProfileState,
+} from '@rusty-view/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionOptionsComponent } from './session-options';
@@ -75,10 +78,19 @@ async function createOptions() {
   };
   const external = {
     lifecyclePendingThreadIds: signal(new Set<string>()),
+    lifecycleRecoveryFor: vi.fn(() => undefined),
+    profileStateFor: vi.fn(
+      (): ExternalBindingProfileState | undefined => undefined,
+    ),
+    error: signal<string | undefined>(undefined),
+    commandError: signal<string | undefined>(undefined),
     metadataPendingBindingIds: signal(new Set<string>()),
     metadataError: signal<string | undefined>(undefined),
     interactions: signal([]),
     archiveThread: vi.fn(async () => true),
+    restartSession: vi.fn(async () => true),
+    interruptSession: vi.fn(async () => true),
+    refreshSessionProfile: vi.fn(async () => undefined),
     updateSessionMetadata: vi.fn(async () => true),
   };
   await TestBed.configureTestingModule({
@@ -140,6 +152,59 @@ describe('SessionOptionsComponent', () => {
 
     expect(external.archiveThread).toHaveBeenCalledWith(session);
     expect(chat.reconcileSessionsAfterLifecycleMutation).toHaveBeenCalledOnce();
+  });
+
+  it('offers metadata-only new, cancel, and profile controls without trusting transcript activity', async () => {
+    const { fixture, external } = await createOptions();
+    const base = codexSession();
+    const binding = base.binding;
+    if (binding === undefined) throw new Error('binding missing');
+    const session: ExternalAgentSession = {
+      ...base,
+      phase: 'active' as const,
+      binding: {
+        ...binding,
+        profileId: 'reviewer',
+        cwd: '/home/dev/rusty-view',
+      },
+    };
+    external.profileStateFor.mockReturnValue({
+      bindingId: 'binding-1',
+      profileId: 'reviewer',
+      state: 'current',
+      refreshRequired: false,
+      appliedProfileRevision: 12,
+      appliedPromptHash: 'a'.repeat(64),
+      currentProfileRevision: 12,
+      currentPromptHash: 'a'.repeat(64),
+    });
+    fixture.componentRef.setInput('externalSession', session);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(
+      host.querySelector('[data-testid="external-session-lifecycle-context"]')
+        ?.textContent,
+    ).toContain('applied revision 12');
+    const cancel = host.querySelector<HTMLButtonElement>(
+      '[data-testid="session-options-cancel-turn"]',
+    );
+    if (cancel === null) throw new Error('cancel button missing');
+    expect(cancel.disabled).toBe(false);
+    cancel.click();
+    host
+      .querySelector<HTMLButtonElement>('[data-testid="session-options-new"]')
+      ?.click();
+    host
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="session-options-refresh-profile"]',
+      )
+      ?.click();
+    await fixture.whenStable();
+
+    expect(external.interruptSession).toHaveBeenCalledWith(session);
+    expect(external.restartSession).toHaveBeenCalledWith(session);
+    expect(external.refreshSessionProfile).toHaveBeenCalledWith(session);
   });
 
   it('shows authoritative workspace revision and submits an in-place change', async () => {

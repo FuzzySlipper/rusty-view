@@ -348,6 +348,31 @@ describe('ExternalRuntimeHttpTransport', () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it('translates malformed JSON into an actionable bounded response error', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn(async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      }),
+    } as unknown as Response);
+    const transport = new ExternalRuntimeHttpTransport(config(fetchImpl));
+
+    await expect(
+      transport.readThread('runtime/a', {
+        threadId: 'thread/b',
+        includeTurns: true,
+        limit: 50,
+      }),
+    ).rejects.toMatchObject({
+      code: 'response_parse_error',
+      statusCode: 200,
+      endpoint: '/v1/external-runtimes/runtime%2Fa/threads/read',
+      message: expect.stringContaining('incomplete or malformed JSON'),
+      retryable: true,
+    });
+  });
+
   it('uses the generated native thread lifecycle routes', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
