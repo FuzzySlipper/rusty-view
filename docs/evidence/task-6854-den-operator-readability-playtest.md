@@ -1,8 +1,11 @@
 # Task 6854 Den operator readability playtest
 
-Date: 2026-08-12  
-Task: Den `rusty-view#6854`  
-Finding: `R6854-6`  
+Date: 2026-08-12
+
+Task: Den `rusty-view#6854`
+
+Finding: `R6854-6`
+
 Outcome: `pass`
 
 ## Exact source and running boundary
