@@ -2587,6 +2587,16 @@ function assertCoordinatedArchiveReceipt(
   session: ExternalAgentSession,
   receipt: ExternalThreadLifecycleReceipt,
 ): void {
+  if (receipt.runtimeId !== session.runtime.runtimeId) {
+    throw new Error(
+      `Crew returned an archive receipt for runtime ${receipt.runtimeId}, but runtime ${session.runtime.runtimeId} was requested. The requested session remains visible for recovery.`,
+    );
+  }
+  if (receipt.threadId !== session.thread.threadId) {
+    throw new Error(
+      `Crew returned an archive receipt for native thread ${receipt.threadId}, but thread ${session.thread.threadId} was requested. The requested session remains visible for recovery.`,
+    );
+  }
   if (!receipt.nativeArchived) {
     throw new Error(
       'Crew returned archive success while the native thread remained active.',

@@ -426,6 +426,42 @@ describe('ExternalAgentStore', () => {
     expect(store.lifecycleNotice()).toContain('Archived native Codex thread');
   });
 
+  it.each([
+    ['runtimeId', 'runtime-other'],
+    ['threadId', 'thread-other'],
+  ] as const)(
+    'rejects a coordinated archive receipt with a crossed %s identity',
+    async (field, crossedIdentity) => {
+      const selectedThread = thread('thread-1', 10);
+      const archiveThread = vi.fn(async () => ({
+        ...coordinatedArchiveReceipt(),
+        [field]: crossedIdentity,
+      }));
+      const store = setupStore({
+        runtimes: [registration('runtime-1')],
+        bindings: [externalBinding()],
+        listThreads: vi.fn(async () => page([selectedThread], null)),
+        readThread: vi.fn(async () => ({
+          thread: selectedThread,
+          turnPage: emptyTurnPage(),
+        })),
+        archiveThread,
+      });
+      await store.refresh();
+      const session = store.sessions()[0];
+      if (session === undefined) throw new Error('expected session');
+      await expect(store.selectSession(session)).resolves.toBe(true);
+
+      await expect(store.archiveThread(session)).resolves.toBe(false);
+
+      expect(store.sessions()).toHaveLength(1);
+      expect(store.selectedSessionKey()).toBe(session.key);
+      expect(store.lifecycleNotice()).toBeUndefined();
+      expect(store.error()).toContain(crossedIdentity);
+      expect(store.error()).toContain('was requested');
+    },
+  );
+
   it('keeps a partial coordinated archive visible and retries the same row to reconciliation', async () => {
     let archived = false;
     const partial = new ChatTransportError({
