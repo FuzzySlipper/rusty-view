@@ -10,513 +10,772 @@
       x
     </button>
   </header>
+
   <div class="rv-admin-providers__toolbar">
-    <button
-      type="button"
-      class="rv-admin-providers__button"
-      (click)="refresh()"
-      [disabled]="admin.loading()"
-    >
-      Refresh
-    </button>
-    <span class="rv-admin-providers__status"
-      >{{ admin.modelEndpoints().length }} endpoints · {{
-      admin.modelConfigurations().length }} configurations</span
-    >
+    <div class="rv-admin-providers__actions">
+      <button
+        type="button"
+        class="rv-admin-providers__button rv-admin-providers__button--primary"
+        data-testid="create-model-provider"
+        (click)="openCreateEndpoint()"
+        [disabled]="admin.loading()"
+      >
+        Create provider
+      </button>
+      <button
+        type="button"
+        class="rv-admin-providers__button rv-admin-providers__button--primary"
+        data-testid="create-model-configuration"
+        (click)="openCreateConfiguration()"
+        [disabled]="admin.loading()"
+      >
+        Create model configuration
+      </button>
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="refresh()"
+        [disabled]="admin.loading()"
+      >
+        Refresh
+      </button>
+    </div>
+    <span class="rv-admin-providers__status">
+      {{ admin.loading() ? 'loading' : admin.modelEndpoints().length + '
+      providers · ' + admin.modelConfigurations().length + ' configurations' }}
+    </span>
   </div>
+
   @if (admin.error(); as error) {
   <div class="rv-admin-providers__error" role="alert">{{ error }}</div>
   }
 
-  <section
-    class="rv-admin-providers__section rv-admin-providers__section--editor"
-    data-testid="model-endpoint-editor"
-  >
-    <h2>
-      {{ editingEndpointId() === null ? 'Create Model Endpoint' : 'Edit Model
-      Endpoint' }}
-    </h2>
-    <p>
-      Endpoints own transport, authentication, credentials, and facts shared by
-      every model configuration that uses them.
-    </p>
-    @if (endpointImpact().length > 0) {
-    <div
-      class="rv-admin-providers__policy-warning"
-      data-testid="model-endpoint-impact"
-      role="alert"
+  <div class="rv-admin-providers__scroll">
+    <section
+      class="rv-admin-providers__section rv-admin-providers__section--list"
+      data-testid="model-endpoints-list"
     >
-      Changes affect {{ endpointImpact().length }} model configurations: @for
-      (configuration of endpointImpact(); track configuration.modelConfigId) {
-      <span>{{ configuration.modelConfigId }}</span> }
-    </div>
-    }
-    <div class="rv-admin-providers__form-grid">
-      <label
-        ><span>Endpoint ID</span
-        ><input
-          data-testid="model-endpoint-id"
-          [disabled]="editingEndpointId() !== null"
-          [value]="endpointForm().endpointId"
-          (input)="endpointText('endpointId', $event)"
-      /></label>
-      <label
-        ><span>Display Name</span
-        ><input
-          [value]="endpointForm().displayName"
-          (input)="endpointText('displayName', $event)"
-      /></label>
-      <label
-        ><span>Description</span
-        ><input
-          [value]="endpointForm().description"
-          (input)="endpointText('description', $event)"
-      /></label>
-      <label
-        ><span>Base URL</span
-        ><input
-          data-testid="model-endpoint-base-url"
-          [value]="endpointForm().baseUrl"
-          (input)="endpointText('baseUrl', $event)"
-      /></label>
-      <label
-        ><span>Protocol</span
-        ><select
-          data-testid="model-endpoint-protocol"
-          [value]="endpointForm().protocol"
-          (change)="updateProtocol($event)"
+      <div class="rv-admin-providers__section-heading">
+        <div>
+          <h2>Model Providers</h2>
+          <p class="rv-admin-providers__hint">
+            Shared transport and authentication providers for model
+            configurations.
+          </p>
+        </div>
+        <span class="rv-admin-providers__status"
+          >{{ admin.modelEndpoints().length }} total</span
         >
-          <option value="responses">responses</option>
-          <option value="chat_completions">chat_completions</option>
-        </select></label
-      >
-      <label
-        ><span>Wire Dialect</span
-        ><select
-          data-testid="model-endpoint-wire-dialect"
-          [value]="endpointForm().wireDialect"
-          (change)="endpointText('wireDialect', $event)"
-        >
-          @for (dialect of wireDialects(); track dialect) {
-          <option [value]="dialect">{{ dialect }}</option>
-          }
-        </select></label
-      >
-      <label
-        ><span>Authentication</span
-        ><select
-          data-testid="model-endpoint-auth-scheme"
-          [value]="endpointForm().authScheme"
-          (change)="updateAuth($event)"
-        >
-          @for (auth of authSchemes; track auth) {
-          <option [value]="auth">{{ auth }}</option>
-          }
-        </select></label
-      >
-      <label
-        ><span>Shared Credential</span
-        ><select
-          data-testid="model-endpoint-credential"
-          [disabled]="endpointForm().authScheme === 'none'"
-          [value]="endpointForm().credentialId"
-          (change)="endpointText('credentialId', $event)"
-        >
-          <option value="">Select a credential</option>
-          @if (localCredentialOption(); as localId) {
-          <option
-            [value]="localId"
-            [selected]="localId === endpointForm().credentialId"
-          >
-            {{ localId }}
-          </option>
-          } @for (credential of credentialOptions(); track
-          credential.credentialId) {
-          <option
-            [value]="credential.credentialId"
-            [selected]="credential.credentialId === endpointForm().credentialId"
-          >
-            {{ credential.displayName }} ({{ credential.credentialId }})
-          </option>
-          }</select
-        ><small
-          >Every saved credential is available; compatibility is determined by
-          endpoint auth settings, not provider classification.</small
-        ></label
-      >
-      <label
-        ><span>Prompt Cache Transport</span
-        ><select
-          data-testid="model-endpoint-cache-transport"
-          [value]="endpointForm().promptCacheTransport"
-          (change)="endpointText('promptCacheTransport', $event)"
-        >
-          @for (cache of cacheTransports; track cache) {
-          <option [value]="cache">{{ cache }}</option>
-          }
-        </select></label
-      >
-      <label
-        ><span>Status</span
-        ><select
-          [value]="endpointForm().status"
-          (change)="endpointText('status', $event)"
-        >
-          @for (status of statuses; track status) {
-          <option [value]="status">{{ status }}</option>
-          }
-        </select></label
-      >
-    </div>
-    @if (endpointForm().authScheme !== 'none') {
-    <div
-      class="rv-admin-providers__form-grid"
-      data-testid="endpoint-credential-management"
+      </div>
+      @if (admin.modelEndpointLoadError(); as error) {
+      <div class="rv-admin-providers__error" role="alert">{{ error }}</div>
+      } @if (admin.modelEndpoints().length === 0) {
+      <div class="rv-admin-providers__empty">
+        No model providers configured.
+      </div>
+      } @else {
+      <ul class="rv-admin-providers__list">
+        @for (endpoint of admin.modelEndpoints(); track endpoint.endpointId) {
+        <li class="rv-admin-providers__provider">
+          <div class="rv-admin-providers__provider-header">
+            <strong>{{ endpoint.displayName || endpoint.endpointId }}</strong>
+            <span
+              class="rv-admin-providers__provider-status"
+              [class.rv-admin-providers__provider-status--active]="
+                endpoint.status === 'active'
+              "
+              [class.rv-admin-providers__provider-status--disabled]="
+                endpoint.status === 'disabled'
+              "
+              [class.rv-admin-providers__provider-status--archived]="
+                endpoint.status === 'archived'
+              "
+              >{{ endpoint.status }}</span
+            >
+          </div>
+          <div class="rv-admin-providers__meta">
+            <span>id {{ endpoint.endpointId }}</span>
+            <span>{{ endpoint.protocol }} / {{ endpoint.wireDialect }}</span>
+            <span>{{ endpoint.authScheme }}</span>
+            <span
+              >{{ admin.modelConfigurations().filter(item => item.endpointId ===
+              endpoint.endpointId).length }} configurations · revision {{
+              endpoint.revision }}</span
+            >
+          </div>
+          <div class="rv-admin-providers__provider-actions">
+            <button
+              type="button"
+              class="rv-admin-providers__button"
+              data-testid="model-endpoint-edit"
+              (click)="editEndpoint(endpoint)"
+              [disabled]="admin.saving()"
+            >
+              Edit
+            </button>
+          </div>
+        </li>
+        }
+      </ul>
+      }
+    </section>
+
+    <section
+      class="rv-admin-providers__section rv-admin-providers__section--list"
+      data-testid="model-configurations-list"
     >
-      <label
-        ><span>New Credential ID</span
-        ><input
-          data-testid="new-endpoint-credential-id"
-          [value]="newCredentialId()"
-          (input)="newCredentialId.set($any($event.target).value)"
-          placeholder="credential:service-name"
-      /></label>
-      <label
-        ><span>New Credential Name</span
-        ><input
-          [value]="newCredentialName()"
-          (input)="newCredentialName.set($any($event.target).value)"
-      /></label>
-      @if (endpointForm().authScheme === 'bearer_api_key') {
-      <label
-        ><span>New API Key</span
-        ><input
-          type="password"
-          [value]="newCredentialSecret()"
-          (input)="newCredentialSecret.set($any($event.target).value)"
-      /></label>
-      } @if (endpointForm().authScheme === 'openai_codex_oauth') {
-      <label
-        ><span>OAuth Callback URL</span
-        ><input
-          [value]="oauthCallbackUrl()"
-          (input)="oauthCallbackUrl.set($any($event.target).value)"
-      /></label>
-      }
-    </div>
-    <div class="rv-admin-providers__actions">
-      @if (endpointForm().authScheme === 'bearer_api_key') {
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="createApiKeyCredential()"
-      >
-        Create API Key Credential
-      </button>
-      } @if (endpointForm().authScheme === 'openai_codex_oauth') {
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="startOauth()"
-      >
-        Start OpenAI OAuth</button
-      ><button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="completeOauth()"
-        [disabled]="oauthCallbackUrl().trim() === ''"
-      >
-        Complete OAuth
-      </button>
-      }
-    </div>
-    }
-    <div class="rv-admin-providers__actions">
-      <button
-        type="button"
-        class="rv-admin-providers__button rv-admin-providers__button--primary"
-        (click)="saveEndpoint()"
-        [disabled]="endpointSaveDisabled()"
-      >
-        {{ editingEndpointId() === null ? 'Create Endpoint' : 'Update Endpoint'
-        }}</button
-      >@if (editingEndpointId() !== null) {
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="cancelEndpoint()"
-      >
-        Cancel
-      </button>
-      }
-    </div>
-  </section>
-
-  <section
-    class="rv-admin-providers__section rv-admin-providers__section--list"
-    data-testid="model-endpoints-list"
-  >
-    <h2>Model Endpoints</h2>
-    @if (admin.modelEndpointLoadError(); as error) {
-    <div class="rv-admin-providers__error">{{ error }}</div>
-    }
-    <ul class="rv-admin-providers__list">
-      @for (endpoint of admin.modelEndpoints(); track endpoint.endpointId) {
-      <li class="rv-admin-providers__provider">
-        <div class="rv-admin-providers__provider-header">
-          <strong>{{ endpoint.endpointId }}</strong
-          ><span>{{ endpoint.status }}</span>
+      <div class="rv-admin-providers__section-heading">
+        <div>
+          <h2>Model Configurations</h2>
+          <p class="rv-admin-providers__hint">
+            One model identity and capability policy linked to a provider.
+          </p>
         </div>
-        <div class="rv-admin-providers__meta">
-          <span>{{ endpoint.baseUrl }}</span
-          ><span>{{ endpoint.protocol }} / {{ endpoint.wireDialect }}</span
-          ><span>{{ endpoint.authScheme }}</span
-          ><span>revision {{ endpoint.revision }}</span
-          ><span
-            >used by {{ admin.modelConfigurations().filter(item =>
-            item.endpointId === endpoint.endpointId).length }}
-            configurations</span
+        <span class="rv-admin-providers__status"
+          >{{ admin.modelConfigurations().length }} total</span
+        >
+      </div>
+      @if (admin.modelConfigurationLoadError(); as error) {
+      <div class="rv-admin-providers__error" role="alert">{{ error }}</div>
+      } @if (admin.modelConfigurations().length === 0) {
+      <div class="rv-admin-providers__empty">
+        No model configurations configured.
+      </div>
+      } @else {
+      <ul class="rv-admin-providers__list">
+        @for (configuration of admin.modelConfigurations(); track
+        configuration.modelConfigId) {
+        <li class="rv-admin-providers__provider">
+          <div class="rv-admin-providers__provider-header">
+            <strong>
+              {{ configuration.displayName || configuration.modelConfigId }}
+            </strong>
+            <span
+              class="rv-admin-providers__provider-status"
+              [class.rv-admin-providers__provider-status--active]="
+                configuration.status === 'active'
+              "
+              [class.rv-admin-providers__provider-status--disabled]="
+                configuration.status === 'disabled'
+              "
+              [class.rv-admin-providers__provider-status--archived]="
+                configuration.status === 'archived'
+              "
+              >{{ configuration.status }}</span
+            >
+          </div>
+          <div class="rv-admin-providers__meta">
+            <span>id {{ configuration.modelConfigId }}</span>
+            <span>model {{ configuration.modelId }}</span>
+            <span>provider {{ configuration.endpointId }}</span>
+            <span>revision {{ configuration.revision }}</span>
+          </div>
+          <div class="rv-admin-providers__provider-actions">
+            <button
+              type="button"
+              class="rv-admin-providers__button"
+              data-testid="model-configuration-edit"
+              (click)="editConfiguration(configuration)"
+              [disabled]="admin.saving()"
+            >
+              Edit
+            </button>
+          </div>
+        </li>
+        }
+      </ul>
+      }
+    </section>
+  </div>
+
+  @if (endpointEditorOpen()) {
+  <div
+    class="rv-admin-providers__window-overlay"
+    role="button"
+    tabindex="0"
+    aria-label="Close model provider editor"
+    (click)="cancelEndpoint()"
+    (keydown.escape)="cancelEndpoint()"
+  >
+    <div
+      class="rv-admin-providers__window"
+      role="dialog"
+      aria-label="Model Provider editor"
+      (click)="$event.stopPropagation()"
+      (keydown)="$event.stopPropagation()"
+    >
+      <section
+        class="rv-admin-providers__editor"
+        data-testid="model-endpoint-editor"
+      >
+        <header class="rv-admin-providers__editor-header">
+          <div>
+            <h2>
+              {{ editingEndpointId() === null ? 'Create Model Provider' : 'Edit
+              Model Provider' }}
+            </h2>
+            <p class="rv-admin-providers__hint">
+              Providers own transport, authentication, credentials, and facts
+              shared by every model configuration that uses them.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="rv-admin-providers__close"
+            (click)="cancelEndpoint()"
+            aria-label="Close model provider editor"
           >
+            x
+          </button>
+        </header>
+        @if (endpointImpact().length > 0) {
+        <div
+          class="rv-admin-providers__policy-warning"
+          data-testid="model-endpoint-impact"
+          role="alert"
+        >
+          Changes affect {{ endpointImpact().length }} model configurations:
+          @for (configuration of endpointImpact(); track
+          configuration.modelConfigId) {
+          <span>{{ configuration.modelConfigId }}</span>
+          }
         </div>
-        <button
-          type="button"
-          class="rv-admin-providers__button"
-          (click)="editEndpoint(endpoint)"
+        }
+        <div class="rv-admin-providers__form-grid">
+          <label>
+            <span>Provider ID</span>
+            <input
+              data-testid="model-endpoint-id"
+              [disabled]="editingEndpointId() !== null"
+              [value]="endpointForm().endpointId"
+              (input)="endpointText('endpointId', $event)"
+            />
+          </label>
+          <label>
+            <span>Display Name</span>
+            <input
+              [value]="endpointForm().displayName"
+              (input)="endpointText('displayName', $event)"
+            />
+          </label>
+          <label>
+            <span>Description</span>
+            <input
+              [value]="endpointForm().description"
+              (input)="endpointText('description', $event)"
+            />
+          </label>
+          <label>
+            <span>Base URL</span>
+            <input
+              data-testid="model-endpoint-base-url"
+              [value]="endpointForm().baseUrl"
+              (input)="endpointText('baseUrl', $event)"
+            />
+          </label>
+          <label>
+            <span>Protocol</span>
+            <select
+              data-testid="model-endpoint-protocol"
+              [value]="endpointForm().protocol"
+              (change)="updateProtocol($event)"
+            >
+              <option value="responses">responses</option>
+              <option value="chat_completions">chat_completions</option>
+            </select>
+          </label>
+          <label>
+            <span>Wire Dialect</span>
+            <select
+              data-testid="model-endpoint-wire-dialect"
+              [value]="endpointForm().wireDialect"
+              (change)="endpointText('wireDialect', $event)"
+            >
+              @for (dialect of wireDialects(); track dialect) {
+              <option [value]="dialect">{{ dialect }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>Authentication</span>
+            <select
+              data-testid="model-endpoint-auth-scheme"
+              [value]="endpointForm().authScheme"
+              (change)="updateAuth($event)"
+            >
+              @for (auth of authSchemes; track auth) {
+              <option [value]="auth">{{ auth }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>Shared Credential</span>
+            <select
+              data-testid="model-endpoint-credential"
+              [disabled]="endpointForm().authScheme === 'none'"
+              [value]="endpointForm().credentialId"
+              (change)="endpointText('credentialId', $event)"
+            >
+              <option value="">Select a credential</option>
+              @if (localCredentialOption(); as localId) {
+              <option
+                [value]="localId"
+                [selected]="localId === endpointForm().credentialId"
+              >
+                {{ localId }}
+              </option>
+              } @for (credential of credentialOptions(); track
+              credential.credentialId) {
+              <option
+                [value]="credential.credentialId"
+                [selected]="credential.credentialId === endpointForm().credentialId"
+              >
+                {{ credential.displayName }} ({{ credential.credentialId }})
+              </option>
+              }
+            </select>
+            <small>
+              Every saved credential is available; compatibility is determined
+              by provider authentication settings, not provider classification.
+            </small>
+          </label>
+          <label>
+            <span>Prompt Cache Transport</span>
+            <select
+              data-testid="model-endpoint-cache-transport"
+              [value]="endpointForm().promptCacheTransport"
+              (change)="endpointText('promptCacheTransport', $event)"
+            >
+              @for (cache of cacheTransports; track cache) {
+              <option [value]="cache">{{ cache }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select
+              [value]="endpointForm().status"
+              (change)="endpointText('status', $event)"
+            >
+              @for (status of statuses; track status) {
+              <option [value]="status">{{ status }}</option>
+              }
+            </select>
+          </label>
+        </div>
+        @if (endpointForm().authScheme !== 'none') {
+        <div
+          class="rv-admin-providers__form-grid"
+          data-testid="endpoint-credential-management"
         >
-          Edit Endpoint
-        </button>
-      </li>
-      }
-    </ul>
-  </section>
-
-  <section
-    class="rv-admin-providers__section rv-admin-providers__section--editor"
-    data-testid="model-configuration-editor"
-  >
-    <h2>
-      {{ editingModelConfigId() === null ? 'Create Model Configuration' : 'Edit
-      Model Configuration' }}
-    </h2>
-    <p>
-      Configurations describe one model and reference an endpoint for transport
-      and authentication.
-    </p>
-    <div class="rv-admin-providers__form-grid">
-      <label
-        ><span>Configuration ID</span
-        ><input
-          data-testid="model-configuration-id"
-          [disabled]="editingModelConfigId() !== null"
-          [value]="configurationForm().modelConfigId"
-          (input)="configurationText('modelConfigId', $event)"
-      /></label>
-      <label
-        ><span>Endpoint</span
-        ><select
-          data-testid="model-configuration-endpoint"
-          [value]="configurationForm().endpointId"
-          (change)="configurationText('endpointId', $event)"
-        >
-          <option value="">Select an endpoint</option>
-          @for (endpoint of admin.modelEndpoints(); track endpoint.endpointId) {
-          <option [value]="endpoint.endpointId">
-            {{ endpoint.displayName || endpoint.endpointId }} — {{
-            endpoint.protocol }} / {{ endpoint.authScheme }}
-          </option>
-          }</select
-        ><small
-          >Changing this selection changes transport and authentication for this
-          model only.</small
-        ></label
-      >
-      <label
-        ><span>Display Name</span
-        ><input
-          [value]="configurationForm().displayName"
-          (input)="configurationText('displayName', $event)"
-      /></label>
-      <label
-        ><span>Description</span
-        ><input
-          [value]="configurationForm().description"
-          (input)="configurationText('description', $event)"
-      /></label>
-      <label
-        ><span>Model ID</span
-        ><input
-          data-testid="model-configuration-model-id"
-          [value]="configurationForm().modelId"
-          (input)="configurationText('modelId', $event)"
-      /></label>
-      <label
-        ><span>Context Window Tokens</span
-        ><input
-          type="number"
-          [value]="configurationForm().contextWindowTokens"
-          (input)="configurationText('contextWindowTokens', $event)"
-      /></label>
-      <label
-        ><span>Max Output Tokens</span
-        ><input
-          type="number"
-          [value]="configurationForm().maxOutputTokens"
-          (input)="configurationText('maxOutputTokens', $event)"
-      /></label>
-      <label
-        ><span>Temperature Milli</span
-        ><input
-          type="number"
-          [value]="configurationForm().temperatureMilli"
-          (input)="configurationText('temperatureMilli', $event)"
-      /></label>
-      <label
-        ><span>Reasoning Effort</span
-        ><input
-          [value]="configurationForm().reasoningEffort"
-          (input)="configurationText('reasoningEffort', $event)"
-      /></label>
-      <label
-        ><span>Reasoning Format</span
-        ><input
-          [value]="configurationForm().reasoningFormat"
-          (input)="configurationText('reasoningFormat', $event)"
-      /></label>
-      <label
-        ><span>Reasoning History</span
-        ><select
-          [value]="configurationForm().reasoningHistory"
-          (change)="configurationText('reasoningHistory', $event)"
-        >
-          @for (value of histories; track value) {
-          <option [value]="value">{{ value }}</option>
+          <label>
+            <span>New Credential ID</span>
+            <input
+              data-testid="new-endpoint-credential-id"
+              [value]="newCredentialId()"
+              (input)="newCredentialId.set($any($event.target).value)"
+              placeholder="credential:service-name"
+            />
+          </label>
+          <label>
+            <span>New Credential Name</span>
+            <input
+              [value]="newCredentialName()"
+              (input)="newCredentialName.set($any($event.target).value)"
+            />
+          </label>
+          @if (endpointForm().authScheme === 'bearer_api_key') {
+          <label>
+            <span>New API Key</span>
+            <input
+              type="password"
+              [value]="newCredentialSecret()"
+              (input)="newCredentialSecret.set($any($event.target).value)"
+            />
+          </label>
+          } @if (endpointForm().authScheme === 'openai_codex_oauth') {
+          <label>
+            <span>OAuth Callback URL</span>
+            <input
+              [value]="oauthCallbackUrl()"
+              (input)="oauthCallbackUrl.set($any($event.target).value)"
+            />
+          </label>
           }
-        </select></label
-      >
-      <label
-        ><span>Reasoning Budget Tokens</span
-        ><input
-          type="number"
-          [value]="configurationForm().reasoningBudgetTokens"
-          (input)="configurationText('reasoningBudgetTokens', $event)"
-      /></label>
-      <label
-        ><span>Thinking Mode</span
-        ><select
-          [value]="configurationForm().thinkingMode"
-          (change)="configurationText('thinkingMode', $event)"
-        >
-          @for (value of thinkingModes; track value) {
-          <option [value]="value">{{ value }}</option>
+        </div>
+        <div class="rv-admin-providers__actions">
+          @if (endpointForm().authScheme === 'bearer_api_key') {
+          <button
+            type="button"
+            class="rv-admin-providers__button"
+            (click)="createApiKeyCredential()"
+          >
+            Create API Key Credential
+          </button>
+          } @if (endpointForm().authScheme === 'openai_codex_oauth') {
+          <button
+            type="button"
+            class="rv-admin-providers__button"
+            (click)="startOauth()"
+          >
+            Start OpenAI OAuth
+          </button>
+          <button
+            type="button"
+            class="rv-admin-providers__button"
+            (click)="completeOauth()"
+            [disabled]="oauthCallbackUrl().trim() === ''"
+          >
+            Complete OAuth
+          </button>
           }
-        </select></label
-      >
-      <label
-        ><span>Prompt Caching Policy</span
-        ><select
-          [value]="configurationForm().promptCachingPolicy"
-          (change)="configurationText('promptCachingPolicy', $event)"
-        >
-          @for (value of cachingPolicies; track value) {
-          <option [value]="value">{{ value }}</option>
+        </div>
+        }
+        <div class="rv-admin-providers__actions">
+          <button
+            type="button"
+            class="rv-admin-providers__button rv-admin-providers__button--primary"
+            (click)="saveEndpoint()"
+            [disabled]="endpointSaveDisabled()"
+          >
+            {{ editingEndpointId() === null ? 'Create Provider' : 'Update
+            Provider' }}
+          </button>
+          <button
+            type="button"
+            class="rv-admin-providers__button"
+            (click)="cancelEndpoint()"
+          >
+            Cancel
+          </button>
+        </div>
+        @if (editingEndpoint(); as endpoint) {
+        <div class="rv-admin-providers__danger-zone">
+          @if (endpointDeleteId() !== endpoint.endpointId) {
+          <button
+            type="button"
+            class="rv-admin-providers__button rv-admin-providers__button--danger"
+            data-testid="model-endpoint-delete"
+            (click)="requestDeleteEndpoint(endpoint)"
+            [disabled]="admin.saving()"
+          >
+            Delete provider
+          </button>
+          } @else {
+          <div
+            class="rv-admin-providers__confirm-box rv-admin-providers__confirm-box--danger"
+            data-testid="model-endpoint-delete-confirm"
+          >
+            <p>
+              Permanently delete <strong>{{ endpoint.endpointId }}</strong>?
+              This is allowed only when no model configuration references it.
+            </p>
+            <label>
+              <span>Type the provider ID to confirm</span>
+              <input
+                type="text"
+                autocomplete="off"
+                [value]="endpointDeleteConfirmation()"
+                (input)="updateEndpointDeleteConfirmation($event)"
+              />
+            </label>
+            <div class="rv-admin-providers__actions">
+              <button
+                type="button"
+                class="rv-admin-providers__button"
+                (click)="cancelDeleteEndpoint()"
+                [disabled]="admin.saving()"
+              >
+                Cancel delete
+              </button>
+              <button
+                type="button"
+                class="rv-admin-providers__button rv-admin-providers__button--danger"
+                data-testid="model-endpoint-confirm-delete"
+                (click)="deleteEndpoint(endpoint)"
+                [disabled]="
+                  admin.saving() || !endpointDeleteConfirmed(endpoint.endpointId)
+                "
+              >
+                Permanently delete
+              </button>
+            </div>
+          </div>
           }
-        </select></label
-      >
-      <label
-        ><span>Image Input</span
-        ><input
-          type="checkbox"
-          [checked]="configurationForm().imageInput"
-          (change)="updateImageInput($event)"
-      /></label>
-      <label
-        ><span>Status</span
-        ><select
-          [value]="configurationForm().status"
-          (change)="configurationText('status', $event)"
-        >
-          @for (status of statuses; track status) {
-          <option [value]="status">{{ status }}</option>
-          }
-        </select></label
-      >
+        </div>
+        }
+      </section>
     </div>
-    <div class="rv-admin-providers__actions">
-      <button
-        type="button"
-        class="rv-admin-providers__button rv-admin-providers__button--primary"
-        (click)="saveConfiguration()"
-        [disabled]="configurationSaveDisabled()"
+  </div>
+  } @if (configurationEditorOpen()) {
+  <div
+    class="rv-admin-providers__window-overlay"
+    role="button"
+    tabindex="0"
+    aria-label="Close model configuration editor"
+    (click)="cancelConfiguration()"
+    (keydown.escape)="cancelConfiguration()"
+  >
+    <div
+      class="rv-admin-providers__window"
+      role="dialog"
+      aria-label="Model Configuration editor"
+      (click)="$event.stopPropagation()"
+      (keydown)="$event.stopPropagation()"
+    >
+      <section
+        class="rv-admin-providers__editor"
+        data-testid="model-configuration-editor"
       >
-        {{ editingModelConfigId() === null ? 'Create Configuration' : 'Update
-        Configuration' }}</button
-      >@if (editingModelConfigId() !== null) {
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="cancelConfiguration()"
-      >
-        Cancel
-      </button>
-      }
+        <header class="rv-admin-providers__editor-header">
+          <div>
+            <h2>
+              {{ editingModelConfigId() === null ? 'Create Model Configuration'
+              : 'Edit Model Configuration' }}
+            </h2>
+            <p class="rv-admin-providers__hint">
+              Configurations describe one model and reference a provider for
+              transport and authentication.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="rv-admin-providers__close"
+            (click)="cancelConfiguration()"
+            aria-label="Close model configuration editor"
+          >
+            x
+          </button>
+        </header>
+        <div class="rv-admin-providers__form-grid">
+          <label>
+            <span>Configuration ID</span>
+            <input
+              data-testid="model-configuration-id"
+              [disabled]="editingModelConfigId() !== null"
+              [value]="configurationForm().modelConfigId"
+              (input)="configurationText('modelConfigId', $event)"
+            />
+          </label>
+          <label>
+            <span>Provider</span>
+            <select
+              data-testid="model-configuration-endpoint"
+              [value]="configurationForm().endpointId"
+              (change)="configurationText('endpointId', $event)"
+            >
+              <option value="">Select a provider</option>
+              @for (endpoint of admin.modelEndpoints(); track
+              endpoint.endpointId) {
+              <option [value]="endpoint.endpointId">
+                {{ endpoint.displayName || endpoint.endpointId }} — {{
+                endpoint.protocol }} / {{ endpoint.authScheme }}
+              </option>
+              }
+            </select>
+            <small>
+              Changing this provider changes transport and authentication for
+              this model only.
+            </small>
+          </label>
+          <label>
+            <span>Display Name</span>
+            <input
+              [value]="configurationForm().displayName"
+              (input)="configurationText('displayName', $event)"
+            />
+          </label>
+          <label>
+            <span>Description</span>
+            <input
+              [value]="configurationForm().description"
+              (input)="configurationText('description', $event)"
+            />
+          </label>
+          <label>
+            <span>Model ID</span>
+            <input
+              data-testid="model-configuration-model-id"
+              [value]="configurationForm().modelId"
+              (input)="configurationText('modelId', $event)"
+            />
+          </label>
+          <label>
+            <span>Context Window Tokens</span>
+            <input
+              type="number"
+              [value]="configurationForm().contextWindowTokens"
+              (input)="configurationText('contextWindowTokens', $event)"
+            />
+          </label>
+          <label>
+            <span>Max Output Tokens</span>
+            <input
+              type="number"
+              [value]="configurationForm().maxOutputTokens"
+              (input)="configurationText('maxOutputTokens', $event)"
+            />
+          </label>
+          <label>
+            <span>Temperature Milli</span>
+            <input
+              type="number"
+              [value]="configurationForm().temperatureMilli"
+              (input)="configurationText('temperatureMilli', $event)"
+            />
+          </label>
+          <label>
+            <span>Reasoning Effort</span>
+            <input
+              [value]="configurationForm().reasoningEffort"
+              (input)="configurationText('reasoningEffort', $event)"
+            />
+          </label>
+          <label>
+            <span>Reasoning Format</span>
+            <input
+              [value]="configurationForm().reasoningFormat"
+              (input)="configurationText('reasoningFormat', $event)"
+            />
+          </label>
+          <label>
+            <span>Reasoning History</span>
+            <select
+              [value]="configurationForm().reasoningHistory"
+              (change)="configurationText('reasoningHistory', $event)"
+            >
+              @for (value of histories; track value) {
+              <option [value]="value">{{ value }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>Reasoning Budget Tokens</span>
+            <input
+              type="number"
+              [value]="configurationForm().reasoningBudgetTokens"
+              (input)="configurationText('reasoningBudgetTokens', $event)"
+            />
+          </label>
+          <label>
+            <span>Thinking Mode</span>
+            <select
+              [value]="configurationForm().thinkingMode"
+              (change)="configurationText('thinkingMode', $event)"
+            >
+              @for (value of thinkingModes; track value) {
+              <option [value]="value">{{ value }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>Prompt Caching Policy</span>
+            <select
+              [value]="configurationForm().promptCachingPolicy"
+              (change)="configurationText('promptCachingPolicy', $event)"
+            >
+              @for (value of cachingPolicies; track value) {
+              <option [value]="value">{{ value }}</option>
+              }
+            </select>
+          </label>
+          <label class="rv-admin-providers__toggle">
+            <input
+              type="checkbox"
+              [checked]="configurationForm().imageInput"
+              (change)="updateImageInput($event)"
+            />
+            <span>Image Input</span>
+          </label>
+          <label>
+            <span>Status</span>
+            <select
+              [value]="configurationForm().status"
+              (change)="configurationText('status', $event)"
+            >
+              @for (status of statuses; track status) {
+              <option [value]="status">{{ status }}</option>
+              }
+            </select>
+          </label>
+        </div>
+        <div class="rv-admin-providers__actions">
+          <button
+            type="button"
+            class="rv-admin-providers__button rv-admin-providers__button--primary"
+            (click)="saveConfiguration()"
+            [disabled]="configurationSaveDisabled()"
+          >
+            {{ editingModelConfigId() === null ? 'Create Configuration' :
+            'Update Configuration' }}
+          </button>
+          <button
+            type="button"
+            class="rv-admin-providers__button"
+            (click)="cancelConfiguration()"
+          >
+            Cancel
+          </button>
+        </div>
+        @if (editingConfiguration(); as configuration) {
+        <div class="rv-admin-providers__danger-zone">
+          @if (configurationDeleteId() !== configuration.modelConfigId) {
+          <button
+            type="button"
+            class="rv-admin-providers__button rv-admin-providers__button--danger"
+            data-testid="model-configuration-delete"
+            (click)="requestDeleteConfiguration(configuration)"
+            [disabled]="admin.saving()"
+          >
+            Delete model configuration
+          </button>
+          } @else {
+          <div
+            class="rv-admin-providers__confirm-box rv-admin-providers__confirm-box--danger"
+            data-testid="model-configuration-delete-confirm"
+          >
+            <p>
+              Permanently delete
+              <strong>{{ configuration.modelConfigId }}</strong>? This cannot be
+              undone.
+            </p>
+            <label>
+              <span>Type the configuration ID to confirm</span>
+              <input
+                type="text"
+                autocomplete="off"
+                [value]="configurationDeleteConfirmation()"
+                (input)="updateConfigurationDeleteConfirmation($event)"
+              />
+            </label>
+            <div class="rv-admin-providers__actions">
+              <button
+                type="button"
+                class="rv-admin-providers__button"
+                (click)="cancelDeleteConfiguration()"
+                [disabled]="admin.saving()"
+              >
+                Cancel delete
+              </button>
+              <button
+                type="button"
+                class="rv-admin-providers__button rv-admin-providers__button--danger"
+                data-testid="model-configuration-confirm-delete"
+                (click)="deleteConfiguration(configuration)"
+                [disabled]="
+                  admin.saving() ||
+                  !configurationDeleteConfirmed(configuration.modelConfigId)
+                "
+              >
+                Permanently delete
+              </button>
+            </div>
+          </div>
+          }
+        </div>
+        }
+      </section>
     </div>
-  </section>
-
-  <section
-    class="rv-admin-providers__section rv-admin-providers__section--list"
-    data-testid="model-configurations-list"
-  >
-    <h2>Model Configurations</h2>
-    @if (admin.modelConfigurationLoadError(); as error) {
-    <div class="rv-admin-providers__error">{{ error }}</div>
-    }
-    <ul class="rv-admin-providers__list">
-      @for (configuration of admin.modelConfigurations(); track
-      configuration.modelConfigId) {
-      <li class="rv-admin-providers__provider">
-        <div class="rv-admin-providers__provider-header">
-          <strong>{{ configuration.modelConfigId }}</strong
-          ><span>{{ configuration.status }}</span>
-        </div>
-        <div class="rv-admin-providers__meta">
-          <span>{{ configuration.modelId }}</span
-          ><span>endpoint {{ configuration.endpointId }}</span
-          ><span>revision {{ configuration.revision }}</span>
-        </div>
-        <button
-          type="button"
-          class="rv-admin-providers__button"
-          (click)="editConfiguration(configuration)"
-        >
-          Edit Configuration
-        </button>
-      </li>
-      }
-    </ul>
-  </section>
-
-  <section
-    class="rv-admin-providers__section rv-admin-providers__section--list"
-    data-testid="legacy-model-providers"
-  >
-    <h2>Legacy Joined Providers (read-only)</h2>
-    <p>
-      Deprecated compatibility projection for migration diagnostics. New edits
-      belong in Model Endpoints and Model Configurations above.
-    </p>
-    <ul class="rv-admin-providers__list">
-      @for (provider of admin.providerAliases(); track provider.alias) {
-      <li class="rv-admin-providers__provider">
-        <div class="rv-admin-providers__provider-header">
-          <strong>{{ provider.alias }}</strong
-          ><span>{{ provider.status }}</span>
-        </div>
-        <div class="rv-admin-providers__meta">
-          <span>{{ provider.modelId }}</span><span>{{ provider.protocol }}</span
-          ><span>revision {{ provider.revision }}</span>
-        </div>
-      </li>
-      }
-    </ul>
-  </section>
+  </div>
+  }
 </div>

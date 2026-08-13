@@ -1140,6 +1140,54 @@ export class AdminStore {
     );
   }
 
+  /**
+   * Hard-delete a normalized endpoint using the revision currently shown in
+   * the panel. A stale revision refreshes both normalized lists before the
+   * actionable error is exposed to the operator.
+   */
+  async deleteModelEndpoint(
+    endpoint: ModelEndpointRecord,
+  ): Promise<ModelEndpointWriteResult | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const result = await this.transport.deleteAdminModelEndpoint(
+        endpoint.endpointId,
+        endpoint.revision,
+      );
+      await this.refresh();
+      return result;
+    } catch (error) {
+      if (isNormalizedModelRevisionConflict(error)) await this.refresh();
+      this._error.set(normalizedModelDeleteErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  /** Hard-delete a normalized model configuration with its current revision. */
+  async deleteModelConfiguration(
+    configuration: ModelConfigurationRecord,
+  ): Promise<ModelConfigurationWriteResult | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    try {
+      const result = await this.transport.deleteAdminModelConfiguration(
+        configuration.modelConfigId,
+        configuration.revision,
+      );
+      await this.refresh();
+      return result;
+    } catch (error) {
+      if (isNormalizedModelRevisionConflict(error)) await this.refresh();
+      this._error.set(normalizedModelDeleteErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
   private async saveNormalizedModelRecord(
     write: () => Promise<ModelEndpointWriteResult>,
   ): Promise<ModelEndpointWriteResult | undefined> {
@@ -1786,6 +1834,44 @@ function isServiceCredentialRevisionConflict(error: unknown): boolean {
     storeErrorDetail(error).apiError?.reasonCode ===
     'service_credential_revision_mismatch'
   );
+}
+
+function isNormalizedModelRevisionConflict(error: unknown): boolean {
+  const reasonCode = storeErrorDetail(error).apiError?.reasonCode;
+  return (
+    reasonCode === 'model_endpoint_revision_mismatch' ||
+    reasonCode === 'model_configuration_revision_mismatch'
+  );
+}
+
+function normalizedModelDeleteErrorDetail(error: unknown): StoreErrorDetail {
+  const detail = storeErrorDetail(error);
+  switch (detail.apiError?.reasonCode) {
+    case 'model_endpoint_revision_mismatch':
+      return {
+        ...detail,
+        message:
+          'This model provider changed elsewhere; the list has been refreshed. Review the current values and try again.',
+      };
+    case 'model_configuration_revision_mismatch':
+      return {
+        ...detail,
+        message:
+          'This model configuration changed elsewhere; the list has been refreshed. Review the current values and try again.',
+      };
+    case 'model_endpoint_in_use':
+      return {
+        ...detail,
+        message: `${detail.message.replace('model endpoint', 'model provider')} Delete or move the model configurations that use this provider before trying again.`,
+      };
+    case 'model_configuration_in_use':
+      return {
+        ...detail,
+        message: `${detail.message} Remove dependent references before trying to delete this model configuration again.`,
+      };
+    default:
+      return detail;
+  }
 }
 
 function providerCredentialErrorDetail(error: unknown): StoreErrorDetail {

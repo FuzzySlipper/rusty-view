@@ -2210,4 +2210,57 @@ describe('AdminHttpTransport', () => {
       29,
     );
   });
+
+  it('hard-deletes endpoints and configurations with JSON CAS revisions', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+        cache: init?.cache,
+      });
+      return requests.length === 1
+        ? jsonOk({ endpoint: { endpointId: 'deleted-endpoint' } })
+        : jsonOk({ configuration: { modelConfigId: 'deleted-configuration' } });
+    };
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const deletedEndpoint = await transport.deleteModelEndpoint(
+      'endpoint/with slash',
+      11,
+    );
+    const deletedConfiguration = await transport.deleteModelConfiguration(
+      'config/with slash',
+      29,
+    );
+
+    expect(deletedEndpoint.endpoint.endpointId).toBe('deleted-endpoint');
+    expect(deletedConfiguration.configuration.modelConfigId).toBe(
+      'deleted-configuration',
+    );
+    expect(requests).toHaveLength(2);
+    const endpointRequest = requests[0];
+    const configurationRequest = requests[1];
+    if (endpointRequest === undefined || configurationRequest === undefined) {
+      throw new Error('expected endpoint and configuration delete requests');
+    }
+    expect(endpointRequest.method).toBe('DELETE');
+    expect(new URL(endpointRequest.url).pathname).toBe(
+      '/v1/admin/model-endpoints/endpoint%2Fwith%20slash',
+    );
+    expect(new URL(endpointRequest.url).search).toBe('');
+    expect(JSON.parse(endpointRequest.body ?? '{}')).toEqual({
+      expectedRevision: 11,
+    });
+    expect(configurationRequest.method).toBe('DELETE');
+    expect(new URL(configurationRequest.url).pathname).toBe(
+      '/v1/admin/model-configurations/config%2Fwith%20slash',
+    );
+    expect(new URL(configurationRequest.url).search).toBe('');
+    expect(JSON.parse(configurationRequest.body ?? '{}')).toEqual({
+      expectedRevision: 29,
+    });
+  });
 });

@@ -712,6 +712,13 @@ export class ChatTransport {
     return this.adminHttp.updateModelEndpoint(endpointId, request);
   }
 
+  deleteAdminModelEndpoint(
+    endpointId: string,
+    expectedRevision: number,
+  ): Promise<ModelEndpointWriteResult> {
+    return this.adminHttp.deleteModelEndpoint(endpointId, expectedRevision);
+  }
+
   adminModelConfigurations(
     query?: ModelConfigurationQuery,
   ): Promise<ModelConfigurationListPage> {
@@ -735,6 +742,16 @@ export class ChatTransport {
     request: ModelConfigurationPatch,
   ): Promise<ModelConfigurationWriteResult> {
     return this.adminHttp.updateModelConfiguration(modelConfigId, request);
+  }
+
+  deleteAdminModelConfiguration(
+    modelConfigId: string,
+    expectedRevision: number,
+  ): Promise<ModelConfigurationWriteResult> {
+    return this.adminHttp.deleteModelConfiguration(
+      modelConfigId,
+      expectedRevision,
+    );
   }
 
   adminModelProviders(query?: ModelProviderQuery): Promise<ModelProviderPage> {

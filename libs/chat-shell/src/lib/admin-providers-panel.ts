@@ -159,6 +159,12 @@ export class AdminProvidersPanelComponent {
     signal<ConfigurationForm>(newConfiguration());
   protected readonly editingEndpointId = signal<string | null>(null);
   protected readonly editingModelConfigId = signal<string | null>(null);
+  protected readonly endpointEditorOpen = signal(false);
+  protected readonly configurationEditorOpen = signal(false);
+  protected readonly endpointDeleteId = signal<string | null>(null);
+  protected readonly configurationDeleteId = signal<string | null>(null);
+  protected readonly endpointDeleteConfirmation = signal('');
+  protected readonly configurationDeleteConfirmation = signal('');
   protected readonly oauthCallbackUrl = signal('');
   protected readonly newCredentialId = signal('');
   protected readonly newCredentialName = signal('');
@@ -197,6 +203,20 @@ export class AdminProvidersPanelComponent {
           .modelConfigurations()
           .filter((item) => item.endpointId === id);
   });
+  protected readonly editingEndpoint = computed(() => {
+    const id = this.editingEndpointId();
+    return id === null
+      ? undefined
+      : this.admin.modelEndpoints().find((item) => item.endpointId === id);
+  });
+  protected readonly editingConfiguration = computed(() => {
+    const id = this.editingModelConfigId();
+    return id === null
+      ? undefined
+      : this.admin
+          .modelConfigurations()
+          .find((item) => item.modelConfigId === id);
+  });
   protected readonly selectedCredential = computed(() =>
     this.credentialOptions().find(
       (item) => item.credentialId === this.endpointForm().credentialId,
@@ -228,6 +248,21 @@ export class AdminProvidersPanelComponent {
   protected closePanel(): void {
     this.dismissed.emit();
   }
+
+  protected openCreateEndpoint(): void {
+    this.cancelConfiguration();
+    this.endpointForm.set(newEndpoint());
+    this.editingEndpointId.set(null);
+    this.endpointEditorOpen.set(true);
+  }
+
+  protected openCreateConfiguration(): void {
+    this.cancelEndpoint();
+    this.configurationForm.set(newConfiguration());
+    this.editingModelConfigId.set(null);
+    this.configurationEditorOpen.set(true);
+  }
+
   protected refresh(): void {
     void this.admin.refresh();
   }
@@ -268,7 +303,9 @@ export class AdminProvidersPanelComponent {
     this.configurationForm.update((current) => ({ ...current, imageInput }));
   }
   protected editEndpoint(endpoint: ModelEndpointRecord): void {
+    this.cancelDeleteEndpoint();
     this.editingEndpointId.set(endpoint.endpointId);
+    this.endpointEditorOpen.set(true);
     this.endpointForm.set({
       endpointId: endpoint.endpointId,
       displayName: endpoint.displayName ?? '',
@@ -284,7 +321,9 @@ export class AdminProvidersPanelComponent {
     });
   }
   protected editConfiguration(configuration: ModelConfigurationRecord): void {
+    this.cancelDeleteConfiguration();
     this.editingModelConfigId.set(configuration.modelConfigId);
+    this.configurationEditorOpen.set(true);
     this.configurationForm.set({
       modelConfigId: configuration.modelConfigId,
       endpointId: configuration.endpointId,
@@ -306,12 +345,92 @@ export class AdminProvidersPanelComponent {
     });
   }
   protected cancelEndpoint(): void {
+    this.cancelDeleteEndpoint();
     this.editingEndpointId.set(null);
+    this.endpointEditorOpen.set(false);
     this.endpointForm.set(newEndpoint());
   }
   protected cancelConfiguration(): void {
+    this.cancelDeleteConfiguration();
     this.editingModelConfigId.set(null);
+    this.configurationEditorOpen.set(false);
     this.configurationForm.set(newConfiguration());
+  }
+
+  protected requestDeleteEndpoint(endpoint: ModelEndpointRecord): void {
+    if (this.admin.saving()) return;
+    this.endpointDeleteConfirmation.set('');
+    this.endpointDeleteId.set(endpoint.endpointId);
+  }
+
+  protected cancelDeleteEndpoint(): void {
+    this.endpointDeleteConfirmation.set('');
+    this.endpointDeleteId.set(null);
+  }
+
+  protected updateEndpointDeleteConfirmation(event: Event): void {
+    this.endpointDeleteConfirmation.set(
+      (event.target as HTMLInputElement).value,
+    );
+  }
+
+  protected endpointDeleteConfirmed(endpointId: string): boolean {
+    return this.endpointDeleteConfirmation() === endpointId;
+  }
+
+  protected async deleteEndpoint(endpoint: ModelEndpointRecord): Promise<void> {
+    if (
+      this.endpointDeleteId() !== endpoint.endpointId ||
+      !this.endpointDeleteConfirmed(endpoint.endpointId)
+    ) {
+      return;
+    }
+    const result = await this.admin.deleteModelEndpoint(endpoint);
+    if (result === undefined) return;
+    this.cancelDeleteEndpoint();
+    if (this.editingEndpointId() === endpoint.endpointId) {
+      this.cancelEndpoint();
+    }
+  }
+
+  protected requestDeleteConfiguration(
+    configuration: ModelConfigurationRecord,
+  ): void {
+    if (this.admin.saving()) return;
+    this.configurationDeleteConfirmation.set('');
+    this.configurationDeleteId.set(configuration.modelConfigId);
+  }
+
+  protected cancelDeleteConfiguration(): void {
+    this.configurationDeleteConfirmation.set('');
+    this.configurationDeleteId.set(null);
+  }
+
+  protected updateConfigurationDeleteConfirmation(event: Event): void {
+    this.configurationDeleteConfirmation.set(
+      (event.target as HTMLInputElement).value,
+    );
+  }
+
+  protected configurationDeleteConfirmed(modelConfigId: string): boolean {
+    return this.configurationDeleteConfirmation() === modelConfigId;
+  }
+
+  protected async deleteConfiguration(
+    configuration: ModelConfigurationRecord,
+  ): Promise<void> {
+    if (
+      this.configurationDeleteId() !== configuration.modelConfigId ||
+      !this.configurationDeleteConfirmed(configuration.modelConfigId)
+    ) {
+      return;
+    }
+    const result = await this.admin.deleteModelConfiguration(configuration);
+    if (result === undefined) return;
+    this.cancelDeleteConfiguration();
+    if (this.editingModelConfigId() === configuration.modelConfigId) {
+      this.cancelConfiguration();
+    }
   }
   protected async saveEndpoint(): Promise<void> {
     if (this.endpointSaveDisabled()) return;

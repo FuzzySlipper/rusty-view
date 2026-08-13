@@ -33,7 +33,8 @@ export interface paths {
         get: operations["getModelEndpoint"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Permanently delete an unused normalized model endpoint */
+        delete: operations["deleteModelEndpoint"];
         options?: never;
         head?: never;
         /** Update a normalized model endpoint */
@@ -69,7 +70,8 @@ export interface paths {
         get: operations["getModelConfiguration"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Permanently delete an unused normalized model configuration */
+        delete: operations["deleteModelConfiguration"];
         options?: never;
         head?: never;
         /** Update a normalized model configuration */
@@ -480,6 +482,9 @@ export interface components {
             };
             expectedRevision?: number;
         };
+        NormalizedModelDeleteRequest: {
+            expectedRevision: number;
+        };
         ModelEndpointPatch: {
             endpointId?: string;
             status?: components["schemas"]["NormalizedModelStatus"];
@@ -605,7 +610,7 @@ export interface components {
             currentRevision: number;
         };
         /** @enum {string} */
-        NormalizedModelReasonCode: "invalid_model_endpoint" | "invalid_model_configuration" | "invalid_model_endpoint_status" | "model_endpoint_not_found" | "model_configuration_not_found" | "model_endpoint_revision_mismatch" | "model_configuration_revision_mismatch" | "model_endpoint_admin_method_not_allowed";
+        NormalizedModelReasonCode: "invalid_model_endpoint" | "invalid_model_configuration" | "invalid_model_endpoint_status" | "model_endpoint_not_found" | "model_configuration_not_found" | "model_endpoint_revision_mismatch" | "model_configuration_revision_mismatch" | "model_endpoint_in_use" | "model_configuration_in_use" | "model_endpoint_admin_method_not_allowed";
         /** @enum {string} */
         ModelProviderStatus: "active" | "disabled" | "archived";
         /** @enum {string} */
@@ -1102,6 +1107,37 @@ export interface operations {
             404: components["responses"]["ErrorEnvelope"];
         };
     };
+    deleteModelEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpointId: components["parameters"]["EndpointId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NormalizedModelDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Deleted normalized model endpoint */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelEndpointWriteResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+            404: components["responses"]["ErrorEnvelope"];
+            409: components["responses"]["ErrorEnvelope"];
+        };
+    };
     patchModelEndpoint: {
         parameters: {
             query?: never;
@@ -1213,6 +1249,37 @@ export interface operations {
                 };
             };
             404: components["responses"]["ErrorEnvelope"];
+        };
+    };
+    deleteModelConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelConfigId: components["parameters"]["ModelConfigId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NormalizedModelDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Deleted normalized model configuration */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelConfigurationWriteResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+            404: components["responses"]["ErrorEnvelope"];
+            409: components["responses"]["ErrorEnvelope"];
         };
     };
     patchModelConfiguration: {

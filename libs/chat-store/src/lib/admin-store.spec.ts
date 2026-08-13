@@ -296,6 +296,14 @@ interface AdminTransportMock {
       ) => Promise<ModelEndpointWriteResult>
     >
   >;
+  readonly deleteAdminModelEndpoint: ReturnType<
+    typeof vi.fn<
+      (
+        endpointId: string,
+        expectedRevision: number,
+      ) => Promise<ModelEndpointWriteResult>
+    >
+  >;
   readonly createAdminModelConfiguration: ReturnType<
     typeof vi.fn<
       (
@@ -308,6 +316,14 @@ interface AdminTransportMock {
       (
         modelConfigId: string,
         request: ModelConfigurationPatch,
+      ) => Promise<ModelConfigurationWriteResult>
+    >
+  >;
+  readonly deleteAdminModelConfiguration: ReturnType<
+    typeof vi.fn<
+      (
+        modelConfigId: string,
+        expectedRevision: number,
       ) => Promise<ModelConfigurationWriteResult>
     >
   >;
@@ -951,6 +967,10 @@ function createTransport(
       ): Promise<ModelEndpointWriteResult> =>
         normalizedModelEndpointWriteResult(endpointId, 3),
     ),
+    deleteAdminModelEndpoint: vi.fn(
+      async (endpointId: string, _expectedRevision: number) =>
+        normalizedModelEndpointWriteResult(endpointId, 1),
+    ),
     createAdminModelConfiguration: vi.fn(
       async (
         request: ModelConfigurationWrite,
@@ -963,6 +983,10 @@ function createTransport(
         _request: ModelConfigurationPatch,
       ): Promise<ModelConfigurationWriteResult> =>
         normalizedModelConfigurationWriteResult(modelConfigId, 3),
+    ),
+    deleteAdminModelConfiguration: vi.fn(
+      async (modelConfigId: string, _expectedRevision: number) =>
+        normalizedModelConfigurationWriteResult(modelConfigId, 1),
     ),
     adminOpenAiOauthStatus: vi.fn(async (alias: string) => ({
       provider: provider(alias),
@@ -2012,6 +2036,86 @@ describe('AdminStore normalized model registries', () => {
     expect(store.error()).toBe('Endpoint rejected (model_endpoint_invalid)');
     expect(store.errorDetail()?.apiError?.reasonCode).toBe(
       'model_endpoint_invalid',
+    );
+    expect(store.saving()).toBe(false);
+  });
+
+  it('hard-deletes normalized records with their current revisions', async () => {
+    const endpoint = normalizedModelEndpoint('endpoint-delete', 41);
+    const configuration = normalizedModelConfiguration('config-delete', 73);
+    const deletedEndpoint = { endpoint: { ...endpoint } };
+    const deletedConfiguration = { configuration: { ...configuration } };
+    const transport = createTransport({
+      deleteAdminModelEndpoint: vi.fn(
+        async (
+          endpointId: string,
+          expectedRevision: number,
+        ): Promise<ModelEndpointWriteResult> => {
+          expect(endpointId).toBe(endpoint.endpointId);
+          expect(expectedRevision).toBe(endpoint.revision);
+          return deletedEndpoint;
+        },
+      ),
+      deleteAdminModelConfiguration: vi.fn(
+        async (
+          modelConfigId: string,
+          expectedRevision: number,
+        ): Promise<ModelConfigurationWriteResult> => {
+          expect(modelConfigId).toBe(configuration.modelConfigId);
+          expect(expectedRevision).toBe(configuration.revision);
+          return deletedConfiguration;
+        },
+      ),
+    });
+    const store = setupAdminStore(transport);
+
+    expect(await store.deleteModelEndpoint(endpoint)).toBe(deletedEndpoint);
+    expect(await store.deleteModelConfiguration(configuration)).toBe(
+      deletedConfiguration,
+    );
+    expect(store.saving()).toBe(false);
+  });
+
+  it('keeps in-use delete failures actionable', async () => {
+    const transport = createTransport({
+      deleteAdminModelEndpoint: vi.fn(async () => {
+        throw apiError(
+          'model_endpoint_in_use',
+          'model endpoint endpoint-openai is still in use by 2 model configuration(s)',
+          409,
+        );
+      }),
+      deleteAdminModelConfiguration: vi.fn(async () => {
+        throw apiError(
+          'model_configuration_in_use',
+          'model configuration config-gpt-5 is still in use',
+          409,
+        );
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    const result = await store.deleteModelEndpoint(
+      normalizedModelEndpoint('endpoint-openai', 4),
+    );
+
+    expect(result).toBeUndefined();
+    expect(store.error()).toContain('still in use by 2 model configuration');
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'model_endpoint_in_use',
+    );
+    expect(store.saving()).toBe(false);
+
+    const configurationResult = await store.deleteModelConfiguration(
+      normalizedModelConfiguration('config-gpt-5', 5),
+    );
+
+    expect(configurationResult).toBeUndefined();
+    expect(store.error()).toContain(
+      'Remove dependent references before trying to delete this model configuration again.',
+    );
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'model_configuration_in_use',
     );
     expect(store.saving()).toBe(false);
   });

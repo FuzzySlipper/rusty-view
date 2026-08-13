@@ -685,6 +685,20 @@ export class AdminHttpTransport {
     });
   }
 
+  /**
+   * Hard-delete an unreferenced normalized model endpoint. Crew applies the
+   * normalized registry CAS revision from the JSON request body and returns
+   * the deleted endpoint in the standard write-result envelope.
+   */
+  deleteModelEndpoint(
+    endpointId: string,
+    expectedRevision: number,
+  ): Promise<ModelEndpointWriteResult> {
+    return this.request('DELETE', modelEndpointPath(endpointId), {
+      body: compactRecord({ expectedRevision }),
+    });
+  }
+
   modelConfigurations(
     query?: ModelConfigurationQuery,
   ): Promise<ModelConfigurationListPage> {
@@ -713,6 +727,20 @@ export class AdminHttpTransport {
   ): Promise<ModelConfigurationWriteResult> {
     return this.request('PATCH', modelConfigurationPath(modelConfigId), {
       body: request as unknown as Record<string, unknown>,
+    });
+  }
+
+  /**
+   * Hard-delete a revision-matched normalized model configuration. Crew
+   * receives the CAS revision in the JSON request body and returns the
+   * deleted configuration in the standard write-result envelope.
+   */
+  deleteModelConfiguration(
+    modelConfigId: string,
+    expectedRevision: number,
+  ): Promise<ModelConfigurationWriteResult> {
+    return this.request('DELETE', modelConfigurationPath(modelConfigId), {
+      body: compactRecord({ expectedRevision }),
     });
   }
 

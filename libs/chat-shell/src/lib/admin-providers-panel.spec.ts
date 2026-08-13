@@ -92,6 +92,12 @@ function setup(credentials: readonly ServiceCredentialRecord[] = [credential]) {
       revision: configuration.revision + 1,
     },
   }));
+  const deleteModelEndpoint = vi.fn(async (value: ModelEndpointRecord) => ({
+    endpoint: value,
+  }));
+  const deleteModelConfiguration = vi.fn(
+    async (value: ModelConfigurationRecord) => ({ configuration: value }),
+  );
   const store = {
     refresh: vi.fn(async () => undefined),
     loading: signal(false),
@@ -105,8 +111,10 @@ function setup(credentials: readonly ServiceCredentialRecord[] = [credential]) {
     providerAliases: signal<readonly ModelProviderRecord[]>([legacyProvider]),
     createModelEndpoint,
     updateModelEndpoint,
+    deleteModelEndpoint,
     createModelConfiguration,
     updateModelConfiguration,
+    deleteModelConfiguration,
     createServiceCredential: vi.fn(async (request) => {
       const created = {
         ...credential,
@@ -133,14 +141,16 @@ function setup(credentials: readonly ServiceCredentialRecord[] = [credential]) {
       saveEndpoint(): Promise<void>;
       editConfiguration(value: ModelConfigurationRecord): void;
       saveConfiguration(): Promise<void>;
+      openCreateEndpoint(): void;
+      openCreateConfiguration(): void;
     },
     store,
   };
 }
 
 describe('AdminProvidersPanelComponent normalized administration', () => {
-  it('renders separate endpoint/configuration editors and legacy read-only visibility', () => {
-    const { fixture } = setup();
+  it('renders concise normalized lists and top-level create actions', () => {
+    const { fixture, component } = setup();
     const root = fixture.nativeElement as HTMLElement;
     expect(
       root.querySelector('.rv-admin-providers__title')?.textContent?.trim(),
@@ -151,28 +161,44 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
         ?.getAttribute('aria-label'),
     ).toBe('Close model providers panel');
     expect(
-      root.querySelector('[data-testid="model-endpoint-editor"]'),
+      root.querySelector('[data-testid="create-model-provider"]'),
     ).not.toBeNull();
     expect(
-      root.querySelector('[data-testid="model-configuration-editor"]'),
+      root.querySelector('[data-testid="create-model-configuration"]'),
     ).not.toBeNull();
+    expect(
+      root.querySelector('[data-testid="model-endpoint-editor"]'),
+    ).toBeNull();
+    expect(
+      root.querySelector('[data-testid="model-configuration-editor"]'),
+    ).toBeNull();
     expect(
       Array.from(root.querySelectorAll('h2')).map((heading) =>
         heading.textContent?.trim(),
       ),
     ).toEqual(
-      expect.arrayContaining(['Model Endpoints', 'Model Configurations']),
+      expect.arrayContaining(['Model Providers', 'Model Configurations']),
     );
-    const legacy = root.querySelector('[data-testid="legacy-model-providers"]');
-    expect(legacy?.textContent).toContain(
-      'Legacy Joined Providers (read-only)',
-    );
-    expect(legacy?.textContent).toContain('legacy-joined');
-    expect(legacy?.querySelector('button')).toBeNull();
+    root
+      .querySelector<HTMLButtonElement>('[data-testid="create-model-provider"]')
+      ?.click();
+    fixture.detectChanges();
+    expect(
+      root.querySelector('[data-testid="model-endpoint-editor"]'),
+    ).not.toBeNull();
+    expect(root.textContent).toContain('Create Model Provider');
+    component.openCreateConfiguration();
+    fixture.detectChanges();
+    expect(
+      root.querySelector('[data-testid="model-configuration-editor"]'),
+    ).not.toBeNull();
+    expect(root.textContent).toContain('Create Model Configuration');
   });
 
   it('uses closed protocol-dependent dialect controls and lists every credential', () => {
-    const { fixture } = setup();
+    const { fixture, component } = setup();
+    component.openCreateEndpoint();
+    fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     const dialect = root.querySelector(
       '[data-testid="model-endpoint-wire-dialect"]',
@@ -199,7 +225,7 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
     ]);
     expect(root.textContent).toContain('Reusable credential');
     expect(root.textContent).toContain(
-      'compatibility is determined by endpoint auth settings',
+      'compatibility is determined by provider authentication settings',
     );
   });
 
@@ -231,7 +257,9 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
   });
 
   it('creates an API-key credential from an empty registry and selects it', async () => {
-    const { fixture, store } = setup([]);
+    const { fixture, component, store } = setup([]);
+    component.editEndpoint(endpoint);
+    fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     selectValue(
       root,
@@ -268,7 +296,9 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
   });
 
   it('creates an OAuth credential from an empty registry, selects it, and starts login', async () => {
-    const { fixture, store } = setup([]);
+    const { fixture, component, store } = setup([]);
+    component.editEndpoint(endpoint);
+    fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     selectValue(
       root,
@@ -303,6 +333,89 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
         '[data-testid="model-endpoint-credential"]',
       )?.value,
     ).toBe('credential:new-oauth');
+  });
+
+  it('confirms endpoint deletion by exact id and keeps the editor/list errors visible', async () => {
+    const { fixture, store } = setup();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(
+      root.querySelector('[data-testid="model-endpoint-delete"]'),
+    ).toBeNull();
+    root
+      .querySelector<HTMLButtonElement>('[data-testid="model-endpoint-edit"]')
+      ?.click();
+    fixture.detectChanges();
+    root
+      .querySelector<HTMLButtonElement>('[data-testid="model-endpoint-delete"]')
+      ?.click();
+    fixture.detectChanges();
+
+    const confirmation = root.querySelector<HTMLInputElement>(
+      '[data-testid="model-endpoint-delete-confirm"] input',
+    );
+    if (confirmation === null) throw new Error('missing endpoint confirmation');
+    const confirmButton = root.querySelector<HTMLButtonElement>(
+      '[data-testid="model-endpoint-confirm-delete"]',
+    );
+    if (confirmButton === null)
+      throw new Error('missing endpoint delete button');
+    expect(confirmButton.disabled).toBe(true);
+
+    confirmation.value = endpoint.endpointId;
+    confirmation.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(confirmButton.disabled).toBe(false);
+    confirmButton.click();
+    await fixture.whenStable();
+
+    expect(store.deleteModelEndpoint).toHaveBeenCalledWith(endpoint);
+    expect(
+      root.querySelector('[data-testid="model-endpoint-delete-confirm"]'),
+    ).toBeNull();
+  });
+
+  it('confirms model configuration deletion by exact id', async () => {
+    const { fixture, store } = setup();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(
+      root.querySelector('[data-testid="model-configuration-delete"]'),
+    ).toBeNull();
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-configuration-edit"]',
+      )
+      ?.click();
+    fixture.detectChanges();
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-configuration-delete"]',
+      )
+      ?.click();
+    fixture.detectChanges();
+
+    const confirmation = root.querySelector<HTMLInputElement>(
+      '[data-testid="model-configuration-delete-confirm"] input',
+    );
+    if (confirmation === null)
+      throw new Error('missing configuration confirmation');
+    const confirmButton = root.querySelector<HTMLButtonElement>(
+      '[data-testid="model-configuration-confirm-delete"]',
+    );
+    if (confirmButton === null)
+      throw new Error('missing configuration delete button');
+    expect(confirmButton.disabled).toBe(true);
+
+    confirmation.value = configuration.modelConfigId;
+    confirmation.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(confirmButton.disabled).toBe(false);
+    confirmButton.click();
+    await fixture.whenStable();
+
+    expect(store.deleteModelConfiguration).toHaveBeenCalledWith(configuration);
+    expect(
+      root.querySelector('[data-testid="model-configuration-delete-confirm"]'),
+    ).toBeNull();
   });
 });
 
