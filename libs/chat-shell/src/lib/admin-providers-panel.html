@@ -123,9 +123,19 @@
           (change)="endpointText('credentialId', $event)"
         >
           <option value="">Select a credential</option>
-          @for (credential of admin.serviceCredentials(); track
+          @if (localCredentialOption(); as localId) {
+          <option
+            [value]="localId"
+            [selected]="localId === endpointForm().credentialId"
+          >
+            {{ localId }}
+          </option>
+          } @for (credential of credentialOptions(); track
           credential.credentialId) {
-          <option [value]="credential.credentialId">
+          <option
+            [value]="credential.credentialId"
+            [selected]="credential.credentialId === endpointForm().credentialId"
+          >
             {{ credential.displayName }} ({{ credential.credentialId }})
           </option>
           }</select
@@ -163,6 +173,14 @@
       class="rv-admin-providers__form-grid"
       data-testid="endpoint-credential-management"
     >
+      <label
+        ><span>New Credential ID</span
+        ><input
+          data-testid="new-endpoint-credential-id"
+          [value]="newCredentialId()"
+          (input)="newCredentialId.set($any($event.target).value)"
+          placeholder="credential:service-name"
+      /></label>
       <label
         ><span>New Credential Name</span
         ><input

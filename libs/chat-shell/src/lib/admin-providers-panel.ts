@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   computed,
   inject,
@@ -18,6 +19,7 @@ import type {
   ModelThinkingMode,
   NormalizedModelStatus,
   PromptCacheTransport,
+  ServiceCredentialRecord,
 } from '@rusty-view/transport';
 
 interface EndpointForm {
@@ -143,6 +145,7 @@ function newConfiguration(): ConfigurationForm {
 })
 export class AdminProvidersPanelComponent {
   protected readonly admin = inject(AdminStore);
+  private readonly changeDetector = inject(ChangeDetectorRef);
   readonly dismissed = output<void>();
 
   protected readonly statuses = STATUS;
@@ -157,8 +160,29 @@ export class AdminProvidersPanelComponent {
   protected readonly editingEndpointId = signal<string | null>(null);
   protected readonly editingModelConfigId = signal<string | null>(null);
   protected readonly oauthCallbackUrl = signal('');
+  protected readonly newCredentialId = signal('');
   protected readonly newCredentialName = signal('');
   protected readonly newCredentialSecret = signal('');
+  private readonly createdCredential = signal<ServiceCredentialRecord | null>(
+    null,
+  );
+  private readonly localCredentialId = signal<string | null>(null);
+
+  protected readonly credentialOptions = computed(() => {
+    const credentials = this.admin.serviceCredentials();
+    const created = this.createdCredential();
+    return created === null ||
+      credentials.some((item) => item.credentialId === created.credentialId)
+      ? credentials
+      : [...credentials, created];
+  });
+  protected readonly localCredentialOption = computed(() => {
+    const id = this.localCredentialId();
+    return id === null ||
+      this.credentialOptions().some((item) => item.credentialId === id)
+      ? null
+      : id;
+  });
 
   protected readonly wireDialects = computed(() =>
     this.endpointForm().protocol === 'responses'
@@ -174,9 +198,9 @@ export class AdminProvidersPanelComponent {
           .filter((item) => item.endpointId === id);
   });
   protected readonly selectedCredential = computed(() =>
-    this.admin
-      .serviceCredentials()
-      .find((item) => item.credentialId === this.endpointForm().credentialId),
+    this.credentialOptions().find(
+      (item) => item.credentialId === this.endpointForm().credentialId,
+    ),
   );
   protected readonly endpointSaveDisabled = computed(() => {
     const form = this.endpointForm();
@@ -355,9 +379,16 @@ export class AdminProvidersPanelComponent {
       : await this.admin.createModelConfiguration(write);
     if (result !== undefined) this.editConfiguration(result.configuration);
   }
-  protected async createApiKeyCredential(): Promise<void> {
-    const id = this.endpointForm().credentialId.trim();
+  protected createApiKeyCredential(): void {
+    const id = this.newCredentialId().trim();
     if (!id || !this.newCredentialSecret().trim()) return;
+    this.localCredentialId.set(id);
+    this.endpointForm.update((current) => ({ ...current, credentialId: id }));
+    this.changeDetector.detectChanges();
+    void this.persistApiKeyCredential(id);
+  }
+
+  private async persistApiKeyCredential(id: string): Promise<void> {
     const credential = await this.admin.createServiceCredential({
       credentialId: id,
       displayName: this.newCredentialName().trim() || id,
@@ -365,18 +396,49 @@ export class AdminProvidersPanelComponent {
       credentialKind: 'api_key',
       secret: this.newCredentialSecret().trim(),
     });
-    if (credential) this.newCredentialSecret.set('');
+    if (credential) {
+      this.createdCredential.set(credential);
+      this.endpointForm.update((current) => ({
+        ...current,
+        credentialId: credential.credentialId,
+      }));
+      this.changeDetector.detectChanges();
+      this.newCredentialSecret.set('');
+    } else {
+      this.newCredentialSecret.set('');
+    }
   }
-  protected async startOauth(): Promise<void> {
-    const id = this.endpointForm().credentialId.trim();
+  protected startOauth(): void {
+    const id =
+      this.newCredentialId().trim() || this.endpointForm().credentialId.trim();
     if (!id) return;
-    if (!this.selectedCredential()) {
-      await this.admin.createServiceCredential({
-        credentialId: id,
-        displayName: this.newCredentialName().trim() || id,
-        providerKind: 'openai',
-        credentialKind: 'openai_oauth',
-      });
+    const existingCredential = this.credentialOptions().find(
+      (credential) => credential.credentialId === id,
+    );
+    if (existingCredential === undefined) {
+      this.localCredentialId.set(id);
+      this.endpointForm.update((current) => ({ ...current, credentialId: id }));
+      this.changeDetector.detectChanges();
+      void this.createAndStartOauth(id);
+      return;
+    }
+    void this.admin.startServiceCredentialOpenAiOauthLogin(id, {});
+  }
+
+  private async createAndStartOauth(id: string): Promise<void> {
+    const credential = await this.admin.createServiceCredential({
+      credentialId: id,
+      displayName: this.newCredentialName().trim() || id,
+      providerKind: 'openai',
+      credentialKind: 'openai_oauth',
+    });
+    if (credential !== undefined) {
+      this.createdCredential.set(credential);
+      this.endpointForm.update((current) => ({
+        ...current,
+        credentialId: credential.credentialId,
+      }));
+      this.changeDetector.detectChanges();
     }
     await this.admin.startServiceCredentialOpenAiOauthLogin(id, {});
   }

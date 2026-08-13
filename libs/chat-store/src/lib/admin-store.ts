@@ -1252,7 +1252,7 @@ export class AdminStore {
     this._error.set(null);
     try {
       const result = await this.transport.createAdminServiceCredential(request);
-      await this.refresh();
+      this.replaceServiceCredential(result.credential);
       return result.credential;
     } catch (error) {
       this._error.set(providerCredentialErrorDetail(error));
@@ -1417,6 +1417,33 @@ export class AdminStore {
       if (index < 0) return page;
       const items = [...page.items];
       items[index] = provider;
+      return { ...page, items };
+    });
+  }
+
+  /** Keep a successful credential write visible without resetting open editors. */
+  private replaceServiceCredential(credential: ServiceCredentialRecord): void {
+    this._serviceCredentials.update((page) => {
+      if (page === null) {
+        return {
+          items: [credential],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        };
+      }
+      const index = page.items.findIndex(
+        (candidate) => candidate.credentialId === credential.credentialId,
+      );
+      if (index < 0) {
+        return {
+          ...page,
+          items: [...page.items, credential],
+          total: page.total + 1,
+        };
+      }
+      const items = [...page.items];
+      items[index] = credential;
       return { ...page, items };
     });
   }

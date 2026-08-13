@@ -69,7 +69,9 @@ const legacyProvider: ModelProviderRecord = {
   updatedAt: '2026-08-13T00:00:00Z',
 };
 
-function setup() {
+function setup(credentials: readonly ServiceCredentialRecord[] = [credential]) {
+  const serviceCredentials =
+    signal<readonly ServiceCredentialRecord[]>(credentials);
   const endpoints = signal<readonly ModelEndpointRecord[]>([endpoint]);
   const configurations = signal<readonly ModelConfigurationRecord[]>([
     configuration,
@@ -99,15 +101,22 @@ function setup() {
     modelConfigurations: configurations,
     modelEndpointLoadError: signal(null),
     modelConfigurationLoadError: signal(null),
-    serviceCredentials: signal<readonly ServiceCredentialRecord[]>([
-      credential,
-    ]),
+    serviceCredentials,
     providerAliases: signal<readonly ModelProviderRecord[]>([legacyProvider]),
     createModelEndpoint,
     updateModelEndpoint,
     createModelConfiguration,
     updateModelConfiguration,
-    createServiceCredential: vi.fn(async () => credential),
+    createServiceCredential: vi.fn(async (request) => {
+      const created = {
+        ...credential,
+        credentialId: request.credentialId,
+        displayName: request.displayName ?? request.credentialId,
+        credentialKind: request.credentialKind ?? 'api_key',
+      };
+      serviceCredentials.update((current) => [...current, created]);
+      return created;
+    }),
     startServiceCredentialOpenAiOauthLogin: vi.fn(async () => undefined),
     completeServiceCredentialOpenAiOauthLogin: vi.fn(async () => undefined),
   };
@@ -205,4 +214,93 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
       expect.objectContaining({ expectedRevision: 11 }),
     );
   });
+
+  it('creates an API-key credential from an empty registry and selects it', async () => {
+    const { fixture, store } = setup([]);
+    const root = fixture.nativeElement as HTMLElement;
+    selectValue(
+      root,
+      '[data-testid="model-endpoint-auth-scheme"]',
+      'bearer_api_key',
+    );
+    fixture.detectChanges();
+    inputValue(
+      root,
+      '[data-testid="new-endpoint-credential-id"]',
+      'credential:new-key',
+    );
+    inputValue(root, 'input[type="password"]', 'secret-value');
+    root.querySelector<HTMLButtonElement>('button')?.focus();
+    const create = Array.from(root.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Create API Key Credential',
+    );
+    create?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.createServiceCredential).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialId: 'credential:new-key',
+        credentialKind: 'api_key',
+        secret: 'secret-value',
+      }),
+    );
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-testid="model-endpoint-credential"]',
+      )?.value,
+    ).toBe('credential:new-key');
+  });
+
+  it('creates an OAuth credential from an empty registry, selects it, and starts login', async () => {
+    const { fixture, store } = setup([]);
+    const root = fixture.nativeElement as HTMLElement;
+    selectValue(
+      root,
+      '[data-testid="model-endpoint-auth-scheme"]',
+      'openai_codex_oauth',
+    );
+    fixture.detectChanges();
+    inputValue(
+      root,
+      '[data-testid="new-endpoint-credential-id"]',
+      'credential:new-oauth',
+    );
+    const start = Array.from(root.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Start OpenAI OAuth',
+    );
+    start?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.createServiceCredential).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentialId: 'credential:new-oauth',
+        credentialKind: 'openai_oauth',
+      }),
+    );
+    expect(store.startServiceCredentialOpenAiOauthLogin).toHaveBeenCalledWith(
+      'credential:new-oauth',
+      {},
+    );
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-testid="model-endpoint-credential"]',
+      )?.value,
+    ).toBe('credential:new-oauth');
+  });
 });
+
+function selectValue(root: HTMLElement, selector: string, value: string): void {
+  const select = root.querySelector<HTMLSelectElement>(selector);
+  if (select === null) throw new Error(`missing select ${selector}`);
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
+}
+
+function inputValue(root: HTMLElement, selector: string, value: string): void {
+  const input = root.querySelector<HTMLInputElement>(selector);
+  if (input === null) throw new Error(`missing input ${selector}`);
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+}

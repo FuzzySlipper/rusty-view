@@ -1773,6 +1773,26 @@ describe('AdminStore behavior', () => {
 });
 
 describe('AdminStore normalized model registries', () => {
+  it('merges a created credential without refreshing and resetting open editors', async () => {
+    const credential = serviceCredential('credential:new');
+    const transport = createTransport({
+      createAdminServiceCredential: vi.fn(async () => ({ credential })),
+    });
+    const store = setupAdminStore(transport);
+    await store.refresh();
+    vi.mocked(transport.adminDiagnostics).mockClear();
+
+    const created = await store.createServiceCredential({
+      credentialId: credential.credentialId,
+      providerKind: 'openai',
+      credentialKind: 'openai_oauth',
+    });
+
+    expect(created).toEqual(credential);
+    expect(store.serviceCredentials()).toEqual([credential]);
+    expect(transport.adminDiagnostics).not.toHaveBeenCalled();
+  });
+
   it('refreshes endpoint and configuration lists through their dedicated loads', async () => {
     const endpoint = normalizedModelEndpoint('endpoint-shared', 4);
     const configuration = normalizedModelConfiguration('config-shared', 7);

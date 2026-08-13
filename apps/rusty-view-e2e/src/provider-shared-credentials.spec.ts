@@ -97,13 +97,192 @@ test('admin separates shared endpoints from model configurations and keeps all c
   await expect(legacy.locator('button')).toHaveCount(0);
 });
 
-function credential(credentialId: string, providerKind: string) {
+test('creates and selects an API-key credential when the registry is empty', async ({
+  page,
+}) => {
+  const calls = await installEmptyCredentialRegistry(page, 'bearer_api_key');
+  await openModelsPanel(page);
+  const panel = page.getByTestId('top-menu-panel-providers');
+  await panel.getByRole('button', { name: 'Edit Endpoint' }).click();
+  await panel
+    .getByTestId('new-endpoint-credential-id')
+    .fill('credential:new-key');
+  await panel.locator('input[type="password"]').fill('secret-value');
+  const createResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/v1/admin/service-credentials',
+  );
+  await panel
+    .getByRole('button', { name: 'Create API Key Credential' })
+    .click();
+  const created = await createResponse;
+  expect(created.ok()).toBe(true);
+  expect(await created.json()).toMatchObject({
+    data: { credential: { credentialId: 'credential:new-key' } },
+  });
+  await expect(panel.getByTestId('model-endpoint-credential')).toHaveValue(
+    'credential:new-key',
+  );
+  expect(calls).toContainEqual(
+    expect.objectContaining({
+      path: '/v1/admin/service-credentials',
+      body: expect.objectContaining({
+        credentialId: 'credential:new-key',
+        credentialKind: 'api_key',
+        secret: 'secret-value',
+      }),
+    }),
+  );
+});
+
+test('creates and selects an OAuth credential when the registry is empty', async ({
+  page,
+}) => {
+  const calls = await installEmptyCredentialRegistry(
+    page,
+    'openai_codex_oauth',
+  );
+  await openModelsPanel(page);
+  const panel = page.getByTestId('top-menu-panel-providers');
+  await panel.getByRole('button', { name: 'Edit Endpoint' }).click();
+  await panel
+    .getByTestId('new-endpoint-credential-id')
+    .fill('credential:new-oauth');
+  const createResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/v1/admin/service-credentials',
+  );
+  await panel.getByRole('button', { name: 'Start OpenAI OAuth' }).click();
+  const created = await createResponse;
+  expect(created.ok()).toBe(true);
+  expect(await created.json()).toMatchObject({
+    data: { credential: { credentialId: 'credential:new-oauth' } },
+  });
+
+  await expect(panel.getByTestId('model-endpoint-credential')).toHaveValue(
+    'credential:new-oauth',
+  );
+  expect(calls).toContainEqual(
+    expect.objectContaining({
+      path: '/v1/admin/service-credentials',
+      body: expect.objectContaining({
+        credentialId: 'credential:new-oauth',
+        credentialKind: 'openai_oauth',
+      }),
+    }),
+  );
+  expect(calls).toContainEqual(
+    expect.objectContaining({
+      path: '/v1/admin/service-credentials/credential%3Anew-oauth/oauth/openai/start',
+    }),
+  );
+});
+
+interface CapturedCall {
+  path: string;
+  body?: Record<string, unknown>;
+}
+
+async function installEmptyCredentialRegistry(
+  page: import('@playwright/test').Page,
+  authScheme: 'bearer_api_key' | 'openai_codex_oauth',
+): Promise<CapturedCall[]> {
+  const calls: CapturedCall[] = [];
+  const credentials: ReturnType<typeof credential>[] = [];
+  const endpoint = {
+    endpointId: `endpoint-${authScheme}`,
+    status: 'active',
+    displayName: 'Credential test endpoint',
+    baseUrl: 'https://api.example.test/v1',
+    protocol: 'chat_completions',
+    wireDialect: 'standard',
+    authScheme,
+    credentialId: null,
+    promptCacheTransport: 'none',
+    metadataJson: {},
+    revision: 1,
+    createdAt: '2026-08-13T00:00:00Z',
+    updatedAt: '2026-08-13T00:00:00Z',
+  };
+  await page.route('**/v1/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const envelope = (data: unknown) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, data }),
+      });
+    if (path === '/v1/admin/service-credentials') {
+      if (request.method() === 'POST') {
+        const body = request.postDataJSON() as Record<string, unknown>;
+        calls.push({ path, body });
+        const created = credential(
+          String(body['credentialId']),
+          String(body['providerKind']),
+          String(body['credentialKind']),
+        );
+        credentials.push(created);
+        return envelope({ credential: created });
+      }
+      return envelope(pageOf(credentials));
+    }
+    if (path.endsWith('/oauth/openai/start')) {
+      calls.push({ path });
+      return envelope({
+        credential: credentials[0],
+        pendingLogin: {
+          pendingLoginId: 'pending-1',
+          credentialId: credentials[0]?.credentialId,
+          issuer: 'https://auth.openai.com',
+          clientId: 'client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          authorizationUrl: 'https://auth.openai.com/authorize',
+          expiresAt: '2026-08-13T01:00:00Z',
+        },
+        loginConfig: {
+          issuer: 'https://auth.openai.com',
+          clientId: 'client',
+          redirectUri: 'http://localhost:1455/auth/callback',
+          redirectUriOverrideAllowed: false,
+          redirectUriMode: 'registered',
+          callbackUrlCompletionAccepted: true,
+          callbackUrlCompletionField: 'callbackUrl',
+          pendingLoginIdRequiredForCallbackUrl: false,
+          remoteOperatorFlow: 'paste_callback_url',
+        },
+      });
+    }
+    if (path === '/v1/admin/model-endpoints')
+      return envelope(pageOf([endpoint]));
+    if (path === '/v1/admin/model-configurations') return envelope(pageOf([]));
+    if (path === '/v1/admin/model-providers') return envelope(pageOf([]));
+    if (path === '/v1/admin/diagnostics') return envelope(diagnostics());
+    if (path.endsWith('/config-validation')) return envelope(null);
+    if (path.startsWith('/v1/admin/')) return envelope(pageOf([]));
+    if (path === '/v1/chat/sessions') return envelope(pageOf([]));
+    return envelope({});
+  });
+  return calls;
+}
+
+async function openModelsPanel(page: import('@playwright/test').Page) {
+  await page.goto('/');
+  await page.locator('[data-menu-id="providers"]').click();
+}
+
+function credential(
+  credentialId: string,
+  providerKind: string,
+  credentialKind = 'api_key',
+) {
   return {
     credentialId,
     displayName: credentialId,
     providerKind,
-    credentialKind: 'api_key',
-    credential: { hasSecret: true, kind: 'api_key', status: 'configured' },
+    credentialKind,
+    credential: { hasSecret: true, kind: credentialKind, status: 'configured' },
     linkedProviderAliases: [],
     revision: 1,
     createdAt: '2026-08-13T00:00:00Z',
