@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
-test('admin separates shared endpoints from model configurations and keeps all credentials selectable', async ({
+test('admin separates shared providers from model configurations and keeps all credentials selectable', async ({
   page,
 }) => {
   const endpoint = {
@@ -75,27 +75,25 @@ test('admin separates shared endpoints from model configurations and keeps all c
   await page.locator('[data-menu-id="providers"]').click();
   const panel = page.getByTestId('top-menu-panel-providers');
   await expect(
-    panel.getByRole('heading', { name: 'Model Endpoints' }),
+    panel.getByRole('heading', { name: 'Model Providers' }),
   ).toBeVisible();
   await expect(
     panel.getByRole('heading', { name: 'Model Configurations' }),
   ).toBeVisible();
-  await panel.getByRole('button', { name: 'Edit Endpoint' }).click();
+  await panel.getByTestId('model-endpoint-edit').click();
   await expect(panel.getByTestId('model-endpoint-impact')).toContainText(
     'model-a',
   );
   const credentialSelector = panel.getByTestId('model-endpoint-credential');
   await expect(credentialSelector.locator('option')).toHaveCount(4);
   await credentialSelector.selectOption('credential:custom');
-  await panel.getByRole('button', { name: 'Update Endpoint' }).click();
+  await panel.getByRole('button', { name: 'Update Provider' }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toMatchObject({
     credentialId: 'credential:custom',
     expectedRevision: 4,
   });
-  const legacy = panel.getByTestId('legacy-model-providers');
-  await expect(legacy).toContainText('read-only');
-  await expect(legacy.locator('button')).toHaveCount(0);
+  await expect(panel.getByTestId('legacy-model-providers')).toHaveCount(0);
 });
 
 test('creates and selects an API-key credential when the registry is empty', async ({
@@ -104,7 +102,7 @@ test('creates and selects an API-key credential when the registry is empty', asy
   const calls = await installEmptyCredentialRegistry(page, 'bearer_api_key');
   await openModelsPanel(page);
   const panel = page.getByTestId('top-menu-panel-providers');
-  await panel.getByRole('button', { name: 'Edit Endpoint' }).click();
+  await panel.getByTestId('model-endpoint-edit').click();
   await panel
     .getByTestId('new-endpoint-credential-id')
     .fill('credential:new-key');
@@ -146,7 +144,7 @@ test('creates and selects an OAuth credential when the registry is empty', async
   );
   await openModelsPanel(page);
   const panel = page.getByTestId('top-menu-panel-providers');
-  await panel.getByRole('button', { name: 'Edit Endpoint' }).click();
+  await panel.getByTestId('model-endpoint-edit').click();
   await panel
     .getByTestId('new-endpoint-credential-id')
     .fill('credential:new-oauth');
