@@ -589,7 +589,9 @@ describe('AdminProvidersPanelComponent', () => {
       credentialId: '',
     });
 
-    component.updateCredentialMode({ target: { value: 'create_openai_oauth' } });
+    component.updateCredentialMode({
+      target: { value: 'create_openai_oauth' },
+    });
     component.updateProtocol({ target: { value: 'chat_completions' } });
     expect(component.form()).toMatchObject({
       credentialMode: 'unconfigured',

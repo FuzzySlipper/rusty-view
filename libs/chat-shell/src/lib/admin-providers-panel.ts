@@ -676,10 +676,7 @@ export class AdminProvidersPanelComponent {
     const form = this.form();
     if (
       this.saveDisabled() ||
-      !isCredentialSelectionCompatible(
-        form,
-        this.admin.serviceCredentials(),
-      )
+      !isCredentialSelectionCompatible(form, this.admin.serviceCredentials())
     ) {
       return;
     }

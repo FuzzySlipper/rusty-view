@@ -350,11 +350,10 @@
         data-testid="provider-oauth-protocol-conflict"
         role="alert"
       >
-        This provider is still linked to an OpenAI OAuth credential. Switch
-        back to Responses, save it as Unconfigured, then change the protocol.
+        This provider is still linked to an OpenAI OAuth credential. Switch back
+        to Responses, save it as Unconfigured, then change the protocol.
       </p>
-      }
-      @if (form().credentialMode === 'create_api_key' || form().credentialMode
+      } @if (form().credentialMode === 'create_api_key' || form().credentialMode
       === 'create_openai_oauth') {
       <label>
         <span>Credential ID</span>
