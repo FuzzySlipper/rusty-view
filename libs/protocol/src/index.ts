@@ -94,6 +94,7 @@ export type ChatCompletionsDialect =
   ProviderAdminSchemas['ChatCompletionsDialect'];
 export type ResponsesProviderDialect =
   ProviderAdminSchemas['ResponsesProviderDialect'];
+export type ModelProviderKind = ProviderAdminSchemas['ModelProviderKind'];
 export type ChatCompletionsThinkingMode =
   ProviderAdminSchemas['ChatCompletionsThinkingMode'];
 export type ChatCompletionsPromptCaching =

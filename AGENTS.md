@@ -4,12 +4,12 @@
 > Shared/global agent policy lives in Den guidance documents, not in this file.
 >
 > Generation sources:
-> - Den guidance: `get_agent_guidance(project_id="rusty-crew")`
+> - Den guidance: `get_agent_guidance(project_id="rusty-view")`
 > - local: `agents-project.md`
 
 ## Den Guidance Bootstrap
 
-- Project ID: `rusty-crew` (rusty-view tasks live under this project)
+- Project ID: `rusty-view`
 - Resolve live guidance with the Den MCP `get_agent_guidance` tool before
   substantial work.
 - Treat the resolved Den guidance packet and its referenced Den documents as
@@ -23,11 +23,10 @@
 # Rusty View Local Bootstrap
 
 Project-specific live guidance and task management live in Den project
-`rusty-crew` under the `rusty-view` tag.
+`rusty-view`.
 
-Use project ID `rusty-crew` with tag filter `rusty-view` for Den tasks,
-messages, documents, librarian queries, and guidance lookups related to
-this frontend.
+Use project ID `rusty-view` for Den tasks, messages, documents, librarian
+queries, and guidance lookups related to this frontend.
 
 ## Source-of-truth posture
 

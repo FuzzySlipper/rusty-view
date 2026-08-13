@@ -15,6 +15,7 @@ import type {
   ChatCompletionsReasoningHistory,
   ChatCompletionsThinkingMode,
   ModelProviderProtocol,
+  ModelProviderKind,
   ModelProviderRecord,
   ModelProviderStatus,
   ModelProviderWriteRequest,
@@ -130,6 +131,24 @@ const RESPONSES_DIALECT_OPTIONS: readonly {
   { value: 'meta', label: 'Meta Responses' },
 ];
 
+const PROVIDER_KIND_OPTIONS: readonly {
+  value: ModelProviderKind;
+  label: string;
+}[] = [
+  { value: 'custom', label: 'Custom / generic' },
+  { value: 'local', label: 'Local deterministic' },
+  { value: 'den-router', label: 'Den Router' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'openai-compatible', label: 'OpenAI-compatible' },
+  { value: 'openrouter', label: 'OpenRouter' },
+  { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'moonshot', label: 'Moonshot' },
+];
+
+function isSupportedProviderKind(value: string): value is ModelProviderKind {
+  return PROVIDER_KIND_OPTIONS.some((option) => option.value === value);
+}
+
 const THINKING_MODES: readonly ChatCompletionsThinkingMode[] = [
   'provider_default',
   'enabled',
@@ -166,6 +185,7 @@ export class AdminProvidersPanelComponent {
 
   protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
   protected readonly responsesDialectOptions = RESPONSES_DIALECT_OPTIONS;
+  protected readonly providerKindOptions = PROVIDER_KIND_OPTIONS;
   protected readonly chatCompletionsDialects = CHAT_COMPLETIONS_DIALECTS;
   protected readonly promptCachingOptions = PROMPT_CACHING_OPTIONS;
   protected readonly thinkingModes = THINKING_MODES;
@@ -177,11 +197,12 @@ export class AdminProvidersPanelComponent {
   protected readonly oauthCallbackReady = computed(
     () => this.form().oauthCallbackUrl.trim() !== '',
   );
-  protected readonly compatibleCredentials = computed(() => {
+  protected readonly providerKindSupported = computed(() =>
+    isSupportedProviderKind(this.form().providerKind),
+  );
+  protected readonly availableCredentials = computed(() => {
     const form = this.form();
-    const providerKind = form.providerKind.trim() || 'custom';
     return this.admin.serviceCredentials().filter((credential) => {
-      if (credential.providerKind !== providerKind) return false;
       return !(
         credential.credentialKind === 'openai_oauth' &&
         form.protocol !== 'responses'
@@ -254,6 +275,7 @@ export class AdminProvidersPanelComponent {
   protected readonly saveDisabled = computed(() => {
     const form = this.form();
     if (this.admin.saving()) return true;
+    if (!this.providerKindSupported()) return true;
     // Create requires an alias and model id; edit uses the path alias.
     if (this.editingAlias() === null && form.alias.trim() === '') return true;
     if (form.modelId.trim() === '') return true;
@@ -279,6 +301,7 @@ export class AdminProvidersPanelComponent {
     field: Exclude<
       keyof ProviderFormState,
       | 'protocol'
+      | 'providerKind'
       | 'status'
       | 'credentialMode'
       | 'responsesDialect'
@@ -373,6 +396,16 @@ export class AdminProvidersPanelComponent {
         responsesDialect: '',
         promptCaching: 'disabled',
       }));
+    }
+  }
+
+  protected updateProviderKind(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    const providerKind = PROVIDER_KIND_OPTIONS.find(
+      (option) => option.value === value,
+    )?.value;
+    if (providerKind !== undefined) {
+      this.form.update((current) => ({ ...current, providerKind }));
     }
   }
 
@@ -608,7 +641,7 @@ export class AdminProvidersPanelComponent {
         credentialId,
         displayName:
           form.credentialDisplayName.trim() || form.displayName.trim() || alias,
-        providerKind: form.providerKind.trim() || 'custom',
+        providerKind: form.providerKind,
         credentialKind:
           form.credentialMode === 'create_openai_oauth'
             ? 'openai_oauth'
@@ -790,11 +823,16 @@ export class AdminProvidersPanelComponent {
 }
 
 function buildWriteRequest(form: ProviderFormState): ModelProviderWriteRequest {
+  if (!isSupportedProviderKind(form.providerKind)) {
+    throw new Error(
+      `unsupported legacy provider kind ${form.providerKind}; select a supported value`,
+    );
+  }
   const request: ModelProviderWriteRequest = {
     protocol: form.protocol,
     modelId: form.modelId.trim(),
     status: form.status,
-    providerKind: form.providerKind.trim() || 'custom',
+    providerKind: form.providerKind,
     ...optionalStringField('alias', form.alias),
     ...optionalStringField('displayName', form.displayName),
     ...optionalStringField('description', form.description),

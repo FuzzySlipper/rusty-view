@@ -475,6 +475,101 @@ describe('AdminProvidersPanelComponent', () => {
     expect(text).not.toContain('secretRef');
   });
 
+  it('offers only the provider kinds defined by the Crew admin contract', async () => {
+    const fixture = await createPanel([]);
+    const selector = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="provider-kind-selector"]',
+    ) as HTMLSelectElement | null;
+
+    expect(selector).not.toBeNull();
+    expect(
+      Array.from(selector?.options ?? []).map((option) => option.value),
+    ).toEqual([
+      'custom',
+      'local',
+      'den-router',
+      'openai',
+      'openai-compatible',
+      'openrouter',
+      'deepseek',
+      'moonshot',
+    ]);
+    expect(textContent(fixture)).toContain(
+      'Protocol and dialect define the wire behavior',
+    );
+  });
+
+  it('requires legacy free-form provider kinds to be explicitly reclassified', async () => {
+    const legacyProvider: ModelProviderRecord = {
+      ...makeProvider('legacy-provider-kind'),
+      providerKind: 'local-certification',
+    };
+    const fixture = await createPanel([legacyProvider]);
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      providerKindSupported(): boolean;
+      saveDisabled(): boolean;
+      updateProviderKind(event: { target: { value: string } }): void;
+    };
+
+    component.selectProviderForEdit(legacyProvider);
+    fixture.detectChanges();
+
+    expect(component.providerKindSupported()).toBe(false);
+    expect(component.saveDisabled()).toBe(true);
+    expect(textContent(fixture)).toContain(
+      'Unsupported legacy value: local-certification',
+    );
+
+    component.updateProviderKind({ target: { value: 'custom' } });
+    fixture.detectChanges();
+
+    expect(component.providerKindSupported()).toBe(true);
+    expect(textContent(fixture)).not.toContain('Unsupported legacy value');
+  });
+
+  it('reuses API keys across provider kinds and only protocol-filters OAuth', async () => {
+    const customApiKey: ServiceCredentialRecord = {
+      ...makeCredential('custom:key'),
+      providerKind: 'custom',
+      credentialKind: 'api_key',
+      credential: { hasSecret: true, kind: 'api_key', status: 'configured' },
+    };
+    const deepseekApiKey: ServiceCredentialRecord = {
+      ...makeCredential('deepseek:key'),
+      providerKind: 'deepseek',
+      credentialKind: 'api_key',
+      credential: { hasSecret: true, kind: 'api_key', status: 'configured' },
+    };
+    const oauth = makeCredential('openai:oauth');
+    const fixture = await createPanel([], false, [
+      customApiKey,
+      deepseekApiKey,
+      oauth,
+    ]);
+    const component = fixture.componentInstance as unknown as {
+      updateProtocol(event: { target: { value: string } }): void;
+    };
+    const optionValues = () =>
+      Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '[data-testid="provider-credential-selector"] option',
+        ),
+      ).map((option) => (option as HTMLOptionElement).value);
+
+    expect(optionValues()).toContain('reuse:custom:key');
+    expect(optionValues()).toContain('reuse:deepseek:key');
+    expect(optionValues()).not.toContain('reuse:openai:oauth');
+
+    component.updateProtocol({ target: { value: 'responses' } });
+    fixture.detectChanges();
+
+    expect(optionValues()).toContain('reuse:openai:oauth');
+    expect(textContent(fixture)).toContain(
+      'API-key credentials are reusable across every provider kind',
+    );
+  });
+
   it('renders a credential-less provider as unconfigured and edits it without assuming API key', async () => {
     const provider: ModelProviderRecord = {
       ...makeProvider('openai-missing'),
@@ -1108,9 +1203,10 @@ describe('AdminProvidersPanelComponent', () => {
     const component = fixture.componentInstance as unknown as {
       form(): { promptCaching: string };
       updateText(
-        field: 'alias' | 'modelId' | 'providerKind',
+        field: 'alias' | 'modelId',
         event: { target: { value: string } },
       ): void;
+      updateProviderKind(event: { target: { value: string } }): void;
       updatePromptCaching(event: { target: { value: string } }): void;
       saveProvider(): Promise<void>;
     };
@@ -1120,7 +1216,7 @@ describe('AdminProvidersPanelComponent', () => {
     component.updateText('modelId', {
       target: { value: 'anthropic/claude-sonnet' },
     });
-    component.updateText('providerKind', { target: { value: 'openrouter' } });
+    component.updateProviderKind({ target: { value: 'openrouter' } });
 
     for (const promptCaching of ['disabled', 'automatic_5m', 'automatic_1h']) {
       component.updatePromptCaching({ target: { value: promptCaching } });

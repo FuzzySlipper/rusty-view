@@ -16,6 +16,7 @@ import type {
   MemorySurfaceCatalogItem,
   MemorySurfaceCatalogProjection,
   MemorySurfaceOwner,
+  ModelProviderKind,
   ProviderAdminModelProviderRecord,
   ProviderAdminModelProviderWrite,
   ResponsesProviderDialect,
@@ -44,6 +45,7 @@ export type {
   MemorySurfaceCatalogItem,
   MemorySurfaceCatalogProjection,
   MemorySurfaceOwner,
+  ModelProviderKind,
   RuntimeActivityCensus,
   RuntimeActivityCensusSummary,
   RuntimeActivityFinding,
@@ -1484,6 +1486,7 @@ export interface ModelProviderRecord {
   readonly alias: string;
   readonly status: ModelProviderStatus;
   readonly protocol: ModelProviderProtocol;
+  /** Existing services may return legacy free-form values; writes are closed. */
   readonly providerKind: string;
   readonly displayName?: string;
   readonly description?: string;
@@ -1528,7 +1531,7 @@ export interface ModelProviderWriteRequest {
   readonly alias?: string;
   readonly status?: ModelProviderStatus;
   readonly protocol: ModelProviderProtocol;
-  readonly providerKind?: string;
+  readonly providerKind?: ModelProviderKind;
   readonly displayName?: string;
   readonly description?: string;
   readonly baseUrl?: string;

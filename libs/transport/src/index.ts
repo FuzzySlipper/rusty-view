@@ -93,6 +93,7 @@ export type {
   ModelProviderCredentialKind,
   ModelProviderCredentialSecretInput,
   ModelProviderCredentialStatus,
+  ModelProviderKind,
   ModelProviderCredentialLinkRequest,
   ModelProviderCredentialLinkResponse,
   ModelProviderCredentialUnlinkRequest,

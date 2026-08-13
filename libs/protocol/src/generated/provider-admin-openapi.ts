@@ -341,6 +341,11 @@ export interface components {
         /** @enum {string} */
         ModelProviderProtocol: "responses" | "chat_completions";
         /**
+         * @description Explicit provider classification. Protocol and dialect fields own wire behavior; openai enables the OpenAI OAuth provider flow and openrouter enables guarded Anthropic prompt caching.
+         * @enum {string}
+         */
+        ModelProviderKind: "custom" | "local" | "den-router" | "openai" | "openai-compatible" | "openrouter" | "deepseek" | "moonshot";
+        /**
          * @description Required when protocol is responses. Selects an explicit provider-owned wire dialect; Crew does not infer it from aliases, URLs, model IDs, or providerKind.
          * @enum {string}
          */
@@ -373,7 +378,7 @@ export interface components {
             alias: string;
             status: components["schemas"]["ModelProviderStatus"];
             protocol: components["schemas"]["ModelProviderProtocol"];
-            providerKind: string;
+            providerKind: components["schemas"]["ModelProviderKind"];
             displayName?: string;
             description?: string;
             baseUrl?: string;
@@ -411,7 +416,7 @@ export interface components {
             status?: components["schemas"]["ModelProviderStatus"];
             protocol?: components["schemas"]["ModelProviderProtocol"];
             /** @default custom */
-            providerKind: string;
+            providerKind: components["schemas"]["ModelProviderKind"];
             displayName?: string;
             description?: string;
             baseUrl?: string;

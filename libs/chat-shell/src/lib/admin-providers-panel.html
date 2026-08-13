@@ -103,12 +103,30 @@
       }
       <label>
         <span>Provider Kind</span>
-        <input
-          type="text"
+        <select
+          data-testid="provider-kind-selector"
           [value]="form().providerKind"
-          (input)="updateText('providerKind', $event)"
-          autocomplete="off"
-        />
+          (change)="updateProviderKind($event)"
+        >
+          @if (!providerKindSupported()) {
+          <option [value]="form().providerKind" disabled>
+            Unsupported legacy value: {{ form().providerKind }}
+          </option>
+          } @for (option of providerKindOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+        <small>
+          Classification only; Protocol and dialect define the wire behavior.
+          OpenAI enables its OAuth flow, while OpenRouter enables guarded
+          Anthropic prompt caching.
+        </small>
+        @if (!providerKindSupported()) {
+        <small class="rv-admin-providers__warning">
+          This older free-form value cannot be saved. Choose a supported
+          classification first.
+        </small>
+        }
       </label>
       <label>
         <span>Base URL</span>
@@ -314,13 +332,17 @@
           <option value="create_openai_oauth">
             Create OpenAI OAuth credential
           </option>
-          @for (credential of compatibleCredentials(); track
+          @for (credential of availableCredentials(); track
           credential.credentialId) {
           <option [value]="'reuse:' + credential.credentialId">
             Reuse {{ credential.displayName }} ({{ credential.credentialId }})
           </option>
           }
         </select>
+        <small>
+          API-key credentials are reusable across every provider kind. OpenAI
+          OAuth credentials require the Responses protocol.
+        </small>
       </label>
       @if (form().credentialMode === 'create_api_key' || form().credentialMode
       === 'create_openai_oauth') {

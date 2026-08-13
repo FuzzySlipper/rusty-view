@@ -1,11 +1,10 @@
 # Rusty View Local Bootstrap
 
 Project-specific live guidance and task management live in Den project
-`rusty-crew` under the `rusty-view` tag.
+`rusty-view`.
 
-Use project ID `rusty-crew` with tag filter `rusty-view` for Den tasks,
-messages, documents, librarian queries, and guidance lookups related to
-this frontend.
+Use project ID `rusty-view` for Den tasks, messages, documents, librarian
+queries, and guidance lookups related to this frontend.
 
 ## Live-test service hygiene
 
