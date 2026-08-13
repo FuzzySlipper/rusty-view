@@ -143,11 +143,26 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
     const { fixture } = setup();
     const root = fixture.nativeElement as HTMLElement;
     expect(
+      root.querySelector('.rv-admin-providers__title')?.textContent?.trim(),
+    ).toBe('Model Providers');
+    expect(
+      root
+        .querySelector('.rv-admin-providers__close')
+        ?.getAttribute('aria-label'),
+    ).toBe('Close model providers panel');
+    expect(
       root.querySelector('[data-testid="model-endpoint-editor"]'),
     ).not.toBeNull();
     expect(
       root.querySelector('[data-testid="model-configuration-editor"]'),
     ).not.toBeNull();
+    expect(
+      Array.from(root.querySelectorAll('h2')).map((heading) =>
+        heading.textContent?.trim(),
+      ),
+    ).toEqual(
+      expect.arrayContaining(['Model Endpoints', 'Model Configurations']),
+    );
     const legacy = root.querySelector('[data-testid="legacy-model-providers"]');
     expect(legacy?.textContent).toContain(
       'Legacy Joined Providers (read-only)',

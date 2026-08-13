@@ -1825,7 +1825,7 @@ function providerCredentialErrorMessage(
     case 'service_credential_revision_mismatch':
       return 'This shared credential changed elsewhere. Its current redacted state has been reloaded; review it and try again.';
     case 'service_credential_not_found':
-      return 'This shared credential no longer exists. Refresh the provider panel and choose another credential.';
+      return 'This shared credential no longer exists. Refresh the Model Providers panel and choose another credential.';
     case 'invalid_service_credential':
       return 'Crew rejected the shared credential configuration. Check its ID, provider kind, and credential kind.';
     case 'model_provider_credential_incompatible':
@@ -1918,7 +1918,7 @@ async function loadMemorySurfaces(transport: ChatTransport): Promise<{
 
 /**
  * Load model providers, capturing any failure as a provider-specific error so
- * the Providers panel can distinguish a broken registry from an empty one.
+ * the Model Providers panel can distinguish a broken registry from an empty one.
  */
 async function loadModelEndpoints(transport: ChatTransport): Promise<{
   page: ModelEndpointListPage | null;

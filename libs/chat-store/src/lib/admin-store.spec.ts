@@ -1587,6 +1587,27 @@ describe('AdminStore behavior', () => {
     );
   });
 
+  it('names the Model Providers panel in missing-credential guidance', async () => {
+    const transport = createTransport({
+      deleteAdminServiceCredential: vi.fn(async () => {
+        throw apiError(
+          'service_credential_not_found',
+          'credential no longer exists',
+        );
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.deleteServiceCredential(serviceCredential('openai:missing'));
+
+    expect(store.error()).toContain(
+      'This shared credential no longer exists. Refresh the Model Providers panel and choose another credential.',
+    );
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'service_credential_not_found',
+    );
+  });
+
   it('reloads a stale credential revision so the next link attempt can succeed', async () => {
     let backendCredentialRevision = 1;
     const currentCredential = (): ServiceCredentialRecord => ({

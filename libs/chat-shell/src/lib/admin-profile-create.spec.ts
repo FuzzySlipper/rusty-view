@@ -110,6 +110,9 @@ describe('AdminProfileCreateComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain(
       'gpt-default · Default endpoint (config-default)',
     );
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Manage both in the Model Providers panel.',
+    );
     component.updateText('profileId', { target: { value: 'model-prime' } });
     component.updateText('modelConfigId', {
       target: { value: 'config-default' },
