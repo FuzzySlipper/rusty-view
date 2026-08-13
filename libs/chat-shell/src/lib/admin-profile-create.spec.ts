@@ -51,7 +51,7 @@ interface CreateComponentApi {
       | 'sessionId'
       | 'implementationId'
       | 'workspaceCwd'
-      | 'providerAlias'
+      | 'modelConfigId'
       | 'soulMarkdown',
     event: { target: { value: string } },
   ): void;
@@ -99,6 +99,28 @@ describe('AdminProfileCreateComponent', () => {
     expect(request.workspaceCwd).toBe('/home/dev');
     expect(request).not.toHaveProperty('modelConfig');
     expect(request).not.toHaveProperty('kind');
+  });
+
+  it('creates a profile with a normalized model configuration selection', async () => {
+    const fixture = await createWindow();
+    const transport = transportSpy();
+    const component =
+      fixture.componentInstance as unknown as CreateComponentApi;
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'gpt-default · Default endpoint (config-default)',
+    );
+    component.updateText('profileId', { target: { value: 'model-prime' } });
+    component.updateText('modelConfigId', {
+      target: { value: 'config-default' },
+    });
+    fixture.detectChanges();
+    component.createProfile();
+    await fixture.whenStable();
+
+    const request = lastCreateRequest(transport.createAdminProfile);
+    expect(request.modelConfigId).toBe('config-default');
+    expect(request).not.toHaveProperty('providerAlias');
   });
 
   it('requires an explicit initial workspace for the default full session', async () => {

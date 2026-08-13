@@ -2819,8 +2819,10 @@ export interface components {
             activityId: string;
             agentId?: string | null;
             debugDetailId?: string | null;
+            endpointId?: string | null;
             kind: components["schemas"]["RuntimeActivityKind"];
             model?: string | null;
+            modelConfigId?: string | null;
             owner: components["schemas"]["RuntimeActivityOwner"];
             parentActivityId?: string | null;
             phase: string;
@@ -2907,9 +2909,11 @@ export interface components {
             activityId: string;
             agentId?: string | null;
             debugDetailId?: string | null;
+            endpointId?: string | null;
             kind: components["schemas"]["RuntimeActivityKind"];
             lastProgressAt: string;
             model?: string | null;
+            modelConfigId?: string | null;
             owner: components["schemas"]["RuntimeActivityOwner"];
             parentActivityId?: string | null;
             phase: string;

@@ -56,9 +56,13 @@
         } @if (providerDetail(); as detail) {
         <div class="rv-debug-panel__meta">
           <span>brain</span><strong>{{ detail.provider.brain_module }}</strong>
-          <span>provider</span
-          ><strong>{{ detail.provider.provider_alias ?? '-' }}</strong>
+          <span>model configuration</span
+          ><strong>{{ detail.provider.model_config_id ?? '-' }}</strong>
           <span>model</span><strong>{{ detail.provider.model ?? '-' }}</strong>
+          <span>endpoint</span
+          ><strong>{{ detail.provider.endpoint_id ?? '-' }}</strong>
+          <span>legacy provider_alias</span
+          ><strong>{{ detail.provider.provider_alias ?? '-' }}</strong>
           <span>protocol</span
           ><strong>{{ detail.provider.protocol ?? '-' }}</strong>
           <span>wake</span><strong>{{ detail.wake_id }}</strong>

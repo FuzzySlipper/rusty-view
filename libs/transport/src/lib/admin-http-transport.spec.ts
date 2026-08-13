@@ -1301,7 +1301,7 @@ describe('AdminHttpTransport', () => {
       next: { profileId: 'rt-prime', revision: 6 },
       nextWrite: {},
       runtimeConfig: {
-        providerAlias: 'default',
+        modelConfigId: 'config-default',
         externalMessageDeliveryPolicy: 'immediate_steer',
         localToolProfileId: 'planner-tools',
         mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
@@ -1323,19 +1323,19 @@ describe('AdminHttpTransport', () => {
     const plan = await transport.planProfileRegistryRuntimeConfig('rt-prime', {
       expectedRevision: 5,
       externalMessageDeliveryPolicy: 'immediate_steer',
-      providerAlias: 'default',
+      modelConfigId: 'config-default',
       localToolProfileId: 'planner-tools',
       mcpBindings: [{ serverId: 'den', toolProfileKey: 'den-key' }],
     });
 
     expect(plan.implications.runtimeRebuildRecommended).toBe(true);
-    expect(plan.runtimeConfig.providerAlias).toBe('default');
+    expect(plan.runtimeConfig.modelConfigId).toBe('config-default');
     const req = lastRequest();
     expect(req.method).toBe('POST');
     expect(req.url).toContain(
       '/v1/admin/profiles/registry/rt-prime/runtime-config/plan',
     );
-    expect(req.body).toContain('"providerAlias":"default"');
+    expect(req.body).toContain('"modelConfigId":"config-default"');
     expect(req.body).toContain('"localToolProfileId":"planner-tools"');
     expect(req.body).toContain('"serverId":"den"');
   });
@@ -1350,7 +1350,7 @@ describe('AdminHttpTransport', () => {
       next: { profileId: 'rt-prime', revision: 6 },
       nextWrite: {},
       runtimeConfig: {
-        providerAlias: 'default',
+        modelConfigId: 'config-default',
         externalMessageDeliveryPolicy: 'immediate_steer',
         mcpBindings: [],
       },

@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "modelConfigId": "config-recorded",
+        "endpointId": "endpoint-recorded",
+        "status": "active",
+        "displayName": "Recorded model",
+        "modelId": "gpt-recorded",
+        "reasoningHistory": "provider_default",
+        "thinkingMode": "provider_default",
+        "promptCachingPolicy": "disabled",
+        "capabilities": { "version": 1, "imageInput": false },
+        "metadataJson": {},
+        "revision": 3,
+        "createdAt": "2026-08-13T00:00:00Z",
+        "updatedAt": "2026-08-13T00:00:00Z"
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0
+  }
+}

@@ -776,6 +776,9 @@ export interface components {
             profile_id: string;
             provider: {
                 alias: string;
+                model_config_id?: string;
+                endpoint_id?: string;
+                provider_alias?: string;
                 /** @enum {string} */
                 status: "active" | "disabled" | "archived" | "missing" | "unknown";
                 /** @enum {string} */
@@ -1012,6 +1015,8 @@ export interface components {
             wake_id: string;
             provider: {
                 brain_module: string;
+                model_config_id?: string;
+                endpoint_id?: string;
                 provider_alias?: string;
                 model?: string;
                 protocol?: string;

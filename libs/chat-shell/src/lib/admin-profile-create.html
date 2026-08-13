@@ -69,21 +69,23 @@
           required for a full session and is not stored as a profile cwd.
         </p>
         <label>
-          <span>Provider alias</span>
+          <span>Model configuration</span>
           <select
-            [value]="form().providerAlias"
-            (change)="updateText('providerAlias', $event)"
+            [value]="form().modelConfigId"
+            (change)="updateText('modelConfigId', $event)"
           >
             <option value="">backend default</option>
-            @for (provider of admin.providerAliases(); track provider.alias) {
-            <option [value]="provider.alias">{{ provider.alias }}</option>
+            @for (configuration of admin.modelConfigurations(); track
+            configuration.modelConfigId) {
+            <option [value]="configuration.modelConfigId">
+              {{ modelConfigurationLabel(configuration) }}
+            </option>
             }
           </select>
         </label>
         <p class="rv-admin-profiles__hint">
-          Model/provider config is owned by the selected provider alias (manage
-          aliases in the Providers panel). Inline model overrides are not
-          honored by the create route.
+          Selects one model and shows the separate endpoint identity used for
+          transport and authentication. Manage both in the Models panel.
         </p>
       </div>
 

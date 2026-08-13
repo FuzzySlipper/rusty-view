@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "endpointId": "endpoint-recorded",
+        "status": "active",
+        "displayName": "Recorded endpoint",
+        "baseUrl": "https://api.recorded.test/v1",
+        "protocol": "responses",
+        "wireDialect": "openai_stateful",
+        "authScheme": "none",
+        "promptCacheTransport": "none",
+        "metadataJson": {},
+        "revision": 2,
+        "createdAt": "2026-08-13T00:00:00Z",
+        "updatedAt": "2026-08-13T00:00:00Z"
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0
+  }
+}

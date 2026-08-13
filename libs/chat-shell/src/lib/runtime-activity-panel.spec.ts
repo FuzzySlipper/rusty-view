@@ -23,7 +23,11 @@ describe('RuntimeActivityPanelComponent', () => {
     expect(host.textContent).toContain('Showing the last successful snapshot');
     expect(host.textContent).toContain('Dispatch');
     expect(host.textContent).toContain('Unknown activity (future_activity)');
-    expect(host.querySelectorAll('tbody tr')).toHaveLength(3);
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(4);
+    expect(host.textContent).toContain('model configuration config-gpt-test');
+    expect(host.textContent).toContain('model gpt-test');
+    expect(host.textContent).toContain('endpoint endpoint-openai');
+    expect(host.textContent).toContain('legacy provider alias old-main');
 
     for (const code of [
       'session_projection_mismatch',
@@ -195,6 +199,16 @@ function activityCensus(): RuntimeActivityCensus {
     serviceInstanceId: 'service-test',
     active: [
       activity('dispatch:1', 'dispatch'),
+      {
+        ...activity('provider:1', 'provider_request', 'dispatch:1'),
+        activity: {
+          ...activity('provider:1', 'provider_request', 'dispatch:1').activity,
+          modelConfigId: 'config-gpt-test',
+          endpointId: 'endpoint-openai',
+          model: 'gpt-test',
+          providerAlias: 'old-main',
+        },
+      },
       activity('future:1', 'future_activity', 'dispatch:1'),
     ],
     recentlyAbnormal: [
@@ -214,7 +228,7 @@ function activityCensus(): RuntimeActivityCensus {
       message: `finding ${code}`,
     })),
     summary: {
-      active: 2,
+      active: 3,
       recentlyAbnormal: 1,
       findings: findingCodes.length,
       untrackedProcesses: 1,

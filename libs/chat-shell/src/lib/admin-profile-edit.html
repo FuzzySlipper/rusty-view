@@ -516,30 +516,38 @@
     </section>
     } @else if (section() === 'runtime') {
     <section class="rv-admin-profiles__section">
-      <h2>Provider &amp; Tools</h2>
+      <h2>Model &amp; Tools</h2>
       <p class="rv-admin-profiles__hint">
-        Change the model provider, built-in tools, and MCP bindings for this
-        profile. Applying rebuilds the runtime without creating a new session.
-        Uses revision {{ record.revision ?? 0 }} for concurrency.
+        Change the model configuration, built-in tools, and MCP bindings for
+        this profile. Applying rebuilds the runtime without creating a new
+        session. Uses revision {{ record.revision ?? 0 }} for concurrency.
       </p>
 
       <label>
-        <span>Provider alias</span>
+        <span>Model configuration</span>
         <select
-          [value]="runtimeProviderAlias()"
-          (change)="updateRuntimeProviderAlias($event)"
+          [value]="runtimeModelConfigId()"
+          (change)="updateRuntimeModelConfigId($event)"
         >
           <option value="">keep current</option>
-          @for (alias of providerAliases(); track alias) {
-          <option [value]="alias">{{ alias }}</option>
+          @for (configuration of modelConfigurations(); track
+          configuration.modelConfigId) {
+          <option [value]="configuration.modelConfigId">
+            {{ modelConfigurationLabel(configuration) }}
+          </option>
           }
         </select>
       </label>
       <p class="rv-admin-profiles__hint">
-        Selecting a provider alias points the profile at that configured
-        provider (manage aliases in the Providers panel). "keep current" leaves
-        the existing provider/model untouched.
+        Each option identifies the model and its separate endpoint. "keep
+        current" leaves the existing model configuration untouched.
       </p>
+      @if (record.providerAlias) {
+      <p class="rv-admin-profiles__hint">
+        Legacy <code>provider_alias</code> compatibility readback:
+        <code>{{ record.providerAlias }}</code>
+      </p>
+      }
 
       <div class="rv-admin-profiles__delivery-policy">
         <span class="rv-admin-profiles__group-label"

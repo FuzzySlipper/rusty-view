@@ -97,7 +97,7 @@ interface LiveProfileIsolation {
   readonly enabled: boolean;
   readonly sourceProfile: string;
   readonly profilePrefix?: string;
-  providerAlias?: string;
+  modelConfigId?: string;
   localToolProfileId?: string;
   createRequest?: LiveProfileCreateRequest;
   createdAtMs?: number;
@@ -125,7 +125,7 @@ export interface LiveProfileIsolationPrefixInput {
 export interface LiveProfileCreateRequest {
   readonly profileId: string;
   readonly displayName: string;
-  readonly providerAlias: string;
+  readonly modelConfigId: string;
   readonly kind: 'full';
   readonly localToolProfileId: string;
   readonly reason: string;
@@ -300,9 +300,10 @@ export class LiveConversation {
         enabled: true,
         sourceProfile: this.sourceProfile,
         profilePrefix,
-        providerAlias:
-          env('RV_LIVE_PROVIDER_ALIAS') ??
-          env('RV_LIVE_PROFILE_PROVIDER_ALIAS'),
+        modelConfigId:
+          env('RV_LIVE_MODEL_CONFIG_ID') ??
+          env('RV_LIVE_PROFILE_MODEL_CONFIG_ID') ??
+          env('RV_LIVE_PROVIDER_ALIAS'),
         localToolProfileId: env('RV_LIVE_LOCAL_TOOL_PROFILE_ID'),
       };
     } else {
@@ -1147,17 +1148,17 @@ export class LiveConversation {
     const request = liveProfileCreateRequest({
       profileId: this.targetProfile,
       displayName: `Live ${this.testInfo.title}`,
-      providerAlias: defaults.providerAlias,
+      modelConfigId: defaults.modelConfigId,
       localToolProfileId: defaults.localToolProfileId,
       reason: `rusty-view live test isolation for ${this.testInfo.title}`,
     });
-    this.profileIsolation.providerAlias = defaults.providerAlias;
+    this.profileIsolation.modelConfigId = defaults.modelConfigId;
     this.profileIsolation.localToolProfileId = defaults.localToolProfileId;
     this.profileIsolation.createRequest = request;
 
     this.recordTimeline('profile:create:start', {
       profileId: request.profileId,
-      providerAlias: request.providerAlias,
+      modelConfigId: request.modelConfigId,
       localToolProfileId: request.localToolProfileId,
     });
     const response = await fetch(
@@ -1202,7 +1203,7 @@ export class LiveConversation {
       sessionId,
     });
     this.note(
-      `Created isolated live profile ${request.profileId} using provider ${request.providerAlias} and local tool profile ${request.localToolProfileId}.`,
+      `Created isolated live profile ${request.profileId} using model configuration ${request.modelConfigId} and local tool profile ${request.localToolProfileId}.`,
     );
   }
 
@@ -1235,15 +1236,15 @@ export class LiveConversation {
   }
 
   private async resolveLiveProfileDefaults(): Promise<{
-    readonly providerAlias: string;
+    readonly modelConfigId: string;
     readonly localToolProfileId: string;
   }> {
     if (
-      this.profileIsolation.providerAlias !== undefined &&
+      this.profileIsolation.modelConfigId !== undefined &&
       this.profileIsolation.localToolProfileId !== undefined
     ) {
       return {
-        providerAlias: this.profileIsolation.providerAlias,
+        modelConfigId: this.profileIsolation.modelConfigId,
         localToolProfileId: this.profileIsolation.localToolProfileId,
       };
     }
@@ -1256,32 +1257,35 @@ export class LiveConversation {
       const data = adminControlPayload(context);
       const provider = recordValue(data, 'provider');
       const tools = recordValue(data, 'tools');
-      const providerAlias =
-        this.profileIsolation.providerAlias ?? stringValue(provider, 'alias');
+      const modelConfigId =
+        this.profileIsolation.modelConfigId ??
+        stringValue(provider, 'model_config_id') ??
+        stringValue(provider, 'modelConfigId') ??
+        stringValue(provider, 'alias');
       const localToolProfileId =
         this.profileIsolation.localToolProfileId ??
         stringValue(tools, 'local_tool_profile_id') ??
         stringValue(tools, 'localToolProfileId');
-      if (providerAlias !== undefined && localToolProfileId !== undefined) {
+      if (modelConfigId !== undefined && localToolProfileId !== undefined) {
         this.recordTimeline('profile:create:defaults-derived', {
           sourceProfile: this.sourceProfile,
           sessionId,
-          providerAlias,
+          modelConfigId,
           localToolProfileId,
         });
-        return { providerAlias, localToolProfileId };
+        return { modelConfigId, localToolProfileId };
       }
     }
 
-    const providerAlias = this.profileIsolation.providerAlias ?? 'default';
+    const modelConfigId = this.profileIsolation.modelConfigId ?? 'default';
     const localToolProfileId =
       this.profileIsolation.localToolProfileId ?? 'full_agent';
     this.recordTimeline('profile:create:defaults-fallback', {
       sourceProfile: this.sourceProfile,
-      providerAlias,
+      modelConfigId,
       localToolProfileId,
     });
-    return { providerAlias, localToolProfileId };
+    return { modelConfigId, localToolProfileId };
   }
 
   private async sourceProfileSessionId(): Promise<string | undefined> {
@@ -1561,14 +1565,14 @@ export function liveProfileIsolationPrefix(
 export function liveProfileCreateRequest(input: {
   readonly profileId: string;
   readonly displayName: string;
-  readonly providerAlias: string;
+  readonly modelConfigId: string;
   readonly localToolProfileId: string;
   readonly reason: string;
 }): LiveProfileCreateRequest {
   return {
     profileId: input.profileId,
     displayName: input.displayName.slice(0, 120),
-    providerAlias: input.providerAlias,
+    modelConfigId: input.modelConfigId,
     kind: 'full',
     localToolProfileId: input.localToolProfileId,
     reason: input.reason,

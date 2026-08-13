@@ -263,7 +263,11 @@
           >Status: {{ store.activeSessionDisplayStatus() ?? 'idle' }}</span
         >
         @if (store.contextUsage(); as context) {
-        <span>Provider: {{ context.provider.alias }}</span>
+        <span
+          >Model config: {{ context.provider.model_config_id ??
+          context.provider.alias }}</span
+        >
+        <span>Endpoint: {{ context.provider.endpoint_id ?? 'unknown' }}</span>
         } @if (store.activeLogicalTurn(); as turn) {
         <span data-testid="logical-turn-status"
           >Turn: {{ turn.operatorState }} · continuation {{

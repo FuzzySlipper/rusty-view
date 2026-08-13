@@ -17,6 +17,9 @@ function usageFixture(
     profile_id: 'prof_1',
     provider: {
       alias: 'main',
+      model_config_id: 'config-gpt-x',
+      endpoint_id: 'endpoint-openai',
+      provider_alias: 'legacy-main',
       status: 'active',
       model_id: 'gpt-x',
       chat_completions_dialect: 'qwen',
@@ -100,6 +103,10 @@ describe('ContextDiagnosticsComponent', () => {
 
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('gpt-x');
+    expect(text).toContain('config-gpt-x');
+    expect(text).toContain('endpoint-openai');
+    expect(text).toContain('Legacy provider_alias (compatibility)');
+    expect(text).toContain('legacy-main');
     expect(text).toContain('sliding-window');
     expect(text).toContain('approximate');
     // Compaction thresholds come straight from the backend, not constants.

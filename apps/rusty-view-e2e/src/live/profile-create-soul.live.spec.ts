@@ -48,7 +48,7 @@ test.describe('profile create soul persistence @live-agent @profiles', () => {
       await createDialog.getByLabel('Display Name').fill(sessionLabel);
       await createDialog.getByLabel('Session kind').selectOption('full');
       await createDialog
-        .getByLabel('Provider alias')
+        .getByLabel('Model configuration')
         .selectOption('tester-chat');
       await createDialog.getByLabel('soul.md (optional)').fill(soulMarkdown);
       const createResponsePromise = page.waitForResponse(
@@ -65,7 +65,7 @@ test.describe('profile create soul persistence @live-agent @profiles', () => {
         profileId,
         displayName: sessionLabel,
         kind: 'full',
-        providerAlias: 'tester-chat',
+        modelConfigId: 'tester-chat',
         soulMarkdown,
       });
 

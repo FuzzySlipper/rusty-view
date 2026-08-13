@@ -67,6 +67,12 @@ function recordedFetch(): FetchImpl {
     if (path === '/v1/admin/model-providers') {
       return jsonFixtureResponse('admin-model-providers.json');
     }
+    if (path === '/v1/admin/model-endpoints') {
+      return jsonFixtureResponse('admin-model-endpoints.json');
+    }
+    if (path === '/v1/admin/model-configurations') {
+      return jsonFixtureResponse('admin-model-configurations.json');
+    }
 
     throw new Error(`Unhandled recorded fixture route: ${url.toString()}`);
   }) as FetchImpl;
@@ -126,6 +132,16 @@ describe('recorded Rusty Crew transport conformance fixtures', () => {
     const providers = await client.adminModelProviders({ limit: 100 });
     expect(providers.items[0]?.alias).toBe('cheap-tester');
     expect(providers.items[0]?.credential.hasSecret).toBe(false);
+
+    const endpoints = await client.adminModelEndpoints({ limit: 100 });
+    const configurations = await client.adminModelConfigurations({
+      limit: 100,
+    });
+    expect(configurations.items[0]).toMatchObject({
+      modelConfigId: 'config-recorded',
+      modelId: 'gpt-recorded',
+      endpointId: endpoints.items[0]?.endpointId,
+    });
   });
 
   it('preserves recorded error envelopes as ChatTransportError details', async () => {

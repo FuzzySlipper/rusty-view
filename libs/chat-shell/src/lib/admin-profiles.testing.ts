@@ -11,6 +11,8 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   MemorySurfaceCatalogProjection,
+  ModelConfigurationListPage,
+  ModelEndpointListPage,
   ProfileBrainRebuildRequest,
   ProfileBrainRebuildResult,
   ProfileDeleteRequest,
@@ -90,6 +92,8 @@ export interface TransportOptions {
   readonly contextStrategyCatalog?: ContextStrategyCatalog | null;
   readonly configValidation?: RuntimeConfigValidationReport | null;
   readonly memorySurfaces?: MemorySurfaceCatalogProjection | null;
+  readonly modelEndpoints?: ModelEndpointListPage;
+  readonly modelConfigurations?: ModelConfigurationListPage;
 }
 
 export function makeTransport(options: TransportOptions = {}): ChatTransport {
@@ -159,6 +163,50 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
       async (_id: string, body: unknown) => body as unknown,
     ),
     adminDeleteLocalToolProfile: recordingFn(async (_id: string) => undefined),
+    adminModelEndpoints: async () =>
+      options.modelEndpoints ?? {
+        items: [
+          {
+            endpointId: 'endpoint-default',
+            status: 'active',
+            displayName: 'Default endpoint',
+            baseUrl: 'https://api.example.test/v1',
+            protocol: 'responses',
+            wireDialect: 'openai_stateful',
+            authScheme: 'none',
+            promptCacheTransport: 'none',
+            metadataJson: {},
+            revision: 1,
+            createdAt: '2026-08-13T00:00:00Z',
+            updatedAt: '2026-08-13T00:00:00Z',
+          },
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
+    adminModelConfigurations: async () =>
+      options.modelConfigurations ?? {
+        items: [
+          {
+            modelConfigId: 'config-default',
+            endpointId: 'endpoint-default',
+            status: 'active',
+            modelId: 'gpt-default',
+            reasoningHistory: 'provider_default',
+            thinkingMode: 'provider_default',
+            promptCachingPolicy: 'disabled',
+            capabilities: { version: 1, imageInput: false },
+            metadataJson: {},
+            revision: 1,
+            createdAt: '2026-08-13T00:00:00Z',
+            updatedAt: '2026-08-13T00:00:00Z',
+          },
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      },
     adminModelProviders: async () => null,
     adminProfileExportPlan: async () =>
       options.exportPlan ?? {
@@ -504,7 +552,7 @@ function runtimeConfigPlan(
     next: { profileId: 'rt-prime', revision: 6 },
     nextWrite: {},
     runtimeConfig: {
-      providerAlias: 'default',
+      modelConfigId: request?.modelConfigId ?? 'config-default',
       externalMessageDeliveryPolicy:
         request?.externalMessageDeliveryPolicy ?? 'immediate_steer',
       localToolProfileId: 'planner-tools',

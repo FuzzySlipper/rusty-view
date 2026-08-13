@@ -29,6 +29,7 @@ import type {
   ContextStrategyDescriptor,
   ContextStrategyPolicy,
   CreateProfileMcpBinding,
+  ModelConfigurationRecord,
   ProfileBundleExportEntry,
   ProfileDeleteResult,
   ProfileRegistryFieldUpdateRequest,
@@ -183,8 +184,8 @@ export class AdminProfileEditComponent {
 
   // ---- runtime-config edit (provider / tools / MCP, #3742) ----------------
 
-  /** Selected provider alias; '' keeps the profile's current provider/model. */
-  protected readonly runtimeProviderAlias = signal<string>('');
+  /** Selected model configuration; '' keeps the profile's current model. */
+  protected readonly runtimeModelConfigId = signal<string>('');
   /** Policy used for new managed external bindings for this profile. */
   protected readonly runtimeExternalMessageDeliveryPolicy =
     signal<ExternalMessageDeliveryPolicy>('immediate_steer');
@@ -587,7 +588,7 @@ export class AdminProfileEditComponent {
 
   /** Seed the runtime-config form from the record's current provider/tools/MCP. */
   private seedRuntimeConfig(record: AdminProfileRegistryRecord): void {
-    this.runtimeProviderAlias.set(record.providerAlias ?? '');
+    this.runtimeModelConfigId.set(record.modelConfigId ?? '');
     this.runtimeExternalMessageDeliveryPolicy.set(
       record.externalMessageDeliveryPolicy ?? 'immediate_steer',
     );
@@ -651,13 +652,23 @@ export class AdminProfileEditComponent {
     this.runtimeContextDirty.set(false);
   }
 
-  /** Configured model provider aliases for the provider dropdown (#3534). */
-  protected providerAliases(): readonly string[] {
-    return this.admin.providerAliases().map((provider) => provider.alias);
+  protected modelConfigurations(): readonly ModelConfigurationRecord[] {
+    return this.admin.modelConfigurations();
   }
 
-  protected updateRuntimeProviderAlias(event: Event): void {
-    this.runtimeProviderAlias.set((event.target as HTMLSelectElement).value);
+  protected modelConfigurationLabel(
+    configuration: ModelConfigurationRecord,
+  ): string {
+    const endpoint = this.admin
+      .modelEndpoints()
+      .find((candidate) => candidate.endpointId === configuration.endpointId);
+    const endpointIdentity =
+      endpoint?.displayName?.trim() || configuration.endpointId;
+    return `${configuration.modelId} · ${endpointIdentity} (${configuration.modelConfigId})`;
+  }
+
+  protected updateRuntimeModelConfigId(event: Event): void {
+    this.runtimeModelConfigId.set((event.target as HTMLSelectElement).value);
   }
 
   protected updateRuntimeExternalMessageDeliveryPolicy(event: Event): void {
@@ -855,7 +866,7 @@ export class AdminProfileEditComponent {
     const request: {
       expectedRevision: number;
       externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
-      providerAlias?: string;
+      modelConfigId?: string;
       localToolProfileId?: string | null;
       toolPolicy?: {
         requestedToolsets: readonly string[];
@@ -869,10 +880,8 @@ export class AdminProfileEditComponent {
         this.runtimeExternalMessageDeliveryPolicy(),
     };
 
-    // Provider: only set an alias (never auto-clear to avoid wiping inline
-    // model config). Empty selection leaves the current provider untouched.
-    const alias = this.runtimeProviderAlias().trim();
-    if (alias !== '') request.providerAlias = alias;
+    const modelConfigId = this.runtimeModelConfigId().trim();
+    if (modelConfigId !== '') request.modelConfigId = modelConfigId;
 
     // Tools: a selected local tool profile wins; otherwise send inline tool
     // policy with localToolProfileId: null so Crew uses the inline selection.

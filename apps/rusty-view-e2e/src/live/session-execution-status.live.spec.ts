@@ -3,7 +3,10 @@ import type { APIRequestContext } from '@playwright/test';
 
 const live = process.env['RV_SESSION_EXECUTION_LIVE_RUN'] === '1';
 const backend = process.env['RV_LIVE_BACKEND_URL'] ?? 'http://127.0.0.1:9348';
-const provider = process.env['RV_LIVE_PROVIDER_ALIAS'] ?? 'tester-chat';
+const modelConfigId =
+  process.env['RV_LIVE_MODEL_CONFIG_ID'] ??
+  process.env['RV_LIVE_PROVIDER_ALIAS'] ??
+  'tester-chat';
 const workingPhase = /^(queued|active|waiting|paused|cancelling)$/;
 
 test.describe('native Crew session execution status @live-agent', () => {
@@ -126,7 +129,7 @@ async function createProfile(
     data: {
       profileId,
       displayName: `Rusty View status ${profileId}`,
-      providerAlias: provider,
+      modelConfigId,
       kind: 'full',
       localToolProfileId: 'full_coding_agent',
       reason: 'task-6421 native execution status live certification',

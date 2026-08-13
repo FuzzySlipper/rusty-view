@@ -3,7 +3,10 @@ import type { APIRequestContext, Page } from '@playwright/test';
 
 const live = process.env['RV_CREW_SESSION_LIVE_RUN'] === '1';
 const backend = process.env['RV_LIVE_BACKEND_URL'] ?? 'http://127.0.0.1:9348';
-const provider = process.env['RV_LIVE_PROVIDER_ALIAS'] ?? 'tester-chat';
+const modelConfigId =
+  process.env['RV_LIVE_MODEL_CONFIG_ID'] ??
+  process.env['RV_LIVE_PROVIDER_ALIAS'] ??
+  'tester-chat';
 const providerTurn =
   process.env['RV_CREW_SESSION_PROVIDER_TURN']?.trim() !== '0';
 const markerA = `CREW_SESSION_WORKSPACE_A_6695_${Date.now()}`;
@@ -330,7 +333,9 @@ async function createProfile(
   await profileDialog.getByLabel('Profile ID').fill(profileId);
   await profileDialog.getByLabel('Display Name').fill(displayName);
   await profileDialog.getByLabel('Session kind').selectOption('full');
-  await profileDialog.getByLabel('Provider alias').selectOption(provider);
+  await profileDialog
+    .getByLabel('Model configuration')
+    .selectOption(modelConfigId);
   const localToolProfile = profileDialog.getByLabel('Local tool profile');
   if ((await localToolProfile.count()) > 0) {
     const options = await localToolProfile.locator('option').count();

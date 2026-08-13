@@ -733,12 +733,9 @@ export interface CreateAdminProfileRequest {
    * (task #3648); retained only as an advanced/import compatibility affordance.
    */
   readonly mcpToolProfile?: string;
-  /**
-   * Reference to a reusable model provider alias (task #3534/#3538). Preferred
-   * over `modelConfig` for profiles that should reuse a configured provider.
-   * When set, the backend resolves model/provider config from the alias and
-   * omits inline `modelConfig` from the created profile.
-   */
+  /** Stable id of the model configuration selected for this profile. */
+  readonly modelConfigId?: string;
+  /** Compatibility-only legacy selection. New UI paths use `modelConfigId`. */
   readonly providerAlias?: string;
   /**
    * Optional DB-backed profile soul prompt. Omit to let the backend default or
@@ -1008,11 +1005,9 @@ export interface AdminProfileRegistryRecord {
   readonly sourceAssetStatuses: readonly AdminProfileRegistryAssetStatus[];
   readonly diagnostics: readonly RuntimeConfigDiagnostic[];
   readonly fallbackStatus: 'registry_authoritative' | 'file_backed_fallback';
-  /**
-   * Current model provider alias the profile references (task #3742), when it
-   * uses a configured provider alias rather than inline model config. Used to
-   * seed the Edit window's provider control.
-   */
+  /** Current normalized model configuration selected by the profile. */
+  readonly modelConfigId?: string;
+  /** Compatibility-only readback from profiles not yet normalized. */
   readonly providerAlias?: string;
   /**
    * Profile policy used when Crew creates a managed external binding. Existing
@@ -1203,7 +1198,8 @@ export interface ContextStrategyCatalog {
  *
  * Field semantics (per Crew contract):
  * - `expectedRevision` is required (optimistic concurrency).
- * - `providerAlias`: set to a configured alias; `null` clears; omit to keep.
+ * - `modelConfigId`: set to a configured model; omit to keep.
+ * - `providerAlias`: compatibility-only legacy input.
  * - `localToolProfileId`: when set it wins and supplies the effective tool
  *   policy; `null` clears the reference so inline `toolPolicy` applies; omit to
  *   keep current.
@@ -1219,6 +1215,7 @@ export interface ProfileRegistryRuntimeConfigRequest {
    * sends the effective value so omission cannot silently reset it.
    */
   readonly externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
+  readonly modelConfigId?: string;
   readonly providerAlias?: string | null;
   readonly localToolProfileId?: string | null;
   readonly toolPolicy?: CreateProfileToolPolicy;
@@ -1237,7 +1234,7 @@ export interface ProfileRegistryRuntimeConfigRequest {
  * change. Used for confirmation/preview.
  */
 export interface EditableProfileRuntimeConfig {
-  readonly providerAlias: string;
+  readonly modelConfigId: string;
   readonly externalMessageDeliveryPolicy: ExternalMessageDeliveryPolicy;
   readonly brain?: { readonly module?: string; readonly strategy?: string };
   readonly localToolProfileId?: string;

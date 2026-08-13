@@ -723,6 +723,8 @@ describe('ChatHttpTransport', () => {
         wake_id: 'wake_1',
         provider: {
           brain_module: 'openai-responses',
+          model_config_id: 'config-gpt-test',
+          endpoint_id: 'endpoint-openai',
           provider_alias: 'main',
           model: 'gpt-test',
           protocol: 'responses',

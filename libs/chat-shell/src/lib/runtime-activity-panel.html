@@ -191,7 +191,21 @@
             <span>{{ row.view.activity.phase }}</span>
             <span>{{ row.view.activity.status }}</span>
           </td>
-          <td>{{ detailSummary(row) }}</td>
+          <td>
+            <span>{{ detailSummary(row) }}</span>
+            @if (row.view.activity.kind === 'provider_request') {
+            <span
+              >model configuration {{ row.view.activity.modelConfigId ?? '-'
+              }}</span
+            >
+            <span>model {{ row.view.activity.model ?? '-' }}</span>
+            <span>endpoint {{ row.view.activity.endpointId ?? '-' }}</span>
+            @if (row.view.activity.providerAlias) {
+            <span
+              >legacy provider alias {{ row.view.activity.providerAlias }}</span
+            >
+            } }
+          </td>
           <td>
             <span>{{ durationLabel(row.view.elapsedMs) }} elapsed</span>
             <span

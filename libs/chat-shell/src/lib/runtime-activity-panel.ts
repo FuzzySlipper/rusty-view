@@ -141,9 +141,21 @@ export class RuntimeActivityPanelComponent {
     const activity = row.view.activity;
     if (activity.kind === 'provider_request') {
       return (
-        [activity.providerAlias, activity.model]
+        [
+          activity.model,
+          activity.modelConfigId === undefined ||
+          activity.modelConfigId === null
+            ? undefined
+            : `config ${activity.modelConfigId}`,
+          activity.endpointId === undefined || activity.endpointId === null
+            ? undefined
+            : `endpoint ${activity.endpointId}`,
+          activity.modelConfigId === undefined && activity.providerAlias
+            ? `legacy alias ${activity.providerAlias}`
+            : undefined,
+        ]
           .filter((value): value is string => Boolean(value))
-          .join(' / ') || 'provider request'
+          .join(' · ') || 'provider request'
       );
     }
     if (activity.kind === 'tool_call') {

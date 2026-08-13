@@ -59,6 +59,8 @@ function providerDetail(): ProviderRequestDebugDetail {
     wake_id: 'wake_1',
     provider: {
       brain_module: 'openai-responses',
+      model_config_id: 'config-gpt-test',
+      endpoint_id: 'endpoint-openai',
       provider_alias: 'main',
       model: 'gpt-test',
       protocol: 'responses',
@@ -282,6 +284,9 @@ describe('DebugPanelComponent', () => {
 
     expect(loadProvider).toHaveBeenCalledWith('sess_1', 'prd_1');
     expect(host.textContent).toContain('openai-responses');
+    expect(host.textContent).toContain('config-gpt-test');
+    expect(host.textContent).toContain('endpoint-openai');
+    expect(host.textContent).toContain('legacy provider_alias');
     expect(host.textContent).toContain('abc123');
   });
 

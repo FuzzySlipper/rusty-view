@@ -226,14 +226,14 @@ test('isolated profile create request uses live tester defaults without cloning 
     liveProfileCreateRequest({
       profileId: 'rv-live-baseline-w0-r0-test',
       displayName: 'Live baseline',
-      providerAlias: 'tester-chat',
+      modelConfigId: 'tester-chat',
       localToolProfileId: 'full_agent',
       reason: 'test isolation',
     }),
   ).toEqual({
     profileId: 'rv-live-baseline-w0-r0-test',
     displayName: 'Live baseline',
-    providerAlias: 'tester-chat',
+    modelConfigId: 'tester-chat',
     kind: 'full',
     localToolProfileId: 'full_agent',
     reason: 'test isolation',

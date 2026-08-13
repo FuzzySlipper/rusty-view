@@ -13,6 +13,7 @@ import type {
   AdminToolDescriptor,
   AdminToolsetDescriptor,
   CreateAdminProfileRequest,
+  ModelConfigurationRecord,
   ProfileRegistryDerivedRuntimeRef,
 } from '@rusty-view/transport';
 
@@ -41,11 +42,8 @@ interface ProfileFormState {
   readonly workspaceCwd: string;
   /** '' means use the backend default session kind. */
   readonly kind: '' | 'full' | 'worker' | 'delegated';
-  /**
-   * Reference to a reusable model provider alias. Preferred over the inline
-   * model override. '' means no alias; the backend then applies defaults.
-   */
-  readonly providerAlias: string;
+  /** Stable model configuration selection. '' lets Crew apply its default. */
+  readonly modelConfigId: string;
   /** Optional DB-backed profile soul prompt seeded during create. */
   readonly soulMarkdown: string;
   /**
@@ -64,7 +62,7 @@ const INITIAL_FORM: ProfileFormState = {
   implementationId: '',
   workspaceCwd: '',
   kind: '',
-  providerAlias: '',
+  modelConfigId: '',
   soulMarkdown: '',
   mcpToolProfile: '',
 };
@@ -255,6 +253,17 @@ export class AdminProfileCreateComponent {
     return localToolProfileLabel(profile);
   }
 
+  protected modelConfigurationLabel(
+    configuration: ModelConfigurationRecord,
+  ): string {
+    const endpoint = this.admin
+      .modelEndpoints()
+      .find((candidate) => candidate.endpointId === configuration.endpointId);
+    const endpointIdentity =
+      endpoint?.displayName?.trim() || configuration.endpointId;
+    return `${configuration.modelId} · ${endpointIdentity} (${configuration.modelConfigId})`;
+  }
+
   /** Built-in (non-MCP) toolsets from Crew's tool catalog (#3686). */
   protected toolsetCatalog(): readonly AdminToolsetDescriptor[] {
     return this.admin.toolsetCatalog();
@@ -350,7 +359,7 @@ function buildCreateProfileRequest(
     ...optionalString('implementationId', form.implementationId),
     ...optionalString('workspaceCwd', form.workspaceCwd),
     ...optionalString('mcpToolProfile', form.mcpToolProfile),
-    ...optionalString('providerAlias', form.providerAlias),
+    ...optionalString('modelConfigId', form.modelConfigId),
     ...optionalMultilineString('soulMarkdown', form.soulMarkdown),
     ...optionalKind(form.kind),
     ...(mcpBindings.length === 0 ? {} : { mcpBindings }),

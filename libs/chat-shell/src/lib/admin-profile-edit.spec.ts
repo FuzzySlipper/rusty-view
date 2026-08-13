@@ -92,7 +92,7 @@ async function editWindow(
 
 interface EditComponentApi {
   showSection(section: 'fields' | 'lifecycle' | 'prompts' | 'runtime'): void;
-  updateRuntimeProviderAlias(event: { target: { value: string } }): void;
+  updateRuntimeModelConfigId(event: { target: { value: string } }): void;
   updateRuntimeExternalMessageDeliveryPolicy(event: {
     target: { value: string };
   }): void;
@@ -522,7 +522,7 @@ describe('AdminProfileEditComponent', () => {
       profileDiagnostics: registryDiagnostics({
         profileId,
         revision: 5,
-        providerAlias: 'default',
+        modelConfigId: 'config-default',
         localToolProfileId: 'planner-tools',
         toolPolicy: { requestedToolsets: ['local_code_read'] },
         mcpBindings: [
@@ -570,8 +570,9 @@ describe('AdminProfileEditComponent', () => {
   it('seeds the runtime-config form from the record (#3742)', async () => {
     const { fixture, component } = await runtimeWindow();
     const html = (fixture.nativeElement as HTMLElement).innerHTML;
-    // Provider and local tool profile are seeded as selected values.
-    expect(html).toContain('Provider &amp; Tools');
+    // Model and local tool profile are seeded as selected values.
+    expect(html).toContain('Model &amp; Tools');
+    expect(html).toContain('gpt-default · Default endpoint (config-default)');
     expect(component.runtimeLocalToolProfileId()).toBe('planner-tools');
   });
 
@@ -631,7 +632,8 @@ describe('AdminProfileEditComponent', () => {
       transport.planAdminProfileRegistryRuntimeConfig,
     );
     expect(request.expectedRevision).toBe(5);
-    expect(request.providerAlias).toBe('default');
+    expect(request.modelConfigId).toBe('config-default');
+    expect(request).not.toHaveProperty('providerAlias');
     expect(request.localToolProfileId).toBe('planner-tools');
     expect(request).not.toHaveProperty('toolPolicy');
     // MCP untouched, so omitted to preserve current bindings.
