@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "repository": "FuzzySlipper/rusty-view",
+  "requiredChecks": [
+    "format / lint / typecheck / test / build",
+    "Playwright smoke (rusty-view)"
+  ],
+  "localVerification": [
+    "pnpm run ci",
+    "pnpm exec nx e2e rusty-view-e2e -- --project=chromium"
+  ],
+  "notes": "Managed reviews require the complete Rusty View verification job and Chromium Playwright smoke."
+}
