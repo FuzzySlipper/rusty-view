@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 test('admin separates shared endpoints from model configurations and keeps all credentials selectable', async ({
   page,
@@ -186,7 +187,7 @@ interface CapturedCall {
 }
 
 async function installEmptyCredentialRegistry(
-  page: import('@playwright/test').Page,
+  page: Page,
   authScheme: 'bearer_api_key' | 'openai_codex_oauth',
 ): Promise<CapturedCall[]> {
   const calls: CapturedCall[] = [];
@@ -267,7 +268,7 @@ async function installEmptyCredentialRegistry(
   return calls;
 }
 
-async function openModelsPanel(page: import('@playwright/test').Page) {
+async function openModelsPanel(page: Page) {
   await page.goto('/');
   await page.locator('[data-menu-id="providers"]').click();
 }
