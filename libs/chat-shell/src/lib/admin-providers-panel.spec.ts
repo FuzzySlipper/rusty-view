@@ -570,6 +570,65 @@ describe('AdminProvidersPanelComponent', () => {
     );
   });
 
+  it('clears reused and create OAuth selections when switching to Chat Completions', async () => {
+    const oauth = makeCredential('openai:oauth');
+    const fixture = await createPanel([], false, [oauth]);
+    const component = fixture.componentInstance as unknown as {
+      form(): { credentialMode: string; credentialId: string };
+      updateProtocol(event: { target: { value: string } }): void;
+      updateCredentialMode(event: { target: { value: string } }): void;
+    };
+
+    component.updateProtocol({ target: { value: 'responses' } });
+    component.updateCredentialMode({
+      target: { value: 'reuse:openai:oauth' },
+    });
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    expect(component.form()).toMatchObject({
+      credentialMode: 'unconfigured',
+      credentialId: '',
+    });
+
+    component.updateCredentialMode({ target: { value: 'create_openai_oauth' } });
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    expect(component.form()).toMatchObject({
+      credentialMode: 'unconfigured',
+      credentialId: '',
+    });
+  });
+
+  it('blocks an existing OAuth-linked provider protocol change before mutation', async () => {
+    const oauth = makeCredential('openai:oauth', ['oauth-provider']);
+    const provider: ModelProviderRecord = {
+      ...makeProvider('oauth-provider'),
+      protocol: 'responses',
+      responsesDialect: 'openai_stateful',
+      credentialId: oauth.credentialId,
+      credential: oauth.credential,
+    };
+    const fixture = await createPanel([provider], false, [oauth]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: { mock: { calls: unknown[][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      updateProtocol(event: { target: { value: string } }): void;
+      saveDisabled(): boolean;
+      saveProvider(): Promise<void>;
+    };
+
+    component.selectProviderForEdit(provider);
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    fixture.detectChanges();
+
+    expect(component.saveDisabled()).toBe(true);
+    expect(textContent(fixture)).toContain(
+      'Switch back to Responses, save it as Unconfigured',
+    );
+    await component.saveProvider();
+    expect(transport.updateAdminModelProvider.mock.calls).toHaveLength(0);
+  });
+
   it('renders a credential-less provider as unconfigured and edits it without assuming API key', async () => {
     const provider: ModelProviderRecord = {
       ...makeProvider('openai-missing'),

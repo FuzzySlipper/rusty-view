@@ -149,6 +149,20 @@ function isSupportedProviderKind(value: string): value is ModelProviderKind {
   return PROVIDER_KIND_OPTIONS.some((option) => option.value === value);
 }
 
+function isCredentialSelectionCompatible(
+  form: ProviderFormState,
+  credentials: readonly ServiceCredentialRecord[],
+): boolean {
+  if (form.protocol === 'responses') return true;
+  if (form.credentialMode === 'create_openai_oauth') return false;
+  if (form.credentialMode !== 'reuse') return true;
+  return !credentials.some(
+    (credential) =>
+      credential.credentialId === form.credentialId &&
+      credential.credentialKind === 'openai_oauth',
+  );
+}
+
 const THINKING_MODES: readonly ChatCompletionsThinkingMode[] = [
   'provider_default',
   'enabled',
@@ -252,6 +266,27 @@ export class AdminProvidersPanelComponent {
       this.selectedCredential()?.credentialKind === 'openai_oauth'
     );
   });
+  protected readonly persistedOauthProtocolConflict = computed(() => {
+    const alias = this.editingAlias();
+    if (alias === null || this.form().protocol === 'responses') return false;
+    const provider = this.admin
+      .modelProviders()
+      ?.items.find((candidate) => candidate.alias === alias);
+    if (provider?.credentialId === undefined) return false;
+    return this.admin
+      .serviceCredentials()
+      .some(
+        (credential) =>
+          credential.credentialId === provider.credentialId &&
+          credential.credentialKind === 'openai_oauth',
+      );
+  });
+  protected readonly credentialSelectionCompatible = computed(() =>
+    isCredentialSelectionCompatible(
+      this.form(),
+      this.admin.serviceCredentials(),
+    ),
+  );
   protected readonly reasoningBudgetEnabled = computed(() => {
     const form = this.form();
     return (
@@ -282,6 +317,8 @@ export class AdminProvidersPanelComponent {
     if (form.protocol === 'responses' && form.responsesDialect === '') {
       return true;
     }
+    if (!this.credentialSelectionCompatible()) return true;
+    if (this.persistedOauthProtocolConflict()) return true;
     return this.reasoningConfigurationIssues().length > 0;
   });
 
@@ -390,12 +427,34 @@ export class AdminProvidersPanelComponent {
   protected updateProtocol(event: Event): void {
     const value = (event.target as HTMLSelectElement).value;
     if (value === 'responses' || value === 'chat_completions') {
-      this.form.update((current) => ({
-        ...current,
-        protocol: value,
-        responsesDialect: '',
-        promptCaching: 'disabled',
-      }));
+      this.form.update((current) => {
+        const oauthSelection =
+          current.credentialMode === 'create_openai_oauth' ||
+          (current.credentialMode === 'reuse' &&
+            this.admin
+              .serviceCredentials()
+              .some(
+                (credential) =>
+                  credential.credentialId === current.credentialId &&
+                  credential.credentialKind === 'openai_oauth',
+              ));
+        const clearOauthSelection =
+          value === 'chat_completions' && oauthSelection;
+        return {
+          ...current,
+          protocol: value,
+          responsesDialect: '',
+          promptCaching: 'disabled',
+          ...(clearOauthSelection
+            ? {
+                credentialMode: 'unconfigured' as const,
+                credentialId: '',
+                credentialDisplayName: '',
+                oauthCallbackUrl: '',
+              }
+            : {}),
+        };
+      });
     }
   }
 
@@ -615,6 +674,15 @@ export class AdminProvidersPanelComponent {
 
   protected async saveProvider(): Promise<void> {
     const form = this.form();
+    if (
+      this.saveDisabled() ||
+      !isCredentialSelectionCompatible(
+        form,
+        this.admin.serviceCredentials(),
+      )
+    ) {
+      return;
+    }
     const request = buildWriteRequest(form);
     let result: ModelProviderWriteResponse | undefined;
     if (this.editingAlias() !== null) {
