@@ -31,6 +31,7 @@ import {
   matchesHotkey,
 } from '@rusty-view/chat-components';
 import type { StreamStatusKind } from '@rusty-view/chat-components';
+import type { SessionContextUsageResult } from '@rusty-view/protocol';
 import {
   MESSAGE_BLOCK_DETAIL_LOADER,
   TOOL_CALL_DEBUG_DETAIL_LOADER,
@@ -69,6 +70,22 @@ interface ComposerAttachmentUpload {
   readonly status: MessageInputAttachmentStatus;
   readonly attachmentId?: string;
   readonly error?: string;
+}
+
+export interface NativeContextIdentity {
+  readonly modelConfigId: string | undefined;
+  readonly legacyProviderAlias: string | undefined;
+}
+
+export function nativeContextIdentity(
+  provider: SessionContextUsageResult['provider'],
+): NativeContextIdentity {
+  return {
+    modelConfigId: provider.model_config_id,
+    legacyProviderAlias:
+      provider.provider_alias ??
+      (provider.model_config_id === undefined ? provider.alias : undefined),
+  };
 }
 
 /**
@@ -157,6 +174,7 @@ export class DebugShellComponent {
   protected readonly external = inject(ExternalAgentStore);
   protected readonly hotkeys = inject(HotkeySettingsService);
   protected readonly theme = inject(ChatTheme);
+  protected readonly nativeContextIdentity = nativeContextIdentity;
   private readonly destroyRef = inject(DestroyRef);
   private readonly transport = inject(ChatTransport);
   private readonly slashCommands =

@@ -262,11 +262,16 @@
           "
           >Status: {{ store.activeSessionDisplayStatus() ?? 'idle' }}</span
         >
-        @if (store.contextUsage(); as context) {
+        @if (store.contextUsage(); as context) { @if
+        (nativeContextIdentity(context.provider); as identity) { @if
+        (identity.modelConfigId) {
+        <span>Model config: {{ identity.modelConfigId }}</span>
+        } @if (identity.legacyProviderAlias) {
         <span
-          >Model config: {{ context.provider.model_config_id ??
-          context.provider.alias }}</span
+          >Legacy provider_alias (compatibility): {{
+          identity.legacyProviderAlias }}</span
         >
+        } }
         <span>Endpoint: {{ context.provider.endpoint_id ?? 'unknown' }}</span>
         } @if (store.activeLogicalTurn(); as turn) {
         <span data-testid="logical-turn-status"

@@ -96,10 +96,16 @@ export class ContextDiagnosticsComponent {
       const provider = this.usage()?.provider;
       if (provider === undefined) return [];
       return compact([
-        row('Model configuration', provider.model_config_id ?? provider.alias),
+        row('Model configuration', provider.model_config_id),
         row('Model', provider.model_id),
         row('Endpoint', provider.endpoint_id),
-        row('Legacy provider_alias (compatibility)', provider.provider_alias),
+        row(
+          'Legacy provider_alias (compatibility)',
+          provider.provider_alias ??
+            (provider.model_config_id === undefined
+              ? provider.alias
+              : undefined),
+        ),
         row('Status', provider.status),
         row('Protocol', provider.protocol),
         row('Provider kind', provider.provider_kind),

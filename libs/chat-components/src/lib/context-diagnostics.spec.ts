@@ -114,6 +114,26 @@ describe('ContextDiagnosticsComponent', () => {
     expect(text).toContain('40%');
   });
 
+  it('labels a legacy-only provider alias as compatibility identity', async () => {
+    const fixture = await createComponent();
+    fixture.componentRef.setInput(
+      'usage',
+      usageFixture({
+        provider: {
+          alias: 'legacy-only',
+          status: 'active',
+          model_id: 'legacy-model',
+        },
+      }),
+    );
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).not.toContain('Model configuration');
+    expect(text).toContain('Legacy provider_alias (compatibility)');
+    expect(text).toContain('legacy-only');
+  });
+
   it('distinguishes configured reasoning controls from applied states', async () => {
     const fixture = await createComponent();
     fixture.componentRef.setInput('usage', usageFixture());
