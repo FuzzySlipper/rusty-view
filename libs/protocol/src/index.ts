@@ -105,6 +105,38 @@ export type ProviderAdminModelProviderRecord =
   ProviderAdminSchemas['ModelProviderRecord'];
 export type ProviderAdminModelProviderWrite =
   ProviderAdminSchemas['ModelProviderWrite'];
+export type NormalizedModelStatus =
+  ProviderAdminSchemas['NormalizedModelStatus'];
+export type ModelEndpointProtocol =
+  ProviderAdminSchemas['ModelEndpointProtocol'];
+export type ModelEndpointWireDialect =
+  ProviderAdminSchemas['ModelEndpointWireDialect'];
+export type ModelEndpointAuthScheme =
+  ProviderAdminSchemas['ModelEndpointAuthScheme'];
+export type PromptCacheTransport = ProviderAdminSchemas['PromptCacheTransport'];
+export type ModelEndpointRecord = ProviderAdminSchemas['ModelEndpointRecord'];
+export type ModelEndpointWrite = ProviderAdminSchemas['ModelEndpointWrite'];
+export type ModelEndpointPatch = ProviderAdminSchemas['ModelEndpointPatch'];
+export type ModelEndpointListPage =
+  ProviderAdminSchemas['ModelEndpointListPage'];
+export type ModelEndpointWriteResult =
+  ProviderAdminSchemas['ModelEndpointWriteResult'];
+export type ModelConfigurationRecord =
+  ProviderAdminSchemas['ModelConfigurationRecord'];
+export type ModelConfigurationWrite =
+  ProviderAdminSchemas['ModelConfigurationWrite'];
+export type ModelConfigurationPatch =
+  ProviderAdminSchemas['ModelConfigurationPatch'];
+export type ModelConfigurationListPage =
+  ProviderAdminSchemas['ModelConfigurationListPage'];
+export type ModelConfigurationWriteResult =
+  ProviderAdminSchemas['ModelConfigurationWriteResult'];
+export type ModelReasoningHistory =
+  ProviderAdminSchemas['ModelReasoningHistory'];
+export type ModelThinkingMode = ProviderAdminSchemas['ModelThinkingMode'];
+export type ModelPromptCachingPolicy =
+  ProviderAdminSchemas['ModelPromptCachingPolicy'];
+export type ModelCapabilities = ProviderAdminSchemas['ModelCapabilities'];
 
 // ---- external-agent runtime ----
 export type ExternalRuntimeFleet = ExternalSchemas['ExternalRuntimeFleet'];

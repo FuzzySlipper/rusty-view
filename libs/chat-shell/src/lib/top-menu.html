@@ -157,7 +157,7 @@
     data-testid="top-menu-overlay-providers"
     role="button"
     tabindex="0"
-    aria-label="Close providers"
+    aria-label="Close model administration"
     (click)="onOverlayClick($event)"
     (keydown.enter)="closePanel()"
     (keydown.space)="closePanel()"
@@ -166,7 +166,7 @@
       class="rv-top-menu__panel"
       data-testid="top-menu-panel-providers"
       role="dialog"
-      aria-label="Model Providers"
+      aria-label="Model Endpoints and Configurations"
       (click)="$event.stopPropagation()"
       (keydown)="onPanelKeydown($event)"
     >

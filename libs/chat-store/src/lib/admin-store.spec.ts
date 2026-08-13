@@ -21,6 +21,18 @@ import {
   type AdminControlResponse,
   type CreatedServiceProfile,
   type ContextStrategyCatalog,
+  type ModelConfigurationListPage,
+  type ModelConfigurationPatch,
+  type ModelConfigurationQuery,
+  type ModelConfigurationRecord,
+  type ModelConfigurationWrite,
+  type ModelConfigurationWriteResult,
+  type ModelEndpointListPage,
+  type ModelEndpointPatch,
+  type ModelEndpointQuery,
+  type ModelEndpointRecord,
+  type ModelEndpointWrite,
+  type ModelEndpointWriteResult,
   type ModelProviderPage,
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
@@ -107,6 +119,14 @@ interface AdminTransportMock {
   >;
   readonly adminContextStrategies: ReturnType<
     typeof vi.fn<() => Promise<ContextStrategyCatalog>>
+  >;
+  readonly adminModelEndpoints: ReturnType<
+    typeof vi.fn<(query?: ModelEndpointQuery) => Promise<ModelEndpointListPage>>
+  >;
+  readonly adminModelConfigurations: ReturnType<
+    typeof vi.fn<
+      (query?: ModelConfigurationQuery) => Promise<ModelConfigurationListPage>
+    >
   >;
   readonly adminModelProviders: ReturnType<
     typeof vi.fn<() => Promise<ModelProviderPage>>
@@ -261,6 +281,34 @@ interface AdminTransportMock {
         request: ModelProviderWriteRequest,
         refresh: string,
       ) => Promise<ModelProviderWriteResponse>
+    >
+  >;
+  readonly createAdminModelEndpoint: ReturnType<
+    typeof vi.fn<
+      (request: ModelEndpointWrite) => Promise<ModelEndpointWriteResult>
+    >
+  >;
+  readonly updateAdminModelEndpoint: ReturnType<
+    typeof vi.fn<
+      (
+        endpointId: string,
+        request: ModelEndpointPatch,
+      ) => Promise<ModelEndpointWriteResult>
+    >
+  >;
+  readonly createAdminModelConfiguration: ReturnType<
+    typeof vi.fn<
+      (
+        request: ModelConfigurationWrite,
+      ) => Promise<ModelConfigurationWriteResult>
+    >
+  >;
+  readonly updateAdminModelConfiguration: ReturnType<
+    typeof vi.fn<
+      (
+        modelConfigId: string,
+        request: ModelConfigurationPatch,
+      ) => Promise<ModelConfigurationWriteResult>
     >
   >;
   readonly adminOpenAiOauthStatus: ReturnType<
@@ -507,6 +555,72 @@ function provider(alias: string): ModelProviderRecord {
   };
 }
 
+function normalizedModelEndpoint(
+  endpointId = 'endpoint-openai',
+  revision = 1,
+): ModelEndpointRecord {
+  return {
+    endpointId,
+    status: 'active',
+    displayName: 'OpenAI endpoint',
+    description: 'Shared OpenAI account',
+    baseUrl: 'https://api.openai.com/v1',
+    protocol: 'responses',
+    wireDialect: 'openai_stateful',
+    authScheme: 'bearer_api_key',
+    credentialId: 'credential-openai',
+    promptCacheTransport: 'none',
+    metadataJson: { owner: 'tests' },
+    revision,
+    createdAt: '2026-08-13T00:00:00Z',
+    updatedAt: '2026-08-13T00:00:00Z',
+  };
+}
+
+function normalizedModelConfiguration(
+  modelConfigId = 'config-gpt-5',
+  revision = 1,
+): ModelConfigurationRecord {
+  return {
+    modelConfigId,
+    endpointId: 'endpoint-openai',
+    status: 'active',
+    displayName: 'GPT 5',
+    description: 'Default reasoning configuration',
+    modelId: 'gpt-5',
+    contextWindowTokens: 400_000,
+    maxOutputTokens: 16_000,
+    temperatureMilli: 700,
+    reasoningEffort: 'high',
+    reasoningFormat: 'summary',
+    reasoningHistory: 'preserve_all',
+    reasoningBudgetTokens: 8_000,
+    thinkingMode: 'enabled',
+    promptCachingPolicy: 'automatic_5m',
+    capabilities: { version: 1, imageInput: true },
+    metadataJson: { owner: 'tests' },
+    revision,
+    createdAt: '2026-08-13T00:00:00Z',
+    updatedAt: '2026-08-13T00:00:00Z',
+  };
+}
+
+function normalizedModelEndpointWriteResult(
+  endpointId = 'endpoint-openai',
+  revision = 1,
+): ModelEndpointWriteResult {
+  return { endpoint: normalizedModelEndpoint(endpointId, revision) };
+}
+
+function normalizedModelConfigurationWriteResult(
+  modelConfigId = 'config-gpt-5',
+  revision = 1,
+): ModelConfigurationWriteResult {
+  return {
+    configuration: normalizedModelConfiguration(modelConfigId, revision),
+  };
+}
+
 function serviceCredential(
   credentialId: string,
   hasSecret = true,
@@ -717,6 +831,18 @@ function createTransport(
           percentRange: { min: 1, max: 100 },
         }) satisfies ContextStrategyCatalog,
     ),
+    adminModelEndpoints: vi.fn(async () => ({
+      items: [] as ModelEndpointRecord[],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    })),
+    adminModelConfigurations: vi.fn(async () => ({
+      items: [] as ModelConfigurationRecord[],
+      total: 0,
+      limit: 100,
+      offset: 0,
+    })),
     adminModelProviders: vi.fn(async () => emptyPage()),
     adminServiceCredentials: vi.fn(async () => emptyPage()),
     createAdminServiceCredential: vi.fn(async (request) => ({
@@ -813,6 +939,30 @@ function createTransport(
     createAdminModelProvider: vi.fn(async () => providerWriteResponse('main')),
     updateAdminModelProvider: vi.fn(async (alias: string) =>
       providerWriteResponse(alias),
+    ),
+    createAdminModelEndpoint: vi.fn(
+      async (request: ModelEndpointWrite): Promise<ModelEndpointWriteResult> =>
+        normalizedModelEndpointWriteResult(request.endpointId, 2),
+    ),
+    updateAdminModelEndpoint: vi.fn(
+      async (
+        endpointId: string,
+        _request: ModelEndpointPatch,
+      ): Promise<ModelEndpointWriteResult> =>
+        normalizedModelEndpointWriteResult(endpointId, 3),
+    ),
+    createAdminModelConfiguration: vi.fn(
+      async (
+        request: ModelConfigurationWrite,
+      ): Promise<ModelConfigurationWriteResult> =>
+        normalizedModelConfigurationWriteResult(request.modelConfigId, 2),
+    ),
+    updateAdminModelConfiguration: vi.fn(
+      async (
+        modelConfigId: string,
+        _request: ModelConfigurationPatch,
+      ): Promise<ModelConfigurationWriteResult> =>
+        normalizedModelConfigurationWriteResult(modelConfigId, 3),
     ),
     adminOpenAiOauthStatus: vi.fn(async (alias: string) => ({
       provider: provider(alias),
@@ -1618,6 +1768,210 @@ describe('AdminStore behavior', () => {
       {},
     );
     expect(store.runtimeResumeResult()?.outcome.result?.targetId).toBe('alpha');
+    expect(store.saving()).toBe(false);
+  });
+});
+
+describe('AdminStore normalized model registries', () => {
+  it('refreshes endpoint and configuration lists through their dedicated loads', async () => {
+    const endpoint = normalizedModelEndpoint('endpoint-shared', 4);
+    const configuration = normalizedModelConfiguration('config-shared', 7);
+    const transport = createTransport({
+      adminModelEndpoints: vi.fn(async () => ({
+        ...emptyPage<ModelEndpointRecord>(),
+        items: [endpoint],
+        total: 1,
+      })),
+      adminModelConfigurations: vi.fn(async () => ({
+        ...emptyPage<ModelConfigurationRecord>(),
+        items: [configuration],
+        total: 1,
+      })),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.refresh();
+
+    expect(transport.adminModelEndpoints).toHaveBeenCalledWith({ limit: 100 });
+    expect(transport.adminModelConfigurations).toHaveBeenCalledWith({
+      limit: 100,
+    });
+    expect(store.modelEndpoints()).toEqual([endpoint]);
+    expect(store.modelConfigurations()).toEqual([configuration]);
+    expect(store.modelEndpointLoadError()).toBeNull();
+    expect(store.modelConfigurationLoadError()).toBeNull();
+    expect(store.error()).toBeNull();
+    expect(store.loading()).toBe(false);
+  });
+
+  it('keeps endpoint and configuration load errors visible independently', async () => {
+    const transport = createTransport({
+      adminModelEndpoints: vi.fn(async () => {
+        throw apiError(
+          'model_endpoint_registry_unavailable',
+          'Model endpoints failed',
+        );
+      }),
+      adminModelConfigurations: vi.fn(async () => {
+        throw apiError(
+          'model_configuration_registry_unavailable',
+          'Model configurations failed',
+        );
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    await store.refresh();
+
+    expect(store.error()).toBeNull();
+    expect(store.modelEndpoints()).toEqual([]);
+    expect(store.modelConfigurations()).toEqual([]);
+    expect(store.modelEndpointLoadError()).toBe(
+      'Model endpoints failed (model_endpoint_registry_unavailable)',
+    );
+    expect(store.modelConfigurationLoadError()).toBe(
+      'Model configurations failed (model_configuration_registry_unavailable)',
+    );
+    expect(store.loading()).toBe(false);
+  });
+
+  it('creates and updates endpoints and configurations with independent revisions', async () => {
+    const endpointCreateRequest = {
+      endpointId: 'endpoint-shared',
+      status: 'active',
+      baseUrl: 'https://api.openai.com/v1',
+      protocol: 'responses',
+      wireDialect: 'openai_stateful',
+      authScheme: 'bearer_api_key',
+      credentialId: 'credential-shared',
+      promptCacheTransport: 'none',
+      metadataJson: { owner: 'tests' },
+    } satisfies ModelEndpointWrite;
+    const endpointUpdateRequest = {
+      status: 'disabled',
+      baseUrl: 'https://api.example.test/v1',
+      expectedRevision: 41,
+    } satisfies ModelEndpointPatch;
+    const configurationCreateRequest = {
+      modelConfigId: 'config-shared',
+      endpointId: 'endpoint-shared',
+      status: 'active',
+      modelId: 'gpt-5',
+      reasoningHistory: 'preserve_all',
+      thinkingMode: 'enabled',
+      promptCachingPolicy: 'automatic_5m',
+      capabilities: { version: 1, imageInput: true },
+      metadataJson: { owner: 'tests' },
+    } satisfies ModelConfigurationWrite;
+    const configurationUpdateRequest = {
+      modelId: 'gpt-5-mini',
+      expectedRevision: 73,
+    } satisfies ModelConfigurationPatch;
+    const endpointCreateResult = normalizedModelEndpointWriteResult(
+      'endpoint-shared',
+      5,
+    );
+    const endpointUpdateResult = normalizedModelEndpointWriteResult(
+      'endpoint-shared',
+      42,
+    );
+    const configurationCreateResult = normalizedModelConfigurationWriteResult(
+      'config-shared',
+      8,
+    );
+    const configurationUpdateResult = normalizedModelConfigurationWriteResult(
+      'config-shared',
+      74,
+    );
+    const transport = createTransport({
+      createAdminModelEndpoint: vi.fn(
+        async (): Promise<ModelEndpointWriteResult> => endpointCreateResult,
+      ),
+      updateAdminModelEndpoint: vi.fn(
+        async (): Promise<ModelEndpointWriteResult> => endpointUpdateResult,
+      ),
+      createAdminModelConfiguration: vi.fn(
+        async (): Promise<ModelConfigurationWriteResult> =>
+          configurationCreateResult,
+      ),
+      updateAdminModelConfiguration: vi.fn(
+        async (): Promise<ModelConfigurationWriteResult> =>
+          configurationUpdateResult,
+      ),
+    });
+    const store = setupAdminStore(transport);
+
+    const createdEndpoint = await store.createModelEndpoint(
+      endpointCreateRequest,
+    );
+    const updatedEndpoint = await store.updateModelEndpoint(
+      'endpoint-shared',
+      endpointUpdateRequest,
+    );
+    const createdConfiguration = await store.createModelConfiguration(
+      configurationCreateRequest,
+    );
+    const updatedConfiguration = await store.updateModelConfiguration(
+      'config-shared',
+      configurationUpdateRequest,
+    );
+
+    expect(createdEndpoint).toBe(endpointCreateResult);
+    expect(updatedEndpoint).toBe(endpointUpdateResult);
+    expect(createdConfiguration).toBe(configurationCreateResult);
+    expect(updatedConfiguration).toBe(configurationUpdateResult);
+    expect(transport.createAdminModelEndpoint).toHaveBeenCalledWith(
+      endpointCreateRequest,
+    );
+    expect(transport.updateAdminModelEndpoint).toHaveBeenCalledWith(
+      'endpoint-shared',
+      endpointUpdateRequest,
+    );
+    expect(transport.createAdminModelConfiguration).toHaveBeenCalledWith(
+      configurationCreateRequest,
+    );
+    expect(transport.updateAdminModelConfiguration).toHaveBeenCalledWith(
+      'config-shared',
+      configurationUpdateRequest,
+    );
+    expect(
+      transport.updateAdminModelEndpoint.mock.calls[0]?.[1].expectedRevision,
+    ).toBe(41);
+    expect(
+      transport.updateAdminModelConfiguration.mock.calls[0]?.[1]
+        .expectedRevision,
+    ).toBe(73);
+    expect(store.modelEndpointWriteResult()).toBe(endpointUpdateResult);
+    expect(store.modelConfigurationWriteResult()).toBe(
+      configurationUpdateResult,
+    );
+    expect(store.saving()).toBe(false);
+  });
+
+  it('surfaces normalized endpoint write errors and clears saving state', async () => {
+    const transport = createTransport({
+      createAdminModelEndpoint: vi.fn(async () => {
+        throw apiError('model_endpoint_invalid', 'Endpoint rejected');
+      }),
+    });
+    const store = setupAdminStore(transport);
+
+    const result = await store.createModelEndpoint({
+      endpointId: 'endpoint-invalid',
+      status: 'active',
+      baseUrl: 'not-a-url',
+      protocol: 'responses',
+      wireDialect: 'openai_stateful',
+      authScheme: 'none',
+      promptCacheTransport: 'none',
+      metadataJson: {},
+    });
+
+    expect(result).toBeUndefined();
+    expect(store.error()).toBe('Endpoint rejected (model_endpoint_invalid)');
+    expect(store.errorDetail()?.apiError?.reasonCode).toBe(
+      'model_endpoint_invalid',
+    );
     expect(store.saving()).toBe(false);
   });
 });

@@ -1,16 +1,15 @@
 <div class="rv-admin-providers">
   <header class="rv-admin-providers__header">
-    <span class="rv-admin-providers__title">Model Providers</span>
+    <span class="rv-admin-providers__title">Model Administration</span>
     <button
       type="button"
       class="rv-admin-providers__close"
       (click)="closePanel()"
-      aria-label="Close providers"
+      aria-label="Close model administration"
     >
       x
     </button>
   </header>
-
   <div class="rv-admin-providers__toolbar">
     <button
       type="button"
@@ -20,598 +19,486 @@
     >
       Refresh
     </button>
-    <span class="rv-admin-providers__status">
-      {{ admin.loading() ? 'loading' : admin.providerAliases().length + '
-      providers' }}
-    </span>
+    <span class="rv-admin-providers__status"
+      >{{ admin.modelEndpoints().length }} endpoints · {{
+      admin.modelConfigurations().length }} configurations</span
+    >
   </div>
-
-  @if (admin.error() !== null) {
-  <div class="rv-admin-providers__error" role="alert">{{ admin.error() }}</div>
-  } @if (admin.credentialLoadError() !== null) {
-  <div class="rv-admin-providers__error" role="alert">
-    Failed to load shared credentials: {{ admin.credentialLoadError() }}
-  </div>
+  @if (admin.error(); as error) {
+  <div class="rv-admin-providers__error" role="alert">{{ error }}</div>
   }
 
   <section
     class="rv-admin-providers__section rv-admin-providers__section--editor"
-    data-testid="admin-providers-editor"
+    data-testid="model-endpoint-editor"
   >
-    <h2>{{ editingAlias() === null ? 'Create Provider' : 'Edit Provider' }}</h2>
+    <h2>
+      {{ editingEndpointId() === null ? 'Create Model Endpoint' : 'Edit Model
+      Endpoint' }}
+    </h2>
+    <p>
+      Endpoints own transport, authentication, credentials, and facts shared by
+      every model configuration that uses them.
+    </p>
+    @if (endpointImpact().length > 0) {
+    <div
+      class="rv-admin-providers__policy-warning"
+      data-testid="model-endpoint-impact"
+      role="alert"
+    >
+      Changes affect {{ endpointImpact().length }} model configurations: @for
+      (configuration of endpointImpact(); track configuration.modelConfigId) {
+      <span>{{ configuration.modelConfigId }}</span> }
+    </div>
+    }
     <div class="rv-admin-providers__form-grid">
-      @if (editingAlias() === null) {
-      <label>
-        <span>Alias</span>
-        <input
-          type="text"
-          [value]="form().alias"
-          (input)="updateText('alias', $event)"
-          autocomplete="off"
-        />
-      </label>
-      } @else {
-      <label class="rv-admin-providers__readonly">
-        <span>Alias</span>
-        <input type="text" [value]="editingAlias()" disabled />
-      </label>
-      }
-      <label>
-        <span>Display Name</span>
-        <input
-          type="text"
-          [value]="form().displayName"
-          (input)="updateText('displayName', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Description</span>
-        <input
-          type="text"
-          [value]="form().description"
-          (input)="updateText('description', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Protocol</span>
-        <select [value]="form().protocol" (change)="updateProtocol($event)">
-          <option value="chat_completions">chat_completions</option>
+      <label
+        ><span>Endpoint ID</span
+        ><input
+          data-testid="model-endpoint-id"
+          [disabled]="editingEndpointId() !== null"
+          [value]="endpointForm().endpointId"
+          (input)="endpointText('endpointId', $event)"
+      /></label>
+      <label
+        ><span>Display Name</span
+        ><input
+          [value]="endpointForm().displayName"
+          (input)="endpointText('displayName', $event)"
+      /></label>
+      <label
+        ><span>Description</span
+        ><input
+          [value]="endpointForm().description"
+          (input)="endpointText('description', $event)"
+      /></label>
+      <label
+        ><span>Base URL</span
+        ><input
+          data-testid="model-endpoint-base-url"
+          [value]="endpointForm().baseUrl"
+          (input)="endpointText('baseUrl', $event)"
+      /></label>
+      <label
+        ><span>Protocol</span
+        ><select
+          data-testid="model-endpoint-protocol"
+          [value]="endpointForm().protocol"
+          (change)="updateProtocol($event)"
+        >
           <option value="responses">responses</option>
-        </select>
-      </label>
-      @if (form().protocol === 'responses') {
-      <label>
-        <span>Responses Dialect</span>
-        <select
-          data-testid="provider-responses-dialect"
-          [value]="form().responsesDialect"
-          (change)="updateResponsesDialect($event)"
-          required
+          <option value="chat_completions">chat_completions</option>
+        </select></label
+      >
+      <label
+        ><span>Wire Dialect</span
+        ><select
+          data-testid="model-endpoint-wire-dialect"
+          [value]="endpointForm().wireDialect"
+          (change)="endpointText('wireDialect', $event)"
         >
-          <option value="" disabled>Select a Responses dialect</option>
-          @for (option of responsesDialectOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-        <small>
-          Required explicit wire behavior. Choose the provider's documented
-          Responses dialect; Crew never infers this value.
-        </small>
-      </label>
-      }
-      <label>
-        <span>Provider Kind</span>
-        <select
-          data-testid="provider-kind-selector"
-          [value]="form().providerKind"
-          (change)="updateProviderKind($event)"
-        >
-          @if (!providerKindSupported()) {
-          <option [value]="form().providerKind" disabled>
-            Unsupported legacy value: {{ form().providerKind }}
-          </option>
-          } @for (option of providerKindOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-        <small>
-          Classification only; Protocol and dialect define the wire behavior.
-          OpenAI enables its OAuth flow, while OpenRouter enables guarded
-          Anthropic prompt caching.
-        </small>
-        @if (!providerKindSupported()) {
-        <small class="rv-admin-providers__warning">
-          This older free-form value cannot be saved. Choose a supported
-          classification first.
-        </small>
-        }
-      </label>
-      <label>
-        <span>Base URL</span>
-        <input
-          type="text"
-          [value]="form().baseUrl"
-          (input)="updateText('baseUrl', $event)"
-          (blur)="probeProvider()"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Model ID</span>
-        <input
-          type="text"
-          [value]="form().modelId"
-          (input)="updateText('modelId', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Context Window Tokens</span>
-        <input
-          type="number"
-          [value]="form().contextWindowTokens"
-          (input)="updateText('contextWindowTokens', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Max Output Tokens</span>
-        <input
-          type="number"
-          [value]="form().maxOutputTokens"
-          (input)="updateText('maxOutputTokens', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Temperature</span>
-        <input
-          type="number"
-          min="0"
-          max="2"
-          step="0.1"
-          placeholder="Provider default"
-          [value]="form().temperature"
-          (input)="updateText('temperature', $event)"
-          autocomplete="off"
-        />
-      </label>
-      <label>
-        <span>Reasoning Effort</span>
-        <select
-          [value]="form().reasoningEffort"
-          (change)="updateText('reasoningEffort', $event)"
-        >
-          @for (option of reasoningEffortOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        <span>Reasoning Format</span>
-        <input
-          type="text"
-          [value]="form().reasoningFormat"
-          readonly
-          aria-describedby="provider-reasoning-format-help"
-          placeholder="Not detected"
-        />
-        <small id="provider-reasoning-format-help">
-          Diagnostic readback only; Crew does not apply this as configuration.
-        </small>
-      </label>
-      @if (form().protocol === 'chat_completions') {
-      <label>
-        <span>Chat Completions Dialect</span>
-        <select
-          data-testid="provider-chat-completions-dialect"
-          [value]="form().chatCompletionsDialect"
-          (change)="updateChatCompletionsDialect($event)"
-        >
-          @for (dialect of chatCompletionsDialects; track dialect) {
+          @for (dialect of wireDialects(); track dialect) {
           <option [value]="dialect">{{ dialect }}</option>
           }
-        </select>
-        <small>
-          Explicit wire behavior; never inferred from alias, model, or URL.
-        </small>
-      </label>
-      <label>
-        <span>Prompt Caching</span>
-        <select
-          data-testid="provider-prompt-caching"
-          [value]="form().promptCaching"
-          (change)="updatePromptCaching($event)"
-        >
-          @for (option of promptCachingOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-        <small>
-          Automatic caching requires chat_completions, provider kind openrouter,
-          and an anthropic/* model. Crew validates unsupported combinations.
-        </small>
-      </label>
-      <label>
-        <span>Thinking Mode</span>
-        <select
-          data-testid="provider-thinking-mode"
-          [value]="form().thinkingMode"
-          (change)="updateThinkingMode($event)"
-        >
-          @for (mode of thinkingModes; track mode) {
-          <option
-            [value]="mode"
-            [disabled]="form().chatCompletionsDialect === 'standard' && mode !== 'provider_default'"
-          >
-            {{ mode }}
-          </option>
-          }
-        </select>
-        <small>Whether the selected dialect sends its thinking control.</small>
-      </label>
-      <label>
-        <span>Reasoning History</span>
-        <select
-          data-testid="provider-reasoning-history"
-          [value]="form().reasoningHistory"
-          (change)="updateReasoningHistory($event)"
-        >
-          @for (history of reasoningHistoryOptions; track history) {
-          <option
-            [value]="history"
-            [disabled]="reasoningHistoryDisabled(history)"
-          >
-            {{ history }}
-          </option>
-          }
-        </select>
-        <small>
-          provider_default strips historical reasoning without a vendor history
-          control; discard strips it and sends a clear control where supported;
-          preserve_all replays all reasoning; tool_calls_only keeps DeepSeek
-          reasoning only on assistant tool-call messages.
-        </small>
-      </label>
-      <label>
-        <span>Reasoning Budget Tokens</span>
-        <input
-          data-testid="provider-reasoning-budget"
-          type="number"
-          min="1"
-          placeholder="No explicit budget"
-          [value]="form().reasoningBudgetTokens"
-          [disabled]="!reasoningBudgetEnabled()"
-          (input)="updateText('reasoningBudgetTokens', $event)"
-          autocomplete="off"
-        />
-        <small>Available only for Qwen with thinking enabled.</small>
-      </label>
-      @if (reasoningConfigurationIssues().length > 0) {
-      <div
-        class="rv-admin-providers__policy-warning"
-        data-testid="provider-reasoning-configuration-warning"
-        role="alert"
+        </select></label
       >
-        @for (issue of reasoningConfigurationIssues(); track issue) {
-        <span>{{ issue }}</span>
-        }
-        <button
-          type="button"
-          class="rv-admin-providers__button"
-          (click)="clearIncompatibleReasoningSettings()"
+      <label
+        ><span>Authentication</span
+        ><select
+          data-testid="model-endpoint-auth-scheme"
+          [value]="endpointForm().authScheme"
+          (change)="updateAuth($event)"
         >
-          Clear incompatible reasoning settings
-        </button>
-      </div>
-      } } @if (kimiThinkingConstraintsActive()) {
-      <p class="rv-admin-providers__policy-warning" role="note">
-        Kimi thinking rejects temperature overrides and requires Max Output
-        Tokens of at least 16,000. Clear Temperature before saving.
-      </p>
-      }
-      <label>
-        <span>Status</span>
-        <select [value]="form().status" (change)="updateStatus($event)">
-          <option value="active">active</option>
-          <option value="disabled">disabled</option>
-          <option value="archived">archived</option>
-        </select>
-      </label>
-      <label>
-        <span>Shared Credential</span>
-        <select
-          data-testid="provider-credential-selector"
-          [value]="credentialChoice()"
-          (change)="updateCredentialMode($event)"
+          @for (auth of authSchemes; track auth) {
+          <option [value]="auth">{{ auth }}</option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Shared Credential</span
+        ><select
+          data-testid="model-endpoint-credential"
+          [disabled]="endpointForm().authScheme === 'none'"
+          [value]="endpointForm().credentialId"
+          (change)="endpointText('credentialId', $event)"
         >
-          <option value="unconfigured">Unconfigured</option>
-          <option value="create_api_key">Create API key credential</option>
-          <option value="create_openai_oauth">
-            Create OpenAI OAuth credential
-          </option>
-          @for (credential of availableCredentials(); track
+          <option value="">Select a credential</option>
+          @for (credential of admin.serviceCredentials(); track
           credential.credentialId) {
-          <option [value]="'reuse:' + credential.credentialId">
-            Reuse {{ credential.displayName }} ({{ credential.credentialId }})
+          <option [value]="credential.credentialId">
+            {{ credential.displayName }} ({{ credential.credentialId }})
           </option>
-          }
-        </select>
-        <small>
-          API-key credentials are reusable across every provider kind. OpenAI
-          OAuth credentials require the Responses protocol.
-        </small>
-      </label>
-      @if (persistedOauthProtocolConflict()) {
-      <p
-        class="rv-admin-providers__policy-warning"
-        data-testid="provider-oauth-protocol-conflict"
-        role="alert"
+          }</select
+        ><small
+          >Every saved credential is available; compatibility is determined by
+          endpoint auth settings, not provider classification.</small
+        ></label
       >
-        This provider is still linked to an OpenAI OAuth credential. Switch back
-        to Responses, save it as Unconfigured, then change the protocol.
-      </p>
-      } @if (form().credentialMode === 'create_api_key' || form().credentialMode
-      === 'create_openai_oauth') {
-      <label>
-        <span>Credential ID</span>
-        <input
-          type="text"
-          [value]="form().credentialId"
-          (input)="updateText('credentialId', $event)"
-          autocomplete="off"
-          placeholder="provider:alias"
-        />
-      </label>
-      <label>
-        <span>Credential Name</span>
-        <input
-          type="text"
-          [value]="form().credentialDisplayName"
-          (input)="updateText('credentialDisplayName', $event)"
-          autocomplete="off"
-        />
-      </label>
-      } @if (form().credentialMode === 'create_api_key') {
-      <label>
-        <span>API Key (never shown after save)</span>
-        <input
-          type="password"
-          [value]="form().secret"
-          (input)="updateText('secret', $event)"
-          autocomplete="off"
-          placeholder="paste key"
-        />
-      </label>
-      } @if (oauthMode()) {
-      <label>
-        <span>OAuth Callback URL</span>
-        <input
-          type="text"
-          [value]="form().oauthCallbackUrl"
-          (input)="updateText('oauthCallbackUrl', $event)"
-          autocomplete="off"
-        />
-      </label>
-      } @else { @if (form().credentialMode === 'unconfigured') {
-      <p class="rv-admin-providers__oauth" role="status">
-        This provider alias will not use a credential.
-      </p>
-      } }
+      <label
+        ><span>Prompt Cache Transport</span
+        ><select
+          data-testid="model-endpoint-cache-transport"
+          [value]="endpointForm().promptCacheTransport"
+          (change)="endpointText('promptCacheTransport', $event)"
+        >
+          @for (cache of cacheTransports; track cache) {
+          <option [value]="cache">{{ cache }}</option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Status</span
+        ><select
+          [value]="endpointForm().status"
+          (change)="endpointText('status', $event)"
+        >
+          @for (status of statuses; track status) {
+          <option [value]="status">{{ status }}</option>
+          }
+        </select></label
+      >
     </div>
-
-    @if (probeStatus() !== '') {
-    <p class="rv-admin-providers__probe" role="status">{{ probeStatus() }}</p>
+    @if (endpointForm().authScheme !== 'none') {
+    <div
+      class="rv-admin-providers__form-grid"
+      data-testid="endpoint-credential-management"
+    >
+      <label
+        ><span>New Credential Name</span
+        ><input
+          [value]="newCredentialName()"
+          (input)="newCredentialName.set($any($event.target).value)"
+      /></label>
+      @if (endpointForm().authScheme === 'bearer_api_key') {
+      <label
+        ><span>New API Key</span
+        ><input
+          type="password"
+          [value]="newCredentialSecret()"
+          (input)="newCredentialSecret.set($any($event.target).value)"
+      /></label>
+      } @if (endpointForm().authScheme === 'openai_codex_oauth') {
+      <label
+        ><span>OAuth Callback URL</span
+        ><input
+          [value]="oauthCallbackUrl()"
+          (input)="oauthCallbackUrl.set($any($event.target).value)"
+      /></label>
+      }
+    </div>
+    <div class="rv-admin-providers__actions">
+      @if (endpointForm().authScheme === 'bearer_api_key') {
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="createApiKeyCredential()"
+      >
+        Create API Key Credential
+      </button>
+      } @if (endpointForm().authScheme === 'openai_codex_oauth') {
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="startOauth()"
+      >
+        Start OpenAI OAuth</button
+      ><button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="completeOauth()"
+        [disabled]="oauthCallbackUrl().trim() === ''"
+      >
+        Complete OAuth
+      </button>
+      }
+    </div>
     }
-
     <div class="rv-admin-providers__actions">
       <button
         type="button"
         class="rv-admin-providers__button rv-admin-providers__button--primary"
-        (click)="saveProvider()"
-        [disabled]="saveDisabled()"
+        (click)="saveEndpoint()"
+        [disabled]="endpointSaveDisabled()"
       >
-        {{ editingAlias() === null ? 'Create Provider' : 'Update Provider' }}
-      </button>
-      @if (editingAlias() !== null) {
+        {{ editingEndpointId() === null ? 'Create Endpoint' : 'Update Endpoint'
+        }}</button
+      >@if (editingEndpointId() !== null) {
       <button
         type="button"
         class="rv-admin-providers__button"
-        (click)="cancelEdit()"
+        (click)="cancelEndpoint()"
       >
         Cancel
       </button>
-      } @if (editingAlias() !== null && oauthMode() && form().credentialId !==
-      '') {
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="startOpenAiOauthLogin()"
-        [disabled]="admin.saving()"
-      >
-        Start OpenAI OAuth
-      </button>
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="completeOpenAiOauthLogin()"
-        [disabled]="admin.saving() || !oauthCallbackReady()"
-      >
-        Complete OpenAI OAuth
-      </button>
-      } @if (editingAlias() !== null && selectedCredential() !== null) {
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="clearSelectedCredential()"
-        [disabled]="admin.saving() || selectedCredentialImpact()?.canClear !== true"
-      >
-        Clear Shared Credential
-      </button>
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="unlinkSelectedCredential()"
-        [disabled]="admin.saving()"
-      >
-        Unlink from Provider
-      </button>
-      <button
-        type="button"
-        class="rv-admin-providers__button"
-        (click)="deleteSelectedCredential()"
-        [disabled]="admin.saving() || selectedCredentialImpact()?.canDelete !== true"
-      >
-        Delete Shared Credential
-      </button>
       }
     </div>
-
-    @if (oauthMode()) {
-    <div class="rv-admin-providers__oauth" role="status">
-      <span>{{ oauthStateLabel() }}</span>
-      <span>
-        Credentials can be reused by compatible aliases on this Crew service.
-        They are not automatically shared with other Crew services.
-      </span>
-    </div>
-    } @if (oauthPendingLogin(); as pendingLogin) {
-    <div class="rv-admin-providers__oauth" role="status">
-      <span>{{ pendingLogin.credentialId ?? form().credentialId }}</span>
-      <a
-        [href]="pendingLogin.authorizationUrl"
-        target="_blank"
-        rel="noreferrer"
-      >
-        authorization URL
-      </a>
-      <span>expires {{ pendingLogin.expiresAt }}</span>
-    </div>
-    } @if (selectedOauthStatus(); as oauthStatus) {
-    <div class="rv-admin-providers__result" role="status">
-      <span>{{ oauthStatus.credential.displayName }}</span>
-      <span>{{ oauthStatus.credential.credentialId }}</span>
-      <span>{{ oauthStatus.credential.credentialKind }}</span>
-      <span>
-        {{ oauthStatus.credential.credential.status ??
-        (oauthStatus.credential.credential.hasSecret ? 'configured' : 'missing')
-        }}
-      </span>
-      <span>{{ oauthStatus.credential.updatedAt }}</span>
-    </div>
-    } @if (selectedCredentialImpact(); as impact) {
-    <div class="rv-admin-providers__result" data-testid="credential-impact">
-      <span>{{ impact.credential.displayName }}</span>
-      <span>{{ impact.credential.credentialId }}</span>
-      <span>{{ impact.credential.credentialKind }}</span>
-      <span>
-        {{ impact.credential.credential.status ??
-        (impact.credential.credential.hasSecret ? 'configured' : 'missing') }}
-      </span>
-      <span>{{ impact.linkedProviderAliases.length }} linked aliases</span>
-      @for (alias of impact.linkedProviderAliases; track alias) {
-      <span>{{ alias }}</span>
-      }
-    </div>
-    } @if (admin.providerWriteResult(); as result) {
-    <div class="rv-admin-providers__result" role="status">
-      <strong
-        class="rv-admin-providers__refresh-summary"
-        [class.rv-admin-providers__refresh-summary--attention]="providerRefreshNeedsAttention(result)"
-      >
-        {{ providerRefreshSummary(result) }}
-      </strong>
-      <span>provider {{ result.provider.alias }}</span>
-      <span>{{ credentialLabel(result.provider) }}</span>
-      <span>refresh {{ result.refresh.mode }}</span>
-      <span>affected {{ result.refresh.affectedProfiles.length }}</span>
-      @for (outcome of result.refresh.outcomes; track outcome.profileId) {
-      <span
-        class="rv-admin-providers__outcome rv-admin-providers__outcome--{{ outcome.status }}"
-      >
-        {{ outcome.profileId }}: {{ outcome.status }} — {{ outcome.summary }}
-        @if (outcome.reasonCode) { (reason {{ outcome.reasonCode }}) }
-      </span>
-      }
-    </div>
-    }
   </section>
 
   <section
     class="rv-admin-providers__section rv-admin-providers__section--list"
-    data-testid="admin-providers-list-region"
+    data-testid="model-endpoints-list"
   >
-    <h2>Configured Providers</h2>
-    @if (admin.providerLoadError() !== null) {
-    <div class="rv-admin-providers__error" role="alert">
-      Failed to load providers: {{ admin.providerLoadError() }}
-    </div>
-    } @else if (admin.providerAliases().length === 0) {
-    <div class="rv-admin-providers__empty">No configured providers.</div>
-    } @else {
+    <h2>Model Endpoints</h2>
+    @if (admin.modelEndpointLoadError(); as error) {
+    <div class="rv-admin-providers__error">{{ error }}</div>
+    }
     <ul class="rv-admin-providers__list">
-      @for (provider of admin.providerAliases(); track provider) {
+      @for (endpoint of admin.modelEndpoints(); track endpoint.endpointId) {
       <li class="rv-admin-providers__provider">
         <div class="rv-admin-providers__provider-header">
-          <span>{{ provider.alias }}</span>
-          <span
-            class="rv-admin-providers__provider-status rv-admin-providers__provider-status--{{ provider.status }}"
-          >
-            {{ provider.status }}
-          </span>
+          <strong>{{ endpoint.endpointId }}</strong
+          ><span>{{ endpoint.status }}</span>
         </div>
         <div class="rv-admin-providers__meta">
-          <span>{{ provider.displayName ?? '-' }}</span>
-          <span>{{ provider.protocol }}</span>
-          <span>{{ provider.providerKind }}</span>
-          <span>{{ provider.modelId }}</span>
-          <span>prompt caching {{ provider.promptCaching ?? 'disabled' }}</span>
-          <span>{{ provider.credentialId ?? 'no shared credential' }}</span>
-          <span>{{ credentialLabel(provider) }}</span>
-          <span>{{ credentialKindLabel(provider) }}</span>
-          <span>{{ credentialUpdatedLabel(provider) }}</span>
-        </div>
-        @if (provider.protocol === 'responses') {
-        <div
-          class="rv-admin-providers__meta rv-admin-providers__meta--policy"
-          data-testid="provider-responses-policy-readback"
-        >
-          <span>
-            dialect {{ provider.responsesDialect ?? 'not configured' }}
-          </span>
-        </div>
-        } @if (provider.protocol === 'chat_completions') {
-        <div
-          class="rv-admin-providers__meta rv-admin-providers__meta--policy"
-          data-testid="provider-reasoning-policy-readback"
-        >
-          <span>dialect {{ provider.chatCompletionsDialect }}</span>
-          <span>thinking {{ provider.thinkingMode }}</span>
-          <span>history {{ provider.reasoningHistory }}</span>
-          <span>
-            budget {{ provider.reasoningBudgetTokens ?? 'provider default' }}
-          </span>
-          <span>format {{ provider.reasoningFormat ?? 'not reported' }}</span>
-        </div>
-        } @if (provider.baseUrl) {
-        <div class="rv-admin-providers__meta">
-          <span>{{ provider.baseUrl }}</span>
-        </div>
-        }
-        <div class="rv-admin-providers__provider-actions">
-          <button
-            type="button"
-            class="rv-admin-providers__button"
-            (click)="selectProviderForEdit(provider)"
+          <span>{{ endpoint.baseUrl }}</span
+          ><span>{{ endpoint.protocol }} / {{ endpoint.wireDialect }}</span
+          ><span>{{ endpoint.authScheme }}</span
+          ><span>revision {{ endpoint.revision }}</span
+          ><span
+            >used by {{ admin.modelConfigurations().filter(item =>
+            item.endpointId === endpoint.endpointId).length }}
+            configurations</span
           >
-            Edit
-          </button>
+        </div>
+        <button
+          type="button"
+          class="rv-admin-providers__button"
+          (click)="editEndpoint(endpoint)"
+        >
+          Edit Endpoint
+        </button>
+      </li>
+      }
+    </ul>
+  </section>
+
+  <section
+    class="rv-admin-providers__section rv-admin-providers__section--editor"
+    data-testid="model-configuration-editor"
+  >
+    <h2>
+      {{ editingModelConfigId() === null ? 'Create Model Configuration' : 'Edit
+      Model Configuration' }}
+    </h2>
+    <p>
+      Configurations describe one model and reference an endpoint for transport
+      and authentication.
+    </p>
+    <div class="rv-admin-providers__form-grid">
+      <label
+        ><span>Configuration ID</span
+        ><input
+          data-testid="model-configuration-id"
+          [disabled]="editingModelConfigId() !== null"
+          [value]="configurationForm().modelConfigId"
+          (input)="configurationText('modelConfigId', $event)"
+      /></label>
+      <label
+        ><span>Endpoint</span
+        ><select
+          data-testid="model-configuration-endpoint"
+          [value]="configurationForm().endpointId"
+          (change)="configurationText('endpointId', $event)"
+        >
+          <option value="">Select an endpoint</option>
+          @for (endpoint of admin.modelEndpoints(); track endpoint.endpointId) {
+          <option [value]="endpoint.endpointId">
+            {{ endpoint.displayName || endpoint.endpointId }} — {{
+            endpoint.protocol }} / {{ endpoint.authScheme }}
+          </option>
+          }</select
+        ><small
+          >Changing this selection changes transport and authentication for this
+          model only.</small
+        ></label
+      >
+      <label
+        ><span>Display Name</span
+        ><input
+          [value]="configurationForm().displayName"
+          (input)="configurationText('displayName', $event)"
+      /></label>
+      <label
+        ><span>Description</span
+        ><input
+          [value]="configurationForm().description"
+          (input)="configurationText('description', $event)"
+      /></label>
+      <label
+        ><span>Model ID</span
+        ><input
+          data-testid="model-configuration-model-id"
+          [value]="configurationForm().modelId"
+          (input)="configurationText('modelId', $event)"
+      /></label>
+      <label
+        ><span>Context Window Tokens</span
+        ><input
+          type="number"
+          [value]="configurationForm().contextWindowTokens"
+          (input)="configurationText('contextWindowTokens', $event)"
+      /></label>
+      <label
+        ><span>Max Output Tokens</span
+        ><input
+          type="number"
+          [value]="configurationForm().maxOutputTokens"
+          (input)="configurationText('maxOutputTokens', $event)"
+      /></label>
+      <label
+        ><span>Temperature Milli</span
+        ><input
+          type="number"
+          [value]="configurationForm().temperatureMilli"
+          (input)="configurationText('temperatureMilli', $event)"
+      /></label>
+      <label
+        ><span>Reasoning Effort</span
+        ><input
+          [value]="configurationForm().reasoningEffort"
+          (input)="configurationText('reasoningEffort', $event)"
+      /></label>
+      <label
+        ><span>Reasoning Format</span
+        ><input
+          [value]="configurationForm().reasoningFormat"
+          (input)="configurationText('reasoningFormat', $event)"
+      /></label>
+      <label
+        ><span>Reasoning History</span
+        ><select
+          [value]="configurationForm().reasoningHistory"
+          (change)="configurationText('reasoningHistory', $event)"
+        >
+          @for (value of histories; track value) {
+          <option [value]="value">{{ value }}</option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Reasoning Budget Tokens</span
+        ><input
+          type="number"
+          [value]="configurationForm().reasoningBudgetTokens"
+          (input)="configurationText('reasoningBudgetTokens', $event)"
+      /></label>
+      <label
+        ><span>Thinking Mode</span
+        ><select
+          [value]="configurationForm().thinkingMode"
+          (change)="configurationText('thinkingMode', $event)"
+        >
+          @for (value of thinkingModes; track value) {
+          <option [value]="value">{{ value }}</option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Prompt Caching Policy</span
+        ><select
+          [value]="configurationForm().promptCachingPolicy"
+          (change)="configurationText('promptCachingPolicy', $event)"
+        >
+          @for (value of cachingPolicies; track value) {
+          <option [value]="value">{{ value }}</option>
+          }
+        </select></label
+      >
+      <label
+        ><span>Image Input</span
+        ><input
+          type="checkbox"
+          [checked]="configurationForm().imageInput"
+          (change)="updateImageInput($event)"
+      /></label>
+      <label
+        ><span>Status</span
+        ><select
+          [value]="configurationForm().status"
+          (change)="configurationText('status', $event)"
+        >
+          @for (status of statuses; track status) {
+          <option [value]="status">{{ status }}</option>
+          }
+        </select></label
+      >
+    </div>
+    <div class="rv-admin-providers__actions">
+      <button
+        type="button"
+        class="rv-admin-providers__button rv-admin-providers__button--primary"
+        (click)="saveConfiguration()"
+        [disabled]="configurationSaveDisabled()"
+      >
+        {{ editingModelConfigId() === null ? 'Create Configuration' : 'Update
+        Configuration' }}</button
+      >@if (editingModelConfigId() !== null) {
+      <button
+        type="button"
+        class="rv-admin-providers__button"
+        (click)="cancelConfiguration()"
+      >
+        Cancel
+      </button>
+      }
+    </div>
+  </section>
+
+  <section
+    class="rv-admin-providers__section rv-admin-providers__section--list"
+    data-testid="model-configurations-list"
+  >
+    <h2>Model Configurations</h2>
+    @if (admin.modelConfigurationLoadError(); as error) {
+    <div class="rv-admin-providers__error">{{ error }}</div>
+    }
+    <ul class="rv-admin-providers__list">
+      @for (configuration of admin.modelConfigurations(); track
+      configuration.modelConfigId) {
+      <li class="rv-admin-providers__provider">
+        <div class="rv-admin-providers__provider-header">
+          <strong>{{ configuration.modelConfigId }}</strong
+          ><span>{{ configuration.status }}</span>
+        </div>
+        <div class="rv-admin-providers__meta">
+          <span>{{ configuration.modelId }}</span
+          ><span>endpoint {{ configuration.endpointId }}</span
+          ><span>revision {{ configuration.revision }}</span>
+        </div>
+        <button
+          type="button"
+          class="rv-admin-providers__button"
+          (click)="editConfiguration(configuration)"
+        >
+          Edit Configuration
+        </button>
+      </li>
+      }
+    </ul>
+  </section>
+
+  <section
+    class="rv-admin-providers__section rv-admin-providers__section--list"
+    data-testid="legacy-model-providers"
+  >
+    <h2>Legacy Joined Providers (read-only)</h2>
+    <p>
+      Deprecated compatibility projection for migration diagnostics. New edits
+      belong in Model Endpoints and Model Configurations above.
+    </p>
+    <ul class="rv-admin-providers__list">
+      @for (provider of admin.providerAliases(); track provider.alias) {
+      <li class="rv-admin-providers__provider">
+        <div class="rv-admin-providers__provider-header">
+          <strong>{{ provider.alias }}</strong
+          ><span>{{ provider.status }}</span>
+        </div>
+        <div class="rv-admin-providers__meta">
+          <span>{{ provider.modelId }}</span><span>{{ provider.protocol }}</span
+          ><span>revision {{ provider.revision }}</span>
         </div>
       </li>
       }
     </ul>
-    }
   </section>
 </div>

@@ -26,6 +26,16 @@ import {
   type CreatedServiceProfile,
   type McpSurfaceDiagnostics,
   type MemorySurfaceCatalogProjection,
+  type ModelConfigurationListPage,
+  type ModelConfigurationPatch,
+  type ModelConfigurationRecord,
+  type ModelConfigurationWrite,
+  type ModelConfigurationWriteResult,
+  type ModelEndpointListPage,
+  type ModelEndpointPatch,
+  type ModelEndpointRecord,
+  type ModelEndpointWrite,
+  type ModelEndpointWriteResult,
   type ModelProviderPage,
   type ModelProviderRecord,
   type ModelProviderWriteRequest,
@@ -167,6 +177,13 @@ export class AdminStore {
   private readonly _runtimeConfigResult =
     signal<ProfileRegistryRuntimeConfigApplyResult | null>(null);
   private readonly _modelProviders = signal<ModelProviderPage | null>(null);
+  private readonly _modelEndpoints = signal<ModelEndpointListPage | null>(null);
+  private readonly _modelConfigurations =
+    signal<ModelConfigurationListPage | null>(null);
+  private readonly _modelEndpointWriteResult =
+    signal<ModelEndpointWriteResult | null>(null);
+  private readonly _modelConfigurationWriteResult =
+    signal<ModelConfigurationWriteResult | null>(null);
   private readonly _providerWriteResult =
     signal<ModelProviderWriteResponse | null>(null);
   private readonly _serviceCredentials = signal<ServiceCredentialPage | null>(
@@ -196,6 +213,11 @@ export class AdminStore {
    * to load it must be visible rather than looking like an empty registry.
    */
   private readonly _providerLoadError = signal<StoreErrorDetail | null>(null);
+  private readonly _modelEndpointLoadError = signal<StoreErrorDetail | null>(
+    null,
+  );
+  private readonly _modelConfigurationLoadError =
+    signal<StoreErrorDetail | null>(null);
   private readonly _credentialLoadError = signal<StoreErrorDetail | null>(null);
   private readonly _loading = signal(false);
   private readonly _saving = signal(false);
@@ -274,6 +296,16 @@ export class AdminStore {
   readonly runtimeConfigResult = this._runtimeConfigResult.asReadonly();
   readonly modelProviders = this._modelProviders.asReadonly();
   readonly providerWriteResult = this._providerWriteResult.asReadonly();
+  readonly modelEndpoints = computed<readonly ModelEndpointRecord[]>(
+    () => this._modelEndpoints()?.items ?? [],
+  );
+  readonly modelConfigurations = computed<readonly ModelConfigurationRecord[]>(
+    () => this._modelConfigurations()?.items ?? [],
+  );
+  readonly modelEndpointWriteResult =
+    this._modelEndpointWriteResult.asReadonly();
+  readonly modelConfigurationWriteResult =
+    this._modelConfigurationWriteResult.asReadonly();
   readonly serviceCredentialPage = this._serviceCredentials.asReadonly();
   readonly serviceCredentialImpact = this._serviceCredentialImpact.asReadonly();
   readonly serviceCredentialOauthStatus =
@@ -292,6 +324,14 @@ export class AdminStore {
   readonly providerLoadErrorDetail = this._providerLoadError.asReadonly();
   readonly providerLoadError = computed(() => {
     const error = this._providerLoadError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
+  readonly modelEndpointLoadError = computed(() => {
+    const error = this._modelEndpointLoadError();
+    return error === null ? null : storeErrorDetailMessage(error);
+  });
+  readonly modelConfigurationLoadError = computed(() => {
+    const error = this._modelConfigurationLoadError();
     return error === null ? null : storeErrorDetailMessage(error);
   });
   readonly credentialLoadError = computed(() => {
@@ -464,6 +504,8 @@ export class AdminStore {
         toolCatalog,
         localToolProfiles,
         contextStrategyCatalog,
+        modelEndpointsResult,
+        modelConfigurationsResult,
         modelProvidersResult,
         serviceCredentialsResult,
       ] = await Promise.all([
@@ -479,6 +521,8 @@ export class AdminStore {
         loadToolCatalog(this.transport),
         loadLocalToolProfiles(this.transport),
         loadContextStrategyCatalog(this.transport),
+        loadModelEndpoints(this.transport),
+        loadModelConfigurations(this.transport),
         loadModelProviders(this.transport),
         loadServiceCredentials(this.transport),
       ]);
@@ -495,6 +539,10 @@ export class AdminStore {
       this._toolCatalog.set(toolCatalog);
       this._localToolProfiles.set(localToolProfiles);
       this._contextStrategyCatalog.set(contextStrategyCatalog);
+      this._modelEndpoints.set(modelEndpointsResult.page);
+      this._modelEndpointLoadError.set(modelEndpointsResult.error);
+      this._modelConfigurations.set(modelConfigurationsResult.page);
+      this._modelConfigurationLoadError.set(modelConfigurationsResult.error);
       this._modelProviders.set(modelProvidersResult.page);
       this._providerLoadError.set(modelProvidersResult.error);
       this._serviceCredentials.set(serviceCredentialsResult.page);
@@ -1058,6 +1106,78 @@ export class AdminStore {
    * Create a reusable model provider alias and automatically rebuild affected
    * profile runtimes so no separate operator step is required (#6066).
    */
+  async createModelEndpoint(
+    request: ModelEndpointWrite,
+  ): Promise<ModelEndpointWriteResult | undefined> {
+    return this.saveNormalizedModelRecord(() =>
+      this.transport.createAdminModelEndpoint(request),
+    );
+  }
+
+  async updateModelEndpoint(
+    endpointId: string,
+    request: ModelEndpointPatch,
+  ): Promise<ModelEndpointWriteResult | undefined> {
+    return this.saveNormalizedModelRecord(() =>
+      this.transport.updateAdminModelEndpoint(endpointId, request),
+    );
+  }
+
+  async createModelConfiguration(
+    request: ModelConfigurationWrite,
+  ): Promise<ModelConfigurationWriteResult | undefined> {
+    return this.saveNormalizedModelConfiguration(() =>
+      this.transport.createAdminModelConfiguration(request),
+    );
+  }
+
+  async updateModelConfiguration(
+    modelConfigId: string,
+    request: ModelConfigurationPatch,
+  ): Promise<ModelConfigurationWriteResult | undefined> {
+    return this.saveNormalizedModelConfiguration(() =>
+      this.transport.updateAdminModelConfiguration(modelConfigId, request),
+    );
+  }
+
+  private async saveNormalizedModelRecord(
+    write: () => Promise<ModelEndpointWriteResult>,
+  ): Promise<ModelEndpointWriteResult | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._modelEndpointWriteResult.set(null);
+    try {
+      const result = await write();
+      this._modelEndpointWriteResult.set(result);
+      await this.refresh();
+      return result;
+    } catch (error) {
+      this._error.set(storeErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
+  private async saveNormalizedModelConfiguration(
+    write: () => Promise<ModelConfigurationWriteResult>,
+  ): Promise<ModelConfigurationWriteResult | undefined> {
+    this._saving.set(true);
+    this._error.set(null);
+    this._modelConfigurationWriteResult.set(null);
+    try {
+      const result = await write();
+      this._modelConfigurationWriteResult.set(result);
+      await this.refresh();
+      return result;
+    } catch (error) {
+      this._error.set(storeErrorDetail(error));
+      return undefined;
+    } finally {
+      this._saving.set(false);
+    }
+  }
+
   async createModelProvider(
     request: ModelProviderWriteRequest,
   ): Promise<ModelProviderWriteResponse | undefined> {
@@ -1773,6 +1893,34 @@ async function loadMemorySurfaces(transport: ChatTransport): Promise<{
  * Load model providers, capturing any failure as a provider-specific error so
  * the Providers panel can distinguish a broken registry from an empty one.
  */
+async function loadModelEndpoints(transport: ChatTransport): Promise<{
+  page: ModelEndpointListPage | null;
+  error: StoreErrorDetail | null;
+}> {
+  try {
+    return {
+      page: await transport.adminModelEndpoints({ limit: 100 }),
+      error: null,
+    };
+  } catch (error) {
+    return { page: null, error: storeErrorDetail(error) };
+  }
+}
+
+async function loadModelConfigurations(transport: ChatTransport): Promise<{
+  page: ModelConfigurationListPage | null;
+  error: StoreErrorDetail | null;
+}> {
+  try {
+    return {
+      page: await transport.adminModelConfigurations({ limit: 100 }),
+      error: null,
+    };
+  } catch (error) {
+    return { page: null, error: storeErrorDetail(error) };
+  }
+}
+
 async function loadModelProviders(transport: ChatTransport): Promise<{
   page: ModelProviderPage | null;
   error: StoreErrorDetail | null;

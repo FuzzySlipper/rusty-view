@@ -16,7 +16,25 @@ import type {
   MemorySurfaceCatalogItem,
   MemorySurfaceCatalogProjection,
   MemorySurfaceOwner,
+  ModelConfigurationListPage,
+  ModelConfigurationPatch,
+  ModelConfigurationRecord,
+  ModelConfigurationWrite,
+  ModelConfigurationWriteResult,
+  ModelEndpointAuthScheme,
+  ModelEndpointListPage,
+  ModelEndpointPatch,
+  ModelEndpointProtocol,
+  ModelEndpointRecord,
+  ModelEndpointWireDialect,
+  ModelEndpointWrite,
+  ModelEndpointWriteResult,
+  ModelPromptCachingPolicy,
+  ModelReasoningHistory,
+  ModelThinkingMode,
   ModelProviderKind,
+  NormalizedModelStatus,
+  PromptCacheTransport,
   ProviderAdminModelProviderRecord,
   ProviderAdminModelProviderWrite,
   ResponsesProviderDialect,
@@ -45,7 +63,25 @@ export type {
   MemorySurfaceCatalogItem,
   MemorySurfaceCatalogProjection,
   MemorySurfaceOwner,
+  ModelConfigurationListPage,
+  ModelConfigurationPatch,
+  ModelConfigurationRecord,
+  ModelConfigurationWrite,
+  ModelConfigurationWriteResult,
+  ModelEndpointAuthScheme,
+  ModelEndpointListPage,
+  ModelEndpointPatch,
+  ModelEndpointProtocol,
+  ModelEndpointRecord,
+  ModelEndpointWireDialect,
+  ModelEndpointWrite,
+  ModelEndpointWriteResult,
+  ModelPromptCachingPolicy,
+  ModelReasoningHistory,
+  ModelThinkingMode,
   ModelProviderKind,
+  NormalizedModelStatus,
+  PromptCacheTransport,
   RuntimeActivityCensus,
   RuntimeActivityCensusSummary,
   RuntimeActivityFinding,
@@ -1445,6 +1481,23 @@ export interface ProfileBundleExportPlan {
 }
 
 // ---- service-level model provider registry (tasks #3534/#3537) ----
+
+/** Filters accepted by the normalized endpoint registry. */
+export interface ModelEndpointQuery {
+  readonly endpointId?: string;
+  readonly status?: NormalizedModelStatus;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+/** Filters accepted by the normalized model-configuration registry. */
+export interface ModelConfigurationQuery {
+  readonly modelConfigId?: string;
+  readonly endpointId?: string;
+  readonly status?: NormalizedModelStatus;
+  readonly limit?: number;
+  readonly offset?: number;
+}
 
 /** Lifecycle status for a model provider alias. */
 export type ModelProviderStatus = 'active' | 'disabled' | 'archived';

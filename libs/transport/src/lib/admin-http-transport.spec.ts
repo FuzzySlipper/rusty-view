@@ -5,6 +5,10 @@ import type { ChatTransportConfig, FetchImpl } from './chat-transport-config';
 import { resolveChatTransportConfig } from './chat-transport-config';
 import type {
   AdminProfileRegistryDiagnostics,
+  ModelConfigurationPatch,
+  ModelConfigurationWrite,
+  ModelEndpointPatch,
+  ModelEndpointWrite,
   StorageQueryCatalog,
   StorageQueryResult,
 } from './admin-api-types';
@@ -2038,5 +2042,172 @@ describe('AdminHttpTransport', () => {
     const req = lastRequest();
     expect(req.method).toBe('DELETE');
     expect(req.url).toContain('/v1/admin/local-tool-profiles/research');
+  });
+
+  it('lists model endpoints with encoded query filters', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({ items: [], total: 0, limit: 25, offset: 5 }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.modelEndpoints({
+      endpointId: 'endpoint/with space?&',
+      status: 'disabled',
+      limit: 25,
+      offset: 5,
+    });
+
+    const request = lastRequest();
+    const url = new URL(request.url);
+    expect(request.method).toBe('GET');
+    expect(url.pathname).toBe('/v1/admin/model-endpoints');
+    expect(url.searchParams.get('endpointId')).toBe('endpoint/with space?&');
+    expect(url.searchParams.get('status')).toBe('disabled');
+    expect(url.searchParams.get('limit')).toBe('25');
+    expect(url.searchParams.get('offset')).toBe('5');
+    expect(request.url).toContain('endpointId=endpoint%2Fwith+space%3F%26');
+  });
+
+  it('lists model configurations with encoded endpoint and model filters', async () => {
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({ items: [], total: 0, limit: 50, offset: 10 }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    await transport.modelConfigurations({
+      modelConfigId: 'config/with space?&',
+      endpointId: 'endpoint/with space?&',
+      status: 'active',
+      limit: 50,
+      offset: 10,
+    });
+
+    const request = lastRequest();
+    const url = new URL(request.url);
+    expect(request.method).toBe('GET');
+    expect(url.pathname).toBe('/v1/admin/model-configurations');
+    expect(url.searchParams.get('modelConfigId')).toBe('config/with space?&');
+    expect(url.searchParams.get('endpointId')).toBe('endpoint/with space?&');
+    expect(url.searchParams.get('status')).toBe('active');
+    expect(url.searchParams.get('limit')).toBe('50');
+    expect(url.searchParams.get('offset')).toBe('10');
+    expect(request.url).toContain('modelConfigId=config%2Fwith+space%3F%26');
+  });
+
+  it('creates a model endpoint with the normalized route and complete body', async () => {
+    const requestBody = {
+      endpointId: 'endpoint-openai',
+      status: 'active',
+      displayName: 'OpenAI endpoint',
+      description: 'Shared OpenAI account',
+      baseUrl: 'https://api.openai.com/v1',
+      protocol: 'responses',
+      wireDialect: 'openai_stateful',
+      authScheme: 'bearer_api_key',
+      credentialId: 'credential-openai',
+      promptCacheTransport: 'none',
+      metadataJson: { owner: 'tests' },
+    } satisfies ModelEndpointWrite;
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({ endpoint: { endpointId: requestBody.endpointId } }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.createModelEndpoint(requestBody);
+
+    const request = lastRequest();
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe('/v1/admin/model-endpoints');
+    expect(JSON.parse(request.body ?? '{}')).toEqual(requestBody);
+    expect(result.endpoint.endpointId).toBe('endpoint-openai');
+  });
+
+  it('creates a model configuration with the normalized route and complete body', async () => {
+    const requestBody = {
+      modelConfigId: 'config-gpt-5',
+      endpointId: 'endpoint-openai',
+      status: 'active',
+      displayName: 'GPT 5',
+      description: 'Default reasoning configuration',
+      modelId: 'gpt-5',
+      contextWindowTokens: 400_000,
+      maxOutputTokens: 16_000,
+      temperatureMilli: 700,
+      reasoningEffort: 'high',
+      reasoningFormat: 'summary',
+      reasoningHistory: 'preserve_all',
+      reasoningBudgetTokens: 8_000,
+      thinkingMode: 'enabled',
+      promptCachingPolicy: 'automatic_5m',
+      capabilities: { version: 1, imageInput: true },
+      metadataJson: { owner: 'tests' },
+    } satisfies ModelConfigurationWrite;
+    const { fetch, lastRequest } = capturingFetch(
+      jsonOk({ configuration: { modelConfigId: requestBody.modelConfigId } }),
+    );
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+
+    const result = await transport.createModelConfiguration(requestBody);
+
+    const request = lastRequest();
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(
+      '/v1/admin/model-configurations',
+    );
+    expect(JSON.parse(request.body ?? '{}')).toEqual(requestBody);
+    expect(result.configuration.modelConfigId).toBe('config-gpt-5');
+  });
+
+  it('updates endpoints and configurations with independent expected revisions', async () => {
+    const requests: CapturedRequest[] = [];
+    const fetch: FetchImpl = async (input, init) => {
+      requests.push({
+        url: input.toString(),
+        method: init?.method ?? 'GET',
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? init.body : undefined,
+        cache: init?.cache,
+      });
+      return jsonOk({ endpoint: {}, configuration: {} });
+    };
+    const transport = new AdminHttpTransport(makeConfig(fetch));
+    const endpointPatch = {
+      status: 'disabled',
+      baseUrl: 'https://api.example.test/v1',
+      expectedRevision: 11,
+    } satisfies ModelEndpointPatch;
+    const configurationPatch = {
+      modelId: 'gpt-5-mini',
+      promptCachingPolicy: 'disabled',
+      expectedRevision: 29,
+    } satisfies ModelConfigurationPatch;
+
+    await transport.updateModelEndpoint('endpoint/with slash', endpointPatch);
+    await transport.updateModelConfiguration(
+      'config/with slash',
+      configurationPatch,
+    );
+
+    const endpointRequest = requests[0];
+    const configurationRequest = requests[1];
+    if (endpointRequest === undefined || configurationRequest === undefined) {
+      throw new Error('expected endpoint and configuration update requests');
+    }
+    expect(endpointRequest.method).toBe('PATCH');
+    expect(endpointRequest.url).toContain(
+      '/v1/admin/model-endpoints/endpoint%2Fwith%20slash',
+    );
+    expect(JSON.parse(endpointRequest.body ?? '{}')).toEqual(endpointPatch);
+    expect(configurationRequest.method).toBe('PATCH');
+    expect(configurationRequest.url).toContain(
+      '/v1/admin/model-configurations/config%2Fwith%20slash',
+    );
+    expect(JSON.parse(configurationRequest.body ?? '{}')).toEqual(
+      configurationPatch,
+    );
+    expect(JSON.parse(endpointRequest.body ?? '{}').expectedRevision).toBe(11);
+    expect(JSON.parse(configurationRequest.body ?? '{}').expectedRevision).toBe(
+      29,
+    );
   });
 });

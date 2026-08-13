@@ -99,9 +99,15 @@ describe('TopMenuComponent', () => {
             loadExportPlan: async () => undefined,
             providerAliases: () => [],
             modelProviders: () => null,
+            modelEndpoints: () => [],
+            modelConfigurations: () => [],
             providerLoadError: () => null,
+            modelEndpointLoadError: () => null,
+            modelConfigurationLoadError: () => null,
             credentialLoadError: () => null,
             providerWriteResult: () => null,
+            modelEndpointWriteResult: () => null,
+            modelConfigurationWriteResult: () => null,
             loadStorageQueryCatalog: async () => undefined,
             executeStorageQuery: async () => true,
             storageQueryCatalog: () => null,
@@ -110,6 +116,10 @@ describe('TopMenuComponent', () => {
             storageQueryError: () => null,
             createModelProvider: async () => undefined,
             updateModelProvider: async () => undefined,
+            createModelEndpoint: async () => undefined,
+            updateModelEndpoint: async () => undefined,
+            createModelConfiguration: async () => undefined,
+            updateModelConfiguration: async () => undefined,
             clearProviderWriteResult: () => undefined,
             loadOpenAiOauthStatus: async () => undefined,
             openAiOauthStatus: () => null,
@@ -232,11 +242,11 @@ describe('TopMenuComponent', () => {
     expect(host.querySelector('rv-admin-service-panel')).not.toBeNull();
   });
 
-  it('opens the Providers panel when Providers is clicked', async () => {
+  it('opens model administration when Models is clicked', async () => {
     const fixture = await createMenu();
     const host = fixture.nativeElement as HTMLElement;
 
-    findMenuButton(host, 'Providers')?.click();
+    findMenuButton(host, 'Models')?.click();
     fixture.detectChanges();
 
     expect(host.querySelector('rv-admin-providers-panel')).not.toBeNull();
@@ -347,7 +357,7 @@ describe('TopMenuComponent', () => {
     expect(host.querySelector('rv-help-panel')).toBeNull();
   });
 
-  it('switches directly from Options to Providers when another top-menu item is clicked', async () => {
+  it('switches directly from Options to Models when another top-menu item is clicked', async () => {
     const fixture = await createMenu();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -355,7 +365,7 @@ describe('TopMenuComponent', () => {
     fixture.detectChanges();
     expect(host.querySelector('rv-options-panel')).not.toBeNull();
 
-    findMenuButton(host, 'Providers')?.click();
+    findMenuButton(host, 'Models')?.click();
     fixture.detectChanges();
 
     expect(host.querySelector('rv-options-panel')).toBeNull();

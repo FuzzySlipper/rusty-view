@@ -4,6 +4,78 @@
  */
 
 export interface paths {
+    "/v1/admin/model-endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List normalized model endpoints */
+        get: operations["listModelEndpoints"];
+        put?: never;
+        /** Create a normalized model endpoint */
+        post: operations["createModelEndpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/model-endpoints/{endpointId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a normalized model endpoint */
+        get: operations["getModelEndpoint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a normalized model endpoint */
+        patch: operations["patchModelEndpoint"];
+        trace?: never;
+    };
+    "/v1/admin/model-configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List normalized model configurations */
+        get: operations["listModelConfigurations"];
+        put?: never;
+        /** Create a normalized model configuration */
+        post: operations["createModelConfiguration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/model-configurations/{modelConfigId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a normalized model configuration */
+        get: operations["getModelConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a normalized model configuration */
+        patch: operations["patchModelConfiguration"];
+        trace?: never;
+    };
     "/v1/admin/model-providers": {
         parameters: {
             query?: never;
@@ -327,7 +399,7 @@ export interface components {
         };
         ApiError: {
             code: string;
-            reason_code: components["schemas"]["ModelProviderReasonCode"];
+            reason_code: components["schemas"]["ModelProviderReasonCode"] | components["schemas"]["NormalizedModelReasonCode"];
             message: string;
             retryable: boolean;
         };
@@ -336,6 +408,204 @@ export interface components {
             /** @constant */
             schema_version: 1;
         };
+        /** @enum {string} */
+        NormalizedModelStatus: "active" | "disabled" | "archived";
+        /** @enum {string} */
+        ModelEndpointProtocol: "responses" | "chat_completions";
+        /**
+         * @description Closed wire dialect registry. The selected dialect must be valid for the endpoint protocol.
+         * @enum {string}
+         */
+        ModelEndpointWireDialect: "openai_stateful" | "openai_stateless" | "generic_stateless" | "deepseek" | "meta" | "standard" | "kimi" | "glm" | "qwen";
+        /**
+         * @description Authentication behavior is explicit. Credentials are referenced by credentialId and secret material is never part of this API.
+         * @enum {string}
+         */
+        ModelEndpointAuthScheme: "none" | "bearer_api_key" | "openai_codex_oauth";
+        /**
+         * @description Explicit transport support for prompt caching.
+         * @enum {string}
+         */
+        PromptCacheTransport: "none" | "openrouter_anthropic";
+        /** @enum {string} */
+        ModelReasoningHistory: "provider_default" | "discard" | "preserve_all" | "tool_calls_only";
+        /** @enum {string} */
+        ModelThinkingMode: "provider_default" | "enabled" | "disabled";
+        /**
+         * @description The policy is normalized configuration state; the endpoint promptCacheTransport and model ID still constrain enabled policies.
+         * @enum {string}
+         */
+        ModelPromptCachingPolicy: "disabled" | "automatic_5m" | "automatic_1h";
+        ModelCapabilities: {
+            /** @constant */
+            version: 1;
+            imageInput: boolean;
+        };
+        ModelEndpointRecord: {
+            endpointId: string;
+            status: components["schemas"]["NormalizedModelStatus"];
+            displayName?: string;
+            description?: string;
+            baseUrl: string;
+            protocol: components["schemas"]["ModelEndpointProtocol"];
+            wireDialect: components["schemas"]["ModelEndpointWireDialect"];
+            authScheme: components["schemas"]["ModelEndpointAuthScheme"];
+            credentialId?: string;
+            promptCacheTransport: components["schemas"]["PromptCacheTransport"];
+            metadataJson: {
+                [key: string]: unknown;
+            };
+            revision: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ModelEndpointWrite: {
+            endpointId: string;
+            status: components["schemas"]["NormalizedModelStatus"];
+            displayName?: string;
+            description?: string;
+            baseUrl: string;
+            protocol: components["schemas"]["ModelEndpointProtocol"];
+            wireDialect: components["schemas"]["ModelEndpointWireDialect"];
+            /** @default none */
+            authScheme: components["schemas"]["ModelEndpointAuthScheme"];
+            credentialId?: string;
+            /** @default none */
+            promptCacheTransport: components["schemas"]["PromptCacheTransport"];
+            /** @default {} */
+            metadataJson: {
+                [key: string]: unknown;
+            };
+            expectedRevision?: number;
+        };
+        ModelEndpointPatch: {
+            endpointId?: string;
+            status?: components["schemas"]["NormalizedModelStatus"];
+            displayName?: string;
+            description?: string;
+            baseUrl?: string;
+            protocol?: components["schemas"]["ModelEndpointProtocol"];
+            wireDialect?: components["schemas"]["ModelEndpointWireDialect"];
+            authScheme?: components["schemas"]["ModelEndpointAuthScheme"];
+            credentialId?: string;
+            promptCacheTransport?: components["schemas"]["PromptCacheTransport"];
+            metadataJson?: {
+                [key: string]: unknown;
+            };
+            expectedRevision?: number;
+        };
+        ModelEndpointListPage: {
+            items: components["schemas"]["ModelEndpointRecord"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        ModelEndpointWriteResult: {
+            endpoint: components["schemas"]["ModelEndpointRecord"];
+        };
+        ModelEndpointRevisionConflict: {
+            endpoint?: components["schemas"]["ModelEndpointRecord"];
+            expectedRevision: number;
+            currentRevision: number;
+        };
+        ModelConfigurationRecord: {
+            modelConfigId: string;
+            endpointId: string;
+            status: components["schemas"]["NormalizedModelStatus"];
+            displayName?: string;
+            description?: string;
+            modelId: string;
+            contextWindowTokens?: number;
+            maxOutputTokens?: number;
+            temperatureMilli?: number;
+            reasoningEffort?: string;
+            reasoningFormat?: string;
+            reasoningHistory: components["schemas"]["ModelReasoningHistory"];
+            reasoningBudgetTokens?: number;
+            thinkingMode: components["schemas"]["ModelThinkingMode"];
+            promptCachingPolicy: components["schemas"]["ModelPromptCachingPolicy"];
+            capabilities: components["schemas"]["ModelCapabilities"];
+            metadataJson: {
+                [key: string]: unknown;
+            };
+            revision: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ModelConfigurationWrite: {
+            modelConfigId: string;
+            endpointId: string;
+            status: components["schemas"]["NormalizedModelStatus"];
+            displayName?: string;
+            description?: string;
+            modelId: string;
+            contextWindowTokens?: number;
+            maxOutputTokens?: number;
+            temperatureMilli?: number;
+            reasoningEffort?: string;
+            reasoningFormat?: string;
+            /** @default provider_default */
+            reasoningHistory: components["schemas"]["ModelReasoningHistory"];
+            reasoningBudgetTokens?: number;
+            /** @default provider_default */
+            thinkingMode: components["schemas"]["ModelThinkingMode"];
+            /** @default disabled */
+            promptCachingPolicy: components["schemas"]["ModelPromptCachingPolicy"];
+            /**
+             * @default {
+             *       "version": 1,
+             *       "imageInput": false
+             *     }
+             */
+            capabilities: components["schemas"]["ModelCapabilities"];
+            /** @default {} */
+            metadataJson: {
+                [key: string]: unknown;
+            };
+            expectedRevision?: number;
+        };
+        ModelConfigurationPatch: {
+            modelConfigId?: string;
+            endpointId?: string;
+            status?: components["schemas"]["NormalizedModelStatus"];
+            displayName?: string;
+            description?: string;
+            modelId?: string;
+            contextWindowTokens?: number;
+            maxOutputTokens?: number;
+            temperatureMilli?: number;
+            reasoningEffort?: string;
+            reasoningFormat?: string;
+            reasoningHistory?: components["schemas"]["ModelReasoningHistory"];
+            reasoningBudgetTokens?: number;
+            thinkingMode?: components["schemas"]["ModelThinkingMode"];
+            promptCachingPolicy?: components["schemas"]["ModelPromptCachingPolicy"];
+            capabilities?: components["schemas"]["ModelCapabilities"];
+            metadataJson?: {
+                [key: string]: unknown;
+            };
+            expectedRevision?: number;
+        };
+        ModelConfigurationListPage: {
+            items: components["schemas"]["ModelConfigurationRecord"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        ModelConfigurationWriteResult: {
+            configuration: components["schemas"]["ModelConfigurationRecord"];
+        };
+        ModelConfigurationRevisionConflict: {
+            configuration?: components["schemas"]["ModelConfigurationRecord"];
+            expectedRevision: number;
+            currentRevision: number;
+        };
+        /** @enum {string} */
+        NormalizedModelReasonCode: "invalid_model_endpoint" | "invalid_model_configuration" | "invalid_model_endpoint_status" | "model_endpoint_not_found" | "model_configuration_not_found" | "model_endpoint_revision_mismatch" | "model_configuration_revision_mismatch" | "model_endpoint_admin_method_not_allowed";
         /** @enum {string} */
         ModelProviderStatus: "active" | "disabled" | "archived";
         /** @enum {string} */
@@ -378,7 +648,8 @@ export interface components {
             alias: string;
             status: components["schemas"]["ModelProviderStatus"];
             protocol: components["schemas"]["ModelProviderProtocol"];
-            providerKind: components["schemas"]["ModelProviderKind"];
+            /** @description Provider classification read from persistence. New writes are restricted to ModelProviderKind, but reads remain open so legacy records with historical classifications can be listed and retrieved for migration. */
+            providerKind: string;
             displayName?: string;
             description?: string;
             baseUrl?: string;
@@ -700,6 +971,28 @@ export interface components {
                 "application/json": components["schemas"]["ApiEnvelope"];
             };
         };
+        /** @description Normalized model endpoint revision conflict */
+        ModelEndpointRevisionConflictEnvelope: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiEnvelope"] & {
+                    data?: components["schemas"]["ModelEndpointRevisionConflict"];
+                };
+            };
+        };
+        /** @description Normalized model configuration revision conflict */
+        ModelConfigurationRevisionConflictEnvelope: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiEnvelope"] & {
+                    data?: components["schemas"]["ModelConfigurationRevisionConflict"];
+                };
+            };
+        };
         /** @description Revision conflict envelope */
         RevisionConflictEnvelope: {
             headers: {
@@ -714,6 +1007,8 @@ export interface components {
     };
     parameters: {
         Alias: string;
+        EndpointId: string;
+        ModelConfigId: string;
         Limit: number;
         Offset: number;
         Refresh: components["schemas"]["ModelProviderRefreshMode"];
@@ -726,6 +1021,231 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listModelEndpoints: {
+        parameters: {
+            query?: {
+                endpointId?: string;
+                status?: components["schemas"]["NormalizedModelStatus"];
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Normalized model endpoint page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelEndpointListPage"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+        };
+    };
+    createModelEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelEndpointWrite"];
+            };
+        };
+        responses: {
+            /** @description Normalized model endpoint write result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelEndpointWriteResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+            409: components["responses"]["ModelEndpointRevisionConflictEnvelope"];
+        };
+    };
+    getModelEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpointId: components["parameters"]["EndpointId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Normalized model endpoint */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelEndpointRecord"];
+                    };
+                };
+            };
+            404: components["responses"]["ErrorEnvelope"];
+        };
+    };
+    patchModelEndpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpointId: components["parameters"]["EndpointId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelEndpointPatch"];
+            };
+        };
+        responses: {
+            /** @description Normalized model endpoint write result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelEndpointWriteResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+            404: components["responses"]["ErrorEnvelope"];
+            409: components["responses"]["ModelEndpointRevisionConflictEnvelope"];
+        };
+    };
+    listModelConfigurations: {
+        parameters: {
+            query?: {
+                modelConfigId?: string;
+                endpointId?: string;
+                status?: components["schemas"]["NormalizedModelStatus"];
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Normalized model configuration page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelConfigurationListPage"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+        };
+    };
+    createModelConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelConfigurationWrite"];
+            };
+        };
+        responses: {
+            /** @description Normalized model configuration write result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelConfigurationWriteResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+            409: components["responses"]["ModelConfigurationRevisionConflictEnvelope"];
+        };
+    };
+    getModelConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelConfigId: components["parameters"]["ModelConfigId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Normalized model configuration */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelConfigurationRecord"];
+                    };
+                };
+            };
+            404: components["responses"]["ErrorEnvelope"];
+        };
+    };
+    patchModelConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelConfigId: components["parameters"]["ModelConfigId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelConfigurationPatch"];
+            };
+        };
+        responses: {
+            /** @description Normalized model configuration write result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiEnvelope"] & {
+                        data?: components["schemas"]["ModelConfigurationWriteResult"];
+                    };
+                };
+            };
+            400: components["responses"]["ErrorEnvelope"];
+            404: components["responses"]["ErrorEnvelope"];
+            409: components["responses"]["ModelConfigurationRevisionConflictEnvelope"];
+        };
+    };
     listModelProviders: {
         parameters: {
             query?: {

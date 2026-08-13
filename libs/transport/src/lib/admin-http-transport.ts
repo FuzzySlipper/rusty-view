@@ -38,6 +38,18 @@ import type {
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
   MemorySurfaceCatalogProjection,
+  ModelConfigurationListPage,
+  ModelConfigurationPatch,
+  ModelConfigurationQuery,
+  ModelConfigurationRecord,
+  ModelConfigurationWrite,
+  ModelConfigurationWriteResult,
+  ModelEndpointListPage,
+  ModelEndpointPatch,
+  ModelEndpointQuery,
+  ModelEndpointRecord,
+  ModelEndpointWrite,
+  ModelEndpointWriteResult,
   ModelProviderPage,
   ModelProviderQuery,
   ModelProviderRecord,
@@ -644,6 +656,66 @@ export class AdminHttpTransport {
     );
   }
 
+  modelEndpoints(query?: ModelEndpointQuery): Promise<ModelEndpointListPage> {
+    return this.request(
+      'GET',
+      '/v1/admin/model-endpoints',
+      optionsForModelEndpointQuery(query),
+    );
+  }
+
+  modelEndpoint(endpointId: string): Promise<ModelEndpointRecord> {
+    return this.request('GET', modelEndpointPath(endpointId));
+  }
+
+  createModelEndpoint(
+    request: ModelEndpointWrite,
+  ): Promise<ModelEndpointWriteResult> {
+    return this.request('POST', '/v1/admin/model-endpoints', {
+      body: request as unknown as Record<string, unknown>,
+    });
+  }
+
+  updateModelEndpoint(
+    endpointId: string,
+    request: ModelEndpointPatch,
+  ): Promise<ModelEndpointWriteResult> {
+    return this.request('PATCH', modelEndpointPath(endpointId), {
+      body: request as unknown as Record<string, unknown>,
+    });
+  }
+
+  modelConfigurations(
+    query?: ModelConfigurationQuery,
+  ): Promise<ModelConfigurationListPage> {
+    return this.request(
+      'GET',
+      '/v1/admin/model-configurations',
+      optionsForModelConfigurationQuery(query),
+    );
+  }
+
+  modelConfiguration(modelConfigId: string): Promise<ModelConfigurationRecord> {
+    return this.request('GET', modelConfigurationPath(modelConfigId));
+  }
+
+  createModelConfiguration(
+    request: ModelConfigurationWrite,
+  ): Promise<ModelConfigurationWriteResult> {
+    return this.request('POST', '/v1/admin/model-configurations', {
+      body: request as unknown as Record<string, unknown>,
+    });
+  }
+
+  updateModelConfiguration(
+    modelConfigId: string,
+    request: ModelConfigurationPatch,
+  ): Promise<ModelConfigurationWriteResult> {
+    return this.request('PATCH', modelConfigurationPath(modelConfigId), {
+      body: request as unknown as Record<string, unknown>,
+    });
+  }
+
   /**
    * List reusable model provider aliases (tasks #3534/#3537). Secrets are
    * redacted on read; `credential.hasSecret` indicates whether a key is set.
@@ -1091,6 +1163,33 @@ function optionsForProviderQuery(query?: ModelProviderQuery): RequestOptions {
   return { query: params };
 }
 
+function optionsForModelEndpointQuery(
+  query?: ModelEndpointQuery,
+): RequestOptions {
+  if (query === undefined) return {};
+  const params: Record<string, unknown> = {};
+  if (query.endpointId !== undefined) params['endpointId'] = query.endpointId;
+  if (query.status !== undefined) params['status'] = query.status;
+  if (query.limit !== undefined) params['limit'] = query.limit;
+  if (query.offset !== undefined) params['offset'] = query.offset;
+  return { query: params };
+}
+
+function optionsForModelConfigurationQuery(
+  query?: ModelConfigurationQuery,
+): RequestOptions {
+  if (query === undefined) return {};
+  const params: Record<string, unknown> = {};
+  if (query.modelConfigId !== undefined) {
+    params['modelConfigId'] = query.modelConfigId;
+  }
+  if (query.endpointId !== undefined) params['endpointId'] = query.endpointId;
+  if (query.status !== undefined) params['status'] = query.status;
+  if (query.limit !== undefined) params['limit'] = query.limit;
+  if (query.offset !== undefined) params['offset'] = query.offset;
+  return { query: params };
+}
+
 function optionsForServiceCredentialQuery(
   query?: ServiceCredentialQuery,
 ): RequestOptions {
@@ -1112,6 +1211,14 @@ function providerWritePath(refresh: ModelProviderRefreshMode): string {
 
 function providerItemPath(alias: string): string {
   return `/v1/admin/model-providers/${encodeURIComponent(alias)}`;
+}
+
+function modelEndpointPath(endpointId: string): string {
+  return `/v1/admin/model-endpoints/${encodeURIComponent(endpointId)}`;
+}
+
+function modelConfigurationPath(modelConfigId: string): string {
+  return `/v1/admin/model-configurations/${encodeURIComponent(modelConfigId)}`;
 }
 
 function openAiOauthProviderPath(

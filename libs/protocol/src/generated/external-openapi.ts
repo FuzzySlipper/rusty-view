@@ -1096,6 +1096,12 @@ export interface components {
             /** @constant */
             type: "wake_failed";
         };
+        /** @enum {string} */
+        ChatCompletionsPromptCachingPolicy: "disabled" | "automatic_5m" | "automatic_1h";
+        /** @enum {string} */
+        ChatCompletionsReasoningHistory: "provider_default" | "discard" | "preserve_all" | "tool_calls_only";
+        /** @enum {string} */
+        ChatCompletionsThinkingMode: "provider_default" | "enabled" | "disabled";
         CompletionPacket: {
             session_id: string;
             status: components["schemas"]["CompletionStatus"];
@@ -1868,14 +1874,20 @@ export interface components {
             credentialId?: string | null;
             /** Format: uint64 */
             credentialRevision?: number | null;
+            endpointId: string;
+            /** Format: uint64 */
+            endpointRevision: number;
+            modelConfigId: string;
+            /** Format: uint64 */
+            modelConfigRevision: number;
             profileId: string;
             /** Format: uint64 */
             profileRevision: number;
             promptFingerprint: string;
-            providerAlias: string;
+            providerAlias?: string | null;
             providerFingerprint: string;
             /** Format: uint64 */
-            providerRevision: number;
+            providerRevision?: number | null;
             toolRegistryRevision: string;
             toolSelectionFingerprint: string;
         };
@@ -1933,6 +1945,7 @@ export interface components {
             activeExecutionEpochId?: string | null;
             admittedAt: string;
             attention?: components["schemas"]["LogicalTurnAttention"] | null;
+            binding: components["schemas"]["LogicalTurnBindingSnapshot"];
             /** Format: uint64 */
             continuationCount: number;
             currentContinuationId: string;
@@ -2336,6 +2349,198 @@ export interface components {
         };
         /** @enum {string} */
         MidTurnDeltaMode: "frozen_snapshot_next_wake";
+        ModelCapabilities: {
+            /** @default false */
+            image_input: boolean;
+            /**
+             * Format: uint32
+             * @default 1
+             */
+            version: number;
+        };
+        ModelConfigurationQuery: {
+            endpoint_id?: string | null;
+            /** Format: uint32 */
+            limit?: number | null;
+            model_config_id?: string | null;
+            /** Format: uint32 */
+            offset?: number | null;
+            status?: components["schemas"]["ModelProviderStatus"] | null;
+        };
+        ModelConfigurationRecord: {
+            /**
+             * @default {
+             *       "image_input": false,
+             *       "version": 1
+             *     }
+             */
+            capabilities: components["schemas"]["ModelCapabilities"];
+            /** Format: uint32 */
+            context_window_tokens?: number | null;
+            created_at: string;
+            description?: string | null;
+            display_name?: string | null;
+            endpoint_id: string;
+            /** Format: uint32 */
+            max_output_tokens?: number | null;
+            /** @default {} */
+            metadata_json: unknown;
+            model_config_id: string;
+            model_id: string;
+            /** @default disabled */
+            prompt_caching_policy: components["schemas"]["ChatCompletionsPromptCachingPolicy"];
+            /** Format: uint32 */
+            reasoning_budget_tokens?: number | null;
+            reasoning_effort?: string | null;
+            reasoning_format?: string | null;
+            /** @default provider_default */
+            reasoning_history: components["schemas"]["ChatCompletionsReasoningHistory"];
+            /** Format: uint64 */
+            revision: number;
+            status: components["schemas"]["ModelProviderStatus"];
+            /** Format: uint32 */
+            temperature_milli?: number | null;
+            /** @default provider_default */
+            thinking_mode: components["schemas"]["ChatCompletionsThinkingMode"];
+            updated_at: string;
+        };
+        ModelConfigurationWrite: {
+            /**
+             * @default {
+             *       "image_input": false,
+             *       "version": 1
+             *     }
+             */
+            capabilities: components["schemas"]["ModelCapabilities"];
+            /** Format: uint32 */
+            context_window_tokens?: number | null;
+            description?: string | null;
+            display_name?: string | null;
+            endpoint_id: string;
+            /** Format: uint64 */
+            expected_revision?: number | null;
+            /** Format: uint32 */
+            max_output_tokens?: number | null;
+            /** @default {} */
+            metadata_json: unknown;
+            model_config_id: string;
+            model_id: string;
+            now: string;
+            /** @default disabled */
+            prompt_caching_policy: components["schemas"]["ChatCompletionsPromptCachingPolicy"];
+            /** Format: uint32 */
+            reasoning_budget_tokens?: number | null;
+            reasoning_effort?: string | null;
+            reasoning_format?: string | null;
+            /** @default provider_default */
+            reasoning_history: components["schemas"]["ChatCompletionsReasoningHistory"];
+            status: components["schemas"]["ModelProviderStatus"];
+            /** Format: uint32 */
+            temperature_milli?: number | null;
+            /** @default provider_default */
+            thinking_mode: components["schemas"]["ChatCompletionsThinkingMode"];
+        };
+        /** @enum {string} */
+        ModelEndpointAuthScheme: "none" | "bearer_api_key" | "openai_codex_oauth";
+        /**
+         * @description Aggregate backfill/parity output. Every member is safe to serialize for
+         *     diagnostics because no field contains a secret or secret-bearing payload.
+         */
+        ModelEndpointBackfillReport: {
+            /** @default [] */
+            joined_projection_equality: components["schemas"]["ModelEndpointJoinedProjectionEquality"][];
+            /** @default [] */
+            mappings: components["schemas"]["ModelEndpointLegacyAliasMapping"][];
+            /** @default [] */
+            representability_errors: components["schemas"]["ModelEndpointRepresentabilityError"][];
+        };
+        /**
+         * @description Equality of the safe, joined projection of a legacy alias and its
+         *     normalized endpoint/configuration records. Differences are field names,
+         *     never the differing values.
+         */
+        ModelEndpointJoinedProjectionEquality: {
+            differing_fields: string[];
+            endpoint_id: string;
+            legacy_alias: string;
+            model_config_id: string;
+            projection_equal: boolean;
+        };
+        /**
+         * @description A deterministic, secret-free mapping from one legacy provider alias to the
+         *     normalized endpoint/configuration pair created by a backfill.
+         */
+        ModelEndpointLegacyAliasMapping: {
+            endpoint_id: string;
+            legacy_alias: string;
+            model_config_id: string;
+        };
+        ModelEndpointParityReport: {
+            /** @default [] */
+            joined_projection_equality: components["schemas"]["ModelEndpointJoinedProjectionEquality"][];
+        };
+        ModelEndpointQuery: {
+            endpoint_id?: string | null;
+            /** Format: uint32 */
+            limit?: number | null;
+            /** Format: uint32 */
+            offset?: number | null;
+            status?: components["schemas"]["ModelProviderStatus"] | null;
+        };
+        ModelEndpointRecord: {
+            /** @default none */
+            auth_scheme: components["schemas"]["ModelEndpointAuthScheme"];
+            base_url: string;
+            created_at: string;
+            credential_id?: string | null;
+            description?: string | null;
+            display_name?: string | null;
+            endpoint_id: string;
+            /** @default {} */
+            metadata_json: unknown;
+            /** @default none */
+            prompt_cache_transport: components["schemas"]["PromptCacheTransport"];
+            protocol: components["schemas"]["ModelProviderProtocol"];
+            /** Format: uint64 */
+            revision: number;
+            status: components["schemas"]["ModelProviderStatus"];
+            updated_at: string;
+            wire_dialect: components["schemas"]["ModelEndpointWireDialect"];
+        };
+        /**
+         * @description A representability failure names only the legacy row and field; it carries
+         *     no provider secret or raw credential material.
+         */
+        ModelEndpointRepresentabilityError: {
+            field: string;
+            legacy_alias: string;
+            reason: string;
+        };
+        /** @enum {string} */
+        ModelEndpointWireDialect: "openai_stateful" | "openai_stateless" | "generic_stateless" | "deepseek" | "meta" | "standard" | "kimi" | "glm" | "qwen";
+        ModelEndpointWrite: {
+            /** @default none */
+            auth_scheme: components["schemas"]["ModelEndpointAuthScheme"];
+            base_url: string;
+            credential_id?: string | null;
+            description?: string | null;
+            display_name?: string | null;
+            endpoint_id: string;
+            /** Format: uint64 */
+            expected_revision?: number | null;
+            /** @default {} */
+            metadata_json: unknown;
+            now: string;
+            /** @default none */
+            prompt_cache_transport: components["schemas"]["PromptCacheTransport"];
+            protocol: components["schemas"]["ModelProviderProtocol"];
+            status: components["schemas"]["ModelProviderStatus"];
+            wire_dialect: components["schemas"]["ModelEndpointWireDialect"];
+        };
+        /** @enum {string} */
+        ModelProviderProtocol: "responses" | "chat_completions";
+        /** @enum {string} */
+        ModelProviderStatus: "active" | "disabled" | "archived";
         NormalizedExternalRuntimeEvent: {
             eventId: string;
             runtimeId: string;
@@ -2367,6 +2572,8 @@ export interface components {
         };
         /** @enum {string} */
         ProjectionVisibility: "observation" | "user_visible";
+        /** @enum {string} */
+        PromptCacheTransport: "none" | "openrouter_anthropic";
         /** @enum {string} */
         ProviderStateAbsenceReason: "not_configured" | "missing" | "expired" | "invalidated" | "module_does_not_use_state" | "load_failed";
         /** @enum {string} */

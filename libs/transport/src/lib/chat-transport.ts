@@ -79,6 +79,18 @@ import type {
   CreatedServiceProfile,
   McpSurfaceDiagnostics,
   MemorySurfaceCatalogProjection,
+  ModelConfigurationListPage,
+  ModelConfigurationPatch,
+  ModelConfigurationQuery,
+  ModelConfigurationRecord,
+  ModelConfigurationWrite,
+  ModelConfigurationWriteResult,
+  ModelEndpointListPage,
+  ModelEndpointPatch,
+  ModelEndpointQuery,
+  ModelEndpointRecord,
+  ModelEndpointWrite,
+  ModelEndpointWriteResult,
   ModelProviderPage,
   ModelProviderQuery,
   ModelProviderRecord,
@@ -675,6 +687,54 @@ export class ChatTransport {
     request: ProfileRegistryRuntimeConfigRequest,
   ): Promise<ProfileRegistryRuntimeConfigApplyResult> {
     return this.adminHttp.applyProfileRegistryRuntimeConfig(profileId, request);
+  }
+
+  adminModelEndpoints(
+    query?: ModelEndpointQuery,
+  ): Promise<ModelEndpointListPage> {
+    return this.adminHttp.modelEndpoints(query);
+  }
+
+  adminModelEndpoint(endpointId: string): Promise<ModelEndpointRecord> {
+    return this.adminHttp.modelEndpoint(endpointId);
+  }
+
+  createAdminModelEndpoint(
+    request: ModelEndpointWrite,
+  ): Promise<ModelEndpointWriteResult> {
+    return this.adminHttp.createModelEndpoint(request);
+  }
+
+  updateAdminModelEndpoint(
+    endpointId: string,
+    request: ModelEndpointPatch,
+  ): Promise<ModelEndpointWriteResult> {
+    return this.adminHttp.updateModelEndpoint(endpointId, request);
+  }
+
+  adminModelConfigurations(
+    query?: ModelConfigurationQuery,
+  ): Promise<ModelConfigurationListPage> {
+    return this.adminHttp.modelConfigurations(query);
+  }
+
+  adminModelConfiguration(
+    modelConfigId: string,
+  ): Promise<ModelConfigurationRecord> {
+    return this.adminHttp.modelConfiguration(modelConfigId);
+  }
+
+  createAdminModelConfiguration(
+    request: ModelConfigurationWrite,
+  ): Promise<ModelConfigurationWriteResult> {
+    return this.adminHttp.createModelConfiguration(request);
+  }
+
+  updateAdminModelConfiguration(
+    modelConfigId: string,
+    request: ModelConfigurationPatch,
+  ): Promise<ModelConfigurationWriteResult> {
+    return this.adminHttp.updateModelConfiguration(modelConfigId, request);
   }
 
   adminModelProviders(query?: ModelProviderQuery): Promise<ModelProviderPage> {
