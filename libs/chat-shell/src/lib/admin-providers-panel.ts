@@ -266,13 +266,20 @@ export class AdminProvidersPanelComponent {
       this.selectedCredential()?.credentialKind === 'openai_oauth'
     );
   });
-  protected readonly persistedOauthProtocolConflict = computed(() => {
+  protected readonly editingProvider = computed(() => {
     const alias = this.editingAlias();
-    if (alias === null || this.form().protocol === 'responses') return false;
-    const provider = this.admin
-      .modelProviders()
-      ?.items.find((candidate) => candidate.alias === alias);
+    if (alias === null) return null;
+    return (
+      this.admin
+        .modelProviders()
+        ?.items.find((candidate) => candidate.alias === alias) ?? null
+    );
+  });
+  protected readonly persistedOauthProtocolConflict = computed(() => {
+    if (this.form().protocol === 'responses') return false;
+    const provider = this.editingProvider();
     if (provider?.credentialId === undefined) return false;
+    if (provider.credential.kind === 'openai_oauth') return true;
     return this.admin
       .serviceCredentials()
       .some(
@@ -428,8 +435,12 @@ export class AdminProvidersPanelComponent {
     const value = (event.target as HTMLSelectElement).value;
     if (value === 'responses' || value === 'chat_completions') {
       this.form.update((current) => {
+        const editingProvider = this.editingProvider();
         const oauthSelection =
           current.credentialMode === 'create_openai_oauth' ||
+          (current.credentialMode === 'reuse' &&
+            editingProvider?.credentialId === current.credentialId &&
+            editingProvider.credential.kind === 'openai_oauth') ||
           (current.credentialMode === 'reuse' &&
             this.admin
               .serviceCredentials()

@@ -80,6 +80,7 @@ function makeTransport(
   providers: readonly ModelProviderRecord[],
   providerLoadFails = false,
   initialCredentials: readonly ServiceCredentialRecord[] = [],
+  credentialLoadFails = false,
 ): ChatTransport {
   let currentProviders = [...providers];
   let currentCredentials = [...initialCredentials];
@@ -139,12 +140,18 @@ function makeTransport(
           }
         : async () => ({ ...page, items: currentProviders }),
     ),
-    adminServiceCredentials: vi.fn(async () => ({
-      items: currentCredentials,
-      total: currentCredentials.length,
-      limit: 100,
-      offset: 0,
-    })),
+    adminServiceCredentials: vi.fn(
+      credentialLoadFails
+        ? async () => {
+            throw new Error('credential page unavailable');
+          }
+        : async () => ({
+            items: currentCredentials,
+            total: currentCredentials.length,
+            limit: 100,
+            offset: 0,
+          }),
+    ),
     createAdminServiceCredential: vi.fn(async (request) => {
       const credential: ServiceCredentialRecord = {
         credentialId: request.credentialId,
@@ -421,6 +428,7 @@ async function createPanel(
   providers: readonly ModelProviderRecord[],
   providerLoadFails = false,
   credentials: readonly ServiceCredentialRecord[] = [],
+  credentialLoadFails = false,
 ) {
   await TestBed.configureTestingModule({
     imports: [AdminProvidersPanelComponent],
@@ -428,7 +436,12 @@ async function createPanel(
       AdminStore,
       {
         provide: ChatTransport,
-        useValue: makeTransport(providers, providerLoadFails, credentials),
+        useValue: makeTransport(
+          providers,
+          providerLoadFails,
+          credentials,
+          credentialLoadFails,
+        ),
       },
     ],
   }).compileComponents();
@@ -629,6 +642,75 @@ describe('AdminProvidersPanelComponent', () => {
     );
     await component.saveProvider();
     expect(transport.updateAdminModelProvider.mock.calls).toHaveLength(0);
+  });
+
+  it('uses provider credential readback when the shared credential page fails', async () => {
+    const oauthProvider: ModelProviderRecord = {
+      ...makeProvider('oauth-provider-partial-load'),
+      protocol: 'responses',
+      responsesDialect: 'openai_stateful',
+      credentialId: 'openai:oauth-partial-load',
+      credential: {
+        hasSecret: true,
+        kind: 'openai_oauth',
+        status: 'configured',
+      },
+    };
+    const fixture = await createPanel([oauthProvider], false, [], true);
+    const store = TestBed.inject(AdminStore);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: { mock: { calls: unknown[][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      updateProtocol(event: { target: { value: string } }): void;
+      saveDisabled(): boolean;
+      saveProvider(): Promise<void>;
+    };
+
+    expect(store.modelProviders()?.items).toContainEqual(oauthProvider);
+    expect(store.serviceCredentials()).toEqual([]);
+    component.selectProviderForEdit(oauthProvider);
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    fixture.detectChanges();
+
+    expect(component.saveDisabled()).toBe(true);
+    expect(textContent(fixture)).toContain(
+      'Switch back to Responses, save it as Unconfigured',
+    );
+    await component.saveProvider();
+    expect(transport.updateAdminModelProvider.mock.calls).toHaveLength(0);
+  });
+
+  it('allows an API-key provider protocol change when the credential page is empty', async () => {
+    const apiKeyProvider: ModelProviderRecord = {
+      ...makeProvider('api-key-provider-partial-load'),
+      protocol: 'responses',
+      responsesDialect: 'generic_stateless',
+      credentialId: 'custom:api-key-partial-load',
+      credential: {
+        hasSecret: true,
+        kind: 'api_key',
+        status: 'configured',
+      },
+    };
+    const fixture = await createPanel([apiKeyProvider]);
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      updateAdminModelProvider: { mock: { calls: unknown[][] } };
+    };
+    const component = fixture.componentInstance as unknown as {
+      selectProviderForEdit(provider: ModelProviderRecord): void;
+      updateProtocol(event: { target: { value: string } }): void;
+      saveDisabled(): boolean;
+      saveProvider(): Promise<void>;
+    };
+
+    component.selectProviderForEdit(apiKeyProvider);
+    await fixture.whenStable();
+    component.updateProtocol({ target: { value: 'chat_completions' } });
+    expect(component.saveDisabled()).toBe(false);
+    await component.saveProvider();
+    expect(transport.updateAdminModelProvider.mock.calls).toHaveLength(1);
   });
 
   it('renders a credential-less provider as unconfigured and edits it without assuming API key', async () => {
