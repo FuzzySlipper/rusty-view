@@ -84,12 +84,7 @@
             aria-label="MCP reconciliation"
           >
             <div class="rv-admin-profiles__mcp-heading">
-              <strong>Desired MCP servers</strong>
-              <span>
-                {{ record.mcpReconciliation?.state ?? 'legacy readback' }} @if
-                (record.mcpReconciliation?.action === 'reload_mcp') { · action
-                /reload-mcp }
-              </span>
+              <strong>MCP servers</strong>
             </div>
             @if (desiredMcpBindings(record).length === 0) {
             <span class="rv-admin-profiles__muted">None selected.</span>
@@ -102,28 +97,19 @@
             </div>
             }
 
-            <strong>Per-session materialization</strong>
-            @if (materializedMcpBindings(record).length === 0) {
+            <strong>Session bindings</strong>
+            @if (materializedSessionNames(record).length === 0) {
             <span class="rv-admin-profiles__muted">
-              No exact-session binding is materialized yet.
+              No sessions currently use these bindings.
             </span>
             } @else {
-            <div class="rv-admin-profiles__mcp-bindings">
-              @for (binding of materializedMcpBindings(record); track
-              binding.bindingId) {
-              <article class="rv-admin-profiles__mcp-binding">
-                <div>
-                  <strong>{{ binding.serverId }}</strong>
-                  <span>{{ binding.sessionKind }}</span>
-                </div>
-                <span>session {{ binding.sessionId ?? '-' }}</span>
-                <span>binding {{ binding.bindingId }}</span>
-                <span>connection {{ mcpSurfaceState(binding) }}</span>
-                <span>tools {{ executableToolState(binding) }}</span>
-                <span
-                  >profile revision {{ revisionState(record, binding) }}</span
-                >
-              </article>
+            <div
+              class="rv-admin-profiles__chips"
+              data-testid="profile-session-bindings"
+            >
+              @for (sessionName of materializedSessionNames(record); track
+              sessionName) {
+              <span>{{ sessionName }}</span>
               }
             </div>
             }

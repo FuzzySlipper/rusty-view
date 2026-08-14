@@ -565,6 +565,15 @@
   padding: var(--rv-space-sm);
 }
 
+.rv-admin-profiles__tool-profile-operation {
+  display: grid;
+  gap: var(--rv-space-sm);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  padding: var(--rv-space-sm);
+  background: var(--rv-color-surface-raised);
+}
+
 .rv-admin-profiles__mcp-server-list {
   list-style: none;
   margin: 0;

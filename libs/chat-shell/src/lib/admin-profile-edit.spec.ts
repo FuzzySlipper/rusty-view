@@ -96,7 +96,10 @@ interface EditComponentApi {
   updateRuntimeExternalMessageDeliveryPolicy(event: {
     target: { value: string };
   }): void;
-  updateRuntimeLocalToolProfile(event: { target: { value: string } }): void;
+  openRuntimeToolProfilePicker(): void;
+  updateRuntimeToolProfileDraft(event: { target: { value: string } }): void;
+  cancelRuntimeToolProfilePicker(): void;
+  applyRuntimeToolProfileDraft(): void;
   toggleRuntimeCustomTools(): void;
   toggleRuntimeToolset(
     toolsetId: string,
@@ -107,6 +110,8 @@ interface EditComponentApi {
     event: { target: { checked: boolean } },
   ): void;
   runtimeLocalToolProfileId(): string;
+  runtimeToolProfileDraftId(): string;
+  runtimeToolProfilePickerOpen(): boolean;
   runtimeExternalMessageDeliveryPolicy(): ExternalMessageDeliveryPolicy;
   runtimeToolsetSelections(): readonly string[];
   planRuntimeConfig(record: AdminProfileRegistryRecord): void;
@@ -515,6 +520,42 @@ describe('AdminProfileEditComponent', () => {
     expect(text).toContain('degraded server unreachable');
   });
 
+  it('keeps detailed exact-session binding diagnostics in the edit window', async () => {
+    const fixture = await editWindow('field-prime', {
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'field-prime',
+        revision: 3,
+        materializedMcpBindings: [
+          {
+            serverId: 'den',
+            bindingId: 'field-den--session--field-session',
+            sessionId: 'field-session',
+            agentId: 'field-prime',
+            status: 'active',
+            toolProfileKey: 'field-prime',
+            sessionKind: 'managed_external',
+            appliedProfileRevision: 2,
+          },
+        ],
+      }),
+      mcpSurfaces: [
+        {
+          bindingId: 'field-den--session--field-session',
+          status: 'degraded',
+        },
+      ],
+    });
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).toContain('Session bindings');
+    expect(text).toContain('field-session');
+    expect(text).toContain('field-den--session--field-session');
+    expect(text).toContain('managed_external');
+    expect(text).toContain('connection degraded');
+    expect(text).toContain('tools unavailable');
+    expect(text).toContain('stale (applied 2, current 3)');
+  });
+
   // ---- runtime-config edit: provider / tools / MCP (#3742) ----------------
 
   async function runtimeWindow(profileId = 'rt-prime') {
@@ -567,13 +608,20 @@ describe('AdminProfileEditComponent', () => {
     };
   }
 
-  it('seeds the runtime-config form from the record (#3742)', async () => {
+  it('shows the current tool profile without an always-present selection dropdown', async () => {
     const { fixture, component } = await runtimeWindow();
-    const html = (fixture.nativeElement as HTMLElement).innerHTML;
-    // Model and local tool profile are seeded as selected values.
+    const host = fixture.nativeElement as HTMLElement;
+    const html = host.innerHTML;
     expect(html).toContain('Model &amp; Tools');
     expect(html).toContain('gpt-default · Default endpoint (config-default)');
     expect(component.runtimeLocalToolProfileId()).toBe('planner-tools');
+    expect(
+      host.querySelector('[data-testid="current-tool-profile"]')?.textContent,
+    ).toContain('Planner tools');
+    expect(
+      host.querySelector('[data-testid="tool-profile-operation"]'),
+    ).toBeNull();
+    expect(buttonByText(fixture, 'Apply Tool Profile')).toBeDefined();
   });
 
   it('edits profile delivery policy and shows existing binding mismatch (#6652)', async () => {
@@ -620,7 +668,7 @@ describe('AdminProfileEditComponent', () => {
     );
   });
 
-  it('prefers a selected local tool profile and omits inline toolPolicy (#3742)', async () => {
+  it('preserves current tools when planning without an explicit tool operation', async () => {
     const { fixture, component } = await runtimeWindow();
     const transport = TestBed.inject(ChatTransport) as unknown as {
       planAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
@@ -634,10 +682,58 @@ describe('AdminProfileEditComponent', () => {
     expect(request.expectedRevision).toBe(5);
     expect(request.modelConfigId).toBe('config-default');
     expect(request).not.toHaveProperty('providerAlias');
-    expect(request.localToolProfileId).toBe('planner-tools');
+    expect(request).not.toHaveProperty('localToolProfileId');
     expect(request).not.toHaveProperty('toolPolicy');
     // MCP untouched, so omitted to preserve current bindings.
     expect(request).not.toHaveProperty('mcpBindings');
+  });
+
+  it('opens and cancels tool-profile application without mutating an ordinary save', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
+
+    component.openRuntimeToolProfilePicker();
+    component.updateRuntimeToolProfileDraft({
+      target: { value: 'builtin-readonly' },
+    });
+    fixture.detectChanges();
+    expect(component.runtimeToolProfilePickerOpen()).toBe(true);
+    expect(component.runtimeToolProfileDraftId()).toBe('builtin-readonly');
+
+    component.cancelRuntimeToolProfilePicker();
+    component.applyRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    expect(component.runtimeToolProfilePickerOpen()).toBe(false);
+    expect(component.runtimeLocalToolProfileId()).toBe('planner-tools');
+    const request = lastRuntimeConfigRequest(
+      transport.applyAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request).not.toHaveProperty('localToolProfileId');
+    expect(request).not.toHaveProperty('toolPolicy');
+  });
+
+  it('applies a selected tool profile as an explicit operation', async () => {
+    const { fixture, component } = await runtimeWindow();
+    const transport = TestBed.inject(ChatTransport) as unknown as {
+      applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
+    };
+
+    component.openRuntimeToolProfilePicker();
+    component.updateRuntimeToolProfileDraft({
+      target: { value: 'builtin-readonly' },
+    });
+    component.applyRuntimeToolProfileDraft();
+    component.applyRuntimeConfig(recordFor('rt-prime'));
+    await fixture.whenStable();
+
+    const request = lastRuntimeConfigRequest(
+      transport.applyAdminProfileRegistryRuntimeConfig,
+    );
+    expect(request.localToolProfileId).toBe('builtin-readonly');
+    expect(request).not.toHaveProperty('toolPolicy');
   });
 
   it('sends inline toolPolicy with localToolProfileId:null when the profile is cleared (#3742)', async () => {
@@ -646,8 +742,9 @@ describe('AdminProfileEditComponent', () => {
       applyAdminProfileRegistryRuntimeConfig: RuntimeConfigSpy;
     };
     // Clear the local tool profile, open custom tools, add a toolset.
-    component.updateRuntimeLocalToolProfile({ target: { value: '' } });
-    component.toggleRuntimeCustomTools();
+    component.openRuntimeToolProfilePicker();
+    component.updateRuntimeToolProfileDraft({ target: { value: '' } });
+    component.applyRuntimeToolProfileDraft();
     component.toggleRuntimeToolset('memory_profile', {
       target: { checked: true },
     });

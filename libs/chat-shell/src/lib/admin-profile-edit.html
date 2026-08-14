@@ -606,26 +606,67 @@
 
       <div class="rv-admin-profiles__tool-policy">
         <span class="rv-admin-profiles__group-label">Built-in tools</span>
-        @if (localToolProfiles().length === 0) {
-        <div class="rv-admin-profiles__empty">
-          No local tool profiles configured. Create one in the Tool Profiles
-          editor, or use custom built-in tools below.
+        <div
+          class="rv-admin-profiles__result"
+          data-testid="current-tool-profile"
+        >
+          <span>Current selection</span>
+          <strong>{{ currentLocalToolProfileLabel() }}</strong>
         </div>
-        } @else {
-        <label>
-          <span>Local tool profile</span>
-          <select
-            [value]="runtimeLocalToolProfileId()"
-            (change)="updateRuntimeLocalToolProfile($event)"
-          >
-            <option value="">none (inline tools)</option>
-            @for (profile of localToolProfiles(); track profile.id) {
-            <option [value]="profile.id">
-              {{ localToolProfileLabel(profile) }}
-            </option>
-            }
-          </select>
-        </label>
+        <button
+          type="button"
+          class="rv-admin-profiles__button rv-admin-profiles__button--small"
+          (click)="openRuntimeToolProfilePicker()"
+          [attr.aria-expanded]="runtimeToolProfilePickerOpen()"
+        >
+          Apply Tool Profile
+        </button>
+        @if (runtimeToolProfilePickerOpen()) {
+        <div
+          class="rv-admin-profiles__tool-profile-operation"
+          data-testid="tool-profile-operation"
+        >
+          <label>
+            <span>Tool profile to apply</span>
+            <select
+              [value]="runtimeToolProfileDraftId()"
+              (change)="updateRuntimeToolProfileDraft($event)"
+            >
+              <option value="">Use inline custom tools</option>
+              @for (profile of localToolProfiles(); track profile.id) {
+              <option [value]="profile.id">
+                {{ localToolProfileLabel(profile) }}
+              </option>
+              }
+            </select>
+          </label>
+          @if (localToolProfiles().length === 0) {
+          <p class="rv-admin-profiles__hint">
+            No reusable tool profiles are configured. The inline option remains
+            available.
+          </p>
+          }
+          <p class="rv-admin-profiles__hint">
+            Apply replaces this profile's current built-in tool selection.
+            Cancel leaves it unchanged.
+          </p>
+          <div class="rv-admin-profiles__actions">
+            <button
+              type="button"
+              class="rv-admin-profiles__button rv-admin-profiles__button--small"
+              (click)="cancelRuntimeToolProfilePicker()"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="rv-admin-profiles__button rv-admin-profiles__button--small rv-admin-profiles__button--primary"
+              (click)="applyRuntimeToolProfileDraft()"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
         }
 
         <div class="rv-admin-profiles__advanced">
@@ -975,6 +1016,37 @@
         </p>
       </div>
       }
+    </section>
+
+    <section class="rv-admin-profiles__section">
+      <h2>Session bindings</h2>
+      <p class="rv-admin-profiles__hint">
+        Exact session records materialized from this profile's desired MCP
+        servers. These details are diagnostic; the profile list shows only the
+        session names.
+      </p>
+      @if (materializedMcpBindings(record).length === 0) {
+      <div class="rv-admin-profiles__empty">
+        No sessions currently use this profile's MCP bindings.
+      </div>
+      } @else { @for (binding of materializedMcpBindings(record); track
+      binding.bindingId) {
+      <div class="rv-admin-profiles__mcp-binding">
+        <div class="rv-admin-profiles__mcp-binding-header">
+          <strong>{{ binding.sessionId ?? 'Unknown session' }}</strong>
+          <span>{{ binding.serverId }}</span>
+          <span>{{ binding.sessionKind }}</span>
+        </div>
+        <div class="rv-admin-profiles__meta">
+          <span>binding {{ binding.bindingId }}</span>
+          <span>connection {{ mcpSurfaceState(binding) }}</span>
+          <span>tools {{ executableToolState(binding) }}</span>
+          <span>
+            profile revision {{ materializedRevisionState(record, binding) }}
+          </span>
+        </div>
+      </div>
+      } }
     </section>
 
     <section class="rv-admin-profiles__section">

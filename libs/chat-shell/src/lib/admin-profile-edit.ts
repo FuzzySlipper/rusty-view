@@ -22,6 +22,7 @@ import type {
   AdminLocalToolProfile,
   AdminMcpBinding,
   AdminMcpServer,
+  AdminProfileMaterializedMcpBinding,
   AdminProfileRegistryRecord,
   AdminToolDescriptor,
   AdminToolsetDescriptor,
@@ -191,6 +192,12 @@ export class AdminProfileEditComponent {
     signal<ExternalMessageDeliveryPolicy>('immediate_steer');
   /** Selected reusable local tool profile id; '' = use inline toolsets/tools. */
   protected readonly runtimeLocalToolProfileId = signal<string>('');
+  /** Draft selection shown only inside the explicit tool-profile operation. */
+  protected readonly runtimeToolProfileDraftId = signal<string>('');
+  /** Whether the explicit tool-profile operation is open. */
+  protected readonly runtimeToolProfilePickerOpen = signal(false);
+  /** Whether built-in tool state should be included in the runtime request. */
+  protected readonly runtimeToolsDirty = signal(false);
   /** Whether the advanced inline "custom built-in tools" disclosure is open. */
   protected readonly runtimeCustomToolsOpen = signal(false);
   protected readonly runtimeToolsetSelections = signal<readonly string[]>([]);
@@ -593,6 +600,9 @@ export class AdminProfileEditComponent {
       record.externalMessageDeliveryPolicy ?? 'immediate_steer',
     );
     this.runtimeLocalToolProfileId.set(record.localToolProfileId ?? '');
+    this.runtimeToolProfileDraftId.set(record.localToolProfileId ?? '');
+    this.runtimeToolProfilePickerOpen.set(false);
+    this.runtimeToolsDirty.set(false);
     const toolsets = record.toolPolicy?.requestedToolsets ?? [];
     const tools = record.toolPolicy?.requestedTools ?? [];
     this.runtimeToolsetSelections.set([...toolsets]);
@@ -695,7 +705,7 @@ export class AdminProfileEditComponent {
     );
   }
 
-  /** Reusable local tool profiles for the dropdown (#3689). */
+  /** Reusable local tool profiles available to the explicit apply operation. */
   protected localToolProfiles(): readonly AdminLocalToolProfile[] {
     return this.admin.localToolProfiles();
   }
@@ -704,10 +714,43 @@ export class AdminProfileEditComponent {
     return localToolProfileLabel(profile);
   }
 
-  protected updateRuntimeLocalToolProfile(event: Event): void {
-    this.runtimeLocalToolProfileId.set(
+  protected currentLocalToolProfileLabel(): string {
+    const currentId = this.runtimeLocalToolProfileId();
+    if (currentId === '') return 'Inline custom tools';
+    const profile = this.localToolProfiles().find(
+      (candidate) => candidate.id === currentId,
+    );
+    return profile === undefined
+      ? `Unavailable tool profile (${currentId})`
+      : this.localToolProfileLabel(profile);
+  }
+
+  protected openRuntimeToolProfilePicker(): void {
+    this.runtimeToolProfileDraftId.set(this.runtimeLocalToolProfileId());
+    this.runtimeToolProfilePickerOpen.set(true);
+  }
+
+  protected updateRuntimeToolProfileDraft(event: Event): void {
+    this.runtimeToolProfileDraftId.set(
       (event.target as HTMLSelectElement).value,
     );
+  }
+
+  protected cancelRuntimeToolProfilePicker(): void {
+    this.runtimeToolProfileDraftId.set(this.runtimeLocalToolProfileId());
+    this.runtimeToolProfilePickerOpen.set(false);
+  }
+
+  protected applyRuntimeToolProfileDraft(): void {
+    const selectedProfileId = this.runtimeToolProfileDraftId();
+    this.runtimeLocalToolProfileId.set(selectedProfileId);
+    this.runtimeToolsDirty.set(true);
+    this.runtimeToolProfilePickerOpen.set(false);
+    if (selectedProfileId === '') {
+      this.runtimeCustomToolsOpen.set(true);
+    } else {
+      this.runtimeCustomToolsOpen.set(false);
+    }
   }
 
   protected toggleRuntimeCustomTools(): void {
@@ -736,6 +779,7 @@ export class AdminProfileEditComponent {
 
   protected toggleRuntimeToolset(toolsetId: string, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
+    this.runtimeToolsDirty.set(true);
     this.runtimeToolsetSelections.update((selections) => {
       const without = selections.filter((id) => id !== toolsetId);
       return checked ? [...without, toolsetId] : without;
@@ -748,6 +792,7 @@ export class AdminProfileEditComponent {
 
   protected toggleRuntimeTool(toolName: string, event: Event): void {
     const checked = (event.target as HTMLInputElement).checked;
+    this.runtimeToolsDirty.set(true);
     this.runtimeToolSelections.update((selections) => {
       const without = selections.filter((name) => name !== toolName);
       return checked ? [...without, toolName] : without;
@@ -883,21 +928,23 @@ export class AdminProfileEditComponent {
     const modelConfigId = this.runtimeModelConfigId().trim();
     if (modelConfigId !== '') request.modelConfigId = modelConfigId;
 
-    // Tools: a selected local tool profile wins; otherwise send inline tool
-    // policy with localToolProfileId: null so Crew uses the inline selection.
-    const localToolProfileId = this.runtimeLocalToolProfileId().trim();
-    if (localToolProfileId !== '') {
-      request.localToolProfileId = localToolProfileId;
-    } else {
-      request.localToolProfileId = null;
-      request.toolPolicy = {
-        requestedToolsets: this.runtimeToolsetSelections().filter(
-          (id) => id.trim() !== '',
-        ),
-        requestedTools: this.runtimeToolSelections().filter(
-          (name) => name.trim() !== '',
-        ),
-      };
+    // Tools are an explicit operation. Ordinary load/plan/apply omits them so
+    // opening this screen can never look like (or cause) a silent clear.
+    if (this.runtimeToolsDirty()) {
+      const localToolProfileId = this.runtimeLocalToolProfileId().trim();
+      if (localToolProfileId !== '') {
+        request.localToolProfileId = localToolProfileId;
+      } else {
+        request.localToolProfileId = null;
+        request.toolPolicy = {
+          requestedToolsets: this.runtimeToolsetSelections().filter(
+            (id) => id.trim() !== '',
+          ),
+          requestedTools: this.runtimeToolSelections().filter(
+            (name) => name.trim() !== '',
+          ),
+        };
+      }
     }
 
     // MCP: only sent when touched; preserves advanced fields for retained
@@ -1053,6 +1100,44 @@ export class AdminProfileEditComponent {
     return this.admin
       .mcpBindings()
       .filter((binding) => binding.profileId === this.profileId());
+  }
+
+  protected materializedMcpBindings(
+    record: AdminProfileRegistryRecord,
+  ): readonly AdminProfileMaterializedMcpBinding[] {
+    return record.materializedMcpBindings ?? [];
+  }
+
+  protected mcpSurfaceState(
+    binding: AdminProfileMaterializedMcpBinding,
+  ): string {
+    const surface = this.admin
+      .mcpSurfaces()
+      ?.items.find((candidate) => candidate.bindingId === binding.bindingId);
+    return String(
+      surface?.status ?? binding.connectionState ?? binding.status ?? 'unknown',
+    );
+  }
+
+  protected executableToolState(
+    binding: AdminProfileMaterializedMcpBinding,
+  ): string {
+    const surface = this.admin
+      .mcpSurfaces()
+      ?.items.find((candidate) => candidate.bindingId === binding.bindingId);
+    if (surface?.status === 'active') return 'callable';
+    if (surface === undefined) return 'not discovered';
+    return 'unavailable';
+  }
+
+  protected materializedRevisionState(
+    record: AdminProfileRegistryRecord,
+    binding: AdminProfileMaterializedMcpBinding,
+  ): string {
+    if (binding.appliedProfileRevision === undefined) return 'unknown';
+    return binding.appliedProfileRevision === record.revision
+      ? 'current'
+      : `stale (applied ${binding.appliedProfileRevision}, current ${record.revision ?? '-'})`;
   }
 
   protected isMcpBindingFallback(binding: AdminMcpBinding): boolean {

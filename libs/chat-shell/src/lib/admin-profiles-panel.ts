@@ -6,10 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
-import type {
-  AdminProfileMaterializedMcpBinding,
-  AdminProfileRegistryRecord,
-} from '@rusty-view/transport';
+import type { AdminProfileRegistryRecord } from '@rusty-view/transport';
 
 import { AdminProfileCreateComponent } from './admin-profile-create';
 import { AdminProfileEditComponent } from './admin-profile-edit';
@@ -172,35 +169,17 @@ export class AdminProfilesPanelComponent {
     return record.materializedMcpBindings ?? [];
   }
 
-  protected mcpSurfaceState(
-    binding: AdminProfileMaterializedMcpBinding,
-  ): string {
-    const surface = this.admin
-      .mcpSurfaces()
-      ?.items.find((candidate) => candidate.bindingId === binding.bindingId);
-    return String(
-      surface?.status ?? binding.connectionState ?? binding.status ?? 'unknown',
-    );
-  }
-
-  protected executableToolState(
-    binding: AdminProfileMaterializedMcpBinding,
-  ): string {
-    const surface = this.admin
-      .mcpSurfaces()
-      ?.items.find((candidate) => candidate.bindingId === binding.bindingId);
-    if (surface?.status === 'active') return 'callable';
-    if (surface === undefined) return 'not discovered';
-    return 'unavailable';
-  }
-
-  protected revisionState(
+  protected materializedSessionNames(
     record: AdminProfileRegistryRecord,
-    binding: AdminProfileMaterializedMcpBinding,
-  ): string {
-    if (binding.appliedProfileRevision === undefined) return 'unknown';
-    return binding.appliedProfileRevision === record.revision
-      ? 'current'
-      : `stale (applied ${binding.appliedProfileRevision}, current ${record.revision ?? '-'})`;
+  ): readonly string[] {
+    const sessionNames = this.materializedMcpBindings(record).map((binding) => {
+      const sessionId = binding.sessionId;
+      if (sessionId === undefined) return 'Unknown session';
+      const session = this.chatStore
+        .sessions()
+        .find((candidate) => candidate.session_id === sessionId);
+      return session?.title?.trim() || sessionId;
+    });
+    return [...new Set(sessionNames)];
   }
 }

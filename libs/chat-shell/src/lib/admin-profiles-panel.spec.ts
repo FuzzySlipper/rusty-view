@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -19,7 +20,10 @@ async function createPanel(options: TransportOptions = {}) {
     imports: [AdminProfilesPanelComponent],
     providers: [
       AdminStore,
-      { provide: ChatStore, useValue: { refreshSessions: vi.fn() } },
+      {
+        provide: ChatStore,
+        useValue: { refreshSessions: vi.fn(), sessions: signal([]) },
+      },
       { provide: ChatTransport, useValue: makeTransport(options) },
     ],
   }).compileComponents();
@@ -70,7 +74,7 @@ describe('AdminProfilesPanelComponent (list coordinator)', () => {
     expect(buttons).toContain('Edit');
   });
 
-  it('separates desired MCP intent from concurrent exact-session materializations', async () => {
+  it('summarizes concurrent MCP materializations as session bindings', async () => {
     const fixture = await createPanel({
       profileDiagnostics: registryDiagnostics({
         profileId: 'ambassador',
@@ -123,14 +127,14 @@ describe('AdminProfilesPanelComponent (list coordinator)', () => {
         '.rv-admin-profiles__mcp',
       )?.textContent ?? '';
 
-    expect(text).toContain('Desired MCP servers');
+    expect(text).toContain('MCP servers');
+    expect(text).toContain('Session bindings');
     expect(text).toContain('ordinary-1');
     expect(text).toContain('external-1');
-    expect(text).toContain('managed_external');
-    expect(text).toContain('tools callable');
-    expect(text).toContain('tools unavailable');
-    expect(text).toContain('profile revision current');
-    expect(text).toContain('stale (applied 8, current 9)');
+    expect(text).not.toContain('managed_external');
+    expect(text).not.toContain('ambassador-den--session--ordinary-1');
+    expect(text).not.toContain('connection active');
+    expect(text).not.toContain('profile revision');
   });
 
   it('blocks edit for a file-backed fallback profile and shows guidance', async () => {
