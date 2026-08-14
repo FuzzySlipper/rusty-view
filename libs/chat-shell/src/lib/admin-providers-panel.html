@@ -470,15 +470,6 @@
               Permanently delete <strong>{{ endpoint.endpointId }}</strong>?
               This is allowed only when no model configuration references it.
             </p>
-            <label>
-              <span>Type the provider ID to confirm</span>
-              <input
-                type="text"
-                autocomplete="off"
-                [value]="endpointDeleteConfirmation()"
-                (input)="updateEndpointDeleteConfirmation($event)"
-              />
-            </label>
             <div class="rv-admin-providers__actions">
               <button
                 type="button"
@@ -493,9 +484,7 @@
                 class="rv-admin-providers__button rv-admin-providers__button--danger"
                 data-testid="model-endpoint-confirm-delete"
                 (click)="deleteEndpoint(endpoint)"
-                [disabled]="
-                  admin.saving() || !endpointDeleteConfirmed(endpoint.endpointId)
-                "
+                [disabled]="admin.saving()"
               >
                 Permanently delete
               </button>
@@ -739,15 +728,6 @@
               <strong>{{ configuration.modelConfigId }}</strong>? This cannot be
               undone.
             </p>
-            <label>
-              <span>Type the configuration ID to confirm</span>
-              <input
-                type="text"
-                autocomplete="off"
-                [value]="configurationDeleteConfirmation()"
-                (input)="updateConfigurationDeleteConfirmation($event)"
-              />
-            </label>
             <div class="rv-admin-providers__actions">
               <button
                 type="button"
@@ -762,10 +742,7 @@
                 class="rv-admin-providers__button rv-admin-providers__button--danger"
                 data-testid="model-configuration-confirm-delete"
                 (click)="deleteConfiguration(configuration)"
-                [disabled]="
-                  admin.saving() ||
-                  !configurationDeleteConfirmed(configuration.modelConfigId)
-                "
+                [disabled]="admin.saving()"
               >
                 Permanently delete
               </button>

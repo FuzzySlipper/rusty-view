@@ -92,9 +92,13 @@ function setup(credentials: readonly ServiceCredentialRecord[] = [credential]) {
       revision: configuration.revision + 1,
     },
   }));
-  const deleteModelEndpoint = vi.fn(async (value: ModelEndpointRecord) => ({
-    endpoint: value,
-  }));
+  const deleteModelEndpoint = vi.fn(
+    async (
+      value: ModelEndpointRecord,
+    ): Promise<{ endpoint: ModelEndpointRecord } | undefined> => ({
+      endpoint: value,
+    }),
+  );
   const deleteModelConfiguration = vi.fn(
     async (value: ModelConfigurationRecord) => ({ configuration: value }),
   );
@@ -335,7 +339,7 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
     ).toBe('credential:new-oauth');
   });
 
-  it('confirms endpoint deletion by exact id and keeps the editor/list errors visible', async () => {
+  it('opens, cancels, and click-confirms endpoint deletion without text entry', async () => {
     const { fixture, store } = setup();
     const root = fixture.nativeElement as HTMLElement;
     expect(
@@ -350,31 +354,73 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
       ?.click();
     fixture.detectChanges();
 
-    const confirmation = root.querySelector<HTMLInputElement>(
-      '[data-testid="model-endpoint-delete-confirm"] input',
-    );
-    if (confirmation === null) throw new Error('missing endpoint confirmation');
+    expect(
+      root.querySelector('[data-testid="model-endpoint-delete-confirm"] input'),
+    ).toBeNull();
     const confirmButton = root.querySelector<HTMLButtonElement>(
       '[data-testid="model-endpoint-confirm-delete"]',
     );
     if (confirmButton === null)
       throw new Error('missing endpoint delete button');
-    expect(confirmButton.disabled).toBe(true);
-
-    confirmation.value = endpoint.endpointId;
-    confirmation.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
     expect(confirmButton.disabled).toBe(false);
-    confirmButton.click();
+
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-endpoint-delete-confirm"] button:not([data-testid])',
+      )
+      ?.click();
+    fixture.detectChanges();
+    expect(store.deleteModelEndpoint).not.toHaveBeenCalled();
+    expect(
+      root.querySelector('[data-testid="model-endpoint-delete-confirm"]'),
+    ).toBeNull();
+
+    root
+      .querySelector<HTMLButtonElement>('[data-testid="model-endpoint-delete"]')
+      ?.click();
+    fixture.detectChanges();
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-endpoint-confirm-delete"]',
+      )
+      ?.click();
     await fixture.whenStable();
 
+    expect(store.deleteModelEndpoint).toHaveBeenCalledTimes(1);
     expect(store.deleteModelEndpoint).toHaveBeenCalledWith(endpoint);
     expect(
       root.querySelector('[data-testid="model-endpoint-delete-confirm"]'),
     ).toBeNull();
   });
 
-  it('confirms model configuration deletion by exact id', async () => {
+  it('keeps endpoint confirmation open when deletion fails', async () => {
+    const { fixture, store } = setup();
+    const root = fixture.nativeElement as HTMLElement;
+    store.deleteModelEndpoint.mockResolvedValueOnce(undefined);
+
+    root
+      .querySelector<HTMLButtonElement>('[data-testid="model-endpoint-edit"]')
+      ?.click();
+    fixture.detectChanges();
+    root
+      .querySelector<HTMLButtonElement>('[data-testid="model-endpoint-delete"]')
+      ?.click();
+    fixture.detectChanges();
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-endpoint-confirm-delete"]',
+      )
+      ?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.deleteModelEndpoint).toHaveBeenCalledTimes(1);
+    expect(
+      root.querySelector('[data-testid="model-endpoint-delete-confirm"]'),
+    ).not.toBeNull();
+  });
+
+  it('opens, cancels, and click-confirms configuration deletion without text entry', async () => {
     const { fixture, store } = setup();
     const root = fixture.nativeElement as HTMLElement;
     expect(
@@ -393,25 +439,43 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
       ?.click();
     fixture.detectChanges();
 
-    const confirmation = root.querySelector<HTMLInputElement>(
-      '[data-testid="model-configuration-delete-confirm"] input',
-    );
-    if (confirmation === null)
-      throw new Error('missing configuration confirmation');
+    expect(
+      root.querySelector(
+        '[data-testid="model-configuration-delete-confirm"] input',
+      ),
+    ).toBeNull();
     const confirmButton = root.querySelector<HTMLButtonElement>(
       '[data-testid="model-configuration-confirm-delete"]',
     );
     if (confirmButton === null)
       throw new Error('missing configuration delete button');
-    expect(confirmButton.disabled).toBe(true);
-
-    confirmation.value = configuration.modelConfigId;
-    confirmation.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
     expect(confirmButton.disabled).toBe(false);
-    confirmButton.click();
+
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-configuration-delete-confirm"] button:not([data-testid])',
+      )
+      ?.click();
+    fixture.detectChanges();
+    expect(store.deleteModelConfiguration).not.toHaveBeenCalled();
+    expect(
+      root.querySelector('[data-testid="model-configuration-delete-confirm"]'),
+    ).toBeNull();
+
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-configuration-delete"]',
+      )
+      ?.click();
+    fixture.detectChanges();
+    root
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="model-configuration-confirm-delete"]',
+      )
+      ?.click();
     await fixture.whenStable();
 
+    expect(store.deleteModelConfiguration).toHaveBeenCalledTimes(1);
     expect(store.deleteModelConfiguration).toHaveBeenCalledWith(configuration);
     expect(
       root.querySelector('[data-testid="model-configuration-delete-confirm"]'),

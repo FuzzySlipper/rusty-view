@@ -163,8 +163,6 @@ export class AdminProvidersPanelComponent {
   protected readonly configurationEditorOpen = signal(false);
   protected readonly endpointDeleteId = signal<string | null>(null);
   protected readonly configurationDeleteId = signal<string | null>(null);
-  protected readonly endpointDeleteConfirmation = signal('');
-  protected readonly configurationDeleteConfirmation = signal('');
   protected readonly oauthCallbackUrl = signal('');
   protected readonly newCredentialId = signal('');
   protected readonly newCredentialName = signal('');
@@ -359,32 +357,15 @@ export class AdminProvidersPanelComponent {
 
   protected requestDeleteEndpoint(endpoint: ModelEndpointRecord): void {
     if (this.admin.saving()) return;
-    this.endpointDeleteConfirmation.set('');
     this.endpointDeleteId.set(endpoint.endpointId);
   }
 
   protected cancelDeleteEndpoint(): void {
-    this.endpointDeleteConfirmation.set('');
     this.endpointDeleteId.set(null);
   }
 
-  protected updateEndpointDeleteConfirmation(event: Event): void {
-    this.endpointDeleteConfirmation.set(
-      (event.target as HTMLInputElement).value,
-    );
-  }
-
-  protected endpointDeleteConfirmed(endpointId: string): boolean {
-    return this.endpointDeleteConfirmation() === endpointId;
-  }
-
   protected async deleteEndpoint(endpoint: ModelEndpointRecord): Promise<void> {
-    if (
-      this.endpointDeleteId() !== endpoint.endpointId ||
-      !this.endpointDeleteConfirmed(endpoint.endpointId)
-    ) {
-      return;
-    }
+    if (this.endpointDeleteId() !== endpoint.endpointId) return;
     const result = await this.admin.deleteModelEndpoint(endpoint);
     if (result === undefined) return;
     this.cancelDeleteEndpoint();
@@ -397,34 +378,17 @@ export class AdminProvidersPanelComponent {
     configuration: ModelConfigurationRecord,
   ): void {
     if (this.admin.saving()) return;
-    this.configurationDeleteConfirmation.set('');
     this.configurationDeleteId.set(configuration.modelConfigId);
   }
 
   protected cancelDeleteConfiguration(): void {
-    this.configurationDeleteConfirmation.set('');
     this.configurationDeleteId.set(null);
-  }
-
-  protected updateConfigurationDeleteConfirmation(event: Event): void {
-    this.configurationDeleteConfirmation.set(
-      (event.target as HTMLInputElement).value,
-    );
-  }
-
-  protected configurationDeleteConfirmed(modelConfigId: string): boolean {
-    return this.configurationDeleteConfirmation() === modelConfigId;
   }
 
   protected async deleteConfiguration(
     configuration: ModelConfigurationRecord,
   ): Promise<void> {
-    if (
-      this.configurationDeleteId() !== configuration.modelConfigId ||
-      !this.configurationDeleteConfirmed(configuration.modelConfigId)
-    ) {
-      return;
-    }
+    if (this.configurationDeleteId() !== configuration.modelConfigId) return;
     const result = await this.admin.deleteModelConfiguration(configuration);
     if (result === undefined) return;
     this.cancelDeleteConfiguration();
