@@ -16,6 +16,8 @@ import type {
 } from './domain-types';
 
 const MAX_PROJECTED_COMMAND_OUTPUT_CHARACTERS = 64_000;
+const MAX_PROJECTED_TOOL_OUTPUT_CHARACTERS = 4_096;
+const TOOL_OUTPUT_TRUNCATION_MARKER = '...[truncated]';
 
 /** Convert runtime-neutral external thread history and live events into transcript view models. */
 export function projectExternalAgentTranscript(
@@ -452,6 +454,22 @@ function snapshotProjectionForEvents(
       content: [activity.command, activity.output]
         .filter((value): value is string => value !== undefined)
         .join('\n'),
+    };
+  }
+  const tool = events.filter(
+    (event) =>
+      event.kind === 'mcp_activity' || event.kind === 'dynamic_tool_activity',
+  );
+  if (tool.length > 0) {
+    const activity = projectExternalToolActivity(tool);
+    if (activity === undefined) return undefined;
+    return {
+      kind:
+        latestDefined(tool, (event) => event.payload.itemType) ??
+        (tool.some((event) => event.kind === 'mcp_activity')
+          ? 'mcpToolCall'
+          : 'dynamicToolCall'),
+      content: activity.text ?? '',
     };
   }
   return undefined;
@@ -986,9 +1004,11 @@ function projectExternalToolActivity(
         toolEvents,
         (event) => event.payload.tool ?? event.payload.server,
       ) ?? 'Tool',
-    text: latestDefined(
-      toolEvents,
-      (event) => event.payload.text ?? event.payload.message,
+    text: readableExternalToolResult(
+      latestDefined(
+        toolEvents,
+        (event) => event.payload.text ?? event.payload.message,
+      ),
     ),
     status,
   };
@@ -1140,7 +1160,7 @@ function eventBlock(
         event,
         'tool_call',
         payload.tool ?? payload.server ?? 'Tool',
-        payload.text ?? payload.message ?? '',
+        readableExternalToolResult(payload.text ?? payload.message) ?? '',
         status,
       );
     case 'usage':
@@ -1302,8 +1322,10 @@ function blockForItem(
   content: string,
   status?: string,
 ): MessageBlock {
-  if (kind.includes('reason')) return simpleBlock(id, 'reasoning', content);
-  if (kind.includes('command'))
+  const normalizedKind = kind.toLowerCase();
+  if (normalizedKind.includes('reason'))
+    return simpleBlock(id, 'reasoning', content);
+  if (normalizedKind.includes('command'))
     return toolBlockValues(
       id,
       'command',
@@ -1311,7 +1333,7 @@ function blockForItem(
       content,
       toolStatus(status),
     );
-  if (kind.includes('file'))
+  if (normalizedKind.includes('file'))
     return toolBlockValues(
       id,
       'file_change',
@@ -1319,8 +1341,52 @@ function blockForItem(
       content,
       toolStatus(status),
     );
-  if (kind.includes('plan')) return simpleBlock(id, 'plan', content);
+  if (normalizedKind.includes('tool'))
+    return snapshotToolBlock(id, kind, content, status);
+  if (normalizedKind.includes('plan')) return simpleBlock(id, 'plan', content);
   return simpleBlock(id, 'text', content);
+}
+
+function snapshotToolBlock(
+  id: string,
+  kind: string,
+  content: string,
+  status: string | undefined,
+): MessageBlock {
+  const block = toolBlockValues(
+    id,
+    'tool_call',
+    kind.toLowerCase().includes('mcp') ? 'MCP tool' : 'Dynamic tool',
+    content,
+    toolStatus(status),
+  );
+  if (block.tool === undefined) return block;
+  return {
+    ...block,
+    tool: {
+      ...block.tool,
+      summary: snapshotToolSummary(content, block.tool.status),
+    },
+  };
+}
+
+function snapshotToolSummary(content: string, status: ToolBlockStatus): string {
+  const trimmed = content.trim();
+  if (trimmed === '[]') return 'No results.';
+  if (
+    trimmed.length > 0 &&
+    trimmed.length <= 160 &&
+    !trimmed.includes('\n') &&
+    !trimmed.startsWith('{') &&
+    !trimmed.startsWith('[')
+  ) {
+    return trimmed;
+  }
+  return status === 'failed'
+    ? 'Tool call failed.'
+    : status === 'completed'
+      ? 'Tool call completed.'
+      : 'Tool call is running.';
 }
 
 function isContentlessGenericSnapshotItem(
@@ -1339,7 +1405,11 @@ function visibleSnapshotItemContent(
   item: ExternalThreadTurnProjection['items'][number],
 ): string {
   const text = item.text;
-  if (hasVisibleSnapshotItemText(text)) return text;
+  if (hasVisibleSnapshotItemText(text)) {
+    return item.kind.toLowerCase().includes('tool')
+      ? (readableExternalToolResult(text) ?? item.kind)
+      : text;
+  }
   const summary = item.summary?.filter(hasVisibleSnapshotItemText).join('\n');
   if (hasVisibleSnapshotItemText(summary)) return summary;
   const status = item.status;
@@ -1573,11 +1643,107 @@ function withExternalDetailHistory(
 }
 
 function roleForItem(kind: string): MessageRole {
-  return kind.includes('user')
+  const normalizedKind = kind.toLowerCase();
+  return normalizedKind.includes('user')
     ? 'user'
-    : kind.includes('tool')
+    : normalizedKind.includes('tool')
       ? 'tool'
       : 'assistant';
+}
+
+function readableExternalToolResult(
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined) return undefined;
+  let projected = value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (isRecord(parsed) && Array.isArray(parsed['content'])) {
+      const structured = parsed['structuredContent'];
+      const detailRef = isRecord(structured)
+        ? (stringField(structured, 'detail_ref') ??
+          stringField(structured, 'detailRef'))
+        : undefined;
+      const primaryText = parsed['content']
+        .filter(isRecord)
+        .filter((item) => stringField(item, 'type') === 'text')
+        .map((item) => stringField(item, 'text'))
+        .filter((item): item is string => item !== undefined)
+        .filter((item) => !isDetailReferenceText(item, detailRef))
+        .map(readableJsonText)
+        .join('\n');
+      projected =
+        primaryText.length > 0
+          ? primaryText
+          : parsed['isError'] === true
+            ? 'Tool call failed without text output.'
+            : 'Tool call completed without text output.';
+    }
+  } catch {
+    // Plain and malformed tool results remain visible as supplied.
+  }
+  projected = replaceUnsafeToolOutputControlCharacters(projected);
+  if (projected.length <= MAX_PROJECTED_TOOL_OUTPUT_CHARACTERS) {
+    return projected;
+  }
+  const contentLength =
+    MAX_PROJECTED_TOOL_OUTPUT_CHARACTERS - TOOL_OUTPUT_TRUNCATION_MARKER.length;
+  let end = contentLength;
+  if (end > 0 && isHighSurrogate(projected.charCodeAt(end - 1))) end -= 1;
+  return `${projected.slice(0, end)}${TOOL_OUTPUT_TRUNCATION_MARKER}`;
+}
+
+function replaceUnsafeToolOutputControlCharacters(value: string): string {
+  return Array.from(value, (character) => {
+    const codeUnit = character.charCodeAt(0);
+    const unsafe =
+      codeUnit <= 0x08 ||
+      codeUnit === 0x0b ||
+      codeUnit === 0x0c ||
+      (codeUnit >= 0x0e && codeUnit <= 0x1f) ||
+      codeUnit === 0x7f;
+    return unsafe ? ' ' : character;
+  }).join('');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stringField(
+  value: Readonly<Record<string, unknown>>,
+  field: string,
+): string | undefined {
+  const candidate = value[field];
+  return typeof candidate === 'string' ? candidate : undefined;
+}
+
+function isDetailReferenceText(
+  value: string,
+  detailRef: string | undefined,
+): boolean {
+  if (detailRef === undefined) return false;
+  if (value === detailRef) return true;
+  try {
+    return JSON.parse(value) === detailRef;
+  } catch {
+    return false;
+  }
+}
+
+function readableJsonText(value: string): string {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === 'string'
+      ? parsed
+      : JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
+}
+
+function isHighSurrogate(codeUnit: number): boolean {
+  return codeUnit >= 0xd800 && codeUnit <= 0xdbff;
 }
 
 function toolStatus(

@@ -1174,6 +1174,180 @@ describe('projectExternalAgentTranscript', () => {
     );
   });
 
+  it('projects serialized dynamic tool envelopes once as collapsed tool activity', () => {
+    const detailRef = 'd1.opaque-review-findings-cursor';
+    const rawEnvelope = JSON.stringify({
+      content: [
+        { type: 'text', text: '[]' },
+        { type: 'text', text: JSON.stringify(detailRef) },
+      ],
+      details: {
+        content: [
+          { type: 'text', text: '[]' },
+          { type: 'text', text: JSON.stringify(detailRef) },
+        ],
+        isError: false,
+        structuredContent: { detail_ref: detailRef, items: [] },
+      },
+      isError: false,
+      structuredContent: { detail_ref: detailRef, items: [] },
+    });
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'review transcript',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.146.0',
+        name: null,
+        agentNickname: 'reviewer',
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'tool-envelope',
+                kind: 'dynamicToolCall',
+                status: 'completed',
+                text: rawEnvelope,
+                detailHandle: 'runtime:controller:detail',
+              },
+              {
+                itemId: 'final',
+                kind: 'agentMessage',
+                status: 'completed',
+                text: 'Review complete.',
+                messagePhase: 'final_answer',
+              },
+            ],
+          },
+        ],
+      },
+      [
+        {
+          ...event('1', 'dynamic_tool_activity', {
+            nativeMethod: 'item/started',
+            itemType: 'dynamicToolCall',
+            status: 'inProgress',
+            tool: 'den_list_review_findings',
+          }),
+          itemId: 'tool-envelope',
+        },
+        {
+          ...event('2', 'dynamic_tool_activity', {
+            nativeMethod: 'item/completed',
+            itemType: 'dynamicToolCall',
+            status: 'completed',
+            success: true,
+            tool: 'den_list_review_findings',
+            text: rawEnvelope,
+          }),
+          itemId: 'tool-envelope',
+          rawDetailRef: 'runtime:controller:detail',
+        },
+      ],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.blocks).toHaveLength(2);
+    expect(messages[0]?.blocks[0]).toMatchObject({
+      id: 'block:tool-envelope',
+      kind: 'tool_call',
+      content: '[]',
+      renderPolicy: 'collapsed',
+      tool: {
+        name: 'Dynamic tool',
+        status: 'completed',
+        summary: 'No results.',
+      },
+    });
+    expect(messages[0]?.blocks[1]).toMatchObject({
+      kind: 'text',
+      content: 'Review complete.',
+    });
+    expect(JSON.stringify(messages)).not.toContain(detailRef);
+    expect(JSON.stringify(messages)).not.toContain('structuredContent');
+  });
+
+  it('bounds and summarizes large historical tool results without making them prose', () => {
+    const rawEnvelope = JSON.stringify({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            task: { id: 6961, title: 'Remove PNG flipping' },
+            description: 'x'.repeat(8_000),
+          }),
+        },
+      ],
+      details: { content: [] },
+      structuredContent: { task: { id: 6961 } },
+    });
+    const messages = projectExternalAgentTranscript(
+      {
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        parentThreadId: null,
+        preview: 'large tool result',
+        ephemeral: false,
+        modelProvider: 'openai',
+        effectiveModel: 'gpt-5.6',
+        createdAt: 1,
+        updatedAt: 2,
+        status: 'idle',
+        cwd: '/home/dev',
+        cliVersion: '0.146.0',
+        name: null,
+        agentNickname: 'reviewer',
+        agentRole: null,
+        turns: [
+          {
+            turnId: 'turn-1',
+            status: 'completed',
+            startedAt: 1,
+            completedAt: 2,
+            durationMs: 1,
+            items: [
+              {
+                itemId: 'large-tool-envelope',
+                kind: 'mcpToolCall',
+                status: 'completed',
+                text: rawEnvelope,
+              },
+            ],
+          },
+        ],
+      },
+      [],
+    );
+    const block = messages[0]?.blocks[0];
+
+    expect(block).toMatchObject({
+      kind: 'tool_call',
+      renderPolicy: 'collapsed',
+      tool: {
+        name: 'MCP tool',
+        status: 'completed',
+        summary: 'Tool call completed.',
+      },
+    });
+    expect(block?.content).toMatch(/^\{\n\s{2}"task":/);
+    expect(block?.content).toMatch(/\.\.\.\[truncated\]$/);
+    expect(block?.content.length).toBe(4_096);
+  });
+
   it('places ordered media after its tool and before later active-turn commentary', () => {
     const media: readonly ExternalRuntimeMediaReference[] = [
       {
