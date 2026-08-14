@@ -154,8 +154,8 @@ describe('TopMenuComponent', () => {
     expect(labels).toContain('Profiles');
     expect(labels).toContain('Service');
     expect(labels).toContain('Debug');
-    expect(labels).toContain('Model Providers');
-    expect(labels).not.toContain('Models');
+    expect(labels).toContain('Models');
+    expect(labels).not.toContain('Model Providers');
     expect(labels).toContain('Options');
     expect(labels).toContain('Help');
   });
@@ -244,11 +244,11 @@ describe('TopMenuComponent', () => {
     expect(host.querySelector('rv-admin-service-panel')).not.toBeNull();
   });
 
-  it('opens Model Providers when Model Providers is clicked', async () => {
+  it('opens Model Providers when Models is clicked', async () => {
     const fixture = await createMenu();
     const host = fixture.nativeElement as HTMLElement;
 
-    findMenuButton(host, 'Model Providers')?.click();
+    findMenuButton(host, 'Models')?.click();
     fixture.detectChanges();
 
     expect(host.querySelector('rv-admin-providers-panel')).not.toBeNull();
@@ -369,7 +369,7 @@ describe('TopMenuComponent', () => {
     expect(host.querySelector('rv-help-panel')).toBeNull();
   });
 
-  it('switches directly from Options to Model Providers when another top-menu item is clicked', async () => {
+  it('switches directly from Options to Model Providers when Models is clicked', async () => {
     const fixture = await createMenu();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -377,7 +377,7 @@ describe('TopMenuComponent', () => {
     fixture.detectChanges();
     expect(host.querySelector('rv-options-panel')).not.toBeNull();
 
-    findMenuButton(host, 'Model Providers')?.click();
+    findMenuButton(host, 'Models')?.click();
     fixture.detectChanges();
 
     expect(host.querySelector('rv-options-panel')).toBeNull();

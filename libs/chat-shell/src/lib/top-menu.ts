@@ -54,7 +54,7 @@ const BUILT_IN_ITEMS: readonly ChatTopMenuItem[] = [
   },
   {
     id: PROVIDERS_PANEL_ID,
-    label: 'Model Providers',
+    label: 'Models',
     tooltip: 'Configure model providers, endpoints, and model configurations',
     kind: 'panel',
     panelId: PROVIDERS_PANEL_ID,
