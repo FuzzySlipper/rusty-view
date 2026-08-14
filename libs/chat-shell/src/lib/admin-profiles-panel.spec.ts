@@ -70,6 +70,69 @@ describe('AdminProfilesPanelComponent (list coordinator)', () => {
     expect(buttons).toContain('Edit');
   });
 
+  it('separates desired MCP intent from concurrent exact-session materializations', async () => {
+    const fixture = await createPanel({
+      profileDiagnostics: registryDiagnostics({
+        profileId: 'ambassador',
+        revision: 9,
+        desiredMcpBindings: [{ serverId: 'den', bindingId: 'ambassador-den' }],
+        materializedMcpBindings: [
+          {
+            serverId: 'den',
+            bindingId: 'ambassador-den--session--ordinary-1',
+            sessionId: 'ordinary-1',
+            agentId: 'ambassador-agent',
+            status: 'active',
+            toolProfileKey: 'ambassador',
+            sessionKind: 'ordinary',
+            appliedProfileRevision: 9,
+          },
+          {
+            serverId: 'den',
+            bindingId: 'ambassador-den--session--external-1',
+            sessionId: 'external-1',
+            agentId: 'ambassador-agent-external',
+            status: 'active',
+            toolProfileKey: 'ambassador',
+            sessionKind: 'managed_external',
+            appliedProfileRevision: 8,
+            externalBindingId: 'external-binding-1',
+          },
+        ],
+        mcpReconciliation: {
+          state: 'converged',
+          desiredCount: 1,
+          materializedCount: 2,
+          sessionCount: 2,
+          action: 'none',
+        },
+      }),
+      mcpSurfaces: [
+        {
+          bindingId: 'ambassador-den--session--ordinary-1',
+          status: 'active',
+        },
+        {
+          bindingId: 'ambassador-den--session--external-1',
+          status: 'degraded',
+        },
+      ],
+    });
+    const text =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.rv-admin-profiles__mcp',
+      )?.textContent ?? '';
+
+    expect(text).toContain('Desired MCP servers');
+    expect(text).toContain('ordinary-1');
+    expect(text).toContain('external-1');
+    expect(text).toContain('managed_external');
+    expect(text).toContain('tools callable');
+    expect(text).toContain('tools unavailable');
+    expect(text).toContain('profile revision current');
+    expect(text).toContain('stale (applied 8, current 9)');
+  });
+
   it('blocks edit for a file-backed fallback profile and shows guidance', async () => {
     const fixture = await createPanel({
       profileDiagnostics: {

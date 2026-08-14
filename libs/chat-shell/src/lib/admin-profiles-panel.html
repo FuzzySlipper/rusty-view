@@ -79,6 +79,66 @@
             <span>kind {{ record.defaultSessionKind ?? '-' }}</span>
             <span>agent {{ record.agentId ?? '-' }}</span>
           </div>
+          <section
+            class="rv-admin-profiles__mcp"
+            aria-label="MCP reconciliation"
+          >
+            <div class="rv-admin-profiles__mcp-heading">
+              <strong>Desired MCP servers</strong>
+              <span>
+                {{ record.mcpReconciliation?.state ?? 'legacy readback' }} @if
+                (record.mcpReconciliation?.action === 'reload_mcp') { · action
+                /reload-mcp }
+              </span>
+            </div>
+            @if (desiredMcpBindings(record).length === 0) {
+            <span class="rv-admin-profiles__muted">None selected.</span>
+            } @else {
+            <div class="rv-admin-profiles__chips">
+              @for (binding of desiredMcpBindings(record); track
+              binding.bindingId ?? binding.serverId) {
+              <span>{{ binding.serverId }}</span>
+              }
+            </div>
+            }
+
+            <strong>Per-session materialization</strong>
+            @if (materializedMcpBindings(record).length === 0) {
+            <span class="rv-admin-profiles__muted">
+              No exact-session binding is materialized yet.
+            </span>
+            } @else {
+            <div class="rv-admin-profiles__mcp-bindings">
+              @for (binding of materializedMcpBindings(record); track
+              binding.bindingId) {
+              <article class="rv-admin-profiles__mcp-binding">
+                <div>
+                  <strong>{{ binding.serverId }}</strong>
+                  <span>{{ binding.sessionKind }}</span>
+                </div>
+                <span>session {{ binding.sessionId ?? '-' }}</span>
+                <span>binding {{ binding.bindingId }}</span>
+                <span>connection {{ mcpSurfaceState(binding) }}</span>
+                <span>tools {{ executableToolState(binding) }}</span>
+                <span
+                  >profile revision {{ revisionState(record, binding) }}</span
+                >
+              </article>
+              }
+            </div>
+            }
+          </section>
+          @if (record.diagnostics.length > 0) {
+          <div class="rv-admin-profiles__diagnostics">
+            @for (diagnostic of record.diagnostics; track diagnostic.code +
+            diagnostic.path) {
+            <span
+              >{{ diagnostic.severity }} · {{ diagnostic.code }} · {{
+              diagnostic.message }}</span
+            >
+            }
+          </div>
+          }
           <div class="rv-admin-profiles__profile-actions">
             @if (isRegistryEditable(record)) {
             <button

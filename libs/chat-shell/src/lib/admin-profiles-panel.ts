@@ -6,7 +6,10 @@ import {
   signal,
 } from '@angular/core';
 import { AdminStore, ChatStore } from '@rusty-view/chat-store';
-import type { AdminProfileRegistryRecord } from '@rusty-view/transport';
+import type {
+  AdminProfileMaterializedMcpBinding,
+  AdminProfileRegistryRecord,
+} from '@rusty-view/transport';
 
 import { AdminProfileCreateComponent } from './admin-profile-create';
 import { AdminProfileEditComponent } from './admin-profile-edit';
@@ -159,5 +162,45 @@ export class AdminProfilesPanelComponent {
     if (states.some((state) => state === 'unknown')) return 'checking';
     if (states.some((state) => state === 'available')) return 'partial';
     return 'missing';
+  }
+
+  protected desiredMcpBindings(record: AdminProfileRegistryRecord) {
+    return record.desiredMcpBindings ?? record.mcpBindings ?? [];
+  }
+
+  protected materializedMcpBindings(record: AdminProfileRegistryRecord) {
+    return record.materializedMcpBindings ?? [];
+  }
+
+  protected mcpSurfaceState(
+    binding: AdminProfileMaterializedMcpBinding,
+  ): string {
+    const surface = this.admin
+      .mcpSurfaces()
+      ?.items.find((candidate) => candidate.bindingId === binding.bindingId);
+    return String(
+      surface?.status ?? binding.connectionState ?? binding.status ?? 'unknown',
+    );
+  }
+
+  protected executableToolState(
+    binding: AdminProfileMaterializedMcpBinding,
+  ): string {
+    const surface = this.admin
+      .mcpSurfaces()
+      ?.items.find((candidate) => candidate.bindingId === binding.bindingId);
+    if (surface?.status === 'active') return 'callable';
+    if (surface === undefined) return 'not discovered';
+    return 'unavailable';
+  }
+
+  protected revisionState(
+    record: AdminProfileRegistryRecord,
+    binding: AdminProfileMaterializedMcpBinding,
+  ): string {
+    if (binding.appliedProfileRevision === undefined) return 'unknown';
+    return binding.appliedProfileRevision === record.revision
+      ? 'current'
+      : `stale (applied ${binding.appliedProfileRevision}, current ${record.revision ?? '-'})`;
   }
 }

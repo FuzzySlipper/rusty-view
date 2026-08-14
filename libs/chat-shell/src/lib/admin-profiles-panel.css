@@ -8,6 +8,59 @@
   position: relative;
 }
 
+.rv-admin-profiles__mcp {
+  display: grid;
+  gap: var(--rv-space-xs);
+  padding-top: var(--rv-space-xs);
+  border-top: 1px solid var(--rv-color-border);
+  color: var(--rv-color-text-secondary);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
+
+.rv-admin-profiles__mcp-heading,
+.rv-admin-profiles__mcp-binding > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rv-space-sm);
+}
+
+.rv-admin-profiles__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rv-space-xs);
+}
+
+.rv-admin-profiles__chips span {
+  padding: 0 var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+}
+
+.rv-admin-profiles__mcp-bindings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--rv-space-xs);
+}
+
+.rv-admin-profiles__mcp-binding,
+.rv-admin-profiles__diagnostics {
+  display: grid;
+  gap: 2px;
+  padding: var(--rv-space-xs);
+  border: 1px solid var(--rv-color-border);
+  border-radius: var(--rv-radius);
+  background: var(--rv-color-surface);
+  overflow-wrap: anywhere;
+}
+
+.rv-admin-profiles__diagnostics {
+  color: var(--rv-color-warning);
+  font-family: var(--rv-font-technical);
+  font-size: var(--rv-font-size-xs);
+}
+
 /*
  * Nested create/edit/tool-profile window. Fixed to the viewport (not absolute
  * to the list panel) so the window is sized by its own max-height and scrolls

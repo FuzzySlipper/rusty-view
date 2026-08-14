@@ -52,6 +52,8 @@ export type {
   AdminProfileAssetStatus,
   AdminProfileRegistryAssetStatus,
   AdminProfileRegistryDiagnostics,
+  AdminProfileMaterializedMcpBinding,
+  AdminProfileMcpReconciliation,
   AdminProfileRegistryQuery,
   AdminProfileRegistryRecord,
   AdminProfileRegistrySource,

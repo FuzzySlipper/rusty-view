@@ -11,6 +11,7 @@ import type {
   CreateAdminProfileRequest,
   CreatedServiceProfile,
   MemorySurfaceCatalogProjection,
+  McpSurfaceDiagnostics,
   ModelConfigurationListPage,
   ModelEndpointListPage,
   ProfileBrainRebuildRequest,
@@ -94,6 +95,7 @@ export interface TransportOptions {
   readonly memorySurfaces?: MemorySurfaceCatalogProjection | null;
   readonly modelEndpoints?: ModelEndpointListPage;
   readonly modelConfigurations?: ModelConfigurationListPage;
+  readonly mcpSurfaces?: readonly McpSurfaceDiagnostics[];
 }
 
 export function makeTransport(options: TransportOptions = {}): ChatTransport {
@@ -131,8 +133,8 @@ export function makeTransport(options: TransportOptions = {}): ChatTransport {
     adminSessions: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
     adminAgents: async () => ({ items: [], total: 0, limit: 100, offset: 0 }),
     adminMcpSurfaces: async () => ({
-      items: [],
-      total: 0,
+      items: [...(options.mcpSurfaces ?? [])],
+      total: options.mcpSurfaces?.length ?? 0,
       limit: 100,
       offset: 0,
     }),

@@ -3136,6 +3136,65 @@ export interface components {
         };
         /** @enum {string} */
         TelegramDiplomatSenderKind: "human" | "bot" | "sender_chat";
+        /** @enum {string} */
+        TelegramOperatorConsultCategory: "network_trouble" | "ambiguous_request" | "unfamiliar_machine_state" | "other";
+        TelegramOperatorConsultQuery: {
+            bindingId?: string | null;
+            consultId?: string | null;
+            /** Format: uint32 */
+            limit?: number | null;
+            sessionId?: string | null;
+            status?: components["schemas"]["TelegramOperatorConsultStatus"] | null;
+        };
+        TelegramOperatorConsultRecord: {
+            adapterId: string;
+            agentId: string;
+            bindingId: string;
+            body: string;
+            category?: components["schemas"]["TelegramOperatorConsultCategory"] | null;
+            consultId: string;
+            /** Format: uint32 */
+            deliveryAttempts: number;
+            externalChatId: string;
+            externalMessageIds: string[];
+            externalThreadId?: string | null;
+            idempotencyKey: string;
+            lastError?: string | null;
+            originatingWakeKind?: string | null;
+            profileId: string;
+            reasonCode?: string | null;
+            requestedAt: string;
+            /** Format: uint64 */
+            revision: number;
+            schemaVersion: string;
+            sentAt?: string | null;
+            sessionId: string;
+            status: components["schemas"]["TelegramOperatorConsultStatus"];
+            toolCallId: string;
+            updatedAt: string;
+            wakeId: string;
+        };
+        TelegramOperatorConsultRequest: {
+            body: string;
+            caller: components["schemas"]["AgentCoordinationCaller"];
+            category?: components["schemas"]["TelegramOperatorConsultCategory"] | null;
+            originatingWakeKind?: string | null;
+            requestedAt: string;
+        };
+        TelegramOperatorConsultSettlement: {
+            consultId: string;
+            /** Format: uint32 */
+            deliveryAttempts: number;
+            /** Format: uint64 */
+            expectedRevision: number;
+            externalMessageIds: string[];
+            lastError?: string | null;
+            reasonCode?: string | null;
+            settledAt: string;
+            status: components["schemas"]["TelegramOperatorConsultStatus"];
+        };
+        /** @enum {string} */
+        TelegramOperatorConsultStatus: "pending" | "sent" | "failed";
         ToolCallMetadata: {
             adapter_id?: string | null;
             binding_id?: string | null;

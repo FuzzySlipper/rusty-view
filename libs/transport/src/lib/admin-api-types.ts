@@ -1032,6 +1032,11 @@ export interface AdminProfileRegistryRecord {
    * diagnostics in {@link AdminMcpBinding}.
    */
   readonly mcpBindings?: readonly AdminProfileRuntimeMcpBinding[];
+  /** Desired profile capability templates; preferred over the compatibility alias above. */
+  readonly desiredMcpBindings?: readonly AdminProfileRuntimeMcpBinding[];
+  /** Exact-session MCP records currently materialized by Crew reconciliation. */
+  readonly materializedMcpBindings?: readonly AdminProfileMaterializedMcpBinding[];
+  readonly mcpReconciliation?: AdminProfileMcpReconciliation;
   /**
    * Current context-strategy policy for the profile (task #3849). Seeds the
    * Edit window's context-policy controls. Absent on backends that predate the
@@ -1051,6 +1056,30 @@ export interface AdminProfileRegistryRecord {
    * records omit this (prompt text lives in `memory.md`).
    */
   readonly promptMemoryMarkdown?: string;
+}
+
+export interface AdminProfileMaterializedMcpBinding {
+  readonly serverId: string;
+  readonly bindingId: string;
+  readonly sessionId?: string;
+  readonly agentId: string;
+  readonly status: string;
+  readonly connectionState?: string;
+  readonly toolProfileKey: string;
+  readonly sessionKind: 'ordinary' | 'managed_external';
+  readonly appliedProfileRevision?: number;
+  readonly externalBindingId?: string;
+}
+
+export interface AdminProfileMcpReconciliation {
+  readonly state:
+    | 'converged'
+    | 'pending_no_session'
+    | 'reconciliation_required';
+  readonly desiredCount: number;
+  readonly materializedCount: number;
+  readonly sessionCount: number;
+  readonly action: 'none' | 'reload_mcp';
 }
 
 /**
