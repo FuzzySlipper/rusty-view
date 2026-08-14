@@ -72,6 +72,29 @@ try {
       `${JSON.stringify({
         profilesDir: '/srv/rusty-crew/config/profiles',
         skillsDir: '/srv/rusty-crew/config/skills',
+        wakeTimeout: { mode: 'finite', timeoutMs: 60_000 },
+        brains: [{ id: 'fixture-brain', providerId: 'fixture-provider' }],
+        sessions: [
+          {
+            id: `${instance}-session`,
+            profileId: 'ambassador',
+            workdir: `/workspace/${instance}`,
+            turnTimeoutMs: 120_000,
+          },
+        ],
+        mcpServers: [
+          {
+            id: 'den',
+            transport: 'http',
+            url: 'http://127.0.0.1:5199/mcp',
+          },
+        ],
+        profileRegistry: {
+          ambassador: {
+            mcpBindings: [{ serverId: 'den', toolNames: ['get_task'] }],
+          },
+        },
+        fixtureCredentialRef: 'credential-preserved',
       })}\n`,
     );
   }
@@ -317,6 +340,34 @@ async function assertNativeConfig(instance, port) {
     config.profilesDir,
     join(stackRoot, 'instances', instance, 'config/profiles'),
   );
+  assert.equal(
+    config.skillsDir,
+    join(stackRoot, 'instances', instance, 'config/skills'),
+  );
+  assert.equal('wakeTimeout' in config, false);
+  assert.deepEqual(config.brains, [
+    { id: 'fixture-brain', providerId: 'fixture-provider' },
+  ]);
+  assert.deepEqual(config.sessions, [
+    {
+      id: `${instance}-session`,
+      profileId: 'ambassador',
+      workdir: `/workspace/${instance}`,
+    },
+  ]);
+  assert.deepEqual(config.mcpServers, [
+    {
+      id: 'den',
+      transport: 'http',
+      url: 'http://127.0.0.1:5199/mcp',
+    },
+  ]);
+  assert.deepEqual(config.profileRegistry, {
+    ambassador: {
+      mcpBindings: [{ serverId: 'den', toolNames: ['get_task'] }],
+    },
+  });
+  assert.equal(config.fixtureCredentialRef, 'credential-preserved');
 }
 
 async function assertLegacyConfig(instance) {

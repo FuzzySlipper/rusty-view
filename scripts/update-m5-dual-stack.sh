@@ -194,9 +194,14 @@ const [file, root] = process.argv.slice(2);
 const config = JSON.parse(fs.readFileSync(file, "utf8"));
 config.profilesDir = `${root}/config/profiles`;
 config.skillsDir = `${root}/config/skills`;
-config.wakeTimeout ??= { mode: "disabled" };
+delete config.wakeTimeout;
 config.brains ??= [];
 config.sessions ??= [];
+for (const session of config.sessions) {
+  if (session && typeof session === "object" && !Array.isArray(session)) {
+    delete session.turnTimeoutMs;
+  }
+}
 const target = `${file}.tmp`;
 fs.writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
 fs.renameSync(target, file);
