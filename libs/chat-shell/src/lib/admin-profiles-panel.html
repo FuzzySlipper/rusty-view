@@ -98,7 +98,7 @@
             }
 
             <strong>Session bindings</strong>
-            @if (materializedSessionNames(record).length === 0) {
+            @if (materializedSessions(record).length === 0) {
             <span class="rv-admin-profiles__muted">
               No sessions currently use these bindings.
             </span>
@@ -107,9 +107,9 @@
               class="rv-admin-profiles__chips"
               data-testid="profile-session-bindings"
             >
-              @for (sessionName of materializedSessionNames(record); track
-              sessionName) {
-              <span>{{ sessionName }}</span>
+              @for (session of materializedSessions(record); track session.key)
+              {
+              <span>{{ session.label }}</span>
               }
             </div>
             }

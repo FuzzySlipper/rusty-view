@@ -15,14 +15,17 @@ import {
   type TransportOptions,
 } from './admin-profiles.testing';
 
-async function createPanel(options: TransportOptions = {}) {
+async function createPanel(
+  options: TransportOptions = {},
+  sessions: readonly { session_id: string; title: string }[] = [],
+) {
   await TestBed.configureTestingModule({
     imports: [AdminProfilesPanelComponent],
     providers: [
       AdminStore,
       {
         provide: ChatStore,
-        useValue: { refreshSessions: vi.fn(), sessions: signal([]) },
+        useValue: { refreshSessions: vi.fn(), sessions: signal(sessions) },
       },
       { provide: ChatTransport, useValue: makeTransport(options) },
     ],
@@ -135,6 +138,47 @@ describe('AdminProfilesPanelComponent (list coordinator)', () => {
     expect(text).not.toContain('ambassador-den--session--ordinary-1');
     expect(text).not.toContain('connection active');
     expect(text).not.toContain('profile revision');
+  });
+
+  it('keeps distinct session bindings visible when session titles match', async () => {
+    const fixture = await createPanel(
+      {
+        profileDiagnostics: registryDiagnostics({
+          profileId: 'ambassador',
+          materializedMcpBindings: [
+            {
+              serverId: 'den',
+              bindingId: 'ambassador-den--session--ordinary-1',
+              sessionId: 'ordinary-1',
+              agentId: 'ordinary-agent',
+              status: 'active',
+              toolProfileKey: 'ambassador',
+              sessionKind: 'ordinary',
+            },
+            {
+              serverId: 'den',
+              bindingId: 'ambassador-den--session--external-1',
+              sessionId: 'external-1',
+              agentId: 'external-agent',
+              status: 'active',
+              toolProfileKey: 'ambassador',
+              sessionKind: 'managed_external',
+            },
+          ],
+        }),
+      },
+      [
+        { session_id: 'ordinary-1', title: 'Shared title' },
+        { session_id: 'external-1', title: 'Shared title' },
+      ],
+    );
+    const chips = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '[data-testid="profile-session-bindings"] span',
+      ),
+    ).map((element) => element.textContent?.trim());
+
+    expect(chips).toEqual(['Shared title', 'Shared title']);
   });
 
   it('blocks edit for a file-backed fallback profile and shows guidance', async () => {

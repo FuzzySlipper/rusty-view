@@ -169,17 +169,22 @@ export class AdminProfilesPanelComponent {
     return record.materializedMcpBindings ?? [];
   }
 
-  protected materializedSessionNames(
+  protected materializedSessions(
     record: AdminProfileRegistryRecord,
-  ): readonly string[] {
-    const sessionNames = this.materializedMcpBindings(record).map((binding) => {
+  ): readonly { key: string; label: string }[] {
+    const sessions = new Map<string, { key: string; label: string }>();
+    for (const binding of this.materializedMcpBindings(record)) {
       const sessionId = binding.sessionId;
-      if (sessionId === undefined) return 'Unknown session';
+      const key = sessionId ?? `binding:${binding.bindingId}`;
+      if (sessions.has(key)) continue;
       const session = this.chatStore
         .sessions()
         .find((candidate) => candidate.session_id === sessionId);
-      return session?.title?.trim() || sessionId;
-    });
-    return [...new Set(sessionNames)];
+      sessions.set(key, {
+        key,
+        label: session?.title?.trim() || sessionId || 'Unknown session',
+      });
+    }
+    return [...sessions.values()];
   }
 }
