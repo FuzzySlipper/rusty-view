@@ -592,6 +592,7 @@
           <label>
             <span>Context Window Tokens</span>
             <input
+              data-testid="model-configuration-context-window-tokens"
               type="number"
               [value]="configurationForm().contextWindowTokens"
               (input)="configurationText('contextWindowTokens', $event)"
@@ -600,6 +601,7 @@
           <label>
             <span>Max Output Tokens</span>
             <input
+              data-testid="model-configuration-max-output-tokens"
               type="number"
               [value]="configurationForm().maxOutputTokens"
               (input)="configurationText('maxOutputTokens', $event)"
@@ -615,10 +617,15 @@
           </label>
           <label>
             <span>Reasoning Effort</span>
-            <input
+            <select
+              data-testid="model-configuration-reasoning-effort"
               [value]="configurationForm().reasoningEffort"
-              (input)="configurationText('reasoningEffort', $event)"
-            />
+              (change)="configurationText('reasoningEffort', $event)"
+            >
+              @for (option of reasoningEffortOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
           </label>
           <label>
             <span>Reasoning Format</span>
@@ -639,12 +646,14 @@
             </select>
           </label>
           <label>
-            <span>Reasoning Budget Tokens</span>
+            <span>Reasoning Budget Tokens (optional)</span>
             <input
+              data-testid="model-configuration-reasoning-budget-tokens"
               type="number"
               [value]="configurationForm().reasoningBudgetTokens"
               (input)="configurationText('reasoningBudgetTokens', $event)"
             />
+            <small>Leave blank to use the provider or model default.</small>
           </label>
           <label>
             <span>Thinking Mode</span>

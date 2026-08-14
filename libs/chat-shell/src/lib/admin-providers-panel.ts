@@ -100,6 +100,18 @@ const CACHING: readonly ModelPromptCachingPolicy[] = [
   'automatic_5m',
   'automatic_1h',
 ];
+const REASONING_EFFORT_OPTIONS: readonly {
+  value: string;
+  label: string;
+}[] = [
+  { value: '', label: 'Provider default' },
+  { value: 'none', label: 'none' },
+  { value: 'minimal', label: 'minimal' },
+  { value: 'low', label: 'low' },
+  { value: 'medium', label: 'medium' },
+  { value: 'high', label: 'high' },
+  { value: 'xhigh', label: 'xhigh' },
+];
 
 function newEndpoint(): EndpointForm {
   return {
@@ -123,8 +135,8 @@ function newConfiguration(): ConfigurationForm {
     displayName: '',
     description: '',
     modelId: '',
-    contextWindowTokens: '',
-    maxOutputTokens: '',
+    contextWindowTokens: '1000000',
+    maxOutputTokens: '64000',
     temperatureMilli: '',
     reasoningEffort: '',
     reasoningFormat: '',
@@ -154,6 +166,7 @@ export class AdminProvidersPanelComponent {
   protected readonly histories = HISTORY;
   protected readonly thinkingModes = THINKING;
   protected readonly cachingPolicies = CACHING;
+  protected readonly reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
   protected readonly endpointForm = signal<EndpointForm>(newEndpoint());
   protected readonly configurationForm =
     signal<ConfigurationForm>(newConfiguration());

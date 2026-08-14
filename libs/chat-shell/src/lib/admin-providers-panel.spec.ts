@@ -199,6 +199,91 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
     expect(root.textContent).toContain('Create Model Configuration');
   });
 
+  it('uses modern create defaults and offers Crew reasoning effort values', () => {
+    const { fixture, component } = setup();
+    component.openCreateConfiguration();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-testid="model-configuration-context-window-tokens"]',
+      )?.value,
+    ).toBe('1000000');
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-testid="model-configuration-max-output-tokens"]',
+      )?.value,
+    ).toBe('64000');
+    const reasoningEffort = root.querySelector<HTMLSelectElement>(
+      '[data-testid="model-configuration-reasoning-effort"]',
+    );
+    expect(
+      Array.from(reasoningEffort?.options ?? []).map((option) => option.value),
+    ).toEqual(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+    expect(reasoningEffort?.options[0]?.textContent?.trim()).toBe(
+      'Provider default',
+    );
+    expect(root.textContent).toContain(
+      'Leave blank to use the provider or model default.',
+    );
+  });
+
+  it('omits a blank reasoning budget and saves the selected reasoning effort', async () => {
+    const { fixture, component, store } = setup();
+    component.openCreateConfiguration();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+
+    inputValue(root, '[data-testid="model-configuration-id"]', 'new-model');
+    selectValue(
+      root,
+      '[data-testid="model-configuration-endpoint"]',
+      endpoint.endpointId,
+    );
+    inputValue(root, '[data-testid="model-configuration-model-id"]', 'gpt-5.6');
+    selectValue(
+      root,
+      '[data-testid="model-configuration-reasoning-effort"]',
+      'high',
+    );
+    await component.saveConfiguration();
+
+    expect(store.createModelConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contextWindowTokens: 1_000_000,
+        maxOutputTokens: 64_000,
+        reasoningEffort: 'high',
+      }),
+    );
+    const write = store.createModelConfiguration.mock.calls[0]?.[0];
+    expect(write).not.toHaveProperty('reasoningBudgetTokens');
+  });
+
+  it('preserves persisted token limits and optional reasoning values on edit', async () => {
+    const existing: ModelConfigurationRecord = {
+      ...configuration,
+      contextWindowTokens: 131_072,
+      maxOutputTokens: 16_384,
+      reasoningEffort: 'minimal',
+      reasoningBudgetTokens: 8_192,
+    };
+    const { component, store } = setup();
+
+    component.editConfiguration(existing);
+    await component.saveConfiguration();
+
+    expect(store.updateModelConfiguration).toHaveBeenCalledWith(
+      existing.modelConfigId,
+      expect.objectContaining({
+        contextWindowTokens: 131_072,
+        maxOutputTokens: 16_384,
+        reasoningEffort: 'minimal',
+        reasoningBudgetTokens: 8_192,
+      }),
+    );
+  });
+
   it('uses closed protocol-dependent dialect controls and lists every credential', () => {
     const { fixture, component } = setup();
     component.openCreateEndpoint();
