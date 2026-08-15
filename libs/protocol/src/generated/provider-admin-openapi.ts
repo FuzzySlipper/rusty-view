@@ -583,10 +583,10 @@ export interface components {
             contextWindowTokens?: number;
             maxOutputTokens?: number;
             temperatureMilli?: number;
-            reasoningEffort?: string;
-            reasoningFormat?: string;
+            reasoningEffort?: string | null;
+            reasoningFormat?: string | null;
             reasoningHistory?: components["schemas"]["ModelReasoningHistory"];
-            reasoningBudgetTokens?: number;
+            reasoningBudgetTokens?: number | null;
             thinkingMode?: components["schemas"]["ModelThinkingMode"];
             promptCachingPolicy?: components["schemas"]["ModelPromptCachingPolicy"];
             capabilities?: components["schemas"]["ModelCapabilities"];

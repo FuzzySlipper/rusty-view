@@ -9,7 +9,9 @@ import {
 } from '@angular/core';
 import { AdminStore } from '@rusty-view/chat-store';
 import type {
+  ModelConfigurationPatch,
   ModelConfigurationRecord,
+  ModelConfigurationWrite,
   ModelEndpointAuthScheme,
   ModelEndpointProtocol,
   ModelEndpointRecord,
@@ -440,7 +442,7 @@ export class AdminProvidersPanelComponent {
   protected async saveConfiguration(): Promise<void> {
     if (this.configurationSaveDisabled()) return;
     const form = this.configurationForm();
-    const write = {
+    const common = {
       modelConfigId: form.modelConfigId.trim(),
       endpointId: form.endpointId,
       status: form.status,
@@ -454,14 +456,7 @@ export class AdminProvidersPanelComponent {
       ...optionalNumber('contextWindowTokens', form.contextWindowTokens),
       ...optionalNumber('maxOutputTokens', form.maxOutputTokens),
       ...optionalNumber('temperatureMilli', form.temperatureMilli),
-      ...(form.reasoningEffort.trim()
-        ? { reasoningEffort: form.reasoningEffort.trim() }
-        : {}),
-      ...(form.reasoningFormat.trim()
-        ? { reasoningFormat: form.reasoningFormat.trim() }
-        : {}),
       reasoningHistory: form.reasoningHistory,
-      ...optionalNumber('reasoningBudgetTokens', form.reasoningBudgetTokens),
       thinkingMode: form.thinkingMode,
       promptCachingPolicy: form.promptCachingPolicy,
       capabilities: { version: 1 as const, imageInput: form.imageInput },
@@ -470,9 +465,36 @@ export class AdminProvidersPanelComponent {
         ? {}
         : { expectedRevision: form.revision }),
     };
-    const result = this.editingModelConfigId()
-      ? await this.admin.updateModelConfiguration(form.modelConfigId, write)
-      : await this.admin.createModelConfiguration(write);
+    const editing = this.editingModelConfigId() !== null;
+    const reasoningEffort = form.reasoningEffort.trim();
+    const reasoningFormat = form.reasoningFormat.trim();
+    const reasoningBudgetTokens = form.reasoningBudgetTokens.trim();
+    const write: ModelConfigurationWrite | ModelConfigurationPatch = {
+      ...common,
+      ...(reasoningEffort !== ''
+        ? { reasoningEffort }
+        : editing
+          ? { reasoningEffort: null }
+          : {}),
+      ...(reasoningFormat !== ''
+        ? { reasoningFormat }
+        : editing
+          ? { reasoningFormat: null }
+          : {}),
+      ...(reasoningBudgetTokens !== ''
+        ? optionalNumber('reasoningBudgetTokens', reasoningBudgetTokens)
+        : editing
+          ? { reasoningBudgetTokens: null }
+          : {}),
+    };
+    const result = editing
+      ? await this.admin.updateModelConfiguration(
+          form.modelConfigId,
+          write as ModelConfigurationPatch,
+        )
+      : await this.admin.createModelConfiguration(
+          write as ModelConfigurationWrite,
+        );
     if (result !== undefined) this.editConfiguration(result.configuration);
   }
   protected createApiKeyCredential(): void {

@@ -553,10 +553,20 @@
               [value]="configurationForm().endpointId"
               (change)="configurationText('endpointId', $event)"
             >
-              <option value="">Select a provider</option>
+              <option
+                value=""
+                [selected]="configurationForm().endpointId === ''"
+              >
+                Select a provider
+              </option>
               @for (endpoint of admin.modelEndpoints(); track
               endpoint.endpointId) {
-              <option [value]="endpoint.endpointId">
+              <option
+                [value]="endpoint.endpointId"
+                [selected]="
+                  configurationForm().endpointId === endpoint.endpointId
+                "
+              >
                 {{ endpoint.displayName || endpoint.endpointId }} — {{
                 endpoint.protocol }} / {{ endpoint.authScheme }}
               </option>
@@ -623,13 +633,21 @@
               (change)="configurationText('reasoningEffort', $event)"
             >
               @for (option of reasoningEffortOptions; track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
+              <option
+                [value]="option.value"
+                [selected]="
+                  configurationForm().reasoningEffort === option.value
+                "
+              >
+                {{ option.label }}
+              </option>
               }
             </select>
           </label>
           <label>
             <span>Reasoning Format</span>
             <input
+              data-testid="model-configuration-reasoning-format"
               [value]="configurationForm().reasoningFormat"
               (input)="configurationText('reasoningFormat', $event)"
             />

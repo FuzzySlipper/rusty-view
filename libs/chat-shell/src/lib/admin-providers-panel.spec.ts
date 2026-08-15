@@ -284,6 +284,57 @@ describe('AdminProvidersPanelComponent normalized administration', () => {
     );
   });
 
+  it('hydrates dynamic provider and reasoning selects and sends explicit clears on edit', async () => {
+    const existing: ModelConfigurationRecord = {
+      ...configuration,
+      endpointId: endpoint.endpointId,
+      reasoningEffort: 'high',
+      reasoningFormat: 'openai',
+      reasoningBudgetTokens: 16_384,
+    };
+    const { fixture, component, store } = setup();
+
+    component.editConfiguration(existing);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-testid="model-configuration-endpoint"]',
+      )?.value,
+    ).toBe(endpoint.endpointId);
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        '[data-testid="model-configuration-reasoning-effort"]',
+      )?.value,
+    ).toBe('high');
+
+    selectValue(
+      root,
+      '[data-testid="model-configuration-reasoning-effort"]',
+      '',
+    );
+    inputValue(
+      root,
+      '[data-testid="model-configuration-reasoning-format"]',
+      '',
+    );
+    inputValue(
+      root,
+      '[data-testid="model-configuration-reasoning-budget-tokens"]',
+      '',
+    );
+    await component.saveConfiguration();
+
+    expect(store.updateModelConfiguration).toHaveBeenCalledWith(
+      existing.modelConfigId,
+      expect.objectContaining({
+        reasoningEffort: null,
+        reasoningFormat: null,
+        reasoningBudgetTokens: null,
+      }),
+    );
+  });
+
   it('uses closed protocol-dependent dialect controls and lists every credential', () => {
     const { fixture, component } = setup();
     component.openCreateEndpoint();
