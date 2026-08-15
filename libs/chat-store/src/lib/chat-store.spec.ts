@@ -2666,7 +2666,7 @@ function makeSession(
 }
 
 describe('ChatStore profiles', () => {
-  it('excludes archived Codex bindings from Crew-facing navigation while preserving active and native sessions', async () => {
+  it('excludes archived and no-thread Codex recovery records from Crew-facing navigation', async () => {
     const archivedCodex = makeSession({
       session_id: 'external-session-archived',
       profile_id: 'codex-profile',
@@ -2677,6 +2677,11 @@ describe('ChatStore profiles', () => {
       profile_id: 'codex-profile',
       status: 'idle',
     });
+    const recoveryCodex = makeSession({
+      session_id: 'external-session-recovery',
+      profile_id: 'codex-profile',
+      status: 'idle',
+    });
     const native = makeSession({
       session_id: 'native-session',
       profile_id: 'native-profile',
@@ -2684,8 +2689,8 @@ describe('ChatStore profiles', () => {
     });
     const transport = createMockTransport({
       sessions: {
-        items: [archivedCodex, activeCodex, native],
-        total: 3,
+        items: [archivedCodex, activeCodex, recoveryCodex, native],
+        total: 4,
         limit: 100,
         offset: 0,
       },
@@ -2720,6 +2725,20 @@ describe('ChatStore profiles', () => {
           bindingStatus: 'active',
           routable: true,
         },
+        {
+          agentId: 'external-agent-recovery',
+          sessionId: recoveryCodex.session_id,
+          profileId: recoveryCodex.profile_id,
+          displayLabel: 'Codex creation recovery',
+          sessionKind: 'full',
+          sessionStatus: 'idle',
+          runtimeKind: 'codex_app_server',
+          runtimeId: 'codex-runtime',
+          bindingId: 'binding-recovery',
+          bindingStatus: 'paused',
+          routable: false,
+          routabilityReasonCode: 'external_binding_native_thread_missing',
+        },
       ],
     });
     const store = setupStore(transport, new InMemoryChatStorage());
@@ -2727,13 +2746,16 @@ describe('ChatStore profiles', () => {
     await store.refreshSessions();
     await store.refreshSessionDirectory();
 
-    expect(store.sessions()).toHaveLength(3);
+    expect(store.sessions()).toHaveLength(4);
     expect(store.allSessions().map((session) => session.session_id)).toEqual(
       expect.arrayContaining([activeCodex.session_id, native.session_id]),
     );
     expect(
       store.allSessions().map((session) => session.session_id),
     ).not.toContain(archivedCodex.session_id);
+    expect(
+      store.allSessions().map((session) => session.session_id),
+    ).not.toContain(recoveryCodex.session_id);
     expect(
       store
         .profiles()
@@ -2748,6 +2770,12 @@ describe('ChatStore profiles', () => {
         .flatMap((profile) => profile.liveSessions)
         .map((session) => session.session_id),
     ).not.toContain(archivedCodex.session_id);
+    expect(
+      store
+        .profiles()
+        .flatMap((profile) => profile.liveSessions)
+        .map((session) => session.session_id),
+    ).not.toContain(recoveryCodex.session_id);
   });
 
   it('applies selected-session execution events immediately and ignores stale phases', async () => {

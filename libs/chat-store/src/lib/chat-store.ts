@@ -327,7 +327,9 @@ export class ChatStore implements OnDestroy {
         const directory = directoryBySessionId.get(session.session_id);
         return !(
           directory?.runtimeKind === 'codex_app_server' &&
-          directory.bindingStatus === 'archived'
+          (directory.bindingStatus === 'archived' ||
+            directory.routabilityReasonCode ===
+              'external_binding_native_thread_missing')
         );
       });
     },
