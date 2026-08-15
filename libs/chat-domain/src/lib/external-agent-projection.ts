@@ -1659,7 +1659,10 @@ function readableExternalToolResult(
   try {
     const parsed: unknown = JSON.parse(value);
     if (isRecord(parsed) && Array.isArray(parsed['content'])) {
-      const structured = parsed['structuredContent'];
+      const details = parsed['details'];
+      const structured =
+        parsed['structuredContent'] ??
+        (isRecord(details) ? details['structuredContent'] : undefined);
       const detailRef = isRecord(structured)
         ? (stringField(structured, 'detail_ref') ??
           stringField(structured, 'detailRef'))

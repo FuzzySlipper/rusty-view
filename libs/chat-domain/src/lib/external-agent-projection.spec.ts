@@ -1190,7 +1190,6 @@ describe('projectExternalAgentTranscript', () => {
         structuredContent: { detail_ref: detailRef, items: [] },
       },
       isError: false,
-      structuredContent: { detail_ref: detailRef, items: [] },
     });
     const messages = projectExternalAgentTranscript(
       {
