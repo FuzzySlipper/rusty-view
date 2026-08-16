@@ -520,7 +520,11 @@ export class ChatStore implements OnDestroy {
       let changed = false;
       const nextSessions = currentSessions.map((current) => {
         const incoming = incomingById.get(current.session_id);
-        if (incoming === undefined) return current;
+        if (incoming === undefined) {
+          if (current.status === 'archived') return current;
+          changed = true;
+          return { ...current, status: 'archived' as const };
+        }
         incomingById.delete(current.session_id);
         const merged = mergeSessionSummary(current, incoming, false);
         if (merged !== current) changed = true;

@@ -1758,6 +1758,7 @@ describe('ChatStore', () => {
     await store.runCommand('/new');
 
     expect(store.activeSessionId()).toBe('sess_new');
+    expect(store.pendingCommands()).toEqual([]);
   });
 
   it('creates and selects an exact Crew session with a revision guard', async () => {
@@ -2925,6 +2926,14 @@ describe('ChatStore profiles', () => {
       store.sessions().find((session) => session.session_id === 'background')
         ?.execution.phase,
     ).toBe('active');
+
+    page.items = [selected];
+    page.total = 1;
+    await store.refreshSessionExecutionSnapshots();
+    expect(
+      store.sessions().find((session) => session.session_id === 'background')
+        ?.status,
+    ).toBe('archived');
   });
 
   it('derives profiles from the session list', async () => {
