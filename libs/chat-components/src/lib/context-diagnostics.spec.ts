@@ -201,6 +201,31 @@ describe('ContextDiagnosticsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('25% full');
   });
 
+  it('prefers the native admission fill percentage used for compaction', async () => {
+    const fixture = await createComponent();
+    fixture.componentRef.setInput(
+      'usage',
+      usageFixture({
+        native_snapshot: {
+          schemaVersion: 1,
+          provider: {},
+          promptProjection: {},
+          reservedOutput: {},
+          admission: { fillPercent: 57 },
+          providerUsage: {},
+          durableTranscript: {},
+          providerState: {},
+          compaction: {},
+          diagnostics: [],
+        },
+      }),
+    );
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('57% full');
+    expect(fixture.nativeElement.textContent).not.toContain('25% full');
+  });
+
   it('renders the degraded badge and diagnostics when degraded', async () => {
     const fixture = await createComponent();
     fixture.componentRef.setInput(

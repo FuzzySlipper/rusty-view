@@ -185,9 +185,22 @@ export class ContextDiagnosticsComponent {
     },
   );
 
-  /** Fill percentage (used / window), when both are known. */
+  /**
+   * Fill percentage used by Crew's native admission/compaction decision.
+   * Older servers do not expose a native snapshot, so retain the sampled
+   * context estimate as a compatibility fallback.
+   */
   protected readonly fillPercent = computed<number | null>(() => {
-    const context = this.usage()?.context;
+    const usage = this.usage();
+    const nativeFillPercent = readFiniteNumber(
+      usage?.native_snapshot?.admission,
+      'fillPercent',
+    );
+    if (nativeFillPercent !== undefined && nativeFillPercent >= 0) {
+      return Math.min(100, Math.round(nativeFillPercent));
+    }
+
+    const context = usage?.context;
     if (context === undefined) return null;
     const window = context.context_window_tokens;
     const used = context.estimated_prompt_tokens;
@@ -290,6 +303,16 @@ function timelineDetail(entry: ContextTimelineEntry): string {
 
 function row(label: string, value: string | undefined): ContextDiagnosticsRow {
   return { label, value: value ?? '—' };
+}
+
+function readFiniteNumber(value: unknown, field: string): number | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const fieldValue = (value as Record<string, unknown>)[field];
+  return typeof fieldValue === 'number' && Number.isFinite(fieldValue)
+    ? fieldValue
+    : undefined;
 }
 
 /** Keep only rows that carry a real value (drops the `—` placeholders). */
